@@ -1,0 +1,48 @@
+name: M0 verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: m0-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scaffold:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: pnpm
+      - run: bash scripts/bootstrap.sh
+      - run: bash scripts/preflight.sh local
+      - run: bash scripts/dev-up.sh
+      - run: bash scripts/collect-evidence.sh infra bash scripts/test-infra.sh
+      - run: pnpm --filter @edgeai/dashboard exec playwright install --with-deps chromium
+      - run: bash scripts/verify-all.sh scaffold
+      - run: bash scripts/collect-evidence.sh postgres bash scripts/test-integration.sh
+      - name: Verify PostgreSQL → Spring → Next.js
+        run: bash scripts/collect-evidence.sh health bash scripts/test-health-stack.sh
+      - name: Stop test services and retain volumes
+        if: always()
+        run: bash scripts/dev-down.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0-verification-${{ github.run_id }}
+          path: |
+            docs/evidence/runs/
+            backend/app/build/test-results/
+            dashboard/test-results/
+          retention-days: 14

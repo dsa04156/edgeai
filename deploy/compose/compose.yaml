@@ -1,0 +1,47 @@
+name: edgeai-dev
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: ${EDGEAI_DB_NAME:?Run bootstrap}
+      POSTGRES_USER: ${EDGEAI_DB_USER:?Run bootstrap}
+      POSTGRES_PASSWORD: ${EDGEAI_DB_PASSWORD:?Run bootstrap}
+    ports: ["127.0.0.1:${EDGEAI_DB_PORT:-15432}:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  mqtt:
+    image: eclipse-mosquitto:2@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
+    ports: ["127.0.0.1:${EDGEAI_MQTT_PORT:-11883}:1883"]
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "127.0.0.1", "-t", "edgeai/health", "-m", "probe"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  minio:
+    profiles: [storage]
+    build:
+      context: ./minio
+    command: [server, /data, --console-address, ':9001']
+    environment:
+      MINIO_ROOT_USER: ${EDGEAI_MINIO_USER:?Run bootstrap}
+      MINIO_ROOT_PASSWORD: ${EDGEAI_MINIO_PASSWORD:?Run bootstrap}
+    ports:
+      - "127.0.0.1:${EDGEAI_MINIO_PORT:-19000}:9000"
+      - "127.0.0.1:${EDGEAI_MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes: ["minio-data:/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres-data:
+  mqtt-data:
+  minio-data:

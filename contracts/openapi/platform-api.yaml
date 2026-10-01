@@ -1,0 +1,67 @@
+openapi: 3.1.0
+info:
+  title: EdgeAI Control Plane — M0
+  version: 0.1.0
+  description: |
+    Implemented bootstrap contract only. Domain APIs from the Notion draft are
+    tracked in docs/api-scope.md and must be specified before M1+ implementation.
+servers:
+  - url: http://127.0.0.1:18080
+security:
+  - localBasic: []
+paths:
+  /api/v1/platform:
+    get:
+      operationId: getPlatform
+      summary: Read implemented platform capabilities
+      responses:
+        '200':
+          description: Platform metadata; an empty capabilities list means no domain features yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformInfo'
+        '401':
+          description: Authentication required
+  /actuator/health/readiness:
+    get:
+      operationId: getReadiness
+      summary: Application and PostgreSQL readiness
+      security: []
+      responses:
+        '200':
+          description: Application and database ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Application or database not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+components:
+  securitySchemes:
+    localBasic:
+      type: http
+      scheme: basic
+      description: Localhost development only; production identity and roles are not implemented.
+  schemas:
+    PlatformInfo:
+      type: object
+      required: [name, version, milestone, capabilities]
+      properties:
+        name: {type: string, const: edgeai}
+        version: {type: string}
+        milestone: {type: string, const: M0}
+        capabilities:
+          type: array
+          items: {type: string}
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]

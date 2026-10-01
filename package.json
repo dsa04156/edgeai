@@ -1,0 +1,16 @@
+{
+  "name": "edgeai-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.34.6",
+  "engines": { "node": ">=22 <23" },
+  "scripts": {
+    "dev": "bash scripts/dev-dashboard.sh",
+    "build": "pnpm --filter @edgeai/dashboard build",
+    "typecheck": "pnpm --filter @edgeai/dashboard typecheck",
+    "lint": "pnpm --filter @edgeai/dashboard lint",
+    "test:ui": "pnpm --filter @edgeai/dashboard test:e2e",
+    "contract:generate": "openapi-typescript contracts/openapi/platform-api.yaml -o dashboard/lib/api-schema.d.ts"
+  },
+  "devDependencies": { "openapi-typescript": "^7.13.0" }
+}

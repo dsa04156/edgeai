@@ -1,0 +1,28 @@
+recorded_at: '2026-10-01'
+scope: M0
+toolchain:
+  java: '21'
+  local_jdk: 'Temurin 21.0.12.1+1'
+  spring_boot: '4.1.1'
+  gradle: '9.7.1'
+  node: '22.23.2'
+  pnpm: '10.34.6'
+  next: '16.3.8'
+  react: '19.3.0'
+dependencies:
+  postgres_compose: '17-alpine; manifest digest pinned in Compose'
+  postgres_local_verified: '16.15 (Ubuntu 24.04 portable packages)'
+  mqtt: 'eclipse-mosquitto:2; manifest digest pinned in Compose'
+  minio: 'optional source build at 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a'
+probes:
+  backend_build_and_unit: PASS
+  postgres_16_flyway: PASS
+  openapi_types: PASS
+  dashboard_build_and_browser: PASS
+  postgres_spring_next_health: PASS
+  compose_config: PASS
+  local_docker_runtime: BLOCKED_SOCKET_PERMISSION
+  github_ci: PENDING_INITIAL_PUSH
+  minio_build_runtime: NOT_RUN
+  kind: NOT_IMPLEMENTED
+  kubeedge_and_hardware: NOT_IMPLEMENTED

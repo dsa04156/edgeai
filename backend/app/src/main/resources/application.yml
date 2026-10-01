@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: edgeai-control-plane
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${EDGEAI_DB_PORT:15432}/${EDGEAI_DB_NAME:edgeai}
+    username: ${EDGEAI_DB_USER:edgeai}
+    password: ${EDGEAI_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+    clean-disabled: true
+  security:
+    user:
+      name: ${EDGEAI_API_USER:edgeai}
+      password: ${EDGEAI_API_PASSWORD}
+server:
+  address: 127.0.0.1
+  port: ${EDGEAI_API_PORT:18080}
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
