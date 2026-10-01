@@ -20,7 +20,7 @@ ui_pid=$!
 db_stopped=false
 restore_db() {
   if [[ "$db_stopped" == true ]]; then
-    if [[ "$restart_mode" == compose ]]; then compose start --wait --wait-timeout 60 postgres;
+    if [[ "$restart_mode" == compose ]]; then compose start postgres;
     else bash scripts/dev-postgres-local.sh start; fi
     db_stopped=false
   fi

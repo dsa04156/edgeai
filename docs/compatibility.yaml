@@ -26,6 +26,6 @@ probes:
   postgres_17_and_mqtt_in_ci: PASS
   github_ci: 'PASS — https://github.com/dsa04156/edgeai/actions/runs/36832834758'
   minio_native_build_and_s3: PASS
-  minio_container_build_runtime: PENDING_CI
+  minio_container_build_runtime: 'PASS — storage job in CI 36833935958'
   kind: NOT_IMPLEMENTED
   kubeedge_and_hardware: NOT_IMPLEMENTED

@@ -50,4 +50,7 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
   무작위 256 KiB 파일 byte 일치, SHA-256 metadata, 비인증 GET 403을 검증했다.
   시험은 고유 probe bucket/object만 만들고 제거했으며 기존 버킷은 건드리지 않았다.
 - MinIO 소스 tar SHA-256을 Dockerfile ADD에 고정했다. native build와 Docker source는 동일 commit이다.
-- 새 CI는 별도 storage job에서 컨테이너 빌드·기동·S3 시험을 수행하도록 구성했다. 현재 결과 대기.
+- [CI 36833935958](https://github.com/dsa04156/edgeai/actions/runs/36833935958)의 storage job이
+  컨테이너 빌드·기동·실제 S3 시험을 2분 35초에 완료했다.
+- 같은 CI의 앱 검사에서는 DB 중지 후 API/UI 503까지 통과했으나 CI Compose가 `start --wait`를
+  지원하지 않아 재기동 단계에서 실패했다. 기본 `start`와 기존 bounded health polling을 사용하도록 수정했다.
