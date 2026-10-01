@@ -20,10 +20,12 @@ probes:
   openapi_types: PASS
   dashboard_build_and_browser: PASS
   postgres_spring_next_health: PASS
+  postgres_outage_and_recovery_local: PASS
   compose_config: PASS
   local_docker_runtime: BLOCKED_SOCKET_PERMISSION
   postgres_17_and_mqtt_in_ci: PASS
   github_ci: 'PASS — https://github.com/dsa04156/edgeai/actions/runs/36832834758'
-  minio_build_runtime: NOT_RUN
+  minio_native_build_and_s3: PASS
+  minio_container_build_runtime: PENDING_CI
   kind: NOT_IMPLEMENTED
   kubeedge_and_hardware: NOT_IMPLEMENTED

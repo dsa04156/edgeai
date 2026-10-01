@@ -22,7 +22,7 @@ docs/evidence/index.md와 로컬 docs/evidence/runs/<testRunId> 참조.
 CI: https://github.com/dsa04156/edgeai/actions/runs/36832834758
 
 [BLOCKED]
-로컬 Docker 소켓 권한. 선택적 MinIO 실행 검증 미완료.
+로컬 Docker 소켓 권한. MinIO native build·실제 S3 시험은 완료했고 컨테이너 검증 CI를 추가했다.
 M1+ 도메인 기능, kind/fault/load/hardware 시험은 아직 미구현.
 별도 전체 구현 계약·실장비·2세부 Remote API·성능 수용 기준은 추가 확인 필요.
 
@@ -33,3 +33,8 @@ M1+ 도메인 기능, kind/fault/load/hardware 시험은 아직 미구현.
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh
 검증 재개: bash scripts/verify-all.sh scaffold
 검증용 로컬 API/UI/PostgreSQL 프로세스는 종료했으며 DB 데이터는 .tools/pgdata에 보존했다.
+
+[M0 COMPLETION AUDIT]
+원래 요청인 초기 개발 환경과 공개 저장소 생성·push의 완료 증거를 재검토했다.
+M1~M10 기능 구현은 이후 개발 단계이며 이번 초기화 완료 판정과 구분한다.
+DB 장애·복구와 MinIO 실제 S3 경로를 추가 검증했다. 확장한 CI 성공 확인 후 M0 감사 결과를 확정한다.

@@ -40,6 +40,7 @@ bash scripts/dev-dashboard.sh
 사용 중인 포트가 있으면 `.env`에서 변경한 뒤 앱을 재시작합니다.
 MinIO는 M4 결과 저장을 위한 선택적 구성입니다: `bash scripts/dev-storage.sh`.
 공식 커뮤니티 소스를 빌드하므로 첫 실행은 오래 걸릴 수 있습니다.
+기동 후 `bash scripts/test-storage.sh`로 실제 S3 업로드·다운로드·metadata·비인증 차단을 확인합니다.
 
 ```bash
 bash scripts/test-health.sh
@@ -54,6 +55,8 @@ bash scripts/verify-all.sh scaffold
 bash scripts/test-integration.sh  # 실제 PostgreSQL 필요
 bash scripts/test-infra.sh        # Compose의 PostgreSQL·MQTT 필요
 bash scripts/test-health.sh       # DB + API + Dashboard 실행 필요
+bash scripts/test-health-stack.sh compose # 앱을 테스트 전용으로 띄우고 프로젝트 DB 장애·복구까지 확인
+bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 ```
 
 `verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.

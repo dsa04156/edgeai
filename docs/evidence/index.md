@@ -13,7 +13,7 @@
 | 20261001T074945Z-eabe3444 | bash scripts/test-health-stack.sh | 0 | DB→Spring→Next.js UP, 인증 200/비인증 401 |
 
 추가 확인: shell 구문, Compose config, 비밀/로컬 파일 Git 제외, 미구현 스크립트 8개의 exit 2,
-desktop/mobile screenshot 직접 확인. 선택적 MinIO 빌드·runtime은 아직 검증하지 않았다.
+desktop/mobile screenshot 직접 확인. 최초 M0 시점에는 MinIO 빌드·runtime을 검증하지 않았으며 후속 감사에서 아래와 같이 보완했다.
 
 수정 이력: 첫 단위시험은 test 전용 password property가 없어 실패했고 설정 분리 후 통과했다.
 첫 UI 시험(20261001T074758Z-9a59c73d)은 전역 pnpm shim 부재로 webServer 시작이 실패했다.
@@ -39,3 +39,15 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
 | 20261001T075427Z-afd2b114 | PostgreSQL → Spring → Next.js health | 0 | PASS |
 
 이후 증거·진행 문서만 갱신하는 커밋은 동일 코드에 대한 위 검증을 재사용한다.
+
+## 초기 환경 완료 감사 보완
+
+- `20261001T080004Z-0963a846`: `test-health-stack.sh local`, exit 0.
+  실제 프로젝트 PostgreSQL 중지 → API readiness 503/DOWN → Next health 503/DOWN,
+  DB 재시작 후 동일 앱 프로세스가 UP으로 복구되는 경로를 확인했다.
+- `20261001T080058Z-3a5d7aab`: `test-storage.sh`, exit 0.
+  공식 MinIO release commit의 native build를 실제 실행했다. 인증된 S3 PUT/stat/GET,
+  무작위 256 KiB 파일 byte 일치, SHA-256 metadata, 비인증 GET 403을 검증했다.
+  시험은 고유 probe bucket/object만 만들고 제거했으며 기존 버킷은 건드리지 않았다.
+- MinIO 소스 tar SHA-256을 Dockerfile ADD에 고정했다. native build와 Docker source는 동일 commit이다.
+- 새 CI는 별도 storage job에서 컨테이너 빌드·기동·S3 시험을 수행하도록 구성했다. 현재 결과 대기.
