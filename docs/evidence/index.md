@@ -54,3 +54,22 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
   컨테이너 빌드·기동·실제 S3 시험을 2분 35초에 완료했다.
 - 같은 CI의 앱 검사에서는 DB 중지 후 API/UI 503까지 통과했으나 CI Compose가 `start --wait`를
   지원하지 않아 재기동 단계에서 실패했다. 기본 `start`와 기존 bounded health polling을 사용하도록 수정했다.
+
+## 최종 M0 검증
+
+[CI 36834353000](https://github.com/dsa04156/edgeai/actions/runs/36834353000),
+코드 `b469f622a785aefc0c5759e329eba1a85e9b30e4`: **scaffold/storage 모두 success**.
+두 artifact를 내려받아 모든 결과 JSON과 health/storage의 실제 PASS 로그를 확인했다.
+
+| testRunId | 시험 | exit | 결과 |
+|---|---|---|---|
+| 20261001T080729Z-4073540f | MinIO 공식 source container build/start | 0 | PASS |
+| 20261001T080937Z-da1d5cb9 | 실제 S3 PUT/stat/GET·metadata·403·probe 정리 | 0 | PASS |
+| 20261001T080754Z-e7e1f843 | PostgreSQL/MQTT | 0 | PASS |
+| 20261001T080817Z-5e96e4d2 | unit | 0 | PASS |
+| 20261001T080903Z-aef6d36c | contract | 0 | PASS |
+| 20261001T080913Z-1887767d | UI lint/types/build/desktop/mobile | 0 | PASS |
+| 20261001T080927Z-3d38056a | PostgreSQL/Flyway integration | 0 | PASS |
+| 20261001T080939Z-0098619b | DB→API→UI 정상/DB 중지 503/DB 재시작 복구 | 0 | PASS |
+
+[완료 감사](m0-completion-audit.md)는 원래 요청의 각 항목과 증거를 연결한다.

@@ -70,5 +70,6 @@ GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0를 
 - [구현 계약](docs/implementation-contract.md), [검증 기준](docs/verification-matrix.md)
 - [OpenAPI](contracts/openapi/platform-api.yaml), [환경 호환성](docs/compatibility.yaml)
 - [검증 증거](docs/evidence/index.md), [결정 기록](docs/adr/0001-greenfield-foundation.md)
+- [초기 개발 환경 완료 감사](docs/evidence/m0-completion-audit.md)
 
 로컬 개발용 인증·MQTT 설정은 운영 배포 구성이 아닙니다. 운영 identity/RBAC/TLS 및 실제 장비 검증은 후속 단계입니다.

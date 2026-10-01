@@ -1,11 +1,14 @@
 # 개발 계획
 
-## 현재 작업: M0 초기화
+## 완료: M0 초기화
 
 1. 설계 출처·범위·미확정 사항을 로컬 docs로 정리한다.
 2. Spring/Next.js/PostgreSQL health path, Flyway, OpenAPI, 실행 스크립트를 구현한다.
 3. 단위·계약·실DB·브라우저·health 시험을 수행하고 evidence를 기록한다.
 4. 공개 GitHub 저장소를 생성하고 커밋·푸시한 뒤 CI 결과를 확인한다.
+
+위 항목과 DB 장애·복구 및 실제 MinIO S3 검증을 완료했다. 코드 b469f62의 CI 36834353000은 두 job 모두 success다.
+요구사항별 증거는 `docs/evidence/m0-completion-audit.md`에서 확인한다.
 
 ## 후속 순서
 
@@ -19,5 +22,5 @@ M1부터 각 기능은 설계 → OpenAPI → Flyway → 구현 → unit/integra
 
 - Docker 접근: `bash scripts/preflight.sh compose`. 현재 권한 차단; 권한 있는 개발 환경에서 `dev-up.sh` 재실행.
 - 외부 상세 계약: 원문 확보 후 M1+에 필요한 범위를 ADR에 정합화.
-- MinIO: `bash scripts/dev-storage.sh`로 선택적 source build/live health 검증.
+- MinIO: source build/live health/실제 S3 검증 완료. `bash scripts/dev-storage.sh`와 `bash scripts/test-storage.sh`로 재현한다.
 - kind/실장비: 전용 context·namespace·소유 label을 준비한 뒤 해당 단계에서 구현. 기존 context를 변경하지 않는다.
