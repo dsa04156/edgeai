@@ -21,3 +21,21 @@ Node로 설치된 Next CLI를 직접 호출하도록 고친 뒤 UI 전체 재실
 
 Docker 소켓 접근은 현재 호스트에서 차단됐다. 실제 kind·hardware 시험은 미구현이다.
 이 결과는 플랫폼 전체의 `LOCAL_VERIFIED` / `FULL_ACCEPTANCE`를 의미하지 않는다.
+
+## GitHub Actions 검증
+
+[Run 36832834758](https://github.com/dsa04156/edgeai/actions/runs/36832834758),
+코드 커밋 `f265c04ddf407950baa76f68d83beb59ef87dae8`, 결과 **success** (2분 50초).
+Ubuntu 24.04 hosted runner / JDK 21 / Node 22 / Compose PostgreSQL 17 / MQTT.
+Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했다.
+
+| testRunId | 시험 | exit | 결과 |
+|---|---|---|---|
+| 20261001T075239Z-0d254de4 | PostgreSQL ready + MQTT pub/sub | 0 | PASS |
+| 20261001T075302Z-d385d565 | unit | 0 | PASS |
+| 20261001T075341Z-f84f9215 | contract | 0 | PASS |
+| 20261001T075354Z-4c80f49d | UI lint/types/build + desktop/mobile | 0 | PASS |
+| 20261001T075412Z-4eeef430 | PostgreSQL 17 Flyway integration | 0 | PASS |
+| 20261001T075427Z-afd2b114 | PostgreSQL → Spring → Next.js health | 0 | PASS |
+
+이후 증거·진행 문서만 갱신하는 커밋은 동일 코드에 대한 위 검증을 재사용한다.
