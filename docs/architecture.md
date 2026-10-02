@@ -32,15 +32,21 @@ Remote·상태형 checkpoint·STREAM route는 남은 범위다.
 V8 runtime_telemetry는 현재 producer가 보고한 cgroup 사용량과 서비스 지연을 Attempt별 최신64개로
 보존한다. Runner 내부 인증과 Run 잠금으로 종료된 producer를 차단하며 Task 상세는 최신 Attempt의
 측정만 제공한다. 측정 수집과 자동 전환의 판단·실행은 별도 단계다(ADR0008).
+ADR0009/V9는 연속된 실제 측정·warmup/cooldown·전환 예산과 판단 이력을 보존하고 이전 노드를
+제외한 AUTO 재배치를 수행한다. 실제 kind/CI/배포에서 검증했다.
+ADR0010의 RemoteGateway는 allocation/run/task/attempt/epoch를 사용하는 내부 경계다.
+HTTP 참조 adapter와 SQLite 기반 합성 제공자를 실제 HTTP/TLS·별도 프로세스로 로컬 검증했다.
+공개 실행 경로와 RemoteAllocation/producer/Result 연결은 남아 있으며 Kubernetes Pod/Node UID를
+Remote 신원으로 대신하지 않는다. 실제 외부 API는 제공된 계약에 맞춘 별도 adapter가 필요하다.
 
 | 경로 | 책임 |
 |---|---|
 | backend/app | 실행 진입점, controller, service, DTO, 인증·설정·예외 처리 |
 | backend/domain | 외부 SDK에 의존하지 않는 도메인 모델과 저장소 인터페이스 |
-| backend/adapters | PostgreSQL 저장소·Kubernetes Node/Job/Pod/신원 adapter·Job compiler·S3 artifact 구현, 추후 KubeEdge·MQTT·remote 경계 |
+| backend/adapters | PostgreSQL 저장소·Kubernetes Node/Job/Pod/신원 adapter·Job compiler·S3 artifact·Remote 참조 HTTP 구현, 추후 KubeEdge·MQTT |
 | dashboard | 사용자 UI, 계약에서 생성한 API 타입 |
 | runner | M4 Python workload 실행·artifact 전송·commit 요청; 내부 API·배포 전체 경로 검증 완료 |
-| simulator | 장치·Remote·장애 재현; 실장비 증거와 분리 |
+| simulator | 영속 Remote 참조 계산·장애 재현. 장치 시뮬레이션은 미구현; 실장비 증거와 분리 |
 | contracts | 구현 전에 확정하는 OpenAPI |
 | deploy | 개발 Compose, GitOps 배포 manifests, 추후 격리 kind 시험 |
 

@@ -2,7 +2,7 @@
 
 [STATUS]
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
-실행 측정도 실제 kind·CI·배포까지 검증했다. 자동 전환 정책을 구현·검증 중이며 전체 플랫폼은 PARTIAL이다.
+실행 측정·자동 전환도 실제 kind·CI·배포까지 검증했다. Remote 참조 adapter는 로컬 검증했으며 전체 플랫폼은 PARTIAL이다.
 현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
@@ -15,7 +15,11 @@ M5 재시도 CI36990194234의 5 jobs·결과JSON14개 PASS 및 e777233 실제 �
 M5 명시적 offload: ADR0007·V7, source fence/drain, 동일 Task 새 Attempt/target claim, Operation API/화면.
 오프로딩 CI36993166041의 5 jobs·결과JSON14개 PASS, kind15개 Run과 f886dd7 실제 배포를 확인했다.
 V8/Runner 내부 telemetry API·cgroup 수집·서비스 지연·현재 Attempt 측정 화면을 추가했다.
-측정 상세 증거는 docs/evidence/m5-runtime-telemetry.md다. ADR0009 자동 판단은 구현·검증 중이며 Remote·상태형 복원은 남아 있다.
+측정 상세 증거는 docs/evidence/m5-runtime-telemetry.md다. ADR0009 자동 판단은 CI36999672446의
+5 jobs/결과JSON14개/실제kind18Run/source951c4bd 배포까지 검증했다. 상세는 docs/evidence/m5-automatic-offload.md다.
+ADR0010 Remote 참조 adapter/SQLite 시뮬레이터: 단위57(HTTP/TLS10 포함), 실제 프로세스 통합13,
+3개 OpenAPI/MVC18 로컬 통과. 상세는 docs/evidence/m5-remote-adapter.md다.
+플랫폼 연결·실제 외부 계약·상태형 복원은 남아 있으며 신규 Remote 코드 CI는 대기다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V5, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.

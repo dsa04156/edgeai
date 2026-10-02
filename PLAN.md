@@ -28,8 +28,10 @@ BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생�
 M5는 ADR0006·V6의 재시도 예약/예산·새 Attempt/epoch를 실제 kind·CI·배포까지 검증했다.
 ADR0007·V7의 실행 중 NODE 전환은 실제 kind·CI·배포 검증을 통과했다.
 ADR0008·V8 실행 측정은 CI36996007482·실제 kind·배포까지 통과했다.
-ADR0009·V9의 선택적 측정 기반 자동 전환 정책·판단 이력·AUTO 노드 제외를 구현·검증 중이다.
-자동 전환 실제 kind 수용과 Remote 계약/연동은 여전히 M5의 필수 범위다.
+ADR0009·V9의 선택적 측정 기반 자동 전환 정책·판단 이력·AUTO 노드 제외는 CI36999672446의
+실제 kind18Run 및 기존 클러스터의 source951c4bd 배포까지 검증했다.
+ADR0010 Remote 참조 계약/HTTP adapter/영속 계산 시뮬레이터는 로컬 HTTP/TLS10개·실제 프로세스13개를 통과했다.
+Remote의 플랫폼 producer/outbox/Result/API·UI 연결과 실제 외부 계약 수용은 여전히 M5의 필수 범위다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

@@ -28,6 +28,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/ArtifactStorageIntegrationTest.class'
     exclude '**/RuntimeArtifactIntegrationTest.class'
     exclude '**/KubernetesRuntimeIntegrationTest.class'
+    exclude '**/RemoteGatewayIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -52,6 +53,13 @@ tasks.register('kubernetesRuntimeIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/KubernetesRuntimeIntegrationTest.class'
+}
+
+tasks.register('remoteIntegrationTest', Test) {
+    description = 'Requires Python and a real loopback reference-provider process; tests persistent HTTP lifecycle and artifact integrity.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/RemoteGatewayIntegrationTest.class'
 }
 
 // Serve the exact reviewed contract; do not infer a competing schema from controllers.

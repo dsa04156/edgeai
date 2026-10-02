@@ -8,7 +8,8 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 실제 Kubernetes Runner 실행, MinIO 파일 검증과 결과 저장까지 연결했습니다.
 로컬 실행은 기본 비활성이고 전용 클러스터 배포는 활성화되어 있습니다.
 M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 검증을 통과했습니다.
-실행 측정도 실제 컨테이너·kind·배포까지 검증했습니다. 자동 전환 정책은 구현·검증 중이며 Remote 연동은 남아 있습니다.
+실행 측정·자동 전환도 실제 컨테이너·kind·배포까지 검증했습니다. Remote 참조 adapter의 HTTP/TLS·
+영속 계산 시험은 로컬 통과했으며 플랫폼 실행 경로와 실제 외부 시스템 연결은 남아 있습니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
@@ -72,6 +73,7 @@ bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 
 bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
 bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 실제 결과 확정·취소 경쟁
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
+bash scripts/test-remote.sh       # 실제 Remote 참조 프로세스/HTTP/SQLite·파일·장애 시험
 ```
 
 `verify-all.sh local|full`은 미구현 fault/load/hardware 시험을 숨기지 않고 nonzero를 반환합니다.

@@ -1,0 +1,240 @@
+openapi: 3.1.0
+info:
+  title: EdgeAI reference Remote provider contract
+  version: 0.1.0
+  description: >-
+    플랫폼 내부 RemoteGateway를 시험하는 참조 프로토콜입니다. 실제 2세부 API의 정의가 아닙니다.
+    모든 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. JSON은 256KiB 이하,
+    개별 파일은 플랫폼 상한 256MiB 이하이며 제공자가 지원하는 더 작은 한도를 적용합니다.
+    loopback 시뮬레이터는 SYNTHETIC 선형 계산·입출력 각 1MiB·동시 계산8개만 지원하고
+    OCI 이미지·자원 예약·GPU/NPU를 실행하지 않습니다. 실제 TaskResult 확정은 별도 플랫폼 책임입니다.
+servers:
+  - url: /
+security:
+  - providerBearer: []
+paths:
+  /reference/v1/allocations/{allocationId}:
+    parameters: &identityParameters
+      - $ref: '#/components/parameters/AllocationId'
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/AttemptId'
+      - $ref: '#/components/parameters/Epoch'
+    put:
+      operationId: referenceRemoteReserve
+      summary: 불변 실행과 고정 마감으로 할당 예약
+      description: >-
+        플랫폼이 미리 정한 allocationId로 예약합니다. 같은 identity와 동일 digest 재전송은 기존
+        상태를 반환하고 다른 내용 또는 선행 취소 tombstone은409입니다. 원문 SERVICE spec 전체를
+        보존합니다. deadline은 최초 예약 시 미래24시간 이내이며 이후 연장하지 않습니다.
+        X-EdgeAI-Request-Digest는 UTF-8의 edgeai-reference-allocation-v1 + LF + 전송 JSON 본문의
+        SHA-256입니다. JSON은 키 정렬·공백 제거·손실 없는 십진수·유효 Unicode로 정규화합니다.
+        숫자 precision/절대scale<=1000, 중첩<=32, NUL/중복 키는 금지합니다.
+        응답 유실 시 동일 PUT 또는 GET으로 복구하며 다른 allocationId를 만들지 않습니다.
+      parameters:
+        - name: X-EdgeAI-Request-Digest
+          in: header
+          required: true
+          schema: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Reservation'}
+      responses:
+        '200': {$ref: '#/components/responses/Status'}
+        '201': {$ref: '#/components/responses/Status'}
+        default: {$ref: '#/components/responses/Error'}
+    get:
+      operationId: referenceRemoteInspect
+      summary: 현재 할당 상태와 불변 요청 식별자 조회
+      description: >-
+        알 수 없는 ID는404입니다. 같은 ID라도 다른 run/task/attempt/epoch는409입니다.
+        revision은 상태 변경마다 증가하며 같은 요청 재전송은 증가시키지 않습니다.
+        재시작 후 진행 중 작업을 자동 재실행하지 않고 FAILED/PROVIDER_RESTART로 종료합니다.
+      responses:
+        '200': {$ref: '#/components/responses/Status'}
+        default: {$ref: '#/components/responses/Error'}
+  /reference/v1/allocations/{allocationId}/inputs/{port}:
+    parameters:
+      - $ref: '#/components/parameters/AllocationId'
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/AttemptId'
+      - $ref: '#/components/parameters/Epoch'
+      - $ref: '#/components/parameters/Port'
+    put:
+      operationId: referenceRemoteUploadInput
+      summary: 선언된 고정 입력 파일 업로드
+      description: >-
+        예약에 포함된 port/bytes/SHA-256/mediaType 및 SERVICE 입력 계약을 검증합니다.
+        동일 파일 재전송은 멱등이며 다른 파일이나 종료한 할당은 거절합니다.
+        파일 본문을 metadata DB나 로그에 넣지 않습니다. 참조 시뮬레이터는 input/application/json만 지원합니다.
+      requestBody:
+        required: true
+        content:
+          '*/*':
+            schema: {type: string, format: binary}
+      responses:
+        '200': {$ref: '#/components/responses/Status'}
+        default: {$ref: '#/components/responses/Error'}
+  /reference/v1/allocations/{allocationId}/start:
+    parameters: *identityParameters
+    post:
+      operationId: referenceRemoteStart
+      summary: 모든 고정 입력을 확인한 후 계산 시작
+      description: >-
+        본문 없이 요청합니다. start 동시 호출·재전송은 동일 계산을 한 번만 시작합니다.
+        입력 누락·손상·마감 초과·취소는409입니다. 같은 RUNNING/SUCCEEDED 재전송은 현재 상태입니다.
+        참조 계산은 features·weights 내적+bias이며 고정 input 파일이 있으면 그 features를 사용합니다.
+        simulationDelayMillis는0..60000의 시험 전용 값입니다. 성능 측정값으로 사용하지 않습니다.
+      responses:
+        '200': {$ref: '#/components/responses/Status'}
+        default: {$ref: '#/components/responses/Error'}
+  /reference/v1/allocations/{allocationId}/cancel:
+    parameters: *identityParameters
+    post:
+      operationId: referenceRemoteCancel
+      summary: 실행 중단 또는 선행 취소 tombstone 기록
+      description: >-
+        본문 없이 요청합니다. 없는 할당도 영속 CANCELLED tombstone을 생성합니다.
+        늦은 reserve/start가 다시 실행하지 못합니다. 실행 중은 CANCELLING 이후 실제 중단을
+        확인해야 CANCELLED가 됩니다. 이미 SUCCEEDED/FAILED인 결과를 덮어쓰지 않습니다.
+      responses:
+        '200': {$ref: '#/components/responses/Status'}
+        default: {$ref: '#/components/responses/Error'}
+  /reference/v1/allocations/{allocationId}/outputs/{port}:
+    parameters:
+      - $ref: '#/components/parameters/AllocationId'
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/AttemptId'
+      - $ref: '#/components/parameters/Epoch'
+      - $ref: '#/components/parameters/Port'
+    get:
+      operationId: referenceRemoteDownloadOutput
+      summary: SUCCEEDED 할당의 출력 bytes 다운로드
+      description: >-
+        아직 결과가 없으면409입니다. 다운로드한 실제 bytes/SHA/mediaType을 Status metadata와
+        대조해야 합니다. 클라이언트는 전용 임시 파일에 받으며 검증 실패·시간 초과·다른 대상 파일
+        존재 시 발행하지 않습니다. redirect를 따르지 않고 RPC 전체시간을 제한합니다.
+      responses:
+        '200':
+          description: 실제 출력 파일. Content-Type은 선언된 mediaType과 같아야 합니다.
+          content:
+            '*/*':
+              schema: {type: string, format: binary}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    providerBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        전용 파일에서 매 요청 다시 읽는 제공자 자격. 공개 API·DB·로그에 저장하지 않습니다.
+        HTTPS/CA/hostname 검증을 사용하며 참조 시뮬레이터의 명시적127.0.0.1/[::1]만 HTTP를 허용합니다.
+  parameters:
+    AllocationId:
+      name: allocationId
+      in: path
+      required: true
+      schema: &uuid {type: string, format: uuid}
+    RunId:
+      name: X-EdgeAI-Run-Id
+      in: header
+      required: true
+      schema: *uuid
+    TaskId:
+      name: X-EdgeAI-Task-Id
+      in: header
+      required: true
+      schema: *uuid
+    AttemptId:
+      name: X-EdgeAI-Attempt-Id
+      in: header
+      required: true
+      schema: *uuid
+    Epoch:
+      name: X-EdgeAI-Epoch
+      in: header
+      required: true
+      schema: &sequence {type: integer, minimum: 1, maximum: 9007199254740991}
+    Port:
+      name: port
+      in: path
+      required: true
+      schema: &port {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
+  responses:
+    Status:
+      description: identity/digest/deadline이 고정된 현재 제공자 상태
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Status'}
+    Error:
+      description: >-
+        400 형식·digest·입력 무결성 오류, 401/403 인증 실패, 404 없는 할당,
+        409 identity/내용/생명주기 충돌, 413 크기 초과, 422 미지원 실행,
+        429/503 용량·일시 장애. adapter는 제공자의 본문을 예외나 로그에 포함하지 않습니다.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [code]
+            properties:
+              code: {type: string, maxLength: 64}
+  schemas:
+    Identity:
+      type: object
+      additionalProperties: false
+      required: [allocationId, runId, taskId, attemptId, epoch]
+      properties:
+        allocationId: *uuid
+        runId: *uuid
+        taskId: *uuid
+        attemptId: *uuid
+        epoch: *sequence
+    File:
+      type: object
+      additionalProperties: false
+      required: [port, bytes, sha256, mediaType]
+      properties:
+        port: *port
+        bytes: {type: integer, minimum: 0, maximum: 268435456}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        mediaType: {type: string, maxLength: 128, pattern: '^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$'}
+    Reservation:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, identity, serviceSpec, parameters, inputs, expiresAt]
+      properties:
+        apiVersion: {const: edgeai.remote.reference/v1}
+        identity: {$ref: '#/components/schemas/Identity'}
+        serviceSpec: {$ref: '../profiles/service-execution.schema.json'}
+        parameters: {type: object, additionalProperties: true}
+        inputs:
+          type: array
+          maxItems: 16
+          description: port는 중복 없이 SERVICE 선언과 일치해야 합니다. 필수 입력은 모두 포함합니다.
+          items: {$ref: '#/components/schemas/File'}
+        expiresAt: {type: string, format: date-time}
+    Status:
+      type: object
+      additionalProperties: false
+      required: [identity, revision, requestDigest, state, expiresAt, failureReason, sourceMode, outputs]
+      description: >-
+        digest/deadline은 선행 취소 tombstone에서만 함께 null입니다. FAILED일 때만 failureReason을
+        포함합니다. SUCCEEDED일 때만1개 이상 outputs를 포함하며 각 port는 중복되지 않습니다.
+        provider의 성공은 플랫폼 producer fencing과 S3 검증을 대신하지 않습니다.
+      properties:
+        identity: {$ref: '#/components/schemas/Identity'}
+        revision: *sequence
+        requestDigest: {type: [string, 'null'], pattern: '^sha256:[a-f0-9]{64}$'}
+        state: {enum: [ALLOCATED, RUNNING, SUCCEEDED, FAILED, CANCELLING, CANCELLED]}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        failureReason: {enum: [null, LEASE_EXPIRED, WORKLOAD_FAILED, PROVIDER_RESTART, INPUT_INVALID, OUTPUT_INVALID]}
+        sourceMode: {enum: [SYNTHETIC, EXTERNAL]}
+        outputs:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/File'}

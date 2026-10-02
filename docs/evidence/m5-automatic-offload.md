@@ -1,4 +1,4 @@
-# M5 자동 전환 — 구현·로컬 검증, 실제 kind 수용 전
+# M5 자동 전환 — 로컬·실제 kind·CI·배포 검증
 
 범위는 ADR0009, RunCreate.offload, Operation.trigger/decision, Attempt.excludedNodeNames와 V9다.
 전체 M5 완료나 최종 최적화 알고리즘의 성능 수용을 의미하지 않는다. Remote·상태형 복원은 남는다.
@@ -44,7 +44,21 @@ smoke-runtime.py --faults에 실제 cgroup 메모리/CPU와 실제 합성 worklo
 세 시나리오를 추가했다. 시험 임계값은 제어 경로 재현용이며 운영 권장값이 아니다. source 종료,
 새 Pod/다른 Node, scheduler affinity, 동일 Task/new Attempt/epoch, late commit 차단, 판단 이력 보존,
 이동 한도, 실제 S3 계산 결과와 cleanup을 확인한다. 메모리 사례는 STARTING 상태에서 API를
-재시작해 영속 Operation/decision 복구를 검증한다. 해당 신규 CI의 통과는 아직 판정하지 않았다.
+재시작해 영속 Operation/decision 복구를 검증한다.
+
+코드951c4bd의 [Actions36999672446](https://github.com/dsa04156/edgeai/actions/runs/36999672446)은
+scaffold/storage/runner/images/gitops 5 jobs 모두 success이고 내려받은 result.json14개 모두 PASS/0이다.
+실제 kind 증거20261002T112023Z-9b4797c0과 kind-runtime.json에서 전체18개 Run을 확인했다.
+자동 MEMORY/LATENCY/CPU 각각 Operation SUCCEEDED, 실제 연속 측정2개, source OFFLOADED,
+동일 Task/new Attempt2·epoch2, 제외되지 않은 다른 Node에 scheduler 배치, late commit401,
+검증된 실제 S3 Result1개, resourcesRemaining0이다. MEMORY 사례는 STARTING 중 API 재시작 뒤
+같은 Operation·판단 이력을 보존했다. 샘플의 resourceSource=CGROUP_V2,
+latencySource=WORKLOAD이며 CPU 사례는5.018초 동안 약1.386/1.405초의 실제 CPU 사용량을 기록했다.
+
+Actions가1024e22에 발행 digest를 기록했다. 배포 검증20261002T113836Z-2288ff3f(PASS)는
+실제 API/Dashboard/MinIO imageID가 source951c4bd의 release.json과 일치하고 Ready,
+PVC Bound, ArgoCD Synced임을 확인했다. 공유 Ingress status 제약으로 aggregate health는 여전히
+Progressing이다. 단독 edgeai Application의 refresh만 요청했고 공유 Traefik 설정은 변경하지 않았다.
 
 로컬 Docker 권한 제한은 유지한다. 실제 container/kind는 GitHub runner에서 확인한다.
 실행 측정 자체의 이전 코드61b6caa는 CI36996007482·kind15Run·실제 배포까지 통과했으며
