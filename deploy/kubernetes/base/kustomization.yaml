@@ -4,5 +4,6 @@ resources:
   - serviceaccount.yaml
   - config.yaml
   - postgres.yaml
+  - minio.yaml
   - api.yaml
   - dashboard.yaml

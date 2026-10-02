@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlatformController {
     @GetMapping("/api/v1/platform")
     public PlatformResponse platform() {
-        return new PlatformResponse("edgeai", "0.1.0", "M3", List.of("profiles", "devices", "nodes", "workflows", "runs", "tasks"));
+        return new PlatformResponse("edgeai", "0.1.0", "M3", List.of("profiles", "devices", "nodes", "workflows", "runs", "tasks", "results"));
     }
 
 }

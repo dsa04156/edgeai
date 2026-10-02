@@ -45,7 +45,9 @@ M2에서 Device 8개·Node 2개를 추가해 현재 구현된 17개 operation을
 장치 등록→노드 연결→세션→관측의 사용 순서와 revision/epoch/sequence 충돌·해제·신선도를 명시한다.
 M3에서 Workflow 4개·Run 4개·Task 2개를 추가해 총 27개 operation을 제공한다.
 DAG 검증·불변 버전·Idempotency-Key·초기 상태·취소 전파·오류를 한국어로 설명한다.
-실제 실행과 결과 조회는 M4 범위이며 초기 QUEUED를 실행 성공으로 표시하지 않는다.
+M4에서 `GET /tasks/{taskId}/results`를 추가해 총28개 operation을 제공한다.
+검증 전의 빈 결과, 없는 Task의404, 저장소 장애503을 구분하고 고정 버전·체크섬·크기·형식만 조회한다.
+서명 URL/자격 증명/파일 본문은 응답하지 않는다. 초기 QUEUED나 Job 종료를 실행 성공으로 표시하지 않는다.
 배포 주소: [Swagger UI](http://edgeai.192.168.0.56.sslip.io/swagger-ui.html),
 [대체 사설망 주소](http://edgeai.10.254.192.217.nip.io/swagger-ui.html).
 배포 계정은 `.tools/kubernetes/edgeai-runtime.env`의 `EDGEAI_API_USER`/`EDGEAI_API_PASSWORD`를 사용한다.

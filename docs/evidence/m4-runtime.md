@@ -2,7 +2,7 @@
 
 2026-10-02. M0–M3는 구현·검증 완료이며 M4는 아직 미완료다.
 이 기록은 실행 규격·Job compiler·S3 adapter·독립 Runner와 실행 상태/결과 확정 서비스의 시험에 한정한다.
-Dashboard의 Run 요청은 아직 실제 Kubernetes workload를 시작하지 않는다.
+배포의 실행 활성화와 실제 Runner 전체 경로 검증 상태는 아래 최신 기록을 따른다.
 
 ## 구현
 
@@ -141,3 +141,38 @@ namespace/SA/RBAC는 후속 실행을 위해 유지한다. 기존 namespace·RBA
 실제 K8 gateway 시험 외의 worker/HTTP DB 시험은 Kubernetes 신원·저장소 응답이 fixture다.
 Runner·MinIO CI는 시험한 정확한 컨테이너를 GHCR에 발행하고 release.json에 digest와
 검증 플랫폼 linux/amd64를 함께 기록하도록 확장했다. 이번 변경의 신규 CI·배포는 아직 확인 전이다.
+
+## Runner 연결 코드 CI·배포와 Result 조회
+
+`9d15fb1`의 Actions36981974775는 최종success, 5 jobs success, 4개 검증 artifact의 결과JSON
+13개 PASS/0이다. `4f3d718`이 API/UI/Runner/MinIO digest를 기록했다. Runner와 MinIO manifest
+익명 조회200을 확인했다. 처음 전체 artifact 다운로드는 Buildx `.dockerbuild` 파일을 ZIP으로
+풀지 못했으며, 네 검증 artifact를 이름으로 지정해 모두 다시 받고 결과JSON을 확인했다.
+`20261002T081450Z-85e0a326`: 실제 API/UI imageID와 pin 일치, Ready, PG/PVC, Argo Synced.
+`20261002T081450Z-ba7da831`: 실제 Ingress Swagger·Profile·Device·Workflow 회귀 PASS/0.
+최초 배포 상태 검사는 rollout 중 이전 imageID를 읽어 실패했으며 rollout 완료 후 같은 검사를 통과했다.
+이 시점에는 runtime 실행 설정이 비활성이다. 기존 aggregate health Progressing 제한을 유지한다.
+
+ResultController/Service/DTO와 `GET /api/v1/tasks/{taskId}/results`, Swagger28개, 작업별 결과
+화면을 추가했다. Task가 있지만 확정 결과가 없으면200/빈items, 없는Task는404, DB장애는503이다.
+결과는 고정 version·실제 검증 checksum/크기/형식 메타데이터이며 인증 토큰·서명URL은 반환하지 않는다.
+
+| testRunId | 범위 | 결과 |
+|---|---|---|
+| 20261002T080933Z-ef0e6d9d | 실제PG41, 실제 인증/API·결과 전후 조회·404·artifact 메타데이터 | PASS/0 |
+| 20261002T081048Z-7c7a4c71 | Result 포함 계약·타입·MVC | PASS/0 |
+| 20261002T081438Z-911c64c6 | 단위37, Result 인증·입력400·저장소503 포함 | PASS/0 |
+| 20261002T081450Z-31381e93 | UI lint/types/build·PC/모바일16, 결과 대기/확정/오류 UI fixture | PASS/0 |
+| 20261002T081525Z-d0c37018 | 실제DB/API·PC/모바일8·Swagger28·Result DB장애503·같은 프로세스 복구 | PASS/0 |
+| 20261002T080620Z-bb443558 / 080620Z-6b353bcb | 격리 로컬 MinIO artifact bucket 초기화·재실행 | PASS/0 |
+| 20261002T081201Z-aba15b4a | 실제K8 MinIO의 비공개·소유 태그·versioning bucket | PASS/0 |
+
+Result API 첫404시험은 컨트롤러의 예외 처리 범위 누락을 발견해 전용 ResultExceptionHandler로 고쳤다.
+UI 첫시험은 Next route announcer와 애플리케이션 alert를 구분하도록 오류 선택자를 수정했다.
+Swagger 첫회귀는 실제28개 operation에 기존27개 기대값을 적용한 실패였고 신규 Result 설명 검증과 함께 고쳤다.
+PC/모바일 결과 UI screenshot을 직접 확인했다. 결과 표시 UI fixture를 실제 Runner 결과로 주장하지 않는다.
+
+전용 signing/storage Secret은 기존 값을 유지하며 mode600 복구 파일을 기록한다. MinIO는 CI에서
+검증한 image digest와 전용5Gi PVC로 실제 클러스터에 초기 배포했다. API key mount/스토리지 주소와
+runtime 활성화 GitOps 설정은 server dry-run을 통과했으며 실제 활성화와 full Runner 수용시험은 다음 검증이다.
+`smoke-runtime.py`와 실제 버전/내용 검증 스크립트를 준비했다. 아직 실행 성공 증거는 없다.

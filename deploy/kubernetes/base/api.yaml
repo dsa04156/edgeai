@@ -29,6 +29,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: api
@@ -37,6 +38,7 @@ spec:
           envFrom:
             - configMapRef: {name: edgeai-config}
             - secretRef: {name: edgeai-runtime}
+            - secretRef: {name: edgeai-artifact-storage}
           env:
             - {name: EDGEAI_KUBE_ENABLED, value: 'true'}
             - {name: EDGEAI_KUBE_API_URL, value: 'https://kubernetes.default.svc'}
@@ -61,6 +63,11 @@ spec:
             periodSeconds: 5
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            - {name: runner-key, mountPath: /var/run/edgeai-controller, readOnly: true}
       volumes:
+        - name: runner-key
+          secret:
+            secretName: edgeai-runner-signing
+            defaultMode: 288
         - name: tmp
           emptyDir: {}

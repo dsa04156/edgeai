@@ -13,3 +13,11 @@ data:
   EDGEAI_API_USER: edgeai
   EDGEAI_BIND_ADDRESS: 0.0.0.0
   EDGEAI_API_BASE_URL: http://edgeai-api:18080
+  EDGEAI_RUNTIME_ENABLED: 'true'
+  EDGEAI_RUNTIME_NAMESPACE: edgeai-runtimes
+  EDGEAI_RUNTIME_SERVICE_ACCOUNT: edgeai-runner
+  EDGEAI_RUNTIME_CONTROL_PLANE_URL: http://edgeai-api.edgeai.svc:18080
+  EDGEAI_RUNNER_KEY_FILE: /var/run/edgeai-controller/key
+  EDGEAI_STORAGE_URL: http://edgeai-minio.edgeai.svc:9000
+  EDGEAI_STORAGE_RUNNER_URL: http://edgeai-minio.edgeai.svc:9000
+  EDGEAI_ARTIFACT_BUCKET: edgeai-artifacts

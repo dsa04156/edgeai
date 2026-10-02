@@ -10,7 +10,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const allowed = request.method === "GET" ? target === "csrf"
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^(devices|nodes)(/${uuid})?$`).test(target)
-    || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}$`).test(target)
+    || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$`).test(target)
     : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^devices/${uuid}$`).test(target);

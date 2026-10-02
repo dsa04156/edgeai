@@ -81,12 +81,23 @@ class RunnerApiIntegrationTest {
     private Map<String,Object> output(boolean version){var output=new LinkedHashMap<String,Object>(Map.of("port","output","bytes",2,"sha256","a".repeat(64),"mediaType","application/json"));if(version)output.put("versionId","fixture-version");return output;}
     private Map<String,Object> with(Execution e,String key,Object value){var body=new LinkedHashMap<>(identity(e));body.put(key,value);return body;}
     @Test void actualSecurityChainClaimsUploadsAndCommitsThenAutomaticallyPlansChild() throws Exception {
-        var e=execution();String assignment=request(e,"claim",identity(e),200);assertThat(assignment).contains("9007199254740993");
+        var e=execution();String resultPath="/api/v1/tasks/"+e.task()+"/results";
+        mvc.perform(get(resultPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/tasks/"+UUID.randomUUID()+"/results").with(user("fixture"))).andExpect(status().isNotFound());
+        mvc.perform(get(resultPath).with(user("fixture"))).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        String assignment=request(e,"claim",identity(e),200);assertThat(assignment).contains("9007199254740993");
         assertThat(request(e,"claim",identity(e),200)).contains(e.attempt().toString());
         assertThat(request(e,"uploads",with(e,"outputs",List.of(output(false))),200)).contains("http://storage.fixture/upload");
         String first=request(e,"commit",with(e,"outputs",List.of(output(true))),201);
         assertThat(request(e,"commit",with(e,"outputs",List.of(output(true))),200)).isEqualTo(first);
         assertThat(executions.taskDetail(e.task()).task().state()).isEqualTo("SUCCEEDED");
+        String metadata=mvc.perform(get(resultPath).with(user("fixture"))).andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control","no-store"))
+            .andExpect(jsonPath("$.items[0].attemptId").value(e.attempt().toString()))
+            .andExpect(jsonPath("$.items[0].artifacts[0].objectVersion").value("fixture-version"))
+            .andExpect(jsonPath("$.items[0].artifacts[0].sha256").value("a".repeat(64)))
+            .andReturn().getResponse().getContentAsString();
+        assertThat(metadata).doesNotContain("http://","Authorization","token","headers");
         var child=executions.taskDetail(e.child());assertThat(child.task().state()).isEqualTo("RUNNING");assertThat(child.attempts()).hasSize(1);
         assertThat(child.attempts().getFirst().state()).isEqualTo("DISPATCHING");
         assertThat(runtimes.byAttempt(child.attempts().getFirst().id())).isPresent();

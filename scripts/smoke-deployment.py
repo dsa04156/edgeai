@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -132,6 +133,16 @@ workflow_url = ui + "/api/control-plane/workflows"
 runs_url = ui + "/api/control-plane/workflow-runs"
 assert request(workflow_url)[0] == 401
 service_body = {"key": "workflow-probe-" + uuid.uuid4().hex, "version": "1.0.0", "spec": {"source": "synthetic-deployment-test"}}
+runtime_enabled = os.environ.get("EDGEAI_SMOKE_RUNTIME_ENABLED") == "true"
+if runtime_enabled:
+    spec = json.loads(Path('contracts/profiles/service-execution.example.json').read_text())
+    release = json.loads(Path('deploy/kubernetes/overlays/dev/release.json').read_text())
+    spec['image'] = 'ghcr.io/dsa04156/edgeai-runner@' + release['runnerDigest']
+    spec['platform'] = {'os': 'linux', 'architectures': ['amd64']}
+    spec['inputs'] = {'input': {'mediaType': 'application/json', 'maxBytes': 1048576, 'required': False}}
+    # This CRUD probe deliberately remains unscheduled so its cancellation assertions cannot race a successful workload.
+    spec['nodeSelector'] = {'edgeai.io/crud-probe': uuid.uuid4().hex}
+    service_body['spec'] = spec
 status, body = request(ui + "/api/control-plane/profiles/SERVICE", "POST", service_body, authenticated=True, csrf=csrf)
 assert status == 201
 service = json.loads(body)
@@ -161,25 +172,37 @@ assert status == 201
 run = json.loads(body)
 run_url = runs_url + "/" + run["id"]
 try:
-    assert run["state"] == "PENDING" and run["parameters"]["serial"] == 9007199254740993
+    assert run["state"] == ("RUNNING" if runtime_enabled else "PENDING") and run["parameters"]["serial"] == 9007199254740993
     assert request(runs_url, "POST", run_body, authenticated=True, csrf=csrf, idempotency=run_key)[0] == 200
     assert request(runs_url, "POST", {**run_body, "parameters": {}}, authenticated=True, csrf=csrf, idempotency=run_key)[0] == 409
     status, body = request(run_url, authenticated=True)
     tasks = {task["key"]: task for task in json.loads(body)["tasks"]}
     assert status == 200 and len(tasks) == 3
-    assert tasks["root"]["state"] == "READY" and tasks["child"]["state"] == "WAITING"
+    assert tasks["root"]["state"] == ("RUNNING" if runtime_enabled else "READY") and tasks["child"]["state"] == "WAITING"
     task_url = ui + "/api/control-plane/tasks/" + tasks["root"]["id"]
     status, body = request(task_url, authenticated=True)
-    assert status == 200 and json.loads(body)["attempts"][0]["state"] == "QUEUED"
+    assert status == 200 and json.loads(body)["attempts"][0]["state"] == ("DISPATCHING" if runtime_enabled else "QUEUED")
     assert request(task_url + "/cancel", "POST", {}, authenticated=True)[0] == 403
     assert request(task_url + "/cancel", "POST", {}, authenticated=True, csrf=csrf)[0] == 200
+    if runtime_enabled:
+        for _ in range(120):
+            _, value = request(task_url, authenticated=True)
+            if json.loads(value)['task']['state'] == 'CANCELLED': break
+            time.sleep(0.5)
+        else: raise AssertionError('Runtime did not confirm Task termination in 60 seconds')
     status, body = request(run_url, authenticated=True)
     state = json.loads(body)
-    assert status == 200 and state["run"]["state"] == "PENDING"
-    assert {task["key"]: task["state"] for task in state["tasks"]} == {"root": "CANCELLED", "child": "SKIPPED", "independent": "READY"}
+    assert status == 200 and state["run"]["state"] == ("RUNNING" if runtime_enabled else "PENDING")
+    assert {task["key"]: task["state"] for task in state["tasks"]} == {"root": "CANCELLED", "child": "SKIPPED", "independent": "RUNNING" if runtime_enabled else "READY"}
     assert request(run_url + "/cancel", "POST", {}, authenticated=True)[0] == 403
 finally:
     assert request(run_url + "/cancel", "POST", {}, authenticated=True, csrf=csrf)[0] == 200
+if runtime_enabled:
+    for _ in range(120):
+        _, value = request(run_url, authenticated=True)
+        if json.loads(value)['run']['state'] == 'CANCELLED': break
+        time.sleep(0.5)
+    else: raise AssertionError('Runtime did not confirm Run termination in 60 seconds')
 status, body = request(runs_url, "POST", run_body, authenticated=True, csrf=csrf, idempotency=run_key)
 assert status == 200 and json.loads(body)["id"] == run["id"] and json.loads(body)["state"] == "CANCELLED"
 print("PASS: deployed immutable DAG, idempotent Run/Task/Attempt initialization, branch cancellation and replay after cancellation; no runtime execution is claimed")

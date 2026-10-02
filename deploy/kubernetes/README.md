@@ -36,7 +36,19 @@ Pod 신원 증명용 audience=edgeai-runner projected token만 Job에 포함한�
 실제 AUTO/NODE·TokenReview·watch·삭제를 시험한다. 해당 Attempt의 리소스만 정리한다.
 대기용 컨테이너 시험이며 Runner/MinIO 전체 실행 증거와 구분한다.
 
-배포 실행은 아직 비활성이다. 활성화에는 CI 검증 Runner/MinIO digest, 버전 관리가 켜진
+배포 config는 runtime 실행을 활성화한다. 적용 전에 CI 검증 Runner/MinIO digest, 버전 관리가 켜진
 전용 bucket, API에서만 읽는 영속 HMAC 키(64 hex, 파일 mode600), 저장소 비밀정보가 필요하다.
 키는 API 재시작 때 변경하지 않는다. `.env.example`의 EDGEAI_RUNTIME_* / EDGEAI_STORAGE_*
 설정을 따르며 자격 증명은 Git에 넣지 않는다. 기존 M3 Run은 활성화 후에도 자동 실행하지 않는다.
+
+`python3 scripts/bootstrap-runtime-secrets.py --context <context>`는 전용 signing/storage Secret을
+생성하고 `.tools/kubernetes/`에 mode600 복구 파일을 유지한다. 재실행해도 키를 교체하지 않는다.
+MinIO는 전용5Gi PVC를 사용하며 외부 Ingress에 노출하지 않는다. CI 검증 digest로 실행한 후
+로컬 port-forward와 비공개 storage 환경 파일을 사용해 `node scripts/bootstrap-artifact-bucket.mjs`를
+실행한다. 기존 버킷은 소유 태그를 검사하고 비공개·versioning을 확인하며 object를 삭제하지 않는다.
+
+실행 활성화 후 CRUD 회귀는 `EDGEAI_SMOKE_RUNTIME_ENABLED=true`로 `scripts/smoke-deployment.py`를 실행한다.
+전체 Runner 시험은 `scripts/smoke-runtime.py --context <context>`이며 `EDGEAI_SMOKE_API_URL`,
+API 인증 환경 변수와 `EDGEAI_STORAGE_URL`/저장소 인증이 필요하다. API는 공개 Result 조회를 지원해야 한다.
+AUTO/NODE BATCH·실제 파일 체크섬/계산값·실행 중 취소·불가능한 affinity를 시험하고 해당 Run 리소스를 정리한다.
+이 명령은 현재 준비 단계이며 실제 실행 결과는 evidence에 기록한다. 실제 kind 게이트의 대체는 아니다.

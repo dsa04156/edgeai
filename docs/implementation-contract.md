@@ -8,7 +8,7 @@
 2. Flyway가 실제 PostgreSQL에서 schema를 초기화한다.
 3. `GET /actuator/health/readiness`는 DB 연결을 포함하며 장애 시 503을 반환한다.
 4. Next.js `GET /api/health`는 Spring readiness 결과를 전달하며 연결 실패를 UP으로 표시하지 않는다.
-5. `GET /api/v1/platform`은 인증을 요구하고 milestone=M3, capabilities=[profiles,devices,nodes,workflows,runs,tasks]를 반환한다.
+5. `GET /api/v1/platform`은 인증을 요구하고 마지막 완료 milestone=M3, capabilities=[profiles,devices,nodes,workflows,runs,tasks,results]를 반환한다. Result 조회 추가만으로 M4 전체 수용 완료를 의미하지 않는다.
 6. 개발 서비스는 loopback에만 publish한다. 비밀번호는 무작위 local `.env`로 관리한다.
 7. 미구현 시험은 exit 2/BLOCKED를 반환한다. scaffold 성공을 전체 플랫폼 완료로 표시하지 않는다.
 

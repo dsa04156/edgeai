@@ -17,8 +17,10 @@ M4 실행 규격·Job compiler·S3 artifact adapter·독립 Runner를 추가했�
 V5의 RuntimeInstance·CREATE/DELETE 명령 lease·봉인된 Result/Artifact와 실행 상태 전이를 추가했다.
 Run 잠금으로 claim·결과 확정·BATCH 하위 해제·취소를 직렬화하고 외부 저장소 I/O 후 producer를 다시 검사한다.
 Kubernetes Job/Secret worker·watch/reconciliation·내부 claim/uploads/commit/fail HTTP를 구현했다.
+Result 공개 API/화면·Swagger28개를 추가했다. 단위37·PG41·UI16·실DB브라우저8·DB장애/복구를 확인했다.
 Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전용 runtime namespace/RBAC를 준비했다.
-실행 기능은 기본 비활성이다. 새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
+로컬 실행 기능 기본값은 비활성이다. 배포는 MinIO/PVC/버킷/영속 키를 준비했고 GitOps 활성화 설정 반영을 진행한다.
+새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
 
 [VERIFIED]
 단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
@@ -47,7 +49,8 @@ M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 
 [NEXT]
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.
-Runner BATCH·취소·재시작 종단 검증, Result 공개 API/UI/Swagger와 실제 kind 수용시험을 완료한다.
+9d15fb1 CI36981974775 5jobs/JSON13개 통과, 배포 imageID·Ingress 회귀까지 확인했다.
+Result/API와 활성화 설정의 새 CI·배포, 실제 Runner BATCH·취소·재시작 종단 검증과 kind 수용시험을 완료한다.
 상세 구현 순서: PLAN.md. 기존 demo-workflow/test-kind의 실제 실행 기준을 유지한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh

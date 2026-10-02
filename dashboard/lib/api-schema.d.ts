@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. root task는 READY/QUEUED Attempt, 나머지는 WAITING입니다. M3는 영속 실행 대기열이며 실제 Pod 실행·결과는 M4에서 구현합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용하며 VD는 M6 후속입니다. STREAM 실행은 아직 501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용하며 VD는 M6 후속입니다. STREAM 실행은 아직 501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -487,6 +487,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{taskId}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 작업의 검증된 결과와 artifact 메타데이터 조회
+         * @description 저장소의 실제 파일 크기·SHA-256·형식과 고정 object version을 검증하고 DB에 확정한 결과만 반환합니다. Task는 있지만 결과가 아직 확정되지 않았으면 200과 빈 items를 반환합니다. Job 종료만으로 결과를 만들지 않습니다. 각 artifact의 포트·버킷·키·버전·체크섬·크기·형식을 확인할 수 있습니다. 파일 본문, 서명 URL, 인증 토큰은 제공하지 않습니다.
+         */
+        get: operations["getTaskResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -536,7 +556,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE";
             message: string;
         };
         /**
@@ -550,7 +570,8 @@ export interface components {
          *         "nodes",
          *         "workflows",
          *         "runs",
-         *         "tasks"
+         *         "tasks",
+         *         "results"
          *       ]
          *     }
          */
@@ -825,6 +846,39 @@ export interface components {
         TaskDetail: {
             task: components["schemas"]["Task"];
             attempts: components["schemas"]["TaskAttempt"][];
+        };
+        TaskResults: {
+            /** Format: uuid */
+            taskId: string;
+            items: components["schemas"]["TaskResult"][];
+        };
+        TaskResult: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            attemptId: string;
+            /** Format: uuid */
+            runtimeId: string;
+            /** Format: int64 */
+            epoch: number;
+            /** Format: uuid */
+            producerPodUid: string;
+            manifestDigest: string;
+            /** Format: date-time */
+            createdAt: string;
+            artifacts: components["schemas"]["ResultArtifact"][];
+        };
+        ResultArtifact: {
+            port: string;
+            bucket: string;
+            objectKey: string;
+            objectVersion: string;
+            sha256: string;
+            /** Format: int64 */
+            bytes: number;
+            mediaType: string;
         };
         EmptyCommand: Record<string, never>;
         WorkflowPage: {
@@ -2673,6 +2727,63 @@ export interface operations {
                 };
             };
             /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Run 상세에 포함된 Task UUID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 확정된 결과 목록. 현재 Task당 최대 1개이며 검증 전에는 비어 있습니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResults"];
+                };
+            };
+            /** @description Task UUID 형식이 잘못되었습니다. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증이 필요합니다. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Task가 없습니다. 결과 대기 중인 Task와 구분합니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 결과 메타데이터 저장소에 연결할 수 없습니다. */
             503: {
                 headers: {
                     [name: string]: unknown;

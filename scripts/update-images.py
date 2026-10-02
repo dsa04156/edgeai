@@ -17,7 +17,7 @@ for value in [args.api, args.dashboard, args.runner, args.minio]:
         parser.error('images must be immutable SHA-256 digests')
 path = Path('deploy/kubernetes/overlays/dev/kustomization.yaml')
 text = path.read_text()
-for name, digest in [('api', args.api), ('dashboard', args.dashboard)]:
+for name, digest in [('api', args.api), ('dashboard', args.dashboard), ('minio', args.minio)]:
     pattern = rf'(- name: ghcr.io/dsa04156/edgeai-{name}\n)    (?:newTag|digest): [^\n]+'
     text, count = re.subn(pattern, rf'\g<1>    digest: {digest}', text)
     if count != 1:

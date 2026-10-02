@@ -31,6 +31,7 @@ export function WorkflowConsole() {
   const [runs, setRuns] = useState<Schema["RunPage"] | null>(null); const [runOffset, setRunOffset] = useState(0);
   const [run, setRun] = useState<Schema["RunDetail"] | null>(null); const [runJson, setRunJson] = useState("");
   const [task, setTask] = useState<Schema["TaskDetail"] | null>(null); const [key, setKey] = useState("");
+  const [results, setResults] = useState<Schema["TaskResults"] | null>(null);
   const [mode, setMode] = useState("AUTO"); const [parameters, setParameters] = useState("{}");
   const [cancel, setCancel] = useState<{ kind: "run" | "task"; id: string } | null>(null);
 
@@ -60,7 +61,12 @@ export function WorkflowConsole() {
     setKey(requestKey()); setCancel(null);
   }
   async function showRun(id: string) {
-    const text = await (await api(`workflow-runs/${id}`)).text(); setRun(JSON.parse(text)); setRunJson(stringify(parse(text), null, 2) || ""); setTask(null); setCancel(null);
+    const text = await (await api(`workflow-runs/${id}`)).text(); setRun(JSON.parse(text)); setRunJson(stringify(parse(text), null, 2) || ""); setTask(null); setResults(null); setCancel(null);
+  }
+  async function showTask(id: string) {
+    setTask(null); setResults(null);
+    const [detail, result] = await Promise.all([api(`tasks/${id}`), api(`tasks/${id}/results`)]);
+    setTask(await detail.json()); setResults(await result.json());
   }
   function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
@@ -76,7 +82,7 @@ export function WorkflowConsole() {
   }
   function disconnect() {
     setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
-    setRuns(null); setRun(null); setRunJson(""); setTask(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}");
+    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}");
   }
   async function confirmCancellation() {
     if (!cancel) return;
@@ -118,7 +124,7 @@ export function WorkflowConsole() {
       {version && <section className="panel" aria-labelledby="selected-version-title"><h2 id="selected-version-title">선택한 DAG · {version.version}</h2><p className="digest mono">버전 ID {version.id}</p><p className="digest mono">{version.digest}</p><pre aria-label="발행된 DAG JSON">{versionJson}</pre>
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
           const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : { mode, nodeId }, parameters: objectJson(parameters) }, key);
-          const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
+          const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
           <label>실행 위치 정책<select value={mode} onChange={e => setMode(e.target.value)}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option></select></label>
           {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
@@ -133,8 +139,16 @@ export function WorkflowConsole() {
         <div className="pagination"><button disabled={busy || runOffset === 0} onClick={() => void action(() => loadRuns(runOffset - 20))}>이전 실행</button><span>{runOffset / 20 + 1} 페이지</span><button disabled={busy || runs?.nextOffset == null} onClick={() => void action(() => loadRuns(runs!.nextOffset!))}>다음 실행</button></div>
       </section>
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
-        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(async () => setTask(await (await api(`tasks/${t.id}`)).json()))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
+        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
+        {task && results && <div role="region" aria-label={`검증된 결과 · ${task.task.key}`}>
+          <div className="toolbar"><h3>검증된 결과 · {task.task.key}</h3><button disabled={busy} onClick={() => void action(() => showTask(task.task.id))}>결과 새로고침</button></div>
+          {results.items.length === 0 ? <p className="muted">아직 확정된 결과가 없습니다.</p> : results.items.map(result => <div key={result.id}>
+            <p className="hint">파일 검증 완료 · {new Date(result.createdAt).toLocaleString()}</p>
+            <div className="table-scroll"><table><caption className="sr-only">검증된 출력 파일</caption><thead><tr><th>출력 포트</th><th>크기</th><th>형식</th></tr></thead><tbody>{result.artifacts.map(artifact => <tr key={artifact.port}><td>{artifact.port}</td><td>{artifact.bytes.toLocaleString()} bytes</td><td>{artifact.mediaType}</td></tr>)}</tbody></table></div>
+            <details><summary>결과 ID·체크섬·파일 버전</summary><p className="digest mono">Result {result.id}</p><p className="digest mono">Attempt {result.attemptId}</p>{result.artifacts.map(artifact => <div key={artifact.port}><h4>{artifact.port}</h4><p className="digest mono">SHA-256 {artifact.sha256}</p><p className="digest mono">버전 {artifact.objectVersion}</p><p className="digest mono">{artifact.bucket}/{artifact.objectKey}</p></div>)}</details>
+          </div>)}
+        </div>}
         <details><summary>실행 매개변수·작업 상세</summary><pre aria-label="실행 상세 JSON">{runJson}</pre></details>
         {!terminal.has(run.run.state) && <div className="release-controls"><button disabled={busy} onClick={() => setCancel({ kind: "run", id: run.run.id })}>실행 취소</button></div>}
         {cancel && <div className="notice"><p>{cancel.kind === "run" ? "이 실행에 속한 모든 작업을 취소합니다." : "선택한 작업과 아직 실행하지 않은 하위 의존 작업을 취소합니다."}</p><div className="toolbar"><button disabled={busy} onClick={() => void action(confirmCancellation)}>취소 확정</button><button disabled={busy} onClick={() => setCancel(null)}>계속 진행</button></div></div>}

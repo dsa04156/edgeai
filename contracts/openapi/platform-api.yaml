@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: EdgeAI Control Plane — M3
+  title: EdgeAI Control Plane
   version: 0.1.0
-  description: Profile → Device/Node → 불변 Workflow DAG → Run/Task/Attempt 관리 API입니다. M3는 실행 요청 저장·조회·취소이며 실제 Kubernetes 실행과
-    결과 저장은 M4에서 구현합니다. 쓰기 요청은 실제 DB에 반영되고 Swagger의 CSRF 토큰/쿠키는 자동 연결됩니다.
+  description: Profile → Device/Node → Workflow DAG → Run/Task/Attempt와 검증된 결과 조회 API입니다.
+    실제 Kubernetes 실행은 서버의 runtime 설정이 활성화된 환경에서 동작합니다. 쓰기 요청은 실제 DB에 반영되고 Swagger의 CSRF 토큰/쿠키는 자동 연결됩니다.
 servers:
 - url: /
 security:
@@ -1065,7 +1065,8 @@ paths:
       operationId: createWorkflowRun
       summary: 워크플로 실행 요청 생성
       description: 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로
-        다시 실행하려면 새 키를 사용합니다. root task는 READY/QUEUED Attempt, 나머지는 WAITING입니다. M3는 영속 실행 대기열이며 실제 Pod 실행·결과는 M4에서 구현합니다. AUTO는
+        다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다.
+        실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는
         scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용하며 VD는 M6 후속입니다. STREAM 실행은 아직 501입니다.
       responses:
         '200':
@@ -1396,6 +1397,43 @@ paths:
       security:
       - localBasic: []
         csrfToken: []
+  /api/v1/tasks/{taskId}/results:
+    get:
+      tags: [Result]
+      operationId: getTaskResults
+      summary: 작업의 검증된 결과와 artifact 메타데이터 조회
+      description: >-
+        저장소의 실제 파일 크기·SHA-256·형식과 고정 object version을 검증하고 DB에 확정한 결과만 반환합니다.
+        Task는 있지만 결과가 아직 확정되지 않았으면 200과 빈 items를 반환합니다. Job 종료만으로 결과를 만들지 않습니다.
+        각 artifact의 포트·버킷·키·버전·체크섬·크기·형식을 확인할 수 있습니다. 파일 본문, 서명 URL, 인증 토큰은 제공하지 않습니다.
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          description: Run 상세에 포함된 Task UUID
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 확정된 결과 목록. 현재 Task당 최대 1개이며 검증 전에는 비어 있습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskResults'}
+        '400':
+          description: Task UUID 형식이 잘못되었습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '401': {description: Basic 인증이 필요합니다.}
+        '404':
+          description: Task가 없습니다. 결과 대기 중인 Task와 구분합니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: 결과 메타데이터 저장소에 연결할 수 없습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
 components:
   securitySchemes:
     csrfToken:
@@ -1556,6 +1594,8 @@ components:
           - CANNOT_CANCEL
           - STREAM_NOT_IMPLEMENTED
           - WORKFLOW_STORE_UNAVAILABLE
+          - INVALID_TASK_ID
+          - RESULT_STORE_UNAVAILABLE
         message:
           type: string
     PlatformInfo:
@@ -1589,6 +1629,7 @@ components:
         - workflows
         - runs
         - tasks
+        - results
     Health:
       type: object
       required:
@@ -2307,6 +2348,46 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TaskAttempt'
+    TaskResults:
+      type: object
+      additionalProperties: false
+      required: [taskId, items]
+      properties:
+        taskId: {type: string, format: uuid}
+        items:
+          type: array
+          maxItems: 1
+          items: {$ref: '#/components/schemas/TaskResult'}
+    TaskResult:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, attemptId, runtimeId, epoch, producerPodUid, manifestDigest, createdAt, artifacts]
+      properties:
+        id: {type: string, format: uuid}
+        taskId: {type: string, format: uuid}
+        attemptId: {type: string, format: uuid}
+        runtimeId: {type: string, format: uuid}
+        epoch: {type: integer, format: int64, minimum: 1}
+        producerPodUid: {type: string, format: uuid}
+        manifestDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        createdAt: {type: string, format: date-time}
+        artifacts:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {$ref: '#/components/schemas/ResultArtifact'}
+    ResultArtifact:
+      type: object
+      additionalProperties: false
+      required: [port, bucket, objectKey, objectVersion, sha256, bytes, mediaType]
+      properties:
+        port: {type: string}
+        bucket: {type: string}
+        objectKey: {type: string}
+        objectVersion: {type: string}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        bytes: {type: integer, format: int64, minimum: 0, maximum: 268435456}
+        mediaType: {type: string}
     EmptyCommand:
       type: object
       additionalProperties: false
@@ -2361,3 +2442,5 @@ tags:
   description: 실행 요청·중복 방지·작업 상태·취소
 - name: Task
   description: 논리 작업 및 Attempt 이력
+- name: Result
+  description: 검증·확정된 작업 결과와 고정 object version 메타데이터

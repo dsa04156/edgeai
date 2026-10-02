@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-minio
+  labels: {app.kubernetes.io/part-of: edgeai, app.kubernetes.io/managed-by: edgeai-bootstrap}
+spec:
+  selector: {app: edgeai-minio}
+  ports: [{name: s3, port: 9000, targetPort: s3}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgeai-minio
+  labels: {app.kubernetes.io/part-of: edgeai, app.kubernetes.io/managed-by: edgeai-bootstrap}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  serviceName: edgeai-minio
+  replicas: 1
+  selector:
+    matchLabels: {app: edgeai-minio}
+  template:
+    metadata:
+      labels: {app: edgeai-minio}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/arch: amd64}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: minio
+          image: ghcr.io/dsa04156/edgeai-minio:bootstrap
+          args: [server, /data, --console-address, ':9001']
+          ports: [{name: s3, containerPort: 9000}]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: edgeai-artifact-storage, key: EDGEAI_MINIO_USER}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: edgeai-artifact-storage, key: EDGEAI_MINIO_PASSWORD}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 1Gi}
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: s3}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /minio/health/live, port: s3}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 5Gi}
