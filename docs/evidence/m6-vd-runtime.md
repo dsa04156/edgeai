@@ -53,9 +53,22 @@ SIGTERM을 두 번 보내는 경로를 제거했고 후속 supervisor 및 전체
 로컬은 실제 Linux Python 프로세스와 HTTP 프로토콜 fixture다. HTTP 서버는 실제 Spring/DB가
 아니며 업로드 대상도 실제 MinIO가 아니다. 컨테이너 시험 fixture는 production UID10001·읽기 전용
 root를 유지하고, 비공개 작업 volume 검사·정리를 같은 UID의 일회성 컨테이너에서 수행한다.
-신규 이미지의 실제 CI 결과와 kind의 VD 전체 경로는 아직 확인 대상이다.
+kind의 VD 전체 경로는 아직 확인 대상이다.
 
-다음은 새 migration의 VDRuntime·명령 lease·Operation·runtime binding 이력, 실제 Pod 생성/관측/
-UID 삭제, runtime/Pod 신원 인증과 poll 서버다. 이어 VD 수정/해제의 교체·drain과 Run VD 정책,
+## CI·기존 실행 회귀·배포 확인
+
+코드e442a5c의 [CI37027216582](https://github.com/dsa04156/edgeai/actions/runs/37027216582)는
+5 jobs 모두 success다. 검증 artifact4개 그룹의 결과JSON15개 모두 PASS/0를 내려받아 확인했다.
+실제 Runner 이미지에서 UID10001·읽기 전용 root·private volume으로27개 시험을 통과했다
+(`20261002T152845Z-01966298`, 84.499초). 호스트도27개 통과했다.
+기존 실제 kind22Run과 고정 S3결과20개의 내용/버전/계산값 검증·클러스터 삭제도 통과했다.
+새 VD supervisor의 kind 제어 서버 연결 시험은 아니다.
+
+GitOps28a6b42 pin과 실제 API/Dashboard/MinIO의 imageID·Ready·PVCBound·ArgoSynced를
+`20261002T155929Z-50929ad5` PASS/0로 확인했다. 공유 Ingress status로 aggregate health는Progressing이다.
+
+V14의 VDRuntime·명령 lease·Operation·runtime binding 이력과 registry 수정/해제 hook은
+[후속 lifecycle 기록](m6-vd-lifecycle.md)을 따른다. 다음은 실제 Pod 생성/관측/UID 삭제,
+runtime/Pod 신원 인증과 poll 서버다. 이어 공개 교체·drain Operation 조회와 Run VD 정책,
 고정 SERVICE에 맞는 Task 배정·Result producer·재시작/취소·demo-vd를 연결한다.
 M5 상태형 복원·외부 실제 계약, M7–M10도 별도로 남는다.

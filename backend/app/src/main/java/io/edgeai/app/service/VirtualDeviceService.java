@@ -18,8 +18,9 @@ public class VirtualDeviceService {
     private final ProfileRepository profiles;
     private final NodeRepository nodes;
     private final Clock clock;
-    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock) {
-        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;
+    private final VDLifecycleService lifecycle;
+    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDLifecycleService lifecycle) {
+        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.lifecycle=lifecycle;
     }
     @Transactional
     public VirtualDeviceRepository.Creation create(String body) {
@@ -58,14 +59,14 @@ public class VirtualDeviceService {
         var current=new TreeMap<String,UUID>();active.forEach(b->current.put(b.sourceKey(),b.deviceId()));
         if(vd.displayName().equals(configuration.displayName()) && vd.placement().equals(configuration.placement()) && current.equals(configuration.sources()))return vd;
         var now=now(vd);repository.update(id,configuration.displayName(),configuration.placement(),vd.state(),now);
-        var updated=find(id,false);bindChanges(updated,active,configuration.sources(),devicesById,now);return updated;
+        var updated=find(id,false);bindChanges(updated,active,configuration.sources(),devicesById,now);lifecycle.registryChanged(updated);return updated;
     }
     @Transactional
     public VirtualDevice release(UUID id) {
         var vd=find(id,true);if(vd.state()==VirtualDevice.State.RELEASED)return vd;
         var now=now(vd);repository.update(id,vd.displayName(),vd.placement(),VirtualDevice.State.RELEASED,now);
         for(var binding:repository.activeSources(id))repository.close(binding.id(),vd.revision()+1,now);
-        return find(id,false);
+        var released=find(id,false);lifecycle.registryChanged(released);return released;
     }
     private void bindChanges(VirtualDevice vd,List<VDSourceBinding> current,Map<String,UUID> requested,Map<UUID,Device> sources,Instant now) {
         var unchanged=new HashSet<String>();

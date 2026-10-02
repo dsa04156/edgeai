@@ -46,7 +46,11 @@ public final class JdbcDeviceRepository implements DeviceRepository {
     public void rename(UUID id,String name,Instant now) { jdbc.update("UPDATE edgeai.device SET display_name=?,revision=revision+1,updated_at=? WHERE id=?",name,Timestamp.from(now),id); }
     public void release(UUID id,Instant now) { jdbc.update("UPDATE edgeai.device SET state='RELEASED',revision=revision+1,updated_at=? WHERE id=?",Timestamp.from(now),id); }
     public boolean hasVirtualDeviceBindings(UUID id) {
-        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding WHERE device_id=? AND closed_at IS NULL)",Boolean.class,id));
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+            SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding b WHERE b.device_id=? AND
+                (b.closed_at IS NULL OR EXISTS (SELECT 1 FROM edgeai.vd_runtime r WHERE r.vd_id=b.vd_id
+                    AND r.observed_state<>'TERMINATED' AND r.configuration->'sources'->>b.source_key=b.id::text)))
+            """,Boolean.class,id));
     }
     public void advanceEpoch(UUID id,Instant now) { jdbc.update("UPDATE edgeai.device SET session_epoch=session_epoch+1,updated_at=? WHERE id=?",Timestamp.from(now),id); }
     public List<DeviceAttachment> attachments(UUID id) { return jdbc.query("SELECT * FROM edgeai.device_attachment WHERE device_id=? ORDER BY attached_at DESC,id LIMIT 20",ATTACHMENT,id); }

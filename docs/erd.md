@@ -9,10 +9,10 @@
 - Workflow → WorkflowVersion → TaskDefinition / TaskDependency
 - WorkflowVersion → WorkflowRun → Task → TaskAttempt
 - TaskAttempt → RuntimeInstance, TaskResult → Artifact
-- VirtualDevice → VDRuntimeBinding → RuntimeInstance
+- VirtualDevice → VDRuntimeBinding → VDRuntime (지속 Pod 실행 세대)
 
-RuntimeInstance는 V5 독립 테이블로 구현했다. VD source 수와
-VD당 active RuntimeBinding 1개 제약은 후속 확정 항목이다.
+RuntimeInstance는 V5의 개별 TaskAttempt 실행이다. VD의 지속 VDRuntime은 V14에서 별도 구현했다.
+VD source는 V13의 이름있는0–16개 slot이고, VD당 열린 RuntimeBinding 하나는 V14 partial UNIQUE다.
 Task당 활성 Attempt 하나는 V4 partial UNIQUE로 구현했다.
 초안의 최소 1개 카디널리티가 생성 직후·Pending 상태에도 성립하는지는 M3/M6에서 검토한다.
 
@@ -28,7 +28,7 @@ UUID PK, kind, profile_key, version, spec(jsonb), digest, created_at(timestamptz
 (kind, profile_key, version)는 UNIQUE이며 kind/키/버전/spec/digest CHECK를 둔다.
 키·버전은 C collation으로 목록 순서와 인덱스를 일치시킨다.
 UPDATE/DELETE 행 trigger 및 TRUNCATE 문장 trigger가 발행 후 변경을 거절한다.
-Device FK는 V3에서 추가했다. TaskDefinition SERVICE 종류 FK는 V4에서 추가했으며 VD FK는 후속 단계다.
+Device FK는 V3에서 추가했다. TaskDefinition SERVICE 종류 FK는 V4, VD/SERVICE 종류 FK는 V13이다.
 
 ## 구현된 M2 테이블
 
@@ -71,4 +71,21 @@ Runtime과 Result는 Kubernetes Pod 또는 RemoteAllocation 중 하나의 produc
 V11은 PostgreSQL BEFORE trigger 시점의 생성 컬럼 비교를 제외하고 결과의 원본 컬럼 봉인을 유지한다.
 V12는 workflow_run/task_attempt/task_offload에 Remote 제공자 binding을 추가하고 실행 대상 변경을 차단한다.
 새 allocation은 Attempt의 고정 제공자와 일치해야 하며 수동 offload는 Node/Remote 중 정확히 하나를 갖는다.
-V1–V12는 로컬 적용된 migration이며 수정하지 않는다.
+V1–V14는 로컬 적용된 migration이며 수정하지 않는다.
+
+## 구현된 M6 등록·실행 수명 테이블
+
+V13 `virtual_device`는 불변 VD/SERVICE Profile과 REGISTERED/RELEASED·revision·배치 의도를 가진다.
+`vd_source_binding`은 slot별 Device·정확한DEVICE Profile/sourceMode와 열린/닫힌 revision을 보존한다.
+현재 source의 유일성, 원본 호환성·필수 slot·논리 해제 제약과 장치 해제 보호를 적용한다.
+
+V14 `vd_runtime`은 불변 VD/configuration/generation·Pod 이름/UID·claim nonce·session/Node 신원과
+희망/관측 상태·startup/drain/lease 시간을 저장한다. `vd_runtime_binding`은 VD와 실행 세대의 별도
+관계 이력이다. VD당 종료 미확인 실행 하나와 열린 runtime binding 하나를 제한하고 지연 제약으로
+종료 상태와 binding 폐쇄의 일치를 확인한다. source binding이 닫힌 뒤에도 이전 runtime이 쓰는
+Device는 실행 종료 확인 전까지 해제할 수 없다.
+
+`vd_operation`은 PROVISION/REPLACE/DRAIN 요청·동일 키 digest·source/target Runtime·처리 결과다.
+`vd_runtime_command`는 실제 CREATE/DELETE의 lease/owner/시도/완료를 따로 저장한다. 실행 요청,
+source/runtime 이력과 Operation은 VD 행 잠금 아래 원자적으로 변경한다.
+현재 TaskAttempt의 RuntimeInstance를 이 지속 VD의 Task slot에 연결하는 관계는 후속 구현이다.

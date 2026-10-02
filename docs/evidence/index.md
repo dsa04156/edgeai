@@ -122,3 +122,5 @@ DB 실행 상태·Kubernetes 생성/관측·내부 API·Result·실제 kind 및 
 Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/Task 실행은 후속 게이트다.
 [지속 runtime 구성 요소](m6-vd-runtime.md)는 Pod compiler·감독 프로세스와 종료/lease/중복 방지
 시험을 다룬다. 등록 코드0b4693c는 CI37022079299와 실제 이미지/Ready/ArgoSynced까지 확인했다.
+[영속 lifecycle](m6-vd-lifecycle.md)은 V14의 실행 세대·명령 lease·Operation·교체/종료·실제 DB 경합을
+검증한다. Kubernetes 관측은 fixture이며 실제 gateway·VD Task 실행 수용은 후속이다.

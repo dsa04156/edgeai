@@ -124,6 +124,8 @@ Node ID만 복사한 별도 Job으로 실제 VD 실행 수용 게이트를 대�
 
 ADR0014의 지속 supervisor·순수 Pod compiler와 내부 poll 계약을 구성 요소로 추가했다.
 실제 자식 Runner 작업·취소·lease·drain·강제 종료 후 자식 정리와 기존 Runner 회귀를 검증한다.
-현재 poll 서버·영속 VDRuntime/Operation·실제 Pod 생성·VD Task 배정은 미연결이다.
-증거는 `docs/evidence/m6-vd-runtime.md`다. 다음은 새 migration에서 실행 세대·명령·Operation·
-runtime binding 이력을 저장하고, 동일 VD 잠금 아래 교체/해제와 Task claim을 연결하는 것이다.
+V14/ADR0015의 영속 VDRuntime/Operation·runtime binding·명령 lease와 registry 수정/해제 hook을
+추가했다. 실제 DB 동시성·서비스 객체 재생성·생성 응답 지연·종료/lease/세대 fence를 검증한다.
+증거는 `docs/evidence/m6-vd-runtime.md`, `docs/evidence/m6-vd-lifecycle.md`다.
+다음은 실제 Pod gateway/worker·poll 서버와 sequence 재전송 상태·공개 Operation/UI,
+VD Run 배정·Task claim/Result의 연결이다. 공개 등록은 아직 runtime을 자동 기동하지 않는다.

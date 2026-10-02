@@ -120,5 +120,7 @@ DB 복합 FK·활성 UNIQUE·이력 변경 차단과 지연 제약으로 필수 
 ADR0014의 순수 `KubernetesVDPodCompiler`는 고정 SERVICE 이미지의 지속 Pod를 만든다.
 `runner/vd.py`는 runtime/generation/session/lease에 묶인 poll로 작업을 받고, 작업마다 기존 Runner를
 별도 session에서 실행한다. Pod 자체는 Task·Job과 독립이며 자원은 동시 작업이 공유한다.
-지속 실행 상태 저장·Operation·실제 Pod gateway·poll 서버·VD Run 배정은 아직 연결하지 않았다.
-구성 요소만으로 등록된 VD를 Ready 또는 실행 가능으로 표시하지 않는다.
+ADR0015/V14는 실행 세대·설정 스냅샷·runtime binding 이력·Operation과 CREATE/DELETE lease를
+저장한다. VD 행 잠금 아래 원본 교체/해제와 drain 요청을 연결하고 이전 세대 종료 확인 후 새 세대를
+만든다. 실제 Pod gateway·poll 서버·VD Run 배정은 아직 연결하지 않았다.
+공개 등록만으로 VD를 Ready 또는 실행 가능으로 표시하지 않는다.
