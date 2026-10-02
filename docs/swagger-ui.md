@@ -29,4 +29,7 @@ ArgoCD/배포 대상 정보는 아직 제공되지 않았으며 임의의 클러
   실브라우저 재검증을 통과했다. 최초 실패 기록 `20261002T013705Z-50688b1b`도 보존한다.
 - Swagger desktop/mobile 스크린샷을 열어 실제 화면을 확인했다.
 
-GitHub CI는 이번 push 결과를 확인한 후 기록한다. CD를 구성하거나 배포하지 않았다.
+코드 fd729ca의 [GitHub Actions 36952012074](https://github.com/dsa04156/edgeai/actions/runs/36952012074)
+scaffold/storage 모두 success다. 내려받은 결과 JSON 8개 모두 PASS/0을 확인했다.
+테스트용 API/UI/DB 프로세스는 종료했다. CD를 구성하거나 배포하지 않았다.
+후속 완료 기록은 문서만 변경하므로 이 코드의 검증을 재사용한다.

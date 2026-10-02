@@ -45,3 +45,6 @@ Swagger UI `/swagger-ui.html`, 계약 `/openapi.yaml` 추가. 문서 인증과 �
 실제 desktop/mobile 등록·조회 검증 완료. 상세 근거: docs/swagger-ui.md.
 GitHub Actions CI 연결 상태를 확인했고 Swagger 시험도 기존 CI 브라우저 경로에 포함했다.
 ArgoCD/CD는 아직 연결하지 않았으며 배포 대상 클러스터·namespace·registry 등이 필요하다.
+
+Swagger 포함 코드 fd729ca의 CI 36952012074: scaffold/storage success, 결과 JSON 8개 PASS/0.
+https://github.com/dsa04156/edgeai/actions/runs/36952012074
