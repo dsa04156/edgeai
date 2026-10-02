@@ -1,6 +1,6 @@
 # M3 Workflow DAG / Run / Task / Attempt
 
-2026-10-02. 구현·로컬 검증을 완료했으며 이 기록 시점의 M3 CI·클러스터 배포는 확인 전이다.
+2026-10-02. M3 구현·로컬·CI·클러스터 배포·실제 Ingress 검증을 완료했다.
 전체 목표 M0–M10은 계속 진행 중이다. M3는 실행 요청 관리이며 실제 Runner 성공을 의미하지 않는다.
 
 ## 구현
@@ -50,10 +50,36 @@ Workflow desktop/mobile 스크린샷을 직접 열어 레이아웃·상태 표�
 
 ## 후속 검증 및 제한
 
-M3 신규 CI·이미지·ArgoCD 배포와 실제 Ingress 검증은 다음 확인 대상이다.
+M3 검증은 아래 CI·배포 증거까지 완료했다.
 M4 PodSpec/Runner/Result, M5 retry/offload, M6 VD, M7 STREAM 및 M8–M10은 미완료다.
 SERVICE spec의 실행 가능 이미지·자원·포트 호환성은 M4 소비 계약에서 검증한다.
 Task SUCCEEDED 보호 시험은 명시적 DB fixture이며 실제 작업 실행 증거가 아니다.
 기존 demo-workflow.sh / test-kind.sh는 M4 실제 실행 기준을 유지하며 아직 BLOCKED다.
 단일 API/DB·개발 Basic 인증과 공유 클러스터 Ingress 상태 제한이 남아 있다.
 LOCAL_VERIFIED / FULL_ACCEPTANCE를 주장하지 않는다.
+
+## CI 및 실제 Kubernetes 배포
+
+코드 `8d1ae08ab479aa680a244b418473219dd7906a6a`의
+[Actions 36970385137](https://github.com/dsa04156/edgeai/actions/runs/36970385137):
+scaffold/storage/images/gitops 모두 success. 내려받은 세 verification artifact의 result.json 9개가 모두 PASS/0이다.
+CI PostgreSQL17에서 migration·통합 시험·PC/모바일8개·DB 장애/복구, MinIO 및 실제 이미지 HTTP 시험을 통과했다.
+
+Actions의 `7a1614e`가 아래 이미지 digest를 Git에 기록했다. ArgoCD Application의 일반 refresh 후
+자동 동기화·rollout을 확인했고 실제 Pod imageID가 일치한다.
+
+- API: `sha256:ad2a43756b2689a42991866c6ab0ed9e29d410e5ae9c260dca39df12489c246a`
+- Dashboard: `sha256:71adb522ad200e7372fdce564d0213e53f9aa18c5376c6db2efa37453bc599e1`
+
+| testRunId | 배포 검증 | 결과 |
+|---|---|---|
+| 20261002T054857Z-6edbe4aa | 이전 M2 배포에서 --through device 데모 범위 호환성 | PASS/0 |
+| 20261002T055519Z-2f49e2b9 | imageID 일치·API/UI/DB Ready·PVC5Gi Bound·Argo Synced | PASS/0 |
+| 20261002T055519Z-c35bcc0a | 실제 Ingress Profile/Device/Workflow HTTP·CSRF·취소·정밀도 | PASS/0 |
+| 20261002T055519Z-7f924d90 | 새 API의 HTTPS/CA/SA Node 관측10개 UID/metadata 대조·합성 연결/해제 | PASS/0 |
+| 20261002T055555Z-bfc97a18 | 실제 사설 HTTP Ingress의 Workflow PC/모바일 2개, 요청 키 생성·발행·취소 | PASS/0 |
+
+최초 상태 확인 20261002T055357Z-a0c5bcb0은 rollout 중 구·신 API Pod가 함께 있어 FAIL이었다.
+rollout 종료 후 같은 상태 검증을 다시 수행해 통과했다. 검증 조건을 완화하지 않았다.
+Argo aggregate health는 기존 공유 Traefik/Ingress status 문제로 Progressing이다.
+실제 HTTP 성공·Ready·Synced와 구분하며 공유 인프라 설정은 변경하지 않았다.

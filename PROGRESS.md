@@ -1,45 +1,45 @@
 # 진행 상태
 
 [STATUS]
-M2 완료. M3 Workflow/Run/Task 구현·로컬 검증 완료, 신규 CI·배포 검증 대기. 전체 플랫폼은 PARTIAL.
-M0/M1 및 초기 CI/CD 완료 기록은 아래에 보존한다. 현재 상세는 docs/evidence/m3-workflow.md.
+M0–M3 구현·검증 완료. 전체 플랫폼은 PARTIAL이며 다음은 M4 실제 작업 실행이다.
+현재 상세: docs/evidence/m3-workflow.md. 이전 단계 완료 기록은 아래와 개별 evidence에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
-코드 20a8d6c의 CI 36950519908: scaffold/storage 모두 success, 결과 JSON 8개 PASS/0.
-https://github.com/dsa04156/edgeai/actions/runs/36950519908
+코드 8d1ae08의 CI 36970385137: scaffold/storage/images/gitops 모두 success, 결과 JSON9개 PASS/0.
+https://github.com/dsa04156/edgeai/actions/runs/36970385137
 
 [IMPLEMENTED]
-DEVICE/SERVICE/VD 등록·목록·버전 조회, OpenAPI 생성 타입, Flyway V2,
-JSON 정규화 SHA-256, 중복 재등록·충돌 처리, PostgreSQL 불변 trigger,
-Basic+CSRF를 유지한 실제 Profile Dashboard.
-키/버전/JSON 상세 형식은 ADR 0002에서 확정했다. spec 실행 호환성은 후속 범위다.
+Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
+Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
+Flyway V1–V4, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
+M3는 실행 요청 저장이며 실제 Runner 실행·검증된 Result는 M4다.
 
 [VERIFIED]
-unit, contract, 실제 PostgreSQL integration, UI lint/typecheck/build/offline browser 통과.
-실제 DB에 연결한 desktop/mobile 등록·재등록·409·새 버전·이전 버전 조회 통과.
-동시 8개 동일 요청은 생성 1개·행 1개, 다른 내용 경쟁은 승자 1개·충돌 1개.
-같은 키의 세 종류 분리, DB UPDATE/DELETE/TRUNCATE 차단, 정밀한 숫자 보존을 확인했다.
-DB 중지/재시작 시 기존 API/UI 프로세스의 readiness 장애 및 복구를 확인했다.
-CI의 새로운 PostgreSQL 17에서도 동일 검증을 통과했다. Flyway history는 edgeai로 고정한다.
+단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
+UI lint/types/build·오프라인14·실DB PC/모바일8 및 DB 장애/복구 통과.
+신규 CI와 실제 이미지 시험 통과. Kubernetes API/UI/DB Ready, PVC5Gi Bound,
+Pod imageID와 CI digest 일치, Argo Synced, 실제 Ingress HTTP·Workflow PC/모바일2개 통과.
+새 API의 실제 Node10개 UID/metadata 대조와 합성 장치 연결/해제 통과.
+기존 Traefik/Ingress status 문제로 Argo aggregate health는 Progressing이며 공유 설정은 변경하지 않았다.
 
 [EVIDENCE]
-docs/evidence/m1-profile.md와 docs/evidence/runs/<testRunId>.
-M0 역사적 완료 감사: docs/evidence/m0-completion-audit.md
+docs/evidence/m3-workflow.md와 docs/evidence/runs/<testRunId>.
+M0–M2: docs/evidence/index.md 및 개별 milestone 문서.
 
 [BLOCKED]
-M1 로컬 범위의 차단 없음. 로컬 Docker 소켓 권한 제한은 portable PostgreSQL로 대체했다.
-전체 플랫폼의 kind/fault/load/hardware 시험과 M2+ 기능은 후속 범위다.
-별도 전체 구현 계약·실장비·2세부 API·성능 기준은 필요한 단계에서 확인한다.
+M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아니다.
+로컬 Docker 권한 제한은 유지한다. M4 실제 kind 검증은 권한 있는 GitHub runner를 준비한다.
+외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
-M3 신규 CI·이미지·ArgoCD·Ingress를 검증한 뒤 M4 PodSpec/Kubernetes/Runner/Result를 구현한다.
+M4 SERVICE 실행 계약·PodSpec compiler·Job/watch/reconciliation·Runner·S3 artifact 검증·Result.
+상세 구현 순서: PLAN.md. 기존 demo-workflow/test-kind의 실제 실행 기준을 유지한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh
-Profile UI: http://127.0.0.1:13080/profiles
-재현: bash scripts/test-unit.sh; bash scripts/test-contract.sh; bash scripts/test-integration.sh;
-bash scripts/test-ui.sh; bash scripts/test-profiles-stack.sh local (Compose는 compose).
-
-검증용 API/UI/PostgreSQL 프로세스는 종료하고 개발 DB 및 원시 evidence는 보존한다.
-
+Workflow UI: http://127.0.0.1:13080/workflows
+배포 Workflow: http://edgeai.192.168.0.56.sslip.io/workflows
+Swagger: http://edgeai.192.168.0.56.sslip.io/swagger-ui.html
+재현: scripts/test-unit.sh, test-contract.sh, test-integration.sh, test-ui.sh,
+test-profiles-stack.sh local (Compose는 compose). 인증은 로컬 .env/배포 .tools의 비공개 환경 파일을 사용한다.
 
 [SWAGGER / CI-CD]
 Swagger UI `/swagger-ui.html`, 계약 `/openapi.yaml` 추가. 문서 인증과 자동 CSRF 쓰기,
@@ -151,3 +151,10 @@ Idempotency-Key 기반 원자적 실행 요청과 Run 행 잠금 취소·하위 
 상세 실행 ID·실패 원인과 수정·한계는 docs/evidence/m3-workflow.md에 기록했다.
 현재 root READY/QUEUED와 하위 WAITING은 요청 저장 상태이며 실제 작업 실행은 M4다.
 M3 코드의 신규 CI·이미지·클러스터 배포 검증은 다음 확인 대상이다.
+
+[M3 CI·배포 확인 — 2026-10-02]
+코드8d1ae08의 Actions36970385137 네 job과 내려받은 결과JSON9개 모두 성공.
+Actions의7a1614e 이미지pin과 실제 Pod imageID 일치, API/UI/DB Ready·PVC Bound·Argo Synced 확인.
+Ingress HTTP·Node10개 대조·사설 HTTP Workflow PC/모바일까지 통과했다.
+원시 증거: 20261002T055519Z-2f49e2b9 / -c35bcc0a / -7f924d90, 20261002T055555Z-bfc97a18.
+전체 플랫폼 범위를 유지하며 M4 실제 실행 경로로 진행한다.

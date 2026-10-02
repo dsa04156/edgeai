@@ -17,7 +17,7 @@ Application은 Actions가 최초 이미지를 발행하고 `bootstrap` 태그를
 
 현재 개발 배포는 amd64 서버 노드에 단일 API·Dashboard·PostgreSQL을 배치한다.
 PVC 5 GiB는 기본 StorageClass를 사용한다. 자동 prune과 cascade deletion은 사용하지 않는다.
-MinIO·MQTT는 현재 M2 관리 API 요청 경로에 필요하지 않아 이 배포에 포함하지 않는다.
+MinIO·MQTT는 현재 M3 관리/실행 요청 저장 경로에 필요하지 않아 이 배포에 포함하지 않는다.
 
 M2 API는 전용 `edgeai-control-plane` ServiceAccount와 마운트된 CA/토큰으로
 Kubernetes Node API를 읽는다. bootstrap은 소유 label을 확인하고 `edgeai-node-reader`
