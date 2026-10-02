@@ -43,7 +43,7 @@ for name in ['edgeai',namespace]:
         cluster=meta.get('labels',{}).get('edgeai.io/test-cluster','')
         assert cluster.startswith('edgeai-ci-') and args.context=='kind-'+cluster,'Fault injection is restricted to an owned disposable kind cluster'
 
-def request(path,method='GET',body=None,key=None,expected=200):
+def request(path,method='GET',body=None,key=None,expected=200,recovery_seconds=0):
     headers={'Authorization':auth}
     if csrf:headers['X-CSRF-TOKEN']=csrf
     if key:headers['Idempotency-Key']=key
@@ -51,12 +51,20 @@ def request(path,method='GET',body=None,key=None,expected=200):
     proxy=os.environ.get('EDGEAI_SMOKE_PROXY_URL')
     url=(proxy.rstrip('/')+'/api/control-plane/' if proxy and path!='platform' else api+'/api/v1/')+path
     req=urllib.request.Request(url,headers=headers,method=method,data=None if body is None else json.dumps(body).encode())
-    try:response=client.open(req,timeout=10)
-    except urllib.error.HTTPError as error:response=error
-    with response:
-        payload=response.read(1048577)
-        if response.status!=expected:raise AssertionError(f'{method} {path} returned HTTP {response.status}, expected {expected}')
+    deadline=time.monotonic()+recovery_seconds
+    while True:
+        try:response=client.open(req,timeout=10)
+        except urllib.error.HTTPError as error:response=error
+        except OSError:
+            if method=='GET' and time.monotonic()<deadline:
+                time.sleep(.2);continue
+            raise AssertionError('HTTP connection unavailable; response suppressed') from None
+        with response:
+            payload=response.read(1048577);status=response.status
         assert len(payload)<=1048576
+        if method=='GET' and status in (502,503,504) and time.monotonic()<deadline:
+            time.sleep(.2);continue
+        if status!=expected:raise AssertionError(f'{method} {path} returned HTTP {status}, expected {expected}')
         return json.loads(payload)
 
 csrf=request('csrf')['token']
@@ -107,9 +115,21 @@ def cleaned(run):
     wait(lambda:not resources(run),60,'Owned Job/Pod/Secret resources did not terminate for Run '+run)
 
 def cancel(run):
+    global csrf
+    csrf=request('csrf',recovery_seconds=30)['token']
     request('workflow-runs/'+run+'/cancel','POST',{})
     wait(lambda:request('workflow-runs/'+run)['run']['state']=='CANCELLED',60,'Cancellation did not reach confirmed physical termination')
     cleaned(run)
+
+def restart_api():
+    global csrf
+    old={p['metadata']['uid'] for p in kube(['-n','edgeai','get','pods','-l','app=edgeai-api','-o','json'])['items']}
+    for command in [['rollout','restart','deployment/edgeai-api'],['rollout','status','deployment/edgeai-api','--timeout=180s']]:
+        result=subprocess.run(kubectl+['-n','edgeai']+command,capture_output=True,text=True,timeout=190)
+        assert result.returncode==0,'Dedicated API restart failed; details suppressed'
+    # Rollout completion can precede deletion/connection drain of the old session owner.
+    wait(lambda:old.isdisjoint({p['metadata']['uid'] for p in kube(['-n','edgeai','get','pods','-l','app=edgeai-api','-o','json'])['items']}),90,'Previous API Pod did not drain')
+    csrf=request('csrf',recovery_seconds=30)['token']
 
 def producer_credentials(pod):
     # Private subprocess pipe only; never print or persist these credentials.
@@ -165,13 +185,10 @@ def execute(version,policy,restart=False):
                     before=[r for r in resources(run_id) if r['kind']=='Job']
                     assert len(before)==1
                     job_uid=before[0]['metadata']['uid']
-                    for command in [['rollout','restart','deployment/edgeai-api'],['rollout','status','deployment/edgeai-api','--timeout=180s']]:
-                        result=subprocess.run(kubectl+['-n','edgeai']+command,capture_output=True,text=True,timeout=190)
-                        assert result.returncode==0,'Dedicated API restart failed; details suppressed'
+                    restart_api()
                     after=[r for r in resources(run_id) if r['kind']=='Job']
                     assert len(after)==1 and after[0]['metadata']['uid']==job_uid,'Restart replaced/duplicated the existing Job'
-                    assert len(request('tasks/'+root['id'])['attempts'])==1
-                    csrf=request('csrf')['token']
+                    assert len(request('tasks/'+root['id'],recovery_seconds=30)['attempts'])==1
                     restart_proof.update(jobUid=job_uid,attemptId=attempt['id'],preserved=True)
                     print('PASS: API replacement retained the same active Job and Attempt',flush=True)
             if detail['run']['state'] in ('FAILED','CANCELLED'):
@@ -332,10 +349,7 @@ os.kill(matches[0],signal.SIGKILL)
         pending=request('workflow-runs/'+run_id)
         assert next(t for t in pending['tasks'] if t['key']=='child')['state']=='WAITING'
         assert request('tasks/'+task_id+'/results')['items']==[]
-        for command in [['rollout','restart','deployment/edgeai-api'],['rollout','status','deployment/edgeai-api','--timeout=180s']]:
-            restarted=subprocess.run(kubectl+['-n','edgeai']+command,capture_output=True,text=True,timeout=190)
-            assert restarted.returncode==0,'Retry recovery API restart failed; details suppressed'
-        csrf=request('csrf')['token']
+        restart_api()
         def retried():
             for resource in resources(run_id):
                 if resource['kind']=='Pod' and resource['spec'].get('nodeName'):
