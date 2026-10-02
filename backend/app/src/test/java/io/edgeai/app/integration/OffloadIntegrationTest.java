@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.*;
 class OffloadIntegrationTest {
     @Autowired RetryIntegrationTest.TestClock clock;
     @Autowired OffloadService offloads;
+    @Autowired RuntimeTelemetryService telemetry;
     @Autowired RuntimeLifecycleService lifecycle;
     @Autowired RuntimeRepository runtimes;
     @Autowired ExecutionRepository repository;
@@ -64,13 +65,20 @@ class OffloadIntegrationTest {
     private List<TaskResult.Output> receipt(UUID task,UUID attempt){var o=manifest().outputs().getFirst();return List.of(new TaskResult.Output("output",new VerifiedArtifact("fixture-only",o.content(task,attempt).objectKey(),o.versionId(),o.sha256(),o.bytes(),o.mediaType())));}
 
     @Test void runningTransferFencesOldProducerWaitsForStopAndClaimsOnlyNewTarget() throws Exception {
-        var f=fixture();var oldPermit=lifecycle.prepareCommit(f.attempt(),1,f.pod().podUid(),manifest());var operation=request(f);
+        var f=fixture();var oldPermit=lifecycle.prepareCommit(f.attempt(),1,f.pod().podUid(),manifest());
+        var principal=new io.edgeai.app.config.RunnerPrincipal(f.attempt(),1,f.pod());
+        var body=new LinkedHashMap<String,Object>(Map.of("epoch",1,"podUid",f.pod().podUid().toString(),"sequence",1,"observedAt",clock.instant().toString(),"intervalMillis",1000));
+        for(String key:List.of("cpuUsageMicros","cpuLimitMillicores","memoryBytes","memoryLimitBytes","latencyMicros","latencyObservedAt"))body.put(key,null);
+        body.put("memoryBytes",1000);telemetry.record(principal,json.canonical(body));
+        assertThat(executions.taskDetail(f.root()).telemetry()).isNotNull();var operation=request(f);
         assertThat(operation.state()).isEqualTo("DRAINING");assertThat(executions.taskDetail(f.root()).task().state()).isEqualTo("OFFLOADING");
         assertThat(executions.taskDetail(f.root()).attempts().getFirst().state()).isEqualTo("OFFLOADED");
         assertThatThrownBy(()->lifecycle.authorize(f.attempt(),1,f.pod().podUid())).isInstanceOf(ControlPlaneException.class);
         assertThatThrownBy(()->lifecycle.commitVerified(oldPermit,receipt(f.root(),f.attempt()))).isInstanceOf(ControlPlaneException.class);
+        assertThatThrownBy(()->telemetry.record(principal,json.canonical(body))).isInstanceOf(ControlPlaneException.class);
         offloads.advance(operation.id());assertThat(executions.taskDetail(f.root()).attempts()).hasSize(1);
         var next=start(f,operation);assertThat(next.number()).isEqualTo(2);assertThat(next.epoch()).isEqualTo(2);assertThat(next.cause()).isEqualTo("OFFLOAD");
+        assertThat(executions.taskDetail(f.root()).telemetry()).isNull();
         assertThat(next.nodeId()).isEqualTo(f.targetNode());assertThat(next.taskId()).isEqualTo(f.root());assertThat(lifecycle.dispatch(next.id()).nodeId()).isEqualTo(f.targetNode());
         assertThat(executions.detail(f.run().id()).run().nodeId()).isEqualTo(f.sourceNode());
         assertThat(offloads.find(operation.id()).state()).isEqualTo("STARTING");

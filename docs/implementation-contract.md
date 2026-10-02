@@ -1,7 +1,8 @@
 # 구현 계약 — M0–M5 작업 기준
 
 상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result 구현 범위.
-M4 구현·검증 완료, M5 재시도는 실제 kind·CI·배포 검증을 통과했고 실행 중 노드 전환을 검증 중이다.
+M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증을 통과했다.
+자동 판단을 위한 실행 측정 수집은 로컬 검증 후 컨테이너/kind 검증 중이다.
 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
@@ -98,3 +99,10 @@ SERVICE의 recovery.mode=RESTART 선언과 실제 RUNNING producer가 있어야 
 `GET /operations/{operationId}`와 Task.offloads는 전환 이력을 제공한다. SUCCEEDED는 새 target claim이며
 TaskResult 확정과 구분한다. 취소/마감/commit/재시도는 Run 잠금으로 직렬화한다.
 자동 정책·Remote·상태형 복원·STREAM route/generation은 이 명시적 BATCH 전환으로 대체하지 않는다.
+
+## M5 실행 측정 계약
+
+ADR0008·Runner 내부 telemetry API·TaskDetail.telemetry·V8을 따른다. 현재 producer가 보고한
+cgroup CPU/메모리와 서비스 개별 지연을 단위와 출처를 유지해 저장하며, 미수집은 null이다.
+Run 잠금 아래 인증/epoch/시각/순번을 확인하고 동일 재전송을 멱등 처리한다. 종료/전환 뒤 거절한다.
+최신64개 보관, 최신 Attempt 분리와 UI 만료 표시는 자동 판단의 입력 기반이며 자동 정책 자체는 아니다.

@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { parse, stringify } from "lossless-json";
 import type { components, operations } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
+import { RuntimeMeasurements } from "./runtime-measurements";
 
 type Schema = components["schemas"];
 const stateNames: Record<string, string> = { PENDING: "실행 대기", WAITING: "입력 대기", READY: "실행 준비", RETRY_WAIT: "재시도 대기", OFFLOADING: "실행 위치 전환 중", DRAINING: "이전 실행 종료 중", STARTING: "새 실행 확인 중", QUEUED: "접수됨", DISPATCHING: "배치 중", RUNNING: "실행 중", SUCCEEDED: "성공", FAILED: "실패", CANCELLING: "종료 확인 중", CANCELLED: "취소됨", SKIPPED: "건너뜀", OFFLOADED: "전환됨" };
@@ -160,6 +161,7 @@ export function WorkflowConsole() {
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
+        {task && <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />}
         {task && <div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
           <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 다른 노드에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>

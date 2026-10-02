@@ -62,4 +62,6 @@ V6 workflow_run 재시도 정책과 task_retry는 동일 Task의 새 Attempt 예
 V7 task_attempt의 mode/node_id/cause는 각 Attempt의 실제 대상과 INITIAL/RETRY/OFFLOAD를 구분한다.
 task_offload는 Task/Run/이전·새 Attempt FK, target Node, idempotency UNIQUE, drain/start 마감,
 상태/실패 코드를 저장한다. Task당 진행 중 Operation 하나를 partial UNIQUE로 제한한다.
-V1–V7은 로컬 적용된 migration이며 수정하지 않는다.
+V8 runtime_telemetry는 (attempt_id,sequence) PK·현재 producer의 관측/수신 시각·측정 구간·
+CPU/memory/선택적 latency를 저장한다. Attempt별 최신64개 보관은 서비스 트랜잭션이 관리한다.
+V1–V8은 로컬 적용된 migration이며 수정하지 않는다.

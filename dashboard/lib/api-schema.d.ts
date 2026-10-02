@@ -916,6 +916,8 @@ export interface components {
             tasks: components["schemas"]["Task"][];
         };
         TaskDetail: {
+            /** @description 최신 Attempt의 최신 측정. 미수집은 null이며 과거 Attempt의 값으로 대체하지 않습니다. */
+            telemetry: components["schemas"]["RuntimeTelemetry"] | null;
             offloads: components["schemas"]["OffloadOperation"][];
             task: components["schemas"]["Task"];
             attempts: components["schemas"]["TaskAttempt"][];
@@ -1001,6 +1003,31 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        RuntimeTelemetry: {
+            /** Format: uuid */
+            attemptId: string;
+            sequence: number;
+            /** Format: date-time */
+            observedAt: string;
+            /** Format: date-time */
+            receivedAt: string;
+            intervalMillis: number;
+            /**
+             * @description Runner와 workload가 속한 cgroup의 측정. Node 잔여량이 아닙니다.
+             * @enum {string|null}
+             */
+            resourceSource: "CGROUP_V2" | null;
+            cpuUsageMicros: number | null;
+            cpuLimitMillicores: number | null;
+            memoryBytes: number | null;
+            memoryLimitBytes: number | null;
+            /** @enum {string|null} */
+            latencySource: "WORKLOAD" | null;
+            /** @description 서비스가 보고한 개별 지연. percentile이 아닙니다. */
+            latencyMicros: number | null;
+            /** Format: date-time */
+            latencyObservedAt: string | null;
         };
         EmptyCommand: Record<string, never>;
         WorkflowPage: {

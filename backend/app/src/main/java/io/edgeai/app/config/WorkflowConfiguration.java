@@ -9,4 +9,5 @@ class WorkflowConfiguration {
     @Bean ExecutionRepository executionRepository(JdbcTemplate jdbc) { return new JdbcExecutionRepository(jdbc); }
     @Bean RuntimeRepository runtimeRepository(JdbcTemplate jdbc) { return new JdbcRuntimeRepository(jdbc); }
     @Bean OffloadRepository offloadRepository(JdbcTemplate jdbc) { return new JdbcOffloadRepository(jdbc); }
+    @Bean TelemetryRepository telemetryRepository(JdbcTemplate jdbc) { return new JdbcTelemetryRepository(jdbc); }
 }

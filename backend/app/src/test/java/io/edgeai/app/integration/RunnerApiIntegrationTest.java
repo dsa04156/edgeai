@@ -5,6 +5,7 @@ import io.edgeai.app.service.*;
 import io.edgeai.app.support.JsonDocuments;
 import io.edgeai.domain.profile.ProfileIdentity;
 import io.edgeai.domain.repository.RuntimeRepository;
+import io.edgeai.domain.repository.TelemetryRepository;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.storage.*;
 import java.net.URI;
@@ -42,6 +43,7 @@ class RunnerApiIntegrationTest {
     @Autowired ExecutionService executions;
     @Autowired RuntimeRepository runtimes;
     @Autowired RunnerTokenService tokens;
+    @Autowired TelemetryRepository telemetry;
     @MockitoBean RuntimeGateway gateway;
     @MockitoBean S3ArtifactStore storage;
     private final JsonDocuments json=new JsonDocuments();
@@ -136,5 +138,48 @@ class RunnerApiIntegrationTest {
         request(e,"fail",with(e,"reason","WORKLOAD_FAILED"),200);
         request(e,"fail",with(e,"reason","WORKLOAD_FAILED"),200);
         assertThat(executions.taskDetail(e.child()).task().state()).isEqualTo("SKIPPED");
+    }
+    private Map<String,Object> measurement(Execution e,long sequence) {
+        var body=new LinkedHashMap<>(identity(e));String observed=Instant.now().toString();
+        body.putAll(Map.of("sequence",sequence,"observedAt",observed,"intervalMillis",1000,"cpuUsageMicros",200000,
+            "cpuLimitMillicores",500,"memoryBytes",10000,"memoryLimitBytes",20000,"latencyMicros",1000,"latencyObservedAt",observed));return body;
+    }
+    @Test void telemetryRequiresCurrentProducerAndRejectsConflictingExpiredOrMalformedReports() throws Exception {
+        var e=execution();var body=measurement(e,1);request(e,"telemetry",body,409);request(e,"claim",identity(e),200);
+        String receipt=request(e,"telemetry",body,200);assertThat(request(e,"telemetry",body,200)).isEqualTo(receipt);
+        var conflict=new LinkedHashMap<>(body);conflict.put("memoryBytes",10001);request(e,"telemetry",conflict,409);
+        for(long offset:new long[]{-61,10}) {
+            var invalid=measurement(e,2);invalid.put("observedAt",Instant.now().plusSeconds(offset).toString());request(e,"telemetry",invalid,409);
+        }
+        var invalid=measurement(e,2);invalid.put("intervalMillis",Long.MAX_VALUE);request(e,"telemetry",invalid,400);
+        invalid=measurement(e,2);invalid.put("epoch",2);request(e,"telemetry",invalid,409);
+        invalid=measurement(e,2);invalid.put("source","made-up");request(e,"telemetry",invalid,400);
+        assertThat(telemetry.recent(e.attempt(),64)).hasSize(1);
+        executions.cancelTask(e.task(),"{}");request(e,"telemetry",measurement(e,2),409);
+        assertThat(telemetry.recent(e.attempt(),64)).hasSize(1);
+    }
+    @Test void telemetryRetentionIsBoundedAndPublicTaskPreservesUnavailableValues() throws Exception {
+        var e=execution();request(e,"claim",identity(e),200);Instant first=Instant.now();
+        for(int i=1;i<=70;i++) {
+            var body=measurement(e,i);body.put("observedAt",first.plusMillis(i).toString());body.put("cpuLimitMillicores",null);
+            body.put("memoryLimitBytes",null);body.put("latencyMicros",null);body.put("latencyObservedAt",null);
+            request(e,"telemetry",body,200);
+        }
+        assertThat(telemetry.recent(e.attempt(),64)).hasSize(64);assertThat(telemetry.find(e.attempt(),1)).isEmpty();
+        request(e,"telemetry",measurement(e,1),409);
+        mvc.perform(get("/api/v1/tasks/"+e.task()).with(user("fixture"))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.telemetry.attemptId").value(e.attempt().toString())).andExpect(jsonPath("$.telemetry.sequence").value(70))
+            .andExpect(jsonPath("$.telemetry.resourceSource").value("CGROUP_V2")).andExpect(jsonPath("$.telemetry.cpuUsageMicros").value(200000))
+            .andExpect(jsonPath("$.telemetry.cpuLimitMillicores").isEmpty()).andExpect(jsonPath("$.telemetry.latencyMicros").isEmpty());
+        request(e,"commit",with(e,"outputs",List.of(output(true))),201);request(e,"telemetry",measurement(e,71),409);
+    }
+    @Test void concurrentTelemetryReplaysAppendOnce() throws Exception {
+        var e=execution();request(e,"claim",identity(e),200);var body=measurement(e,1);
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            var start=new java.util.concurrent.CountDownLatch(1);var futures=new ArrayList<java.util.concurrent.Future<String>>();
+            for(int i=0;i<8;i++)futures.add(pool.submit(()->{start.await();return request(e,"telemetry",body,200);}));start.countDown();
+            var values=new HashSet<String>();for(var future:futures)values.add(future.get(20,java.util.concurrent.TimeUnit.SECONDS));
+            assertThat(values).hasSize(1);assertThat(telemetry.recent(e.attempt(),64)).hasSize(1);
+        }
     }
 }

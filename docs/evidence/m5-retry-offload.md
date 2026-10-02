@@ -1,7 +1,7 @@
 # M5 Retry / Offload / Remote — 진행 중
 
-M0–M4 완료 후 M5 재시도의 실제 kind·CI·배포를 검증했다. 명시적 실행 중 NODE 전환은
-API/UI·실DB 검증을 완료하고 실제 kind 게이트를 추가했다. 전체 M5 완료 판정은 아니다.
+M0–M4 완료 후 M5 재시도와 명시적 실행 중 NODE 전환의 실제 kind·CI·배포를 검증했다.
+자동 판단을 위한 [실행 측정](m5-runtime-telemetry.md)을 구현·검증 중이다. 전체 M5 완료 판정은 아니다.
 자동 전환 정책·Remote adapter/실제 외부 연동·상태형 복원/STREAM route는 남아 있다.
 
 ## 구현한 계약
@@ -67,7 +67,7 @@ Kubernetes 신원과 storage receipt는 이 DB 시험에서 명시적인 fixture
 - GitOps pin f209efe를 반영하고 `20261002T094921Z-7d583def`로 e777233의 API/UI/MinIO 실제 imageID,
   Ready·PVC Bound·Argo Synced를 확인했다. 기존 공유 Ingress status 문제로 aggregate health는 Progressing이다.
 
-## 실행 중 NODE 전환 — 로컬 검증, 신규 kind 검증 전
+## 실행 중 NODE 전환 — 로컬·실제 kind·배포 검증 완료
 
 ADR0007·V7·OffloadService/Worker·OperationController·UI를 구현했다. V7은 로컬 PG에 적용했으므로
 이후 수정하지 않는다. SERVICE recovery.mode=RESTART 선언을 요구하고, 실제 RUNNING producer를
@@ -107,4 +107,14 @@ Recreate로 변경했다. 실제 서버 dry-run은 통과했으며 새 kind에�
 실제 kind 신규 조건은 기존 disposable cluster에서만 노드 cordon/API restart를 사용한다.
 root와 입력을 받는 child의 노드 이동, STARTING 중 API 재시작·같은 target Attempt 복구,
 이전 Pod 부재·늦은 commit 차단·고정 BATCH 입력·단일 Result·target 시작 취소/마감·자원 정리를 검사한다.
-현재 이 코드의 새 CI가 필요하며 아직 실제 offload 통과로 판정하지 않는다.
+f886dd7의 CI36993166041에서 이 조건을 통과했다. 세부 증거는 다음과 같다.
+
+### 실제 offload CI와 배포 — 2026-10-02
+
+5 jobs 모두 success, 내려받은 result.json14개가 모두 PASS/exit0다. 실제 kind
+20261002T100931Z-cb4dd0a2의 15개 Run에는 running-offload-restart-and-batch-input,
+cancel-offload-starting, offload-start-timeout이 포함된다. root·child 각각 동일 Task의 Attempt/epoch2,
+실제 target Node/다른 Pod, source Pod 부재, 늦은 commit401, 결과1개씩, 고정 입력 계산값,
+root STARTING Operation/API 재시작 복구, 취소/마감 및 Run 자원0개를 확인했다.
+pin94a5e24를 반영한 실제 배포 시험20261002T102330Z-bcec2e83도 PASS다. f886dd7의 API/UI/MinIO
+imageID·Ready·PVC Bound·Argo Synced를 확인했다. aggregate health는 기존 공유 Ingress 문제로 Progressing이다.

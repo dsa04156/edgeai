@@ -29,6 +29,9 @@ M5는 Run별 RetryPolicy·V6 task_retry 예약과 RETRY_WAIT를 추가한다. �
 명시적인 실행 중 NODE 전환을 같은 잠금으로 처리한다. 이전 producer 차단→물리 종료→새 Attempt 및
 target claim 확인 순서이며 Operation 성공과 Task 결과 성공을 구분한다. 실제 배치는 scheduler가 담당한다.
 자동 전환 정책·Remote·상태형 checkpoint·STREAM route는 남은 범위다.
+V8 runtime_telemetry는 현재 producer가 보고한 cgroup 사용량과 서비스 지연을 Attempt별 최신64개로
+보존한다. Runner 내부 인증과 Run 잠금으로 종료된 producer를 차단하며 Task 상세는 최신 Attempt의
+측정만 제공한다. 측정 수집과 자동 전환의 판단·실행은 별도 단계다(ADR0008).
 
 | 경로 | 책임 |
 |---|---|

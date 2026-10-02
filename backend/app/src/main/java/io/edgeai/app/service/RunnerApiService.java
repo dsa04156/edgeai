@@ -29,9 +29,10 @@ public final class RunnerApiService {
             inputs.put(input.port(),Map.of("url",grant.url().toString(),"bytes",artifact.bytes(),"sha256",artifact.sha256(),"mediaType",artifact.mediaType()));
         }
         var outputs=new TreeMap<String,Object>();assignment.spec().outputs().forEach((port,spec)->outputs.put(port,Map.of("mediaType",spec.mediaType(),"maxBytes",spec.maxBytes())));
-        return Map.of("runId",runtime.runId().toString(),"taskId",runtime.taskId().toString(),"attemptId",runtime.attemptId().toString(),"epoch",runtime.epoch(),
+        var response=new TreeMap<String,Object>(Map.of("runId",runtime.runId().toString(),"taskId",runtime.taskId().toString(),"attemptId",runtime.attemptId().toString(),"epoch",runtime.epoch(),
             "command",assignment.spec().command(),"args",assignment.spec().args(),"parameters",JSON.decode(assignment.parametersJson()),"inputs",inputs,"outputs",outputs,
-            "timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds())));
+            "timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds()))));
+        response.put("telemetry",Map.of("intervalSeconds",5));return response;
     }
     public Object uploads(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");var outputs=RunnerInput.outputs(root.get("outputs"),false);

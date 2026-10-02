@@ -418,7 +418,15 @@ if args.faults:
         assert result.returncode==0,'Owned target scheduling change failed; output suppressed'
 
     offload_spec=copy.deepcopy(base);offload_spec['recovery']={'mode':'RESTART'}
-    offload_spec['command']=['python3','-c',"import time,runpy; time.sleep(45); runpy.run_path('/opt/edgeai/examples/linear.py',run_name='__main__')"]
+    offload_spec['command']=['python3','-c',"""import datetime,json,os,pathlib,time,runpy
+path=pathlib.Path(os.environ['EDGEAI_TELEMETRY_FILE'])
+for sequence in range(1,91):
+    begin=time.perf_counter_ns();sum(i*i for i in range(5000));latency=(time.perf_counter_ns()-begin)//1000
+    temporary=path.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'sequence':sequence,'observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'latencyMicros':latency}))
+    temporary.replace(path);time.sleep(.5)
+runpy.run_path('/opt/edgeai/examples/linear.py',run_name='__main__')
+"""]
     offload_child=copy.deepcopy(offload_spec);offload_child['inputs']=child_spec['inputs']
     offload_version=workflow('offload-batch',profile('offload-root',offload_spec),profile('offload-child',offload_child))
     run_id=create(offload_version,{'mode':'NODE','nodeId':source_node['metadata']['uid']})['id']
@@ -436,6 +444,11 @@ if args.faults:
             old_pod=wait(running_source,150,'Offload source did not claim')
             assert old_pod['spec']['nodeName']==source_node['metadata']['name']
             captured=producer_credentials(old_pod);first=request('tasks/'+task_id)['attempts'][0]
+            def measured(attempt):
+                value=request('tasks/'+task_id).get('telemetry')
+                return value if value and value['attemptId']==attempt and value['cpuUsageMicros'] is not None and value['latencyMicros'] is not None else None
+            old_sample=wait(lambda:measured(first['id']),20,'Source Runner did not report actual measurements')
+            assert old_sample['resourceSource']=='CGROUP_V2' and old_sample['cpuLimitMillicores']>0 and old_sample['memoryBytes']>0
             if task_key=='root':scheduling(False)
             body={'sourceAttemptId':first['id'],'targetNodeId':target_node['metadata']['uid'],'drainTimeoutSeconds':60,'startTimeoutSeconds':180}
             key=str(uuid.uuid4());operation=request('tasks/'+task_id+'/offload','POST',body,key=key,expected=202)
@@ -465,10 +478,14 @@ if args.faults:
             target_pod=next(p for p in live if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==history[0]['id'])
             assert target_pod['spec']['nodeName']==target_node['metadata']['name'] and target_pod['metadata']['uid']!=old_pod['metadata']['uid']
             assert request('tasks/'+task_id+'/results')['items']==[],'Transfer success incorrectly completed the Task'
-            late=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]});del captured
+            late=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]})
+            reported={k:old_sample[k] for k in ['sequence','observedAt','intervalMillis','cpuUsageMicros','cpuLimitMillicores','memoryBytes','memoryLimitBytes','latencyMicros','latencyObservedAt']}
+            late_telemetry=fenced_request(captured,'telemetry',{'epoch':captured['epoch'],'podUid':captured['podUid'],**reported});del captured
+            target_sample=wait(lambda:measured(history[0]['id']),20,'Target Runner did not report its own measurements')
+            assert target_sample['attemptId']!=old_sample['attemptId'] and target_sample['resourceSource']=='CGROUP_V2' and target_sample['latencySource']=='WORKLOAD'
             proofs.append({'taskId':task_id,'taskKey':task_key,'operationId':operation['id'],'attempts':history,
                 'sourcePodUid':old_pod['metadata']['uid'],'targetPodUid':target_pod['metadata']['uid'],'targetNode':target_pod['spec']['nodeName'],
-                'lateCommitStatus':late,'pendingOperationRecovered':task_key=='root'})
+                'lateCommitStatus':late,'lateTelemetryStatus':late_telemetry,'sourceMeasurement':old_sample,'targetMeasurement':target_sample,'pendingOperationRecovered':task_key=='root'})
         detail=wait(lambda:(d if (d:=request('workflow-runs/'+run_id))['run']['state']=='SUCCEEDED' else None),150,'Transferred BATCH did not finish')
         results=[]
         for task in detail['tasks']:

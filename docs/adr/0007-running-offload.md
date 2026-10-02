@@ -1,6 +1,6 @@
 # ADR 0007: 실행 중 Task의 노드 전환
 
-상태: 채택, 로컬 검증 완료 후 실제 kind 검증 진행. M5 running offload의 Kubernetes 경로이며
+상태: 채택, 로컬·실제 kind·CI·배포 검증 완료. M5 running offload의 명시적 Kubernetes 경로이며
 자동 정책·Remote·상태형 복원은 후속 범위다.
 
 Notion은 동일 Task의 새 Attempt, 실행 중 전환과 Pending 재시도의 구분, fence/drain/route,

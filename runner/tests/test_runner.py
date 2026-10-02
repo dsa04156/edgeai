@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Fixture:
-    def __init__(self, command, parameters=None, inputs=None, timeout=10, retry_commit=False, fenced=False, pending_claims=0):
+    def __init__(self, command, parameters=None, inputs=None, timeout=10, retry_commit=False, fenced=False, pending_claims=0, telemetry_status=None, telemetry_error=None):
         self.image = os.environ.get("EDGEAI_RUNNER_IMAGE")
         if self.image:
             command = ["python3" if value == sys.executable else value.replace(str(ROOT / "runner/examples"),"/opt/edgeai/examples") for value in command]
@@ -28,9 +28,13 @@ class Fixture:
         self.outputs, self.manifests, self.commits, self.failures = {}, {}, [], []
         self.commit_calls = 0
         self.claim_calls = 0
+        self.telemetry = []
+        self.telemetry_status = telemetry_status
         self.assignment = {"runId": self.run, "taskId": self.task, "attemptId": self.attempt, "epoch": 1,
             "command": command, "args": [], "parameters": parameters or {}, "inputs": inputs or {},
             "outputs": {"output": {"mediaType": "application/json", "maxBytes": 1048576}}, "timeoutSeconds": timeout}
+        if telemetry_status is not None:
+            self.assignment['telemetry'] = {'intervalSeconds': 1}
         fixture = self
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -72,6 +76,11 @@ class Fixture:
                 if operation == "fail":
                     fixture.failures.append(body["reason"])
                     return self.reply(200,{"attemptId":fixture.attempt,"state":"FAILED"})
+                if operation == 'telemetry':
+                    fixture.telemetry.append(body)
+                    if telemetry_error:
+                        return self.reply(telemetry_status, {'code': telemetry_error})
+                    return self.reply(telemetry_status, {'attemptId': fixture.attempt, 'sequence': body['sequence'], 'receivedAt': body['observedAt']})
                 return self.reply(404,{})
             def do_PUT(self):
                 if self.headers.get("Authorization"):
@@ -123,6 +132,8 @@ class Fixture:
             env["EDGEAI_WORK_DIR"] = "/work"
             for key in ("EDGEAI_ATTEMPT_ID","EDGEAI_POD_UID","EDGEAI_ATTEMPT_EPOCH","EDGEAI_CONTROL_PLANE_URL","EDGEAI_CLAIM_FILE","EDGEAI_POD_TOKEN_FILE","EDGEAI_WORK_DIR"):
                 command.extend(["--env",key])
+            if self.telemetry_status is not None:
+                command.extend(['--cpus=0.5', '--memory=128m'])
             command.append(self.image)
         return subprocess.Popen(command,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 
@@ -220,6 +231,34 @@ class RunnerTest(unittest.TestCase):
             self.assertNotIn("RUNNER_WORKLOAD_START",out)
             self.assertFalse(f.failures)
             self.assertFalse(f.commits)
+
+    def test_actual_workload_latency_and_optional_resource_measurements(self):
+        body = """import datetime,json,os,pathlib,time
+path=pathlib.Path(os.environ['EDGEAI_TELEMETRY_FILE'])
+for sequence in range(1,14):
+    begin=time.perf_counter_ns();time.sleep(.25);latency=(time.perf_counter_ns()-begin)//1000
+    temporary=path.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'sequence':sequence,'observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'latencyMicros':latency}))
+    temporary.replace(path)
+pathlib.Path(os.environ['EDGEAI_OUTPUT_DIR'],'output').write_text('{}')
+"""
+        for status, error in [(200, None), (503, None), (409, None), (409, 'TELEMETRY_EXPIRED')]:
+            with self.subTest(status=status, error=error), Fixture(self.python(body), telemetry_status=status, telemetry_error=error) as f:
+                code, out = f.finish(f.start())
+                self.assertTrue(f.telemetry)
+                self.assertGreater(f.telemetry[0]['latencyMicros'], 0)
+                if f.image:
+                    self.assertIsNotNone(f.telemetry[0]['cpuUsageMicros'])
+                    self.assertEqual(500, f.telemetry[0]['cpuLimitMillicores'])
+                    self.assertGreater(f.telemetry[0]['memoryBytes'], 0)
+                    self.assertEqual(128 * 1024 * 1024, f.telemetry[0]['memoryLimitBytes'])
+                if status == 409 and error is None:
+                    self.assertNotEqual(0, code); self.assertIn('FENCED', out)
+                    self.assertFalse(f.commits); self.assertFalse(f.failures)
+                else:
+                    self.assertEqual(0, code); self.assertEqual(1, len(f.commits))
+                    self.assertGreaterEqual(len(f.telemetry), 2)
+                    self.assertEqual(sorted({s['sequence'] for s in f.telemetry}), [s['sequence'] for s in f.telemetry])
 
 
 if __name__ == "__main__":

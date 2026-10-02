@@ -2473,7 +2473,13 @@ components:
       - task
       - attempts
       - offloads
+      - telemetry
       properties:
+        telemetry:
+          description: 최신 Attempt의 최신 측정. 미수집은 null이며 과거 Attempt의 값으로 대체하지 않습니다.
+          oneOf:
+          - {$ref: '#/components/schemas/RuntimeTelemetry'}
+          - {type: 'null'}
         offloads:
           type: array
           maxItems: 8
@@ -2555,6 +2561,24 @@ components:
         startDeadline: {type: [string, 'null'], format: date-time}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+    RuntimeTelemetry:
+      type: object
+      additionalProperties: false
+      required: [attemptId, sequence, observedAt, receivedAt, intervalMillis, resourceSource, cpuUsageMicros, cpuLimitMillicores, memoryBytes, memoryLimitBytes, latencySource, latencyMicros, latencyObservedAt]
+      properties:
+        attemptId: {type: string, format: uuid}
+        sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+        observedAt: {type: string, format: date-time}
+        receivedAt: {type: string, format: date-time}
+        intervalMillis: {type: integer, minimum: 200, maximum: 60000}
+        resourceSource: {type: [string, 'null'], enum: [CGROUP_V2, null], description: Runner와 workload가 속한 cgroup의 측정. Node 잔여량이 아닙니다.}
+        cpuUsageMicros: {type: [integer, 'null'], minimum: 0, maximum: 9007199254740991}
+        cpuLimitMillicores: {type: [integer, 'null'], minimum: 1, maximum: 1000000000}
+        memoryBytes: {type: [integer, 'null'], minimum: 0, maximum: 9007199254740991}
+        memoryLimitBytes: {type: [integer, 'null'], minimum: 1, maximum: 9007199254740991}
+        latencySource: {type: [string, 'null'], enum: [WORKLOAD, null]}
+        latencyMicros: {type: [integer, 'null'], minimum: 0, maximum: 600000000, description: 서비스가 보고한 개별 지연. percentile이 아닙니다.}
+        latencyObservedAt: {type: [string, 'null'], format: date-time}
     EmptyCommand:
       type: object
       additionalProperties: false

@@ -147,6 +147,42 @@ paths:
           description: 과거 claim·producer 불일치·취소·내용 충돌
         '503':
           description: DB·Kubernetes·Object Storage 일시 장애
+  /internal/v1/attempts/{attemptId}/telemetry:
+    post:
+      operationId: runnerTelemetry
+      summary: 현재 producer의 실제 자원·서비스 지연 측정 보고
+      description: >-
+        cgroup v2 사용량과 선택적인 서비스 지연을 보고합니다. 지원하지 않는 지표는 null입니다.
+        sequence/observedAt은 증가해야 하며 동일 sequence/동일 내용만 재전송할 수 있습니다.
+        관측은 서버 시각 기준 과거60초·미래5초 이내입니다. 최신64개만 보관합니다.
+        Run 잠금 안에서 현재 producer를 확인하며 취소·전환·완료 후 보고를 거절합니다.
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TelemetryRequest'}
+      responses:
+        '200':
+          description: 저장된 측정 receipt. 재전송도 동일 receipt입니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [attemptId, sequence, receivedAt]
+                properties:
+                  attemptId: *id001
+                  sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+                  receivedAt: {type: string, format: date-time}
+        '400': {description: 필드·단위·값 범위 오류}
+        '401': {description: Runner 또는 Pod 인증 실패}
+        '409': {description: producer 차단·내용 충돌·순서 역전·측정 만료}
+        '503': {description: DB 또는 Kubernetes 일시 장애}
 components:
   securitySchemes:
     podIdentity:
@@ -267,6 +303,12 @@ components:
       type: object
       additionalProperties: false
       properties:
+        telemetry:
+          type: object
+          additionalProperties: false
+          required: [intervalSeconds]
+          properties:
+            intervalSeconds: {type: integer, minimum: 1, maximum: 60, description: 실행 중 측정 주기. 이 설정이 없으면 수집하지 않습니다.}
         runId: *id001
         taskId: *id001
         attemptId: *id001
@@ -397,3 +439,19 @@ components:
       required:
       - attemptId
       - state
+    TelemetryRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, podUid, sequence, observedAt, intervalMillis, cpuUsageMicros, cpuLimitMillicores, memoryBytes, memoryLimitBytes, latencyMicros, latencyObservedAt]
+      properties:
+        epoch: *id006
+        podUid: *id001
+        sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+        observedAt: {type: string, format: date-time}
+        intervalMillis: {type: integer, minimum: 200, maximum: 60000}
+        cpuUsageMicros: {type: [integer, 'null'], minimum: 0, maximum: 9007199254740991, description: intervalMillis 동안 해당 cgroup의 CPU 사용 시간 증가량}
+        cpuLimitMillicores: {type: [integer, 'null'], minimum: 1, maximum: 1000000000, description: cgroup quota. 무제한/미지원은 null}
+        memoryBytes: {type: [integer, 'null'], minimum: 0, maximum: 9007199254740991}
+        memoryLimitBytes: {type: [integer, 'null'], minimum: 1, maximum: 9007199254740991}
+        latencyMicros: {type: [integer, 'null'], minimum: 0, maximum: 600000000, description: 서비스가 보고한 개별 지연 측정. 실행 시간이나 percentile이 아닙니다.}
+        latencyObservedAt: {type: [string, 'null'], format: date-time, description: latencyMicros와 함께 제공. 관측보다 과거30초·미래5초 이내}

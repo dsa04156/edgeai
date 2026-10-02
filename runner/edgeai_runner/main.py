@@ -21,6 +21,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
+from edgeai_runner.telemetry import Sampler, own_cgroup
 
 MAX_JSON = 262144
 MAX_FILE = 268435456
@@ -120,13 +121,13 @@ class Runner:
             raise RunnerError("TIMEOUT")
         return max(0.1, min(maximum, remaining))
 
-    def api(self, operation, payload):
+    def api(self, operation, payload, max_attempts=None, request_timeout=15):
         body = json_encode(payload)
         if len(body) > MAX_JSON:
             raise RunnerError("INVALID_RESPONSE")
         # Initial Pod status/Job observation may lag the already running process.
         # Claim may retry within its existing 30-second deadline; fenced identity never retries.
-        retries = 16 if operation == "claim" else 3
+        retries = max_attempts if max_attempts is not None else 16 if operation == "claim" else 3
         for attempt in range(retries):
             try:
                 # Kubelet rotates this Pod-bound credential; reread it for each control-plane request.
@@ -135,14 +136,25 @@ class Runner:
                     raise RunnerError("INVALID_CONFIGURATION")
                 request = urllib.request.Request(self.base + "/" + operation, data=body, method="POST",
                     headers={"Authorization": "Bearer " + self.token, "X-EdgeAI-Pod-Token": pod_token, "Content-Type": "application/json"})
-                with self.http.open(request, timeout=self.timeout()) as response:
+                with self.http.open(request, timeout=self.timeout(request_timeout)) as response:
                     content = response.read(MAX_JSON + 1)
                     if len(content) > MAX_JSON:
                         raise RunnerError("INVALID_RESPONSE")
                     return json_decode(content)
             except urllib.error.HTTPError as error:
                 status = error.code
+                details = {}
+                if operation == "telemetry" and status == 409:
+                    try:
+                        content = error.read(8193)
+                        if len(content) <= 8192:
+                            details = json_decode(content)
+                    except Exception:
+                        pass
                 error.close()
+                if operation == "telemetry" and status == 409 and isinstance(details, dict) and details.get("code") in {
+                        "TELEMETRY_CONFLICT", "TELEMETRY_OUT_OF_ORDER", "TELEMETRY_EXPIRED"}:
+                    raise RunnerError("TELEMETRY_REJECTED") from None
                 if status in (401, 403, 409):
                     raise RunnerError("FENCED") from None
                 if status not in (429, 502, 503, 504):
@@ -186,12 +198,34 @@ class Runner:
             raise RunnerError("INVALID_RESPONSE")
         env = {k: v for k, v in os.environ.items() if not k.startswith("EDGEAI_")}
         env.update(EDGEAI_INPUT_DIR=str(self.work / "inputs"), EDGEAI_OUTPUT_DIR=str(self.work / "outputs"),
-            EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), TMPDIR=str(self.work / "tmp"))
+            EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), EDGEAI_TELEMETRY_FILE=str(self.work / "telemetry.json"), TMPDIR=str(self.work / "tmp"))
         process = None
+        stop_metrics, fenced_metrics = threading.Event(), threading.Event()
+        metrics_thread = None
+        def measurements(interval):
+            sampler = Sampler(self.work, own_cgroup())
+            while not stop_metrics.wait(interval):
+                try:
+                    sample = sampler.sample()
+                    if sample is not None:
+                        self.api("telemetry", {**self.identity, **sample}, max_attempts=1, request_timeout=2)
+                except RunnerError as error:
+                    if error.code == "FENCED":
+                        fenced_metrics.set()
+                        return
+                except Exception:
+                    # Optional measurement must not replace the workload's result/failure path.
+                    pass
         try:
             process = subprocess.Popen(command, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            if "telemetry" in assignment:
+                interval = integer(assignment["telemetry"]["intervalSeconds"], 1, 60)
+                metrics_thread = threading.Thread(target=measurements, args=(interval,), daemon=True)
+                metrics_thread.start()
             while process.poll() is None:
+                if fenced_metrics.is_set():
+                    raise RunnerError("FENCED")
                 self.timeout()
                 cancelled.wait(0.05)
             if process.returncode != 0:
@@ -199,6 +233,7 @@ class Runner:
         except OSError:
             raise RunnerError("WORKLOAD_FAILED") from None
         finally:
+            stop_metrics.set()
             if process is not None:
                 try:
                     os.killpg(process.pid, signal.SIGTERM)
@@ -214,6 +249,8 @@ class Runner:
                 except ProcessLookupError:
                     pass
                 process.wait()
+            if metrics_thread is not None:
+                metrics_thread.join(timeout=3)
 
     def outputs(self, assignment, directory_fd):
         files = {}
