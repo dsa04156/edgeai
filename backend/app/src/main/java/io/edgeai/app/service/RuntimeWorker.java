@@ -69,7 +69,7 @@ public final class RuntimeWorker {
             // Includes TERMINATED rows: a late CREATE may arrive after DELETE observed no Job.
             for(var observation:snapshot.jobs().values()) {
                 var runtime=runtimes.byAttempt(observation.attemptId()).orElse(null);
-                if(runtime==null || runtime.remote() || !runtime.namespace().equals(settings.namespace()))continue;
+                if(runtime==null || runtime.remote() || runtime.vd() || !runtime.namespace().equals(settings.namespace()))continue;
                 if(!runtime.taskId().equals(observation.taskId()) || !runtime.runId().equals(observation.runId()) || runtime.epoch()!=observation.epoch() || !runtime.jobName().equals(observation.name()) ||
                         (runtime.jobUid()!=null&&!runtime.jobUid().equals(observation.jobUid()))) {
                     lifecycle.observeFailure(runtime.attemptId(),"OWNERSHIP_CONFLICT");continue;

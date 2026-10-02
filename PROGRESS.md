@@ -79,7 +79,7 @@ poll d89d2bb CI37040484693 5jobs/JSON15개·실제Runner27·기존kind22Run PASS
 docs/evidence/m6-vd-kubernetes.md. 새 kind CI·VD Task 연결·새 코드 CI/배포는 별도이며 미완료다.
 공개 실행8981a94 CI37044509505 5jobs/결과JSON15 PASS. pin f6a996e 실제imageID·Ready/PVCBound/ArgoSynced
 183056Z-6979449b PASS. 신규 VD kind 게이트와 Task 연결 완료를 뜻하지 않는다.
-ADR0019/V16 VD Task 영속 기반: PostgreSQL124(신규8)·단위81·계약4/MVC25·실API/DB PC모바일10과
+ADR0019/V16 VD Task 영속 기반: PostgreSQL124(신규8)·최종 단위82·계약4/MVC25·실API/DB PC모바일10과
 DB503/복구 PASS. 배정 slot·Run 잠금 순서·생산자 FK를 검증하며 관측/결과 receipt는 fixture다.
 공개 VD Run·poll Task 전달·Runner/Result 연결은 남는다. docs/evidence/m6-vd-task-persistence.md.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
