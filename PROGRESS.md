@@ -4,8 +4,10 @@
 M6 VD는 실제 자식 Task/Result·수명·CI·배포·PC/모바일 결과 화면까지 검증 완료했다.
 현재는 M7 다중 장치·스트리밍의 첫 구성 요소 작업 중이며 공개 STREAM 실행은 아직501이다.
 frame/처리 확인·로컬 원자적 journal·MQTT 전달을 구현했고 실제 SQLite/프로세스·브로커·TLS 시험을
-통과했다. 제어 서버 DataRoute·Runner 스트림 workload·새 Pod checkpoint 복원 연결은 남아 있다.
-상세: docs/evidence/m7-stream-transport.md. 새 CI와 배포 상태는 해당 증거 기록을 따른다.
+통과했다. ADR0023/V19 DataRoute·RouteGeneration의 내부 제어 상태도 실제 DB12개/전체148개를
+통과했다. 인증 배정·실제 broker 권한 수명·Runner 스트림 workload·새 Pod checkpoint 복원 연결은 남아 있다.
+상세: docs/evidence/m7-stream-transport.md, docs/evidence/m7-stream-routes.md.
+717b5cd CI37067700149는5jobs/JSON16개·실제kind 통과. 후속 문서 커밋으로 배포pin은 갱신되지 않았다.
 최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.
@@ -36,7 +38,7 @@ worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Ru
 실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
-Flyway V1–V18, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
+Flyway V1–V19, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
 M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
 V14는 내부 runtime/Operation·명령 lease·교체/drain 상태와 registry hook을 추가한다.
 ADR0016의 실제 Pod gateway/worker·HMAC 자격, Pod-bound TokenReview·UID 소유/삭제·watch/relist를

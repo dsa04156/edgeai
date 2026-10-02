@@ -161,6 +161,8 @@ ADR0021의 DATA/END/처리 확인 codec과 ADR0022의 SQLite 입력/계산 상�
 MQTT5 adapter를 구현했다. 같은 볼륨의 프로세스 강제 종료 복구·경로별 용량 예약·중복/순번
 검사와 실제 broker의 두 합성 장치→join→sink·강제 종료/재연결·ACL·TLS를 검증한다.
 상세 상태는 `docs/evidence/m7-stream-transport.md`를 따른다.
-다음은 DataRoute 영속 세대·제어 서버 배정·broker 계정/권한 수명·Runner/SERVICE 스트림 인터페이스,
+ADR0023/V19 DataRoute 영속 세대·내부 제어 상태는 실제 PostgreSQL12개/전체148개 검증을 통과했다.
+상세는 `docs/evidence/m7-stream-routes.md`다.
+다음은 인증된 제어 서버 배정·broker 계정/권한 수명·Runner/SERVICE 스트림 인터페이스,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

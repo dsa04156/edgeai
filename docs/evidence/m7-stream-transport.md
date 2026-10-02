@@ -67,9 +67,15 @@ hostname 거절, TLS 응답 정지 timeout·실제 소켓 정리도 확인했다
 직접 확인했다: 20261002T213518Z-3c0dcb62의50개/88.272초,
 20261002T213700Z-5570fafb의 MQTT9개/9.242초 모두PASS/0이며 ResourceWarning이 없다.
 Runner/VD의 실행 시험은 실제 이미지이고 새 codec/journal 단위는 CI 호스트 Python에서 수행한다.
-다른 CI job과 전체 이미지/실제 Kubernetes·배포 확인은 아직 진행 중이다.
+이후 같은 CI의5 jobs가 모두 success로 끝났다. 네 artifact의 결과JSON16개 모두PASS/0이며,
+실제 kind 로그/보고서에서 기존 실행22Run·S3파일20개, VD4조건(자식 작업4Run·S3파일5개·API교체),
+소유 자원 정리를 확인했다. kind 실행은20261002T214428Z-d159e340이다.
+gitops job은 뒤따른 문서 커밋711c47f 때문에 “A newer main revision exists”로 pin 갱신을
+건너뛰었다. 따라서 이 CI 성공은717b5cd의 새 클러스터 배포 증거가 아니며 배포 pin은 기존
+2ec9462를 유지한다. 다음 소스 CI가 최신 이미지를 반영하도록 연결하고 실제 상태를 다시 확인한다.
 
-남은 작업: DataRoute 영속 세대·생산자/소비자 배정·broker 계정/ACL 수명, SERVICE/Runner의 스트림
+DataRoute 영속 세대의 내부 제어 상태는 [후속 실제 DB 검증](m7-stream-routes.md)을 통과했다.
+남은 작업: 인증된 생산자/소비자 배정·broker 계정/ACL 수명, SERVICE/Runner의 스트림
 입출력, S3 checkpoint 검증·새 Pod/Node restore, 여러 Device의 실제 BATCH/STREAM DAG,
 공개 API/Swagger/화면, 실제 Kubernetes와 `demo-multidevice.sh` 수용이다.
 현재 journal 복구는 같은 로컬 볼륨만 다루며 M5 상태형 offload·M10 실장비 수용을 대신하지 않는다.

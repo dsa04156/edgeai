@@ -44,7 +44,8 @@ Run의 실행 정책은 전체 DAG 기본값이고, STREAM edge는 발행할 수
 메시지 wire format, broker별 권한 관리, 전달 보장 수준과 checkpoint 형식은 원문에 상세
 정의가 없다. [ADR0021](adr/0021-stream-frame-boundary.md)과
 [ADR0022](adr/0022-stream-processing-journal.md)에서 frame/처리 확인·로컬 journal·MQTT adapter를
-구체화했다. DataRoute 영속 상태·배정/권한 수명·S3 checkpoint와 migration은 다음 작업이다. M5의 상태형
+구체화했다. [ADR0023](adr/0023-stream-route-authority.md)/V19는 DataRoute 영속 상태와 세대 제어를
+구현하고 실제 DB에서 검증했다. 인증된 배정·실제 broker 권한 수명·S3 checkpoint는 남았다. M5의 상태형
 복원 잔여 조건은 이 결정과 함께 검토하고, 단순 처음부터 재시작을 checkpoint 복원이라 부르지 않는다.
 
 수용은 프로토콜 단위→실제 DB/브로커→Runner/다중 입력→실제 Kubernetes→장애/재연결→
