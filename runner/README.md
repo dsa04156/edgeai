@@ -44,6 +44,8 @@ EDGEAI_RUNNER_IMAGE=edgeai-runner:verify bash scripts/test-runner.sh
 둘 다 격리된 HTTP 프로토콜 fixture를 사용하므로 실제 Control Plane/MinIO/kind 연결 시험과
 구분한다. `examples/linear.py`는 합성 입력으로 CPU 계산을 수행하는 참조 workload이며
 학습 모델·GPU/NPU·실장비 성능 수용시험이 아니다.
+참조 계산의 선택적 `parameters.simulationDelayMillis`는 정수0~60000이며 Remote 참조 제공자와 같은
+장애/전환 시험 대기다. 실제 계산 전 기다리고 Runner timeout·취소가 그대로 적용된다. 성능 지표가 아니다.
 
 시험은 결과 byte·digest, commit 재전송, 큰 정수/소수 보존, 잘못된 입력, 누락/링크 출력,
 timeout, SIGTERM, 거절된 claim을 다룬다. 현재 증거는 [M4 기록](../docs/evidence/m4-runtime.md)을 따른다.

@@ -2,6 +2,7 @@
 
 `remote_server.py`는 별도 Python 프로세스·실제 HTTP·SQLite·파일로 RemoteGateway 계약을 시험한다.
 자동 시험은 저장소 루트에서 `bash scripts/test-remote.sh`로 실행한다. Python3와 JDK21이 필요하다.
+별도 kind TLS launcher의 실제 인증서/인증/재시작 시험에는 OpenSSL도 필요하다.
 시험은 임시 디렉터리/임의 포트/임시 자격을 만들고 종료 시 프로세스를 정리한다. PostgreSQL은 필요 없다.
 
 프로토콜은 [remote-reference-api.yaml](../contracts/openapi/remote-reference-api.yaml),
@@ -38,3 +39,7 @@ SERVICE.timeoutSeconds를 별도 타이머로 시행하지 않으므로 플랫�
 
 시험 전용 `--fault-file`은 비공개 로컬 JSON 파일로 `reserve_timeout_once`를 주입한다.
 예약을 DB에 확정한 뒤 응답만 지연해 timeout→GET/replay 복구를 확인한다. 네트워크 장애 주입 API는 없다.
+
+격리 kind에서는 [TLS launcher](../deploy/kind/remote-provider.py)를 통해 HTTPS만 수신한다.
+배포·인증서·PVC·API 연결은 [kind 문서](../deploy/kind/README.md)를 따른다. 기본 loopback 실행 방식과
+참조 프로토콜은 유지하며 이 launcher를 실제 외부 제공자로 간주하지 않는다.

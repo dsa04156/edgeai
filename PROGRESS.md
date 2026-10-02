@@ -3,7 +3,7 @@
 [STATUS]
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.
-M5 Remote 자동 worker·공개 실행/전환 API·고정 제공자 binding은 로컬 검증했다. 실제 kind Remote 종단·신규 CI/배포·외부 수용은 남았다. 상세: docs/evidence/m5-remote-worker.md.
+M5 Remote 자동 worker·공개 실행/전환 API·고정 제공자 binding은 로컬 및 CI37013658656을 통과했다. 실제 kind Remote 종단·외부 수용은 남았다. 상세: docs/evidence/m5-remote-worker.md.
 현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
@@ -25,7 +25,9 @@ ADR0011/V10–V11 RemoteAllocation, Pod와 분리한 producer, 관측 revision/l
 실제 S3 검증 후 결과 확정·하위 BATCH와 결과 API/화면을 추가했다. 로컬 PG80·단위58·실제 MinIO3 통과.
 플랫폼 연결6009136의 CI37008176219 5 jobs/결과JSON15개 PASS, 실제 이미지·Ready/PVC/ArgoSynced 확인.
 ADR0012/V12 Remote worker·직접 S3 전송·공개 REMOTE Run/Offload·불변 제공자 설정과 UI를 추가했다.
-실제 외부 계약·상태형 복원은 남아 있으며 worker 코드의 새 CI·배포는 확인 대상이다.
+worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Run 통과. GitOps pin은 f6c5a2d다.
+실제 API/UI/MinIO imageID 일치·Ready/PVCBound/ArgoSynced도 PASS(20261002T135530Z-df0f3f31).
+실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V12, 계층형 Spring 패키지, 한국어 Swagger30개, GitHub Actions/GHCR/ArgoCD 연결.
@@ -84,6 +86,8 @@ M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
+M5 실제 NODE↔REMOTE·API 재시작/취소 kind 게이트4개 Run을 추가했다. TLS2/참조 제공자13·Runner14·
+실제 Kubernetes server dry-run은 통과했으며 신규 kind 종단 결과는 아직 대기다. docs/evidence/m5-remote-kind.md.
 M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
 M5 Remote worker 코드의 CI·이미지·배포를 확인하고 실제 kind의 Kubernetes↔Remote 전환 및
 API 프로세스 재시작 종단을 추가 검증한다. 외부 실제 계약과 상태형 복원도 M5 완료 전 남은 게이트다.

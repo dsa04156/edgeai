@@ -11,7 +11,7 @@
 | M3 | 완료 — DAG/Run/Task/Attempt·로컬·CI·이미지·ArgoCD·실제 Ingress 검증 |
 | M4 | 완료 — 실제 kind·기존 클러스터 Runner/MinIO/Result·실패/취소·CI/배포 검증 |
 | M5 | 동일 Task 새 Attempt, retry budget, 실행 중 offload/fence/drain/route 전환, remote adapter 계약·장애·늦은 결과 차단 |
-| M6 | 영속 VD, source/runtime binding 분리, provision/readiness/replacement/drain 및 Operation 상태, UI |
+| M6 | 영속 VD, source/runtime binding 분리, provision/readiness/replacement/drain 및 Operation 상태, Run의 VD 정책으로 활성 Runtime 실행, UI |
 | M7 | 다중 장치 BATCH/STREAM DAG, 데이터 route/generation, backpressure·재연결·실제 데이터 흐름 |
 | M8 | 100→300→1,000 장치 부하, 측정 환경·지연·오류·자원 증거 및 병목 개선 |
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
@@ -38,8 +38,13 @@ ADR0012/V12는 자동 Remote worker·직접 S3 전송·공개 Run/Offload REMOTE
 연결했다. 단위60·PostgreSQL80·실제 S3/DB/provider14·UI26·실DB브라우저8·DB 장애/복구를 로컬 검증했다.
 실제 Spring 스케줄러 BATCH, 제공자 프로세스 재시작·재시도·취소·변조·중복 처리도 포함한다.
 Kubernetes↔Remote 전환의 Kubernetes 부분은 fixture이며 실제 kind 전환/API 프로세스 재시작 종단,
-상태형 복원 및 실제 외부 계약 수용은 남는다. 현재 worker 코드의 신규 CI·배포는 확인 대상이다.
+상태형 복원 및 실제 외부 계약 수용은 남는다. worker f6dc087의 CI37013658656은5 jobs/JSON15개와
+기존 실제 kind18Run을 통과했고 GitOps f6c5a2d에 이미지 digest를 기록했다.
+실제 imageID·Ready/PVCBound/ArgoSynced도 `20261002T135530Z-df0f3f31`에서 확인했다.
 상세는 `docs/evidence/m5-remote-worker.md`다. M5 완료로 판정하지 않는다.
+후속으로 독립 TLS Remote Pod/PVC와 실제 양방향 전환·API 교체/취소의 kind4개 Run을 추가했다.
+TLS2·참조 제공자13·Runner14·실서버 manifest 검증은 통과했다. 새 kind 종단 결과는 아직 대기이며
+`docs/evidence/m5-remote-kind.md`에서 성공 여부를 별도로 확인한다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

@@ -42,11 +42,61 @@ def free_port():
         return sock.getsockname()[1]
 
 
+def remote_fixture(state,runner_image,cluster):
+    documents=[]
+    # Independent, persistent TLS provider. API replacement must not replace the provider or its data.
+    cert, private_key = state / 'remote.crt', state / 'remote.key'
+    call(['openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '1',
+          '-subj', '/CN=edgeai-remote.edgeai.svc', '-addext', 'subjectAltName=DNS:edgeai-remote.edgeai.svc',
+          '-keyout', str(private_key), '-out', str(cert)], label='Test provider certificate generation')
+    private_key.chmod(0o600)
+    credential = secrets.token_urlsafe(32)
+    for secret_name, values in [('edgeai-remote-server', {'tls.crt': cert.read_text(), 'tls.key': private_key.read_text(), 'token': credential}),
+                                ('edgeai-remote-client', {'ca.crt': cert.read_text(), 'token': credential})]:
+        documents.append({'apiVersion': 'v1', 'kind': 'Secret',
+            'metadata': {'name': secret_name, 'namespace': 'edgeai', 'labels': LABELS}, 'stringData': values})
+    del credential, values
+    documents.append({'apiVersion': 'v1', 'kind': 'ConfigMap',
+        'metadata': {'name': 'edgeai-remote-code', 'namespace': 'edgeai', 'labels': LABELS},
+        'data': {'remote_server.py': (ROOT / 'simulator/remote_server.py').read_text(),
+                 'remote-provider.py': (ROOT / 'deploy/kind/remote-provider.py').read_text()}})
+    provider_labels = {**LABELS, 'app': 'edgeai-remote', 'edgeai.io/test-cluster': cluster}
+    documents.append({'apiVersion': 'v1', 'kind': 'List', 'items': [
+        {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim', 'metadata': {'name': 'edgeai-remote-data', 'namespace': 'edgeai', 'labels': provider_labels},
+         'spec': {'accessModes': ['ReadWriteOnce'], 'resources': {'requests': {'storage': '1Gi'}}}},
+        {'apiVersion': 'v1', 'kind': 'Service', 'metadata': {'name': 'edgeai-remote', 'namespace': 'edgeai', 'labels': provider_labels},
+         'spec': {'selector': {'app': 'edgeai-remote'}, 'ports': [{'name': 'https', 'port': 8443, 'targetPort': 8443}]}},
+        {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'edgeai-remote', 'namespace': 'edgeai', 'labels': provider_labels},
+         'spec': {'replicas': 1, 'strategy': {'type': 'Recreate'}, 'selector': {'matchLabels': {'app': 'edgeai-remote'}},
+             'template': {'metadata': {'labels': provider_labels}, 'spec': {'automountServiceAccountToken': False,
+                 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
+                 'containers': [{'name': 'provider', 'image': runner_image, 'command': ['python3', '/opt/probe/remote-provider.py'],
+                     'args': ['--state-dir', '/data/provider', '--token-file', '/var/run/remote/token', '--cert-file', '/var/run/remote/tls.crt', '--key-file', '/var/run/remote/tls.key'],
+                     'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
+                     'resources': {'requests': {'cpu': '50m', 'memory': '64Mi'}, 'limits': {'cpu': '1', 'memory': '256Mi'}},
+                     'readinessProbe': {'tcpSocket': {'port': 8443}, 'periodSeconds': 2},
+                     'volumeMounts': [{'name': 'code', 'mountPath': '/opt/probe', 'readOnly': True}, {'name': 'identity', 'mountPath': '/var/run/remote', 'readOnly': True}, {'name': 'data', 'mountPath': '/data'}]}],
+                 'volumes': [{'name': 'code', 'configMap': {'name': 'edgeai-remote-code'}},
+                             {'name': 'identity', 'secret': {'secretName': 'edgeai-remote-server', 'defaultMode': 288}},
+                             {'name': 'data', 'persistentVolumeClaim': {'claimName': 'edgeai-remote-data'}}]}}}}
+    ]})
+    return documents
+
+
+def remote_api_patch():
+    return {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'edgeai-api'},
+    'spec': {'template': {'spec': {'containers': [{'name': 'api', 'env': [
+        {'name': 'EDGEAI_REMOTE_ENABLED', 'value': 'true'}, {'name': 'EDGEAI_REMOTE_URL', 'value': 'https://edgeai-remote.edgeai.svc:8443'},
+        {'name': 'EDGEAI_REMOTE_TOKEN_FILE', 'value': '/var/run/edgeai-remote/token'}, {'name': 'EDGEAI_REMOTE_CA_FILE', 'value': '/var/run/edgeai-remote/ca.crt'}],
+        'volumeMounts': [{'name': 'remote-client', 'mountPath': '/var/run/edgeai-remote', 'readOnly': True}]}],
+        'volumes': [{'name': 'remote-client', 'secret': {'secretName': 'edgeai-remote-client', 'defaultMode': 288}}]}}}}
+
+
 def main():
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         print('BLOCKED: this kind acceptance environment currently requires Linux amd64')
         return 2
-    for executable in ['docker', 'kubectl', 'node']:
+    for executable in ['docker', 'kubectl', 'node', 'openssl']:
         if not shutil.which(executable):
             print('BLOCKED: required executable missing: ' + executable)
             return 2
@@ -129,6 +179,8 @@ def main():
             for line in (state / 'secrets/edgeai-storage.env').read_text().splitlines():
                 key, value = line.split('=', 1)
                 env[key] = value
+            for document in remote_fixture(state,images['runner'],name):
+                kcall(['create', '-f', '-'], document)
             # Kustomize resources stay under this checkout; the overlay contains no credentials.
             with tempfile.TemporaryDirectory(prefix='.run-', dir=ROOT / 'deploy/kind') as overlay:
                 pins = []
@@ -136,10 +188,11 @@ def main():
                     ref = images[component]
                     pins.append({'name': 'ghcr.io/dsa04156/edgeai-' + component,
                                  **({'digest': ref.split('@')[1]} if '@' in ref else {'newTag': ref.rsplit(':', 1)[1]})})
+                (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))
                 (Path(overlay) / 'kustomization.yaml').write_text(json.dumps({'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
-                    'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins}))
+                    'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins, 'patches': [{'path': 'remote-api.json'}]}))
                 kcall(['apply', '-k', overlay])
-            for resource in ['statefulset/edgeai-postgres', 'statefulset/edgeai-minio', 'deployment/edgeai-api', 'deployment/edgeai-dashboard']:
+            for resource in ['statefulset/edgeai-postgres', 'statefulset/edgeai-minio', 'deployment/edgeai-remote', 'deployment/edgeai-api', 'deployment/edgeai-dashboard']:
                 print('Waiting for ' + resource, flush=True)
                 kcall(['-n', 'edgeai', 'rollout', 'status', resource, '--timeout=240s'], timeout=250)
             env['EDGEAI_STORAGE_URL'] = forward('edgeai-minio', 9000, '/minio/health/ready')
@@ -150,7 +203,7 @@ def main():
             # The UI proxy survives API Pod replacement; direct kubectl port-forward to the old Pod does not.
             env['EDGEAI_SMOKE_PROXY_URL'] = env['EDGEAI_SMOKE_UI_URL']
             print('Running real scheduler, BATCH, artifacts, cancellation and runtime fault acceptance', flush=True)
-            result = subprocess.run(['python3', 'scripts/smoke-runtime.py', '--context', context, '--faults', '--report', '.tools/kind-runtime.json'], env=env, timeout=900)
+            result = subprocess.run(['python3', 'scripts/smoke-runtime.py', '--context', context, '--faults', '--remote', '--report', '.tools/kind-runtime.json'], env=env, timeout=1500)
             if result.returncode:
                 raise RuntimeError('kind runtime acceptance failed')
             print('PASS: isolated kind runtime acceptance', flush=True)

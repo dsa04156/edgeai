@@ -19,7 +19,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--context', required=True)
 parser.add_argument('--report', default='.tools/runtime-smoke.json')
 parser.add_argument('--faults', action='store_true', help='Also restart the API and inject protocol faults; dedicated test cluster only')
+parser.add_argument('--remote', action='store_true', help='Verify the independent TLS Remote provider and real Kubernetes transfers; requires --faults')
 args = parser.parse_args()
+assert not args.remote or args.faults,'Remote acceptance requires the owned disposable-cluster fault guard'
 api = os.environ['EDGEAI_SMOKE_API_URL'].rstrip('/')
 origin = urllib.parse.urlsplit(api)
 assert origin.scheme in ('http','https') and origin.hostname and not origin.username and not origin.password and not origin.path and not origin.query and not origin.fragment
@@ -82,13 +84,15 @@ artifacts=[]
 def profile(suffix,spec):
     return request('profiles/SERVICE','POST',{'key':prefix+'-'+suffix,'version':'1.0.0','spec':spec},expected=201)['id']
 
-def workflow(suffix,root,child=None):
+def workflow(suffix,root,child=None,root_delay=0,child_delay=0):
     w=request('workflows','POST',{'key':prefix+'-'+suffix,'displayName':'Synthetic runtime acceptance'},expected=201)
     tasks=[{'key':'root','serviceProfileVersionId':root,'parameters':{'features':[2,1],'weights':[0.5,-1],'bias':0.25}}]
+    if root_delay:tasks[0]['parameters']['simulationDelayMillis']=root_delay
     edges=[]
     if child:
         # Child input must come from the parent's stored artifact, not these intentionally wrong features.
         tasks.append({'key':'child','serviceProfileVersionId':child,'parameters':{'features':[99,99],'weights':[2,3],'bias':1}})
+        if child_delay:tasks[1]['parameters']['simulationDelayMillis']=child_delay
         edges=[{'fromTask':'root','toTask':'child','fromPort':'output','toPort':'input','mode':'BATCH'}]
     return request('workflows/'+w['id']+'/versions','POST',{'version':'1.0.0','tasks':tasks,'dependencies':edges},expected=201)['id']
 
@@ -590,6 +594,163 @@ if args.faults:
         finally:
             scheduling(True)
             if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+if args.remote:
+    # This provider is a real separate TLS Pod/PVC. Its SQLite is inspected through a private pipe,
+    # projecting only owned synthetic identities/state/counts and fixed artifact metadata.
+    provider_deployment=kube(['-n','edgeai','get','deployment','edgeai-remote','-o','json'])
+    assert provider_deployment['metadata']['labels'].get('edgeai.io/test-cluster')==cluster
+    def provider_pod():
+        pods=kube(['-n','edgeai','get','pods','-l','app=edgeai-remote','-o','json'])['items']
+        assert len(pods)==1 and pods[0]['metadata']['labels'].get('edgeai.io/test-cluster')==cluster
+        return pods[0]
+    def private_exec(pod,code,arguments=(),scope='edgeai'):
+        result=subprocess.run(kubectl+['-n',scope,'exec','-i',pod,'--','python3','-',*arguments],input=code,text=True,capture_output=True,timeout=20)
+        assert result.returncode==0 and len(result.stdout)<=262144,'Owned Remote proof failed; private output suppressed'
+        try:return json.loads(result.stdout)
+        except Exception:raise AssertionError('Owned Remote proof invalid; private output suppressed') from None
+    def remote_rows(run_id):
+        uuid.UUID(run_id)
+        return private_exec(provider_pod()['metadata']['name'],"""import json,sqlite3,sys
+db=sqlite3.connect('file:/data/provider/allocations.sqlite?mode=ro',uri=True)
+proof=[]
+for row in db.execute('SELECT id,identity,digest,state,executions,work,outputs FROM allocations'):
+    identity=json.loads(row[1])
+    if identity['runId']==sys.argv[1]:
+        work=json.loads(row[5]) if row[5] else {}
+        proof.append({'id':row[0],'identity':identity,'requestDigest':row[2],'state':row[3],'executions':row[4],
+                      'inputs':work.get('inputs',[]),'outputs':json.loads(row[6])})
+print(json.dumps(proof))
+""",[run_id])
+    def running_task(run_id,task_key):
+        task=next(t for t in request('workflow-runs/'+run_id)['tasks'] if t['key']==task_key)
+        detail=request('tasks/'+task['id'])
+        assert detail['task']['state'] not in ('FAILED','CANCELLED','SKIPPED'),'Remote acceptance task failed before transfer'
+        return detail if detail['attempts'] and detail['attempts'][0]['state']=='RUNNING' else None
+    def succeeded(run_id):
+        detail=request('workflow-runs/'+run_id)
+        assert detail['run']['state'] not in ('FAILED','CANCELLED'),'Remote acceptance run failed'
+        return detail if detail['run']['state']=='SUCCEEDED' else None
+    def result_files(detail):
+        results=[]
+        for task in detail['tasks']:
+            values=request('tasks/'+task['id']+'/results')['items'];assert len(values)==1 and len(values[0]['artifacts'])==1
+            result=values[0];latest=request('tasks/'+task['id'])['attempts'][0]
+            assert latest['state']=='SUCCEEDED' and result['attemptId']==latest['id']
+            if latest['mode']=='REMOTE':assert result['producerPodUid'] is None and result['remoteAllocationId'] and result['remoteSourceMode']=='SYNTHETIC'
+            else:assert result['producerPodUid'] and result['remoteAllocationId'] is None
+            artifacts.append({'artifact':result['artifacts'][0],'expected':{'sourceMode':'SYNTHETIC','features':[2,1],'score':0.25 if task['key']=='root' else 8.0,'prediction':1}})
+            results.append(result)
+        return results
+    remote_spec=copy.deepcopy(base);remote_spec.update(command=['python3','/opt/edgeai/examples/linear.py'],recovery={'mode':'RESTART'},timeoutSeconds=240)
+    remote_child=copy.deepcopy(remote_spec);remote_child['inputs']=child_spec['inputs']
+    root_profile=profile('remote-root',remote_spec);child_profile=profile('remote-child',remote_child)
+    remote_policy={'mode':'REMOTE','providerKey':'reference'}
+    remote_version=workflow('remote-restart',root_profile,child_profile,root_delay=60000)
+    run=create(remote_version,remote_policy);run_id=run['id']
+    try:
+        active=wait(lambda:running_task(run_id,'root'),60,'Remote root did not start through the scheduled worker')
+        before=remote_rows(run_id);assert len(before)==1 and before[0]['state']=='RUNNING' and before[0]['executions']==1
+        provider_uid=provider_pod()['metadata']['uid'];assert not resources(run_id),'Remote-only work created Kubernetes runtime resources'
+        restart_api()
+        after=remote_rows(run_id)
+        assert len(after)==1 and after[0]['id']==before[0]['id'] and after[0]['executions']==1
+        assert provider_pod()['metadata']['uid']==provider_uid,'API restart replaced the independent provider'
+        history=request('tasks/'+active['task']['id'])['attempts'];assert len(history)==1 and history[0]['id']==active['attempts'][0]['id']
+        detail=wait(lambda:succeeded(run_id),180,'Remote BATCH did not recover after API replacement')
+        results=result_files(detail);rows=remote_rows(run_id)
+        assert len(rows)==2 and all(r['state']=='SUCCEEDED' and r['executions']==1 for r in rows)
+        assert {r['id'] for r in rows}=={r['remoteAllocationId'] for r in results}
+        for task in detail['tasks']:
+            attempts=request('tasks/'+task['id'])['attempts'];assert len(attempts)==1 and attempts[0]['remoteTarget']==run['remoteTarget']
+        cleaned(run_id)
+        report['runs'].append({'id':run_id,'case':'remote-batch-api-restart','providerPodUid':provider_uid,'allocations':rows,'results':results,'attemptPreserved':True,'resourcesRemaining':0})
+        print('PASS: real TLS Remote BATCH survives API Pod replacement with the same allocation/Attempt and exactly one computation',flush=True)
+    finally:
+        if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+    for direction in ('node-to-remote','remote-to-node'):
+        run=create(workflow(direction,root_profile,child_profile,child_delay=60000),
+                   {'mode':'NODE','nodeId':source_node['metadata']['uid']} if direction=='node-to-remote' else remote_policy)
+        run_id=run['id'];captured=None
+        try:
+            current=wait(lambda:running_task(run_id,'child'),120,'BATCH child did not reach actual source execution')
+            task_id=current['task']['id'];first=current['attempts'][0]
+            parent=next(t for t in request('workflow-runs/'+run_id)['tasks'] if t['key']=='root')
+            parent_artifact=request('tasks/'+parent['id']+'/results')['items'][0]['artifacts'][0]
+            source_proof={}
+            if direction=='node-to-remote':
+                old_pod=next(p for p in resources(run_id) if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==first['id'])
+                captured=producer_credentials(old_pod);source_proof={'podUid':old_pod['metadata']['uid'],'nodeName':old_pod['spec']['nodeName']}
+                target={'targetProviderKey':'reference'}
+            else:
+                old_allocation=next(r for r in remote_rows(run_id) if r['identity']['attemptId']==first['id'])
+                assert old_allocation['state']=='RUNNING';source_proof={'remoteAllocationId':old_allocation['id']}
+                target={'targetNodeId':target_node['metadata']['uid']};scheduling(False)
+            body={'sourceAttemptId':first['id'],**target,'drainTimeoutSeconds':90,'startTimeoutSeconds':180};key=str(uuid.uuid4())
+            operation=request('tasks/'+task_id+'/offload','POST',body,key=key,expected=202)
+            assert request('tasks/'+task_id+'/offload','POST',body,key=key)['id']==operation['id']
+            def transferred(states):
+                value=request('operations/'+operation['id'])
+                assert value['state'] not in ('FAILED','CANCELLED','CANCELLING'),'Real Remote transfer failed'
+                return value if value['state'] in states else None
+            if direction=='remote-to-node':
+                pending=wait(lambda:transferred({'STARTING'}),100,'Remote source did not physically stop')
+                assert next(r for r in remote_rows(run_id) if r['id']==old_allocation['id'])['state']=='CANCELLED'
+                restart_api()
+                recovered=transferred({'STARTING'});assert recovered and recovered['targetAttemptId']==pending['targetAttemptId']
+                scheduling(True)
+            operation=wait(lambda:transferred({'SUCCEEDED'}),120,'Real transfer target did not start')
+            history=request('tasks/'+task_id)['attempts']
+            assert len(history)==2 and history[1]['id']==first['id'] and history[1]['state']=='OFFLOADED'
+            assert history[0]['id']==operation['targetAttemptId'] and history[0]['number']==2 and history[0]['epoch']==2
+            target_proof={}
+            if direction=='node-to-remote':
+                assert not resources(run_id),'Old Kubernetes producer survived Remote target start'
+                remote=next(r for r in remote_rows(run_id) if r['identity']['attemptId']==history[0]['id'])
+                assert remote['executions']==1 and remote['inputs'][0]['sha256']==parent_artifact['sha256']
+                target_proof={'remoteAllocationId':remote['id']}
+                target_proof['lateCommitStatus']=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]});captured=None
+            else:
+                pod=next(p for p in resources(run_id) if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==history[0]['id'])
+                assert pod['spec']['nodeName']==target_node['metadata']['name']
+                inputs=private_exec(pod['metadata']['name'],"""import json,sys,urllib.parse
+sys.path.insert(0,'/opt/edgeai')
+from edgeai_runner.main import Runner
+r=Runner();inputs=r.api('claim',r.identity)['inputs']
+print(json.dumps({k:{'bytes':v['bytes'],'sha256':v['sha256'],'objectVersion':urllib.parse.parse_qs(urllib.parse.urlsplit(v['url']).query)['versionId'][0]} for k,v in inputs.items()}))
+""",scope=namespace)
+                assert inputs['input']['objectVersion']==parent_artifact['objectVersion'] and inputs['input']['sha256']==parent_artifact['sha256']
+                target_proof={'podUid':pod['metadata']['uid'],'nodeName':pod['spec']['nodeName'],'fixedInput':inputs['input']}
+            detail=wait(lambda:succeeded(run_id),180,'Transferred actual workload did not produce a verified result')
+            assert detail['run']['mode']==run['mode'] and detail['run']['remoteTarget']==run['remoteTarget']
+            results=result_files(detail);child_result=next(r for r in results if r['taskId']==task_id)
+            if direction=='node-to-remote':assert child_result['remoteAllocationId']==target_proof['remoteAllocationId']
+            else:assert child_result['producerPodUid']==target_proof['podUid']
+            rows=remote_rows(run_id);assert all(r['state'] in ('SUCCEEDED','CANCELLED') and r['executions']==1 for r in rows)
+            cleaned(run_id)
+            report['runs'].append({'id':run_id,'case':direction,'taskId':task_id,'source':source_proof,'target':target_proof,'operation':operation,
+                'attempts':request('tasks/'+task_id)['attempts'],'allocations':rows,'results':results,'pendingOperationRecovered':direction=='remote-to-node','resourcesRemaining':0})
+            print('PASS: real '+direction+' preserves Task/input, confirms source termination, starts a new producer and commits one verified Result',flush=True)
+        finally:
+            scheduling(True)
+            if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+    run_id=create(remote_version,remote_policy)['id']
+    try:
+        active=wait(lambda:running_task(run_id,'root'),60,'Remote cancellation source did not start')
+        request('workflow-runs/'+run_id+'/cancel','POST',{})
+        restart_api()
+        wait(lambda:request('workflow-runs/'+run_id)['run']['state']=='CANCELLED',90,'Remote cancellation did not recover after API replacement')
+        rows=remote_rows(run_id);assert len(rows)==1 and rows[0]['state']=='CANCELLED' and rows[0]['executions']==1
+        for task in request('workflow-runs/'+run_id)['tasks']:
+            assert request('tasks/'+task['id']+'/results')['items']==[]
+            if task['key']=='child':assert request('tasks/'+task['id'])['attempts']==[]
+        cleaned(run_id)
+        report['runs'].append({'id':run_id,'case':'remote-cancel-api-restart','allocations':rows,'resourcesRemaining':0})
+        print('PASS: Remote cancellation persists across API replacement, confirms actual provider termination and releases no child/Result',flush=True)
+    finally:
+        if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
 
 verification=subprocess.run(['node','scripts/verify-runtime-artifacts.mjs'],input=json.dumps(artifacts),text=True,capture_output=True,timeout=90)
 if verification.returncode:raise AssertionError('Actual S3 output verification failed; response suppressed')

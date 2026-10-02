@@ -10,7 +10,7 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 검증을 통과했습니다.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation·결과 확정은 CI·배포까지 검증했습니다.
 Remote 자동 worker·공개 실행/전환·제공자 설정 고정은 실제 PostgreSQL·MinIO·참조 제공자로 로컬 검증했습니다.
-실제 kind Remote 종단·새 worker 코드의 CI/배포·외부 시스템 연결은 남아 있습니다.
+worker 코드의 CI도 통과했으며 실제 kind Remote 종단·외부 시스템 연결은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

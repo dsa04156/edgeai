@@ -174,6 +174,21 @@ class RunnerTest(unittest.TestCase):
             self.assertIn(b"9007199254740993",f.outputs["output"])
             self.assertIn(b"0.12345678901234567890123456789",f.outputs["output"])
 
+    def test_reference_synthetic_delay_can_be_stopped_by_runner_timeout(self):
+        with Fixture([sys.executable,str(ROOT / "runner/examples/linear.py")],
+                {"features":[2,3],"weights":[4,-1],"simulationDelayMillis":60000},timeout=1) as f:
+            self.assertNotEqual(0,f.finish(f.start())[0])
+            self.assertEqual(["TIMEOUT"],f.failures)
+            self.assertFalse(f.commits)
+
+    def test_reference_rejects_invalid_synthetic_delay(self):
+        for delay in [-1,60001,True]:
+            with self.subTest(delay=delay), Fixture([sys.executable,str(ROOT / "runner/examples/linear.py")],
+                    {"features":[2,3],"weights":[4,-1],"simulationDelayMillis":delay}) as f:
+                self.assertNotEqual(0,f.finish(f.start())[0])
+                self.assertEqual(["WORKLOAD_FAILED"],f.failures)
+                self.assertFalse(f.commits)
+
     def test_startup_status_lag_retries_claim_without_restarting_workload(self):
         with Fixture([sys.executable,str(ROOT / "runner/examples/linear.py")],
                 {"features":[2,3],"weights":[4,-1],"bias":-2},pending_claims=4) as f:

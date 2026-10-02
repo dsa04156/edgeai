@@ -60,9 +60,16 @@ Result manifestDigest의 기존 문서 패턴도 실제 DB 계약인 `sha256:` �
 
 ## CI·배포 및 남은 게이트
 
-이전 source6009136의 CI37008176219와 실제75c6632 이미지 pin 확인은
-[영속 Remote 연결 기록](m5-remote-runtime.md)에 보존한다. 현재 worker 코드의 새 CI·이미지·배포는
-다음 확인 대상이며 이전 성공을 새 코드 성공으로 취급하지 않는다. Remote는 배포 기본 비활성이다.
+source `f6dc087a0751321078d95da519d7cb98cc0250c1`의
+[CI37013658656](https://github.com/dsa04156/edgeai/actions/runs/37013658656)는
+scaffold/storage/runner/images/gitops 5 jobs 모두 success다. 내려받은 네 artifact 그룹의
+result.json15개도 모두 PASS/exit0이다. 실제 저장소/worker 시험은 `20261002T133544Z-f394bb9c`,
+이미지 시험은 `20261002T134036Z-25639e2b`, 기존 실제 kind18Run은 `20261002T134108Z-dd57fa6c`다.
+이 CI의 kind는 기존 Kubernetes 회귀이며 새 Remote kind4Run은 [후속 게이트](m5-remote-kind.md)를 따른다.
+GitOps는 f6c5a2d로 검증한 이미지 digest를 기록했다. Remote는 배포 기본 비활성이다.
+`20261002T135530Z-df0f3f31`은 실제 API/Dashboard/MinIO imageID가 f6dc087 검증 digest와 일치하며
+Ready/PVCBound/ArgoSynced임을 확인했다. 기존 공유 Ingress status 제한으로 aggregate health는 Progressing이다.
+이전6009136 검증은 [영속 Remote 연결 기록](m5-remote-runtime.md)에 보존한다.
 
 실제 kind Kubernetes↔Remote 전환, API 프로세스 재시작 중 명령 복구·취소, 외부 endpoint/auth/API 계약과
 상태형 복원은 남는다. 현재 제공자 하나의 참조 프로토콜·SYNTHETIC 계산 검증이며 실제 OCI/모델/장비
