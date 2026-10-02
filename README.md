@@ -5,8 +5,8 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 최종 Kubernetes 노드 선택은 kube-scheduler가 담당합니다.
 
 현재 구현 범위는 **M3 Profile·장치/노드·Workflow DAG·실행 요청 관리**입니다. 실제 Runner 실행과 결과 저장은 M4입니다.
-M4의 실행 규격·Kubernetes Job compiler·S3 artifact adapter·독립 Runner를 개발 중이며,
-아직 실행 요청과 연결되지 않았습니다. [M4 진행 기록](docs/evidence/m4-runtime.md)을 참고하세요.
+M4의 실행 규격·Job worker·Runner 내부 API·결과 확정 서비스를 구현·검증 중입니다.
+실행 연결은 기본 비활성이며 실제 배포의 전체 실행 경로 검증이 남아 있습니다. [M4 진행 기록](docs/evidence/m4-runtime.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
 ## 빠른 시작

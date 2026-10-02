@@ -102,6 +102,7 @@ class Runner:
                 raise ValueError()
             self.base = origin.rstrip("/") + "/internal/v1/attempts/" + self.attempt
             self.token = Path(os.environ["EDGEAI_CLAIM_FILE"]).read_text().strip()
+            self.pod_token_file = Path(os.environ["EDGEAI_POD_TOKEN_FILE"])
             if not self.token or len(self.token) > 1024 or any(ord(c) < 33 or ord(c) > 126 for c in self.token):
                 raise ValueError()
             self.work = Path(os.environ["EDGEAI_WORK_DIR"]).resolve(strict=True)
@@ -125,8 +126,12 @@ class Runner:
             raise RunnerError("INVALID_RESPONSE")
         for attempt in range(3):
             try:
+                # Kubelet rotates this Pod-bound credential; reread it for each control-plane request.
+                pod_token = self.pod_token_file.read_text().strip()
+                if not pod_token or len(pod_token) > 16384 or any(ord(c) < 33 or ord(c) > 126 for c in pod_token):
+                    raise RunnerError("INVALID_CONFIGURATION")
                 request = urllib.request.Request(self.base + "/" + operation, data=body, method="POST",
-                    headers={"Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
+                    headers={"Authorization": "Bearer " + self.token, "X-EdgeAI-Pod-Token": pod_token, "Content-Type": "application/json"})
                 with self.http.open(request, timeout=self.timeout()) as response:
                     content = response.read(MAX_JSON + 1)
                     if len(content) > MAX_JSON:

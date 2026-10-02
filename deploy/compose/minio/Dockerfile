@@ -6,11 +6,13 @@ RUN tar -xzf /tmp/minio.tar.gz --strip-components=1 -C /src
 RUN CGO_ENABLED=0 go build -trimpath -o /out/minio .
 
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --create-home minio \
     && mkdir /data && chown minio:minio /data
 COPY --from=build /out/minio /usr/local/bin/minio
+COPY --from=build /src/LICENSE /usr/share/doc/minio/LICENSE
 USER 10001
 EXPOSE 9000 9001
 ENTRYPOINT ["/usr/local/bin/minio"]

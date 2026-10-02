@@ -6,7 +6,8 @@ import java.util.*;
 public interface RuntimeRepository {
     Optional<RuntimeInstance> runtime(UUID id);
     Optional<RuntimeInstance> byAttempt(UUID attemptId);
-    List<UUID> readyAttempts(int limit);
+    List<UUID> readyAttempts(UUID runId,int limit);
+    List<RuntimeInstance> active(String namespace,int limit);
     void create(RuntimeInstance runtime);
     void submitted(UUID runtimeId,UUID jobUid,Instant expiresAt,Instant now);
     void claimed(UUID runtimeId,RuntimePod pod,Instant now);

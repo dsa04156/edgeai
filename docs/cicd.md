@@ -100,3 +100,9 @@ Traefik의 publishedService 설정도 이 빈 상태를 Ingress에 전달하므�
 - [ArgoCD 자동 동기화](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)
 - [Next.js standalone 출력](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)
 - [Docker Official Images ECR Public 제공](https://aws.amazon.com/blogs/containers/docker-official-images-now-available-on-amazon-elastic-container-registry-public/)
+# M4 이미지 추가
+
+Runner와 MinIO job은 각각 시험한 로컬 컨테이너를 main push에서만 GHCR에 발행한다.
+scaffold/storage/runner/images가 통과하면 gitops가 API·Dashboard 배포 pin과 함께
+Runner·MinIO digest를 `release.json`에 기록한다. 현재 참조 runtime 이미지 검증 플랫폼은
+linux/amd64다. Runner/MinIO digest 등록만으로 실제 실행 기능이 활성화되지는 않는다.

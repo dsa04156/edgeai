@@ -28,6 +28,20 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  runtime:
+    enabled: ${EDGEAI_RUNTIME_ENABLED:false}
+    worker-enabled: ${EDGEAI_RUNTIME_WORKER_ENABLED:true}
+    namespace: ${EDGEAI_RUNTIME_NAMESPACE:edgeai-runtimes}
+    service-account: ${EDGEAI_RUNTIME_SERVICE_ACCOUNT:edgeai-runner}
+    control-plane-url: ${EDGEAI_RUNTIME_CONTROL_PLANE_URL:http://edgeai-api.edgeai.svc:18080}
+    key-file: ${EDGEAI_RUNNER_KEY_FILE:}
+    dispatch-seconds: ${EDGEAI_RUNTIME_DISPATCH_SECONDS:120}
+  storage:
+    endpoint: ${EDGEAI_STORAGE_URL:http://127.0.0.1:19000}
+    runner-endpoint: ${EDGEAI_STORAGE_RUNNER_URL:http://127.0.0.1:19000}
+    access-key: ${EDGEAI_MINIO_USER:}
+    secret-key: ${EDGEAI_MINIO_PASSWORD:}
+    bucket: ${EDGEAI_ARTIFACT_BUCKET:edgeai-artifacts}
   kubernetes:
     enabled: ${EDGEAI_KUBE_ENABLED:false}
     url: ${EDGEAI_KUBE_API_URL:https://kubernetes.default.svc}

@@ -70,6 +70,12 @@ class ExecutionSpecTest {
         var job = JSON.decode(nodeJson); var spec = map(map(job).get("spec")); var pod = map(map(spec.get("template")).get("spec"));
         assertEquals("0", spec.get("backoffLimit").toString()); assertEquals("Never", pod.get("restartPolicy"));
         assertEquals(false, pod.get("automountServiceAccountToken")); assertFalse(pod.containsKey("hostNetwork"));
+        var identity = ((List<?>) pod.get("volumes")).stream().map(this::map).filter(v -> v.get("name").equals("identity")).findFirst().orElseThrow();
+        var projection = map(identity.get("projected"));
+        var token = map(map(((List<?>) projection.get("sources")).getFirst()).get("serviceAccountToken"));
+        assertEquals("edgeai-runner", token.get("audience"));
+        assertEquals("600", token.get("expirationSeconds").toString());
+        assertEquals("288", projection.get("defaultMode").toString());
         var container = map(((List<?>) pod.get("containers")).getFirst());
         assertEquals(true, map(container.get("securityContext")).get("readOnlyRootFilesystem"));
         assertEquals(false, map(container.get("securityContext")).get("allowPrivilegeEscalation"));

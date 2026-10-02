@@ -5,6 +5,7 @@ import io.edgeai.domain.repository.*;
 import io.edgeai.domain.workflow.Dag;
 import java.time.Clock;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 import static io.edgeai.app.support.WorkflowInput.*;
@@ -17,8 +18,13 @@ public class ExecutionService {
     private final NodeRepository nodes;
     private final RuntimeRepository runtimes;
     private final Clock clock;
-    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,Clock clock) {
+    private final RuntimeLifecycleService lifecycle;
+    private final boolean runtimeEnabled;
+    private final String runtimeNamespace;
+    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,Clock clock,
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.clock=clock;
+        this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -39,10 +45,12 @@ public class ExecutionService {
         if(dag.dependencies().stream().anyMatch(edge->edge.mode()==Dag.Mode.STREAM))
             throw error(501,"STREAM_NOT_IMPLEMENTED","STREAM 실행은 M7에서 구현합니다. 현재는 BATCH DAG 실행 요청을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
+        if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters));
         var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),"PENDING",now,now);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,workflows.definitions(versionId),dag.roots());
-        return new Creation<>(run,true);
+        if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
+        return new Creation<>(repository.run(run.id(),false).orElseThrow(),true);
     }
     private Creation<WorkflowRun> replay(WorkflowRun run,String digest) {
         if(!run.requestDigest().equals(digest)) throw error(409,"IDEMPOTENCY_CONFLICT","같은 Idempotency-Key에 다른 실행 입력이 있습니다.");

@@ -16,7 +16,9 @@ AUTO는 요구조건을 Kubernetes Job에 표현한다. NODE는 관측된 Node �
 Job은 attempt UUID에서 결정한 이름, completions/parallelism=1, backoffLimit=0, restartPolicy=Never,
 activeDeadlineSeconds를 사용한다. Kubernetes 자체 재시도로 Attempt 이력을 숨기지 않는다.
 container는 non-root, read-only root, no privilege escalation, drop ALL, RuntimeDefault seccomp,
-ServiceAccount token 미마운트, 제한된 작업 volume을 사용한다. hostPath/hostNetwork/임의 Secret 참조를 받지 않는다.
+기본 Kubernetes API token 자동 마운트 금지, 제한된 작업 volume을 사용한다. hostPath/hostNetwork/임의 Secret 참조를 받지 않는다.
+Pod 신원을 증명하는 별도 projected token은 audience `edgeai-runner`, 유효기간 요청 600초로 마운트한다.
+Runner ServiceAccount에는 Job/Pod/Secret 등 리소스 접근 권한을 부여하지 않는다.
 작업 이미지는 `/opt/edgeai/runner.py`와 Python3을 포함해야 하며 workload는 shell 없이 command/args로 실행한다.
 
 ## 실행 신원과 조정
@@ -27,6 +29,13 @@ RuntimeInstance, producer claim/epoch, 영속 실행 명령은 새 Flyway migrat
 Run 행 잠금·현재 Attempt·claim 검사를 모든 실행/취소/결과 전이에서 유지한다.
 결정적 Job 이름과 실제 UID 대조로 네트워크 timeout·API 재시작 후 중복 생성을 조정한다.
 Job의 중복 Pod 가능성에 대비해 실제 Pod UID에 producer claim을 결합하며 다른 Pod의 결과는 거절한다.
+Attempt Secret만으로는 같은 Job의 중복 Pod를 구분할 수 없다. 내부 API는 재시작에도 유지되는
+HMAC 키로 namespace/Attempt/epoch/nonce에 결합한 Bearer token과, 매 요청 파일에서 다시 읽은
+Pod-bound token을 함께 요구한다. TokenReview의 audience·ServiceAccount·Pod UID를 검증하고
+실제 Running Pod와 Job owner UID, Node UID를 조회한다. 호출자가 선언한 Pod UID만 신뢰하지 않는다.
+일반 Basic 인증은 내부 Runner API 권한을 얻지 못한다. 내부 경로에는 최대 256KiB 본문 제한을 적용한다.
+Control Plane에는 전용 namespace의 Jobs get/list/watch/create/delete, Pods get/list,
+Secrets get/create/delete와 해당 namespace 조회·TokenReview create만 추가한다. Node 읽기는 기존 권한을 사용한다.
 Job/Pod는 list/watch/relist와 주기적 reconciliation으로 관측한다. watch410은 재목록으로 복구한다.
 
 V5는 RuntimeInstance와 CREATE/DELETE 명령을 같은 DB 트랜잭션으로 저장한다. 명령은 namespace
@@ -35,6 +44,13 @@ V5는 RuntimeInstance와 CREATE/DELETE 명령을 같은 DB 트랜잭션으로 �
 열고 기존 삭제 lease를 무효화한다. 외부 생성/삭제의 멱등성과 UID 검사는 Kubernetes adapter가 담당한다.
 실행·claim·결과·취소는 모두 같은 Run 행 잠금을 사용한다. claim은 Job UID·Pod UID와 epoch를
 고정하며 NODE 정책은 대상 Node UID와 이름도 일치해야 한다.
+
+`edgeai.runtime.enabled=true`에서 새 Run을 만들 때 전체 SERVICE/DAG/병합 parameters를 검증하고
+root Runtime과 CREATE 명령을 Run 생성과 같은 트랜잭션에 저장한다. 결과 확정 시 준비된 하위
+Runtime과 명령도 원자적으로 저장한다. 과거 M3 Run을 시작 시 일괄 실행하지 않는다. 그 요청에는
+실행용 이미지가 없는 Profile도 있으므로 실행하려면 유효한 Profile과 새 요청 키로 Run을 생성한다.
+기존 Idempotency-Key 재전송은 원래 Run을 그대로 반환한다. 기본값은 false이며 배포 저장소·키·권한
+설정과 전체 경로 검증을 마친 뒤 실행을 활성화한다.
 
 Runner parameters는 TaskDefinition parameters에 Run parameters를 얕게 덮어쓴 결과다.
 같은 최상위 키는 Run 값이 우선하며 중첩 객체를 재귀 병합하지 않는다. 합친 JSON은 64 KiB로
@@ -71,6 +87,8 @@ Job→artifact→Result, BATCH·부족한 자원·NODE 제약·API 재시작·�
 [노드 지정](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/),
 [Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/),
 [watch](https://kubernetes.io/docs/reference/using-api/api-concepts/),
+[Pod-bound token](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/),
+[TokenReview](https://kubernetes.io/docs/reference/kubernetes-api/definitions/token-review-v1-authentication/),
 [자원](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/),
 [QoS](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/),
 [S3 무결성](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html).

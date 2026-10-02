@@ -1,10 +1,9 @@
 # Runner — M4 구성 요소 구현 중
 
 Python 표준 라이브러리로 Attempt claim → 입력 다운로드·SHA-256 확인 → 실제 자식 프로세스
-실행 → 출력 업로드 → Result commit 요청을 수행한다. 현재 독립 Runner와 프로토콜 시험을
-구현했다. DB 상태 전이·검증된 결과 확정 서비스는 추가했으며 Control Plane의 claim/commit
-HTTP 인증/API와 Kubernetes 실행 연결은 남아 있다.
-따라서 현재 Dashboard에서 만든 Run이 이 Runner를 실행하지는 않는다.
+실행 → 출력 업로드 → Result commit 요청을 수행한다. 내부 HTTP 인증/API, DB 상태 전이,
+검증된 결과 확정, Kubernetes worker를 구현했다. 실행은 `EDGEAI_RUNTIME_ENABLED=true`로
+명시적으로 활성화해야 한다. 현재 배포는 비활성 상태이며 저장소·이미지 연결과 전체 경로 검증이 남아 있다.
 
 계약은 [Runner OpenAPI](../contracts/openapi/runner-api.yaml), 실행 규격은
 [SERVICE schema](../contracts/profiles/service-execution.schema.json), 설계는
@@ -20,6 +19,7 @@ digest는 자리표시자이며 실행 가능한 이미지 주소가 아니다.
 | `EDGEAI_ATTEMPT_EPOCH` | 현재 Attempt epoch |
 | `EDGEAI_POD_UID` | 실행 Pod UUID |
 | `EDGEAI_CLAIM_FILE` | Attempt 전용 인증 토큰 파일 |
+| `EDGEAI_POD_TOKEN_FILE` | audience=edgeai-runner인 Pod-bound token 파일; 요청마다 다시 읽음 |
 | `EDGEAI_WORK_DIR` | 비어 있는 쓰기 가능한 작업 디렉터리 |
 
 워크로드에는 `EDGEAI_INPUT_DIR`, `EDGEAI_OUTPUT_DIR`, `EDGEAI_PARAMETERS_FILE` 경로를 전달한다.
@@ -29,7 +29,8 @@ workload stdout/stderr는 저장하지 않는다. 출력은 일반 파일만 허
 
 이미지는 Python 3.13의 고정 digest를 사용하며 UID 10001로 실행한다. Kubernetes compiler는
 읽기 전용 root filesystem, 작업 volume, 제한된 권한과 token 파일을 구성한다. 실제 Kubernetes
-실행·claim fencing의 종단 검증은 아직 수행하지 않았다.
+Runner→Control Plane→MinIO→Result 전체 경로 검증은 아직 수행하지 않았다.
+실제 클러스터의 Pod 신원·TokenReview·AUTO/NODE 배치·삭제는 별도 대기 컨테이너로 검증했다.
 
 ## 구성 요소 시험
 

@@ -8,6 +8,7 @@ import io.edgeai.domain.storage.*;
 import io.edgeai.domain.workflow.*;
 import java.time.*;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static io.edgeai.app.support.WorkflowInput.*;
@@ -22,16 +23,35 @@ public class RuntimeLifecycleService {
     private final ProfileRepository profiles;
     private final NodeRepository nodes;
     private final Clock clock;
+    private final boolean autoDispatch;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,Clock clock) {
-        this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.clock=clock;
+            ProfileRepository profiles,NodeRepository nodes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch) {
+        this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.autoDispatch=autoDispatch;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
         public Assignment { inputs=List.copyOf(inputs); }
     }
     public record CommitPermit(RuntimeInstance runtime,ResultManifest manifest,String digest,TaskResult replay) {}
+    public record Dispatch(RuntimeInstance runtime,ServiceExecutionSpec spec,UUID nodeId,String nodeName) {}
     private record Context(WorkflowRun run,Task task,TaskAttempt attempt) {}
+
+    @Transactional(readOnly=true)
+    public void validateRequest(UUID versionId,String parameters) {
+        validateDag(versionId);
+        for(var definition:workflows.definitions(versionId))mergeParameters(definition.parametersJson(),parameters);
+    }
+    @Transactional
+    public void startRun(UUID runId,String namespace) {
+        executions.run(runId,true).orElseThrow();
+        for(UUID attempt:runtimes.readyAttempts(runId,128))plan(attempt,namespace);
+    }
+    @Transactional
+    public Dispatch dispatch(UUID attemptId) {
+        var c=lock(attemptId);var r=runtime(attemptId);
+        String name=c.run().nodeId()==null?null:nodes.find(c.run().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
+        return new Dispatch(r,spec(c),c.run().nodeId(),name);
+    }
 
     @Transactional
     public RuntimeInstance plan(UUID attemptId,String namespace) {
@@ -117,6 +137,7 @@ public class RuntimeLifecycleService {
         }
         var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified);
         runtimes.commit(result,now);runtimes.releaseReadyChildren(r.runId(),now);executions.reconcileRunState(r.runId(),now);
+        if(autoDispatch)startRun(r.runId(),r.namespace());
         return new Creation<>(result,true);
     }
     @Transactional
@@ -135,6 +156,17 @@ public class RuntimeLifecycleService {
         var c=lock(attemptId);var r=runtime(attemptId);
         if(!r.desiredState().equals("STOPPED"))throw fenced();
         runtimes.terminated(r.id(),clock.instant());executions.reconcileRunState(c.run().id(),clock.instant());
+    }
+    @Transactional
+    public void observeFailure(UUID attemptId,String reason) {
+        if(!Set.of("DISPATCH_TIMEOUT","RUNTIME_TIMEOUT","RUNTIME_LOST","JOB_FAILED","RESULT_MISSING","OWNERSHIP_CONFLICT").contains(reason))
+            throw new IllegalArgumentException("Unknown runtime observation failure");
+        var c=lock(attemptId);var r=runtime(attemptId);
+        if(!r.desiredState().equals("RUNNING") || !Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING"))return;
+        var now=clock.instant();runtimes.fail(r.id(),reason,now);
+        var descendants=storedDag(workflows.version(c.run().workflowVersionId()).orElseThrow().dagJson()).descendants(c.task().key());
+        for(var child:executions.tasks(r.runId()))if(descendants.contains(child.key()))executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);
+        runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
     }
     private TaskResult replay(RuntimeInstance runtime,long epoch,UUID pod,String digest) {
         var result=runtimes.result(runtime.taskId()).orElse(null);if(result==null)return null;
@@ -161,9 +193,12 @@ public class RuntimeLifecycleService {
     }
     private ServiceExecutionSpec spec(Context c) { return ServiceExecutionInput.parseSpec(profiles.find(definition(c).serviceProfileVersionId()).orElseThrow().specJson()); }
     private String parameters(Context c) {
+        return mergeParameters(definition(c).parametersJson(),c.run().parametersJson());
+    }
+    private static String mergeParameters(String taskParameters,String runParameters) {
         var merged=new TreeMap<String,Object>();
-        ((Map<?,?>)JSON.decode(definition(c).parametersJson())).forEach((k,v)->merged.put((String)k,v));
-        ((Map<?,?>)JSON.decode(c.run().parametersJson())).forEach((k,v)->merged.put((String)k,v));
+        ((Map<?,?>)JSON.decode(taskParameters)).forEach((k,v)->merged.put((String)k,v));
+        ((Map<?,?>)JSON.decode(runParameters)).forEach((k,v)->merged.put((String)k,v));
         return JSON.boundedCanonical(merged,65536);
     }
     private List<InputArtifact> inputs(Context c,ServiceExecutionSpec spec) {

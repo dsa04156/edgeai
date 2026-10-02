@@ -6,11 +6,13 @@ import re
 parser = argparse.ArgumentParser()
 parser.add_argument('--api', required=True)
 parser.add_argument('--dashboard', required=True)
+parser.add_argument('--runner', required=True)
+parser.add_argument('--minio', required=True)
 parser.add_argument('--revision', required=True)
 args = parser.parse_args()
 if not re.fullmatch(r'[0-9a-f]{40}', args.revision):
     parser.error('revision must be a full Git SHA')
-for value in [args.api, args.dashboard]:
+for value in [args.api, args.dashboard, args.runner, args.minio]:
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
         parser.error('images must be immutable SHA-256 digests')
 path = Path('deploy/kubernetes/overlays/dev/kustomization.yaml')
@@ -23,4 +25,5 @@ for name, digest in [('api', args.api), ('dashboard', args.dashboard)]:
 path.write_text(text)
 Path('deploy/kubernetes/overlays/dev/release.json').write_text(
     __import__('json').dumps({'sourceRevision': args.revision, 'apiDigest': args.api,
-                            'dashboardDigest': args.dashboard}, indent=2) + '\n')
+                            'dashboardDigest': args.dashboard, 'runnerDigest': args.runner,
+                            'minioDigest': args.minio, 'runtimeImagePlatforms': ['linux/amd64']}, indent=2) + '\n')

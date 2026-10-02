@@ -30,7 +30,10 @@
 | M4-STORAGE | scripts/test-runtime-storage.sh | 실제 byte SHA-256·길이·형식·version 검증, 변조 업로드 거절, 고정 버전 다운로드 | 실제 MinIO |
 | M4-STATE | scripts/test-integration.sh | 실행 계획·명령 lease·동시 producer claim·결과 멱등성·취소 경쟁·BATCH 해제·DB rollback | 실제 PostgreSQL; Pod/저장소 응답은 명시적 fixture |
 | M4-RESULT | scripts/test-runtime-results.sh | 실제 S3 byte 검증→봉인된 DB Result→하위 입력, 위조 metadata·취소 중 결과 거절 | 실제 PostgreSQL + MinIO; Pod 신원은 fixture |
-| M4-RUNNER | scripts/test-runner.sh | 실제 workload, 입력/출력 검증, commit 재전송, timeout·취소·claim 거절 | Python + HTTP fixture; Control Plane 미연결 |
+| M4-RUNNER | scripts/test-runner.sh | 실제 workload, 입력/출력 검증, commit 재전송, timeout·취소·claim 거절 | Python + HTTP fixture |
+| M4-HTTP | scripts/test-integration.sh | 실제 내부 인증 체인·producer fence·본문 제한·원자적 하위 실행 계획 | 실제 PostgreSQL; K8/S3는 명시적 fixture |
+| M4-WORKER | scripts/test-integration.sh | 응답 유실·새 worker·취소 종료 확인·늦은 Job·누락 결과·watch 만료·deadline | 실제 PostgreSQL; K8 응답은 fixture |
+| M4-K8-GATEWAY | scripts/test-runtime-kubernetes.sh <명시적-context> | 실제 제한된 SA/TLS·AUTO/NODE scheduler·Pod TokenReview·watch·UID 삭제 | 소유 namespace/RBAC 필요; 대기 컨테이너이며 Runner 전체 경로와 구분 |
 | M4-RUNNER-IMAGE | EDGEAI_RUNNER_IMAGE=<image> scripts/test-runner.sh | 같은 프로토콜 시험을 비루트·읽기 전용 컨테이너로 수행 | Linux Docker; CI runner job |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |

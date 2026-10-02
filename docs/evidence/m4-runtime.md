@@ -90,16 +90,54 @@ PostgreSQL 단독 시험의 Pod 신원과 artifact receipt는 fixture다. 별도
 
 ## 남은 M4 작업과 제한
 
-1. 전용 runtime namespace·RBAC, 영속 명령을 소비하는 실제 Job/Secret 생성·UID 대조·watch/relist·재시작 reconciliation.
-2. 내부 인증·실제 Pod UID 확인·claim/업로드/결과 HTTP API와 구현한 트랜잭션 서비스 연결.
-3. 실제 Runner의 BATCH 입력 전달과 취소·리소스 종료·누락/늦은 결과에 대한 종단 검증.
-4. Result 공개 API·UI·Swagger와 실제 kind의 scheduler→Runner→MinIO→Result 수용시험.
+1. 검증된 Runner·MinIO 이미지 배포, 영속 signing key·저장소 bucket 설정과 실행 활성화.
+2. 실제 Runner의 BATCH 입력 전달과 취소·리소스 종료·누락/늦은 결과에 대한 종단 검증.
+3. Result 공개 API·UI·Swagger와 실제 kind의 scheduler→Runner→MinIO→Result 수용시험.
 
 presigned PUT의 checksum 헤더는 서명하지만 SDK는 Content-Length/Content-Type을 서명에서
 제외한다. 현재 내용·크기·형식 검증은 commit 전에 수행하며, 업로드 전 정확한 크기 제한을
 보장하지 않는다. 저장소 quota 또는 별도 업로드 제한은 후속 보강 대상이다.
 
 CI에 실제 MinIO artifact 검증·Runner 컨테이너 job·PostgreSQL과 S3를 함께 사용하는 결과 검증을 추가했다.
-로컬 Docker 권한 제한은 유지한다. V5 서비스 추가 이후의 CI·새 배포 검증은 아직 진행 전이다.
+로컬 Docker 권한 제한은 유지한다. V5 서비스 코드의 CI·새 배포 상태 확인은 아래 기록을 따른다.
 `test-kind.sh`와 `demo-workflow.sh`는 전체 실행 경로가 없어 계속 BLOCKED다.
 전체 플랫폼의 LOCAL_VERIFIED/FULL_ACCEPTANCE를 주장하지 않는다.
+
+## V5 코드의 CI·배포 확인
+
+`5992cdc`의 Actions 36978182298은 5 jobs success, 다운로드한 4 artifacts의 결과 JSON
+13개 PASS/0다. Actions pin `bc061e7`, 실제 API imageID
+`sha256:c08052d470d4297016883c63d30a4c01d07dbef9d3ac11e21619a410a4fd7e61` 일치.
+`20261002T074736Z-451996e7`: API/UI/PG Ready, PVC Bound, Argo Synced.
+기존 Ingress status 제한으로 aggregate health는 Progressing이다.
+
+## 내부 Runner API와 Kubernetes worker
+
+별도 Spring security chain은 Attempt HMAC과 Pod-bound token을 함께 요구한다.
+TokenReview의 audience·ServiceAccount·Pod UID와 실제 Pod/Job/Node를 대조한다.
+명령 worker는 결정적 Job/Secret·UID 전제 삭제·lease 재시도·전체 목록과 watch/relist를 사용한다.
+신규 Run의 root와 결과 확정 후 하위 Runtime 명령을 해당 DB 트랜잭션에서 함께 저장한다.
+기존 M3 Run은 자동 실행하지 않는다. 실행 플래그 기본값 false와 실제 배포 비활성을 유지한다.
+
+| testRunId | 확인 범위 | 결과 |
+|---|---|---|
+| 20261002T074735Z-3758e1db | 단위35, HTTP fixture의 생성 응답 유실·TokenReview·소유권·UID 삭제·watch410 | PASS/0 |
+| 20261002T075659Z-ba344c36 | 실제 PG35, 내부 인증·claim/uploads/commit/fail·Basic 거절·취소 fence·본문 제한 | PASS/0 |
+| 20261002T075758Z-71ca2adf | 실제 PG41, 새 worker 재시도·실제 종료 확인 전 CANCELLING·늦은 Job 재삭제·누락 Result·deadline·snapshot 경쟁 | PASS/0 |
+| 20261002T075817Z-911002f8 | 단위35, projected token audience·유효기간·파일 권한 포함 | PASS/0 |
+| 20261002T080018Z-573f6476 | 실제 K8 2개, 제한된 SA/TLS·AUTO/NODE scheduler·Pod TokenReview·unbound token 거절·watch·Job/Pod/Secret 종료 확인 | PASS/0 |
+| 20261002T080137Z-48c060c7 | 공개 계약 타입·내부 Runner OpenAPI·MVC·패키징 계약 | PASS/0 |
+| 20261002T080335Z-a9f9cfa9 | 호스트 Runner7, 별도 Pod token 요청·비노출·실제 subprocess·실패/timeout | PASS/0 |
+
+실제 K8 시험은 `edgeai-runtimes` 소유 namespace에서 digest 고정 PostgreSQL 이미지의 `sleep`
+컨테이너를 실행했다. 생성한 Attempt별 Job/Pod/Secret은 시험 종료 전에 삭제했으며 운영 API/DB는
+변경하지 않았다. fixture workload이므로 Runner→MinIO→Result 종단 시험은 아니다.
+namespace/SA/RBAC는 후속 실행을 위해 유지한다. 기존 namespace·RBAC 소유 labels를 검사하며
+서로 다른 scope의 리소스를 변경하지 않는다. 제어 서버 SA로 TLS API에 접근하고 Pod token은
+메모리에서만 사용했다. 시험용 제어 서버 token/CA 파일은 mode600 임시 디렉터리에서 삭제했다.
+
+최초 내부 API 시험 20261002T075046Z-2adb8673은 Mockito 재설정 중 기존 Answer가 null 인수를
+받아 실패했다. `doThrow` 방식으로 예외 fixture를 설정해 원래 HTTP 거절 경로를 재검증했다.
+실제 K8 gateway 시험 외의 worker/HTTP DB 시험은 Kubernetes 신원·저장소 응답이 fixture다.
+Runner·MinIO CI는 시험한 정확한 컨테이너를 GHCR에 발행하고 release.json에 digest와
+검증 플랫폼 linux/amd64를 함께 기록하도록 확장했다. 이번 변경의 신규 CI·배포는 아직 확인 전이다.

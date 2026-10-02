@@ -27,6 +27,7 @@ tasks.register('integrationTest', Test) {
     include '**/*IntegrationTest.class'
     exclude '**/ArtifactStorageIntegrationTest.class'
     exclude '**/RuntimeArtifactIntegrationTest.class'
+    exclude '**/KubernetesRuntimeIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -44,6 +45,13 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     include '**/RuntimeArtifactIntegrationTest.class'
     shouldRunAfter tasks.named('test')
+}
+
+tasks.register('kubernetesRuntimeIntegrationTest', Test) {
+    description = 'Requires an explicit, owned real Kubernetes namespace and limited service account credentials.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/KubernetesRuntimeIntegrationTest.class'
 }
 
 // Serve the exact reviewed contract; do not infer a competing schema from controllers.

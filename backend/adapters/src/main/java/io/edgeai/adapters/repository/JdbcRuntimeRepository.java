@@ -22,13 +22,16 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         instant(r,"expires_at"),r.getString("failure_reason"),instant(r,"created_at"),instant(r,"updated_at"));
     public Optional<RuntimeInstance> runtime(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE id=?",RUNTIME,id).stream().findFirst(); }
     public Optional<RuntimeInstance> byAttempt(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE attempt_id=?",RUNTIME,id).stream().findFirst(); }
-    public List<UUID> readyAttempts(int limit) {
+    public List<UUID> readyAttempts(UUID runId,int limit) {
         return jdbc.query("""
             SELECT a.id FROM edgeai.task_attempt a JOIN edgeai.task t ON t.id=a.task_id
             JOIN edgeai.workflow_run w ON w.id=t.run_id
-            WHERE a.state='QUEUED' AND t.state='READY' AND w.state IN ('PENDING','RUNNING')
+            WHERE a.state='QUEUED' AND t.state='READY' AND w.state IN ('PENDING','RUNNING') AND w.id=?
             ORDER BY a.created_at,a.id LIMIT ?
-            """,(r,n)->r.getObject(1,UUID.class),limit);
+            """,(r,n)->r.getObject(1,UUID.class),runId,limit);
+    }
+    public List<RuntimeInstance> active(String namespace,int limit) {
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public void create(RuntimeInstance r) {
         Timestamp now=Timestamp.from(r.createdAt());

@@ -24,6 +24,7 @@ class Fixture:
             command = ["python3" if value == sys.executable else value.replace(str(ROOT / "runner/examples"),"/opt/edgeai/examples") for value in command]
         self.attempt, self.task, self.run, self.pod = [str(uuid.uuid4()) for _ in range(4)]
         self.token = "test-only-" + uuid.uuid4().hex
+        self.pod_token = "pod-test-only-" + uuid.uuid4().hex
         self.outputs, self.manifests, self.commits, self.failures = {}, {}, [], []
         self.commit_calls = 0
         self.assignment = {"runId": self.run, "taskId": self.task, "attemptId": self.attempt, "epoch": 1,
@@ -42,7 +43,7 @@ class Fixture:
                 self.end_headers()
                 self.wfile.write(body)
             def do_POST(self):
-                if self.headers.get("Authorization") != "Bearer " + fixture.token:
+                if self.headers.get("Authorization") != "Bearer " + fixture.token or self.headers.get("X-EdgeAI-Pod-Token") != fixture.pod_token:
                     return self.reply(401,{})
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 if body.get("epoch") != 1 or body.get("podUid") != fixture.pod:
@@ -93,6 +94,7 @@ class Fixture:
         self.temp = tempfile.TemporaryDirectory(prefix="edgeai-runner-test-")
         self.path = Path(self.temp.name)
         (self.path / "token").write_text(self.token)
+        (self.path / "pod-token").write_text(self.pod_token)
         (self.path / "work").mkdir()
         return self
 
@@ -104,16 +106,18 @@ class Fixture:
 
     def start(self):
         env = {**os.environ, "EDGEAI_ATTEMPT_ID":self.attempt,"EDGEAI_POD_UID":self.pod,"EDGEAI_ATTEMPT_EPOCH":"1",
-            "EDGEAI_CONTROL_PLANE_URL":self.origin,"EDGEAI_CLAIM_FILE":str(self.path / "token"),"EDGEAI_WORK_DIR":str(self.path / "work")}
+            "EDGEAI_CONTROL_PLANE_URL":self.origin,"EDGEAI_CLAIM_FILE":str(self.path / "token"),"EDGEAI_POD_TOKEN_FILE":str(self.path / "pod-token"),"EDGEAI_WORK_DIR":str(self.path / "work")}
         command = [sys.executable,str(ROOT / "runner" / "runner.py")]
         if self.image:
             # Same protocol scenarios run in the exact image on Linux CI. No cluster privileges.
             command = ["docker","run","--rm","--network=host","--read-only","--cap-drop=ALL",
                 "--security-opt=no-new-privileges","--tmpfs","/work:rw,uid=10001,gid=10001,size=64m",
-                "--mount",f"type=bind,source={self.path / 'token'},target=/var/run/edgeai/token,readonly"]
+                "--mount",f"type=bind,source={self.path / 'token'},target=/var/run/edgeai/token,readonly",
+                "--mount",f"type=bind,source={self.path / 'pod-token'},target=/var/run/edgeai-identity/token,readonly"]
             env["EDGEAI_CLAIM_FILE"] = "/var/run/edgeai/token"
+            env["EDGEAI_POD_TOKEN_FILE"] = "/var/run/edgeai-identity/token"
             env["EDGEAI_WORK_DIR"] = "/work"
-            for key in ("EDGEAI_ATTEMPT_ID","EDGEAI_POD_UID","EDGEAI_ATTEMPT_EPOCH","EDGEAI_CONTROL_PLANE_URL","EDGEAI_CLAIM_FILE","EDGEAI_WORK_DIR"):
+            for key in ("EDGEAI_ATTEMPT_ID","EDGEAI_POD_UID","EDGEAI_ATTEMPT_EPOCH","EDGEAI_CONTROL_PLANE_URL","EDGEAI_CLAIM_FILE","EDGEAI_POD_TOKEN_FILE","EDGEAI_WORK_DIR"):
                 command.extend(["--env",key])
             command.append(self.image)
         return subprocess.Popen(command,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
@@ -125,7 +129,7 @@ class Fixture:
             process.kill()
             process.communicate()
             raise AssertionError("Runner exceeded test deadline") from None
-        if self.token in out + err or self.origin in out + err:
+        if self.token in out + err or self.pod_token in out + err or self.origin in out + err:
             raise AssertionError("Runner leaked credentials or transfer URL")
         if err:
             raise AssertionError("Runner emitted unstructured stderr")

@@ -8,6 +8,7 @@ servers:
 - url: /
 security:
 - runnerClaim: []
+  podIdentity: []
 paths:
   /internal/v1/attempts/{attemptId}/claim:
     post:
@@ -148,6 +149,11 @@ paths:
           description: DB·Kubernetes·Object Storage 일시 장애
 components:
   securitySchemes:
+    podIdentity:
+      type: apiKey
+      in: header
+      name: X-EdgeAI-Pod-Token
+      description: audience=edgeai-runner인 Kubernetes projected Pod 토큰. TokenReview·실제 Pod/Job/Node를 검증하며 매 요청 새로 읽는다.
     runnerClaim:
       type: http
       scheme: bearer

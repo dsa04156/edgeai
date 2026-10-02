@@ -21,15 +21,16 @@ flowchart LR
 Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes 작업 실행과 결과는 M4 범위다.
 현재 M4에는 실행 규격 검증·Job compiler·S3 artifact adapter·독립 Python Runner가 추가됐다.
 V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·검증된 결과 확정·BATCH 해제·취소를
-같은 Run 행 잠금 아래 연결한다. 실제 Kubernetes 생성/관측 worker와 내부 Runner HTTP 인증/API 연결은 남아 있다.
+같은 Run 행 잠금 아래 연결한다. Kubernetes worker와 내부 Runner HTTP 인증/API는 구현했다.
+실행은 기본 비활성이며 배포 저장소·키·이미지 연결과 Runner 전체 경로 검증이 남아 있다.
 
 | 경로 | 책임 |
 |---|---|
 | backend/app | 실행 진입점, controller, service, DTO, 인증·설정·예외 처리 |
 | backend/domain | 외부 SDK에 의존하지 않는 도메인 모델과 저장소 인터페이스 |
-| backend/adapters | PostgreSQL 저장소·Kubernetes Node 읽기·Job compiler·S3 artifact 구현, 추후 KubeEdge·MQTT·remote 경계 |
+| backend/adapters | PostgreSQL 저장소·Kubernetes Node/Job/Pod/신원 adapter·Job compiler·S3 artifact 구현, 추후 KubeEdge·MQTT·remote 경계 |
 | dashboard | 사용자 UI, 계약에서 생성한 API 타입 |
-| runner | M4 Python workload 실행·artifact 전송·commit 요청; 현재 내부 API 연결 전 |
+| runner | M4 Python workload 실행·artifact 전송·commit 요청; 내부 API 구현, 배포 전체 경로 검증 전 |
 | simulator | 장치·Remote·장애 재현; 실장비 증거와 분리 |
 | contracts | 구현 전에 확정하는 OpenAPI |
 | deploy | 개발 Compose, GitOps 배포 manifests, 추후 격리 kind 시험 |
