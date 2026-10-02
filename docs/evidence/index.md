@@ -145,3 +145,6 @@ MQTT 두 입력/계산/결과·backpressure·broker 재시작·ACL/TLS를 검증
 
 [실제 broker 권한](m7-stream-broker.md): 전용 Mosquitto의 동적 ACL·반복/경합·회수 이력·SIGKILL 복구·
 TLS/timeout/소켓 정리를 실제 연결로 검증했다. DB worker와 공개 STREAM 실행 연결은 남는다.
+
+[영속 권한 worker](m7-stream-worker.md): 실제 DB/TLS broker·Spring scheduler와 응답 유실·새 worker/
+두 worker 경합·느린 발급 중 fence·lease 만료를 검증했다. 인증 배정·Runner/공개 STREAM 연결은 남는다.

@@ -60,3 +60,16 @@ GitHub scaffold job에도 PostgreSQL 기동 후 전용 broker를 설치하고 �
 운영 클러스터의 기존 MQTT나 공유 설정을 변경하지 않았다. 관리 자격의 배포, 영속 broker 설정,
 DB의 권한 상태와 broker를 연결하는 worker·실제 lease 준수·인증된 배정·Runtime 실행·공개 STREAM과
 S3 checkpoint/새 Pod 복원은 남는다. 현재 API와 Swagger에는 새 공개 endpoint가 없다.
+
+## 후속 확인
+
+소스9d8f89b의 CI37074435731 scaffold job에서 실제 broker 시험
+`20261002T224921Z-f0f86af3`의 PASS/0과 BUILD SUCCESSFUL 로그를 내려받아 확인했다.
+동일 artifact의 결과 JSON9개 모두 PASS/0이며 runner/storage job도 성공했다.
+후속으로5개 job 모두 success와4개 artifact의 결과 JSON17개 모두 PASS/0을 확인했다.
+실제 kind `20261002T225916Z-070e66ce`는 BATCH/Remote/VD 실행·API 재시작·교체/취소·
+S3 결과20+5개 검증·자원 정리와 최종 Pod Ready를 통과했다.
+GitOps aab300d의 실제 배포도 `20261002T232338Z-64c92ed7` PASS/0이다. 소스9d8f89b의
+정확한 API/Dashboard/MinIO imageID·Ready·PVC Bound·Argo revision/Synced를 확인했다.
+기존 공유 Ingress 상태 때문에 aggregate health는 Progressing이다. 새 worker 소스 배포 증거와 구분한다.
+후속 DB worker의 구현/로컬 검증 범위는 [별도 기록](m7-stream-worker.md)을 따른다.

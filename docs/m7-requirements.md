@@ -71,3 +71,7 @@ checkpoint/재전송/중복 제거 경계를 정의해야 한다.
 Dynamic Security의 client/role/topic 제어는 [ADR0024](adr/0024-stream-broker-authority.md)에서 채택해
 실제 TLS broker adapter로 검증했다. 서버 worker·운영 broker·인증 배정 연결은 남아 있다.
 [공식 설명](https://mosquitto.org/documentation/dynamic-security/).
+
+후속 [ADR0025](adr/0025-stream-authority-worker.md)는 DB의 PREPARING/FENCED 상태를 영속 명령으로
+삼아 주기적 현재 주체 검사와 bounded broker 발급/회수를 연결한다. 실제 Spring scheduler·DB/TLS
+broker·응답 유실·두 worker 경합의 로컬 시험을 통과했으며 운영 broker·인증 배정은 계속 남는다.

@@ -28,6 +28,14 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  stream:
+    enabled: ${EDGEAI_STREAM_ENABLED:false}
+    broker-url: ${EDGEAI_STREAM_BROKER_URL:}
+    broker-digest: ${EDGEAI_STREAM_BROKER_DIGEST:}
+    admin-user: ${EDGEAI_STREAM_ADMIN_USER:edgeai-admin}
+    admin-password-file: ${EDGEAI_STREAM_ADMIN_PASSWORD_FILE:}
+    ca-file: ${EDGEAI_STREAM_CA_FILE:}
+    principal-key-file: ${EDGEAI_STREAM_PRINCIPAL_KEY_FILE:}
   vd:
     enabled: ${EDGEAI_VD_ENABLED:false}
   remote:

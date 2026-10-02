@@ -32,6 +32,17 @@ public final class JdbcDataRouteRepository implements DataRouteRepository {
     public Optional<RouteGeneration> open(UUID route){return jdbc.query("SELECT * FROM edgeai.route_generation WHERE route_id=? AND closed_at IS NULL",GENERATION,route).stream().findFirst();}
     public long lastGeneration(UUID route){return jdbc.queryForObject("SELECT coalesce(max(generation),0) FROM edgeai.route_generation WHERE route_id=?",Long.class,route);}
     public List<RouteGeneration> history(UUID route,int limit,int offset){return jdbc.query("SELECT * FROM edgeai.route_generation WHERE route_id=? ORDER BY generation DESC LIMIT ? OFFSET ?",GENERATION,route,limit,offset);}
+    public List<UUID> openGenerations(String digest,UUID after,int limit){
+        return scan(digest,after,limit,false);
+    }
+    public List<UUID> pendingGenerations(String digest,UUID after,int limit){return scan(digest,after,limit,true);}
+    private List<UUID> scan(String digest,UUID after,int limit,boolean pending){
+        RouteGeneration.digest(digest);if(limit<1 || limit>256)throw new IllegalArgumentException("Invalid stream scan size");
+        String condition=pending?" AND (activated_at IS NULL OR fenced_at IS NOT NULL)":"";
+        return after==null
+            ?jdbc.queryForList("SELECT id FROM edgeai.route_generation WHERE broker_digest=? AND closed_at IS NULL"+condition+" ORDER BY id LIMIT ?",UUID.class,digest,limit)
+            :jdbc.queryForList("SELECT id FROM edgeai.route_generation WHERE broker_digest=? AND closed_at IS NULL"+condition+" AND id>? ORDER BY id LIMIT ?",UUID.class,digest,after,limit);
+    }
     public void prepare(DataRoute r,RouteGeneration g){jdbc.update("""
         INSERT INTO edgeai.route_generation(id,route_id,run_id,generation,source_task_id,source_device_id,consumer_task_id,
           producer_attempt_id,producer_session_id,producer_epoch,consumer_attempt_id,consumer_epoch,broker_digest,policy_digest,request_digest,created_at,updated_at,lease_until)

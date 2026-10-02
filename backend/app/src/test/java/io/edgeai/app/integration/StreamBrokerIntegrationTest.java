@@ -30,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 
 /** Actual TLS MQTT and dynamic ACLs, plus real DB authority transitions. Task RUNNING is a fixture;
- * scheduling, Pod/Device authentication, worker recovery and Runner workload remain separate gates. */
+ * Pod/Device authentication and Runner workload remain separate gates. */
 @SpringBootTest
 class StreamBrokerIntegrationTest {
     @Autowired ProfileService profiles;
@@ -39,12 +39,15 @@ class StreamBrokerIntegrationTest {
     @Autowired WorkflowRepository definitions;
     @Autowired ExecutionRepository executions;
     @Autowired DataRouteService routes;
+    @Autowired DataRouteRepository routeStore;
+    @Autowired ExecutionService runs;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JdbcTemplate jdbc;
     @TempDir Path root;
     private Process broker;private BufferedReader lines;private int port;private MosquittoStreamBroker gateway;
     private final List<MqttClient> peers=new ArrayList<>();
-    private static final String DIGEST="sha256:"+"a".repeat(64),POLICY="sha256:"+"b".repeat(64);
+    private final String digest="sha256:"+UUID.randomUUID().toString().replace("-","").repeat(2);
+    private static final String POLICY="sha256:"+"b".repeat(64);
     @BeforeEach void start()throws Exception {
         broker=new ProcessBuilder("python3","src/test/fixtures/stream_broker.py",root.toString()).redirectError(root.resolve("fixture-error.log").toFile()).start();
         lines=broker.inputReader();port=Integer.parseInt(line());gateway=gateway("localhost","server.crt");
@@ -54,7 +57,7 @@ class StreamBrokerIntegrationTest {
         while(System.nanoTime()<until){if(lines.ready()){String l=lines.readLine();if(l!=null)return l;}if(!broker.isAlive())break;Thread.sleep(20);}
         throw new AssertionError("Isolated broker did not become ready; private diagnostics suppressed");
     }
-    private MosquittoStreamBroker gateway(String host,String ca){return new MosquittoStreamBroker("ssl://"+host+":"+port,"edgeai-admin",root.resolve("admin.password"),root.resolve(ca),root.resolve("principal.key"),DIGEST,Clock.systemUTC());}
+    private MosquittoStreamBroker gateway(String host,String ca){return new MosquittoStreamBroker("ssl://"+host+":"+port,"edgeai-admin",root.resolve("admin.password"),root.resolve(ca),root.resolve("principal.key"),digest,Clock.systemUTC());}
     @AfterEach void close()throws Exception {
         for(var peer:peers){try{peer.disconnectForcibly(0,100,false);}catch(Exception ignored){}try{peer.close(true);}catch(Exception ignored){}}
         if(broker!=null){broker.destroy();if(!broker.waitFor(5,TimeUnit.SECONDS)){broker.destroyForcibly();assertThat(broker.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
@@ -63,7 +66,7 @@ class StreamBrokerIntegrationTest {
     private Permission permission(Principal producer,Actor consumer){
         var now=Instant.now();var route=new DataRoute(UUID.randomUUID(),UUID.randomUUID(),producer.kind().equals("TASK")?UUID.randomUUID():null,
             producer.kind().equals("DEVICE")?UUID.randomUUID():null,UUID.randomUUID(),producer.kind().equals("DEVICE")?"SYNTHETIC":null,"output",UUID.randomUUID(),"input","application/json",4096,now);
-        var generation=new RouteGeneration(UUID.randomUUID(),route.id(),1,producer.actor(),consumer,DIGEST,POLICY,POLICY,now,now,now.plusSeconds(120),null,null,null,null);
+        var generation=new RouteGeneration(UUID.randomUUID(),route.id(),1,producer.actor(),consumer,digest,POLICY,POLICY,now,now,now.plusSeconds(120),null,null,null,null);
         return new Permission(route,generation);
     }
     private SSLSocketFactory tls()throws Exception {
@@ -129,10 +132,10 @@ class StreamBrokerIntegrationTest {
     }
     @Test void wrongBrokerPolicyExpiredLeaseAndCredentialConfigurationFailClosed()throws Exception {
         var p=permission();gateway.grant(p);var g=p.generation();
-        var foreign=new RouteGeneration(g.id(),g.routeId(),g.generation(),g.producer(),g.consumer(),DIGEST,"sha256:"+"c".repeat(64),POLICY,g.createdAt(),g.updatedAt(),g.leaseUntil(),null,null,null,null);
+        var foreign=new RouteGeneration(g.id(),g.routeId(),g.generation(),g.producer(),g.consumer(),digest,"sha256:"+"c".repeat(64),POLICY,g.createdAt(),g.updatedAt(),g.leaseUntil(),null,null,null,null);
         reason(StreamBrokerException.Reason.CONFLICT,()->gateway.grant(new Permission(p.route(),foreign)));
         reason(StreamBrokerException.Reason.CONFLICT,()->gateway.revoke(new Permission(p.route(),foreign)));
-        var expired=new MosquittoStreamBroker("ssl://localhost:"+port,"edgeai-admin",root.resolve("admin.password"),root.resolve("server.crt"),root.resolve("principal.key"),DIGEST,Clock.offset(Clock.systemUTC(),Duration.ofSeconds(121)));
+        var expired=new MosquittoStreamBroker("ssl://localhost:"+port,"edgeai-admin",root.resolve("admin.password"),root.resolve("server.crt"),root.resolve("principal.key"),digest,Clock.offset(Clock.systemUTC(),Duration.ofSeconds(121)));
         reason(StreamBrokerException.Reason.REVOKED,()->expired.grant(p));
         assertThat(gateway.credential(p.producer()).toString()).doesNotContain(new String(gateway.credential(p.producer()).password()));
         var originalKey=Files.readAllBytes(root.resolve("principal.key"));Files.writeString(root.resolve("principal.key"),"c".repeat(64));
@@ -149,7 +152,7 @@ class StreamBrokerIntegrationTest {
     }
     @Test void silentTlsPeerTimesOutAndReleasesItsSocket()throws Exception {
         try(var silent=new java.net.ServerSocket(0,1,java.net.InetAddress.getByName("127.0.0.1"))){
-            var candidate=new MosquittoStreamBroker("ssl://localhost:"+silent.getLocalPort(),"edgeai-admin",root.resolve("admin.password"),root.resolve("server.crt"),root.resolve("principal.key"),DIGEST,Clock.systemUTC());
+            var candidate=new MosquittoStreamBroker("ssl://localhost:"+silent.getLocalPort(),"edgeai-admin",root.resolve("admin.password"),root.resolve("server.crt"),root.resolve("principal.key"),digest,Clock.systemUTC());
             long before=sockets(),started=System.nanoTime();
             reason(StreamBrokerException.Reason.UNAVAILABLE,()->candidate.grant(permission()));
             assertThat(Duration.ofNanos(System.nanoTime()-started)).isLessThan(Duration.ofSeconds(8));
@@ -161,6 +164,154 @@ class StreamBrokerIntegrationTest {
         try(var paths=Files.list(Path.of("/proc/self/fd"))){return paths.filter(p->{try{return Files.readSymbolicLink(p).toString().startsWith("socket:");}catch(IOException e){return false;}}).count();}
     }
     @Test void actualDatabaseDeviceReconnectRevokesBrokerBeforeNextGenerationCanDeliver()throws Exception {
+        var p=databasePermission(digest,120,UUID.randomUUID());var route=p.route();var g=p.generation();var actor=g.consumer();var json=new JsonDocuments();
+        routes.activate(gateway.grant(p));assertThat(routes.accepts(g.id(),g.producer(),g.consumer())).isTrue();
+        var source=peer(p.producer());var sink=peer(p.consumer());var data=subscribe(sink,p.topic("frames"));publish(source,p.topic("frames"),"before");received(data,"before");
+        var nextSession=devices.openSession(route.sourceDeviceId(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
+        assertThat(routes.accepts(g.id(),g.producer(),g.consumer())).isFalse();assertThat(routes.reconcile(g.id()).fenceReason()).isEqualTo("PRODUCER_CHANGED");
+        var nextActor=new Actor(nextSession.id(),nextSession.epoch());
+        assertThatThrownBy(()->routes.prepare(route.id(),UUID.randomUUID(),nextActor,actor,digest,120)).isInstanceOfSatisfying(io.edgeai.app.exception.ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("STREAM_REVOCATION_PENDING"));
+        assertThat(routes.revoked(gateway.revoke(p)).state()).isEqualTo("CLOSED");
+        var next=routes.prepare(route.id(),UUID.randomUUID(),nextActor,actor,digest,120);assertThat(next.generation()).isEqualTo(2);
+        var permission=new Permission(route,next);routes.activate(gateway.grant(permission));
+        var newSink=peer(permission.consumer());var nextData=subscribe(newSink,permission.topic("frames"));
+        try{publish(source,permission.topic("frames"),"stale");}catch(MqttException rejected){}
+        publish(peer(permission.producer()),permission.topic("frames"),"after");received(nextData,"after");assertThat(nextData.poll(200,TimeUnit.MILLISECONDS)).isNull();
+        assertThat(routes.accepts(next.id(),next.producer(),next.consumer())).isTrue();
+        routes.fence(next.id(),"COMPLETED");routes.revoked(gateway.revoke(permission));
+    }
+    @Test void configuredSpringSchedulerGrantsReconnectsAndExpiresWithoutDirectWorkerCalls()throws Exception {
+        var p=databasePermission(digest,120,UUID.randomUUID());
+        try(var context=new org.springframework.context.annotation.AnnotationConfigApplicationContext()){
+            var properties=new HashMap<String,Object>();properties.put("edgeai.stream.enabled","true");
+            properties.put("edgeai.stream.broker-url","ssl://localhost:"+port);properties.put("edgeai.stream.broker-digest",digest);
+            properties.put("edgeai.stream.admin-user","edgeai-admin");properties.put("edgeai.stream.admin-password-file",root.resolve("admin.password").toString());
+            properties.put("edgeai.stream.ca-file",root.resolve("server.crt").toString());properties.put("edgeai.stream.principal-key-file",root.resolve("principal.key").toString());
+            properties.put("edgeai.stream.reconcile-ms","20");properties.put("edgeai.stream.scan-size","2");
+            context.getEnvironment().getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource("isolated-stream",properties));
+            context.registerBean(Clock.class,Clock::systemUTC);context.registerBean(DataRouteRepository.class,()->routeStore);context.registerBean(DataRouteService.class,()->routes);
+            context.register(io.edgeai.app.config.StreamConfiguration.class);context.refresh();
+            until(()->state(p).equals("ACTIVE"),()->{});
+            var data=subscribe(peer(p.consumer()),p.topic("frames"));var source=peer(p.producer());publish(source,p.topic("frames"),"scheduled");received(data,"scheduled");
+            var session=devices.openSession(p.route().sourceDeviceId(),new JsonDocuments().canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
+            until(()->state(p).equals("CLOSED"),()->{});
+            assertThat(routeStore.generation(p.generation().id()).orElseThrow().fenceReason()).isEqualTo("PRODUCER_CHANGED");
+            var next=routes.prepare(p.route().id(),UUID.randomUUID(),new Actor(session.id(),session.epoch()),p.generation().consumer(),digest,5);
+            var q=new Permission(p.route(),next);until(()->state(q).equals("ACTIVE"),()->{});
+            var currentData=subscribe(peer(q.consumer()),q.topic("frames"));publish(peer(q.producer()),q.topic("frames"),"new-generation");received(currentData,"new-generation");
+            until(()->state(q).equals("CLOSED"),()->{});
+            assertThat(routeStore.generation(q.generation().id()).orElseThrow().fenceReason()).isEqualTo("LEASE_EXPIRED");
+            assertThat(peer(q.producer()).subscribe(q.topic("acks"),1).getReasonCodes()).containsExactly(135);
+        }
+    }
+    @Test void lostGrantAndRevokeResponsesRecoverFromStoredIntentWithFreshWorkers()throws Exception {
+        var p=databasePermission(digest,120,UUID.randomUUID());var grants=new java.util.concurrent.atomic.AtomicInteger();var revokes=new java.util.concurrent.atomic.AtomicInteger();
+        var lost=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission value){gateway.grant(value);grants.incrementAndGet();throw new StreamBrokerException(StreamBrokerException.Reason.UNAVAILABLE);}
+            public BrokerReceipt revoke(Permission value){gateway.revoke(value);revokes.incrementAndGet();throw new StreamBrokerException(StreamBrokerException.Reason.UNAVAILABLE);}
+        };
+        try(var worker=worker(lost,1,2)){worker.tick();until(()->grants.get()==1,()->{});}
+        assertThat(state(p)).isEqualTo("PREPARING");
+        // The response was lost after the real broker had already granted access.
+        var data=subscribe(peer(p.consumer()),p.topic("frames"));publish(peer(p.producer()),p.topic("frames"),"pending-recovery");received(data,"pending-recovery");
+        try(var worker=worker(gateway,1,2)){until(()->state(p).equals("ACTIVE"),worker::tick);}
+        routes.fence(p.generation().id(),"COMPLETED");
+        try(var worker=worker(lost,1,2)){worker.tick();until(()->revokes.get()==1,()->{});}
+        assertThat(state(p)).isEqualTo("FENCED");assertThat(peer(p.consumer()).subscribe(p.topic("frames"),1).getReasonCodes()).containsExactly(135);
+        // Also restart the real broker; its empty-role history survives separately from the DB.
+        broker.outputWriter().write("restart\n");broker.outputWriter().flush();assertThat(Integer.parseInt(line())).isEqualTo(port);
+        try(var worker=worker(gateway("localhost","server.crt"),1,2)){until(()->state(p).equals("CLOSED"),worker::tick);}
+        reason(StreamBrokerException.Reason.REVOKED,()->gateway.grant(p));
+    }
+    @Test void blockedGrantDoesNotBlockFencingOtherPagesOrHoldDatabaseLocks()throws Exception {
+        long prefix=UUID.randomUUID().getMostSignificantBits();
+        var blocked=databasePermission(digest,120,new UUID(prefix,1));var a=databasePermission(digest,120,new UUID(prefix,2));var b=databasePermission(digest,120,new UUID(prefix,3));
+        var granted=new CountDownLatch(1);var release=new CountDownLatch(1);var active=new java.util.concurrent.atomic.AtomicInteger();var maximum=new java.util.concurrent.atomic.AtomicInteger();
+        var transactionSeen=new java.util.concurrent.atomic.AtomicBoolean();
+        var slow=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission p){
+                if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())transactionSeen.set(true);
+                int count=active.incrementAndGet();maximum.accumulateAndGet(count,Math::max);
+                try{var receipt=gateway.grant(p);if(p.generation().id().equals(blocked.generation().id())){granted.countDown();if(!release.await(10,TimeUnit.SECONDS))throw new AssertionError("test release timed out");}return receipt;}
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new StreamBrokerException(StreamBrokerException.Reason.UNAVAILABLE);}finally{active.decrementAndGet();}
+            }
+            public BrokerReceipt revoke(Permission p){if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())transactionSeen.set(true);return gateway.revoke(p);}
+        };
+        try(var worker=worker(slow,2,2)){
+            worker.tick();assertThat(granted.await(5,TimeUnit.SECONDS)).isTrue();
+            until(()->state(a).equals("ACTIVE") && state(b).equals("ACTIVE"),worker::tick);
+            try(var executor=Executors.newSingleThreadExecutor()){
+                executor.submit(()->devices.openSession(blocked.route().sourceDeviceId(),new JsonDocuments().canonical(Map.of("bootId",UUID.randomUUID().toString())))).get(2,TimeUnit.SECONDS);
+            }
+            until(()->state(blocked).equals("FENCED"),worker::tick);
+            assertThat(release.getCount()).isEqualTo(1);release.countDown();until(()->state(blocked).equals("CLOSED"),worker::tick);
+            assertThat(routeStore.generation(blocked.generation().id()).orElseThrow().activatedAt()).isNull();
+            for(var p:List.of(a,b))runs.cancelRun(p.route().runId(),"{}");
+            until(()->state(a).equals("CLOSED") && state(b).equals("CLOSED"),worker::tick);
+        }finally{release.countDown();}
+        assertThat(transactionSeen.get()).isFalse();assertThat(maximum.get()).isEqualTo(2);
+    }
+    @Test void unavailableFirstGenerationDoesNotStarveLaterCommandsOrTouchForeignBroker()throws Exception {
+        long prefix=UUID.randomUUID().getMostSignificantBits();
+        var first=databasePermission(digest,120,new UUID(prefix,11));var second=databasePermission(digest,120,new UUID(prefix,12));var third=databasePermission(digest,120,new UUID(prefix,13));
+        var foreign=databasePermission("sha256:"+"f".repeat(64),120,UUID.randomUUID());var failures=new java.util.concurrent.atomic.AtomicInteger();
+        var gatewayWithFailure=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission p){if(p.generation().id().equals(first.generation().id())){failures.incrementAndGet();throw new StreamBrokerException(StreamBrokerException.Reason.UNAVAILABLE);}return gateway.grant(p);}
+            public BrokerReceipt revoke(Permission p){return gateway.revoke(p);}
+        };
+        try(var worker=worker(gatewayWithFailure,1,2)){
+            until(()->state(second).equals("ACTIVE") && state(third).equals("ACTIVE"),worker::tick);
+            assertThat(failures.get()).isPositive();assertThat(state(first)).isEqualTo("PREPARING");assertThat(state(foreign)).isEqualTo("PREPARING");
+            for(var p:List.of(first,second,third))routes.fence(p.generation().id(),"CANCELLED");
+            until(()->List.of(first,second,third).stream().allMatch(p->state(p).equals("CLOSED")),worker::tick);
+        }
+        // Foreign broker remains deliberately pending; its own configured worker must clean it.
+        assertThat(state(foreign)).isEqualTo("PREPARING");
+    }
+    @Test void mismatchedReceiptsCannotActivateOrCloseAnotherGeneration()throws Exception {
+        var p=databasePermission(digest,120,UUID.randomUUID());var foreign=databasePermission("sha256:"+"e".repeat(64),120,UUID.randomUUID());
+        var wrongGrant=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission value){gateway.grant(value);return foreign.receipt();}
+            public BrokerReceipt revoke(Permission value){return gateway.revoke(value);}
+        };
+        try(var worker=worker(wrongGrant,1,2)){until(()->state(p).equals("CLOSED"),worker::tick);}
+        var failed=routeStore.generation(p.generation().id()).orElseThrow();assertThat(failed.activatedAt()).isNull();assertThat(failed.fenceReason()).isEqualTo("FAILED");
+        var q=databasePermission(digest,120,UUID.randomUUID());routes.activate(gateway.grant(q));routes.fence(q.generation().id(),"COMPLETED");
+        var calls=new java.util.concurrent.atomic.AtomicInteger();var wrongRevoke=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission value){return gateway.grant(value);}
+            public BrokerReceipt revoke(Permission value){gateway.revoke(value);calls.incrementAndGet();return foreign.receipt();}
+        };
+        try(var worker=worker(wrongRevoke,1,2)){worker.tick();until(()->calls.get()==1,()->{});}
+        assertThat(state(q)).isEqualTo("FENCED");assertThat(state(foreign)).isEqualTo("PREPARING");
+        try(var worker=worker(gateway,1,2)){until(()->state(q).equals("CLOSED"),worker::tick);}
+    }
+    @Test void twoWorkersRecoverCompetingGrantAndRevokeAcrossDeviceGenerations()throws Exception {
+        var p=databasePermission(digest,120,UUID.randomUUID());var granted=new CountDownLatch(2);var release=new CountDownLatch(1);
+        var racing=new StreamBrokerGateway(){
+            public BrokerReceipt grant(Permission value){var receipt=gateway.grant(value);granted.countDown();
+                try{if(!release.await(10,TimeUnit.SECONDS))throw new AssertionError("two-worker barrier timed out");return receipt;}
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new StreamBrokerException(StreamBrokerException.Reason.UNAVAILABLE);}}
+            public BrokerReceipt revoke(Permission value){return gateway.revoke(value);}
+        };
+        try(var first=worker(racing,1,2);var second=worker(racing,1,2)){
+            first.tick();second.tick();assertThat(granted.await(5,TimeUnit.SECONDS)).isTrue();
+            var session=devices.openSession(p.route().sourceDeviceId(),new JsonDocuments().canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
+            until(()->state(p).equals("FENCED"),()->{first.tick();second.tick();});release.countDown();
+            until(()->state(p).equals("CLOSED"),()->{first.tick();second.tick();});
+            assertThat(routeStore.generation(p.generation().id()).orElseThrow().activatedAt()).isNull();
+            var g=routes.prepare(p.route().id(),UUID.randomUUID(),new Actor(session.id(),session.epoch()),p.generation().consumer(),digest,120);
+            var next=new Permission(p.route(),g);until(()->state(next).equals("ACTIVE"),()->{first.tick();second.tick();});
+            var data=subscribe(peer(next.consumer()),next.topic("frames"));publish(peer(next.producer()),next.topic("frames"),"two-workers");received(data,"two-workers");
+            runs.cancelRun(next.route().runId(),"{}");until(()->state(next).equals("CLOSED"),()->{first.tick();second.tick();});
+        }finally{release.countDown();}
+    }
+    private StreamAuthorityWorker worker(StreamBrokerGateway value,int concurrency,int page){return new StreamAuthorityWorker(routeStore,routes,value,digest,concurrency,page);}
+    private String state(Permission p){return routeStore.generation(p.generation().id()).orElseThrow().state();}
+    private void until(java.util.function.BooleanSupplier done,Runnable step)throws Exception {
+        long deadline=System.nanoTime()+Duration.ofSeconds(15).toNanos();
+        while(!done.getAsBoolean() && System.nanoTime()<deadline){step.run();Thread.sleep(20);}assertThat(done.getAsBoolean()).isTrue();
+    }
+    private Permission databasePermission(String binding,int ttl,UUID request)throws Exception {
         var json=new JsonDocuments();var spec=new HashMap<String,Object>();
         ((Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")))).forEach((k,v)->spec.put((String)k,v));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",4096,"required",true)));
@@ -179,20 +330,7 @@ class StreamBrokerIntegrationTest {
         });
         var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();var actor=new Actor(attempt.id(),attempt.epoch());
         var route=routes.fromDevice(run.id(),device.id(),"samples",task.id(),"input",4096);
-        var g=routes.prepare(route.id(),UUID.randomUUID(),new Actor(session.id(),session.epoch()),actor,DIGEST,120);
-        var p=new Permission(route,g);routes.activate(gateway.grant(p));assertThat(routes.accepts(g.id(),g.producer(),g.consumer())).isTrue();
-        var source=peer(p.producer());var sink=peer(p.consumer());var data=subscribe(sink,p.topic("frames"));publish(source,p.topic("frames"),"before");received(data,"before");
-        var nextSession=devices.openSession(device.id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
-        assertThat(routes.accepts(g.id(),g.producer(),g.consumer())).isFalse();assertThat(routes.reconcile(g.id()).fenceReason()).isEqualTo("PRODUCER_CHANGED");
-        var nextActor=new Actor(nextSession.id(),nextSession.epoch());
-        assertThatThrownBy(()->routes.prepare(route.id(),UUID.randomUUID(),nextActor,actor,DIGEST,120)).isInstanceOfSatisfying(io.edgeai.app.exception.ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("STREAM_REVOCATION_PENDING"));
-        assertThat(routes.revoked(gateway.revoke(p)).state()).isEqualTo("CLOSED");
-        var next=routes.prepare(route.id(),UUID.randomUUID(),nextActor,actor,DIGEST,120);assertThat(next.generation()).isEqualTo(2);
-        var permission=new Permission(route,next);routes.activate(gateway.grant(permission));
-        var newSink=peer(permission.consumer());var nextData=subscribe(newSink,permission.topic("frames"));
-        try{publish(source,permission.topic("frames"),"stale");}catch(MqttException rejected){}
-        publish(peer(permission.producer()),permission.topic("frames"),"after");received(nextData,"after");assertThat(nextData.poll(200,TimeUnit.MILLISECONDS)).isNull();
-        assertThat(routes.accepts(next.id(),next.producer(),next.consumer())).isTrue();
-        routes.fence(next.id(),"COMPLETED");routes.revoked(gateway.revoke(permission));
+        var g=routes.prepare(route.id(),request,new Actor(session.id(),session.epoch()),actor,binding,ttl);
+        return new Permission(route,g);
     }
 }

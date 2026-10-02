@@ -16,7 +16,8 @@ VD Task 배정·Runner·결과 API/화면을 연결했습니다. 실제 Kubernet
 활성 작업 중 교체·취소·재시도와 새 이미지의 CI·배포·실제 PC/모바일 결과 화면까지 통과했습니다.
 [M6 완료 범위와 근거](docs/evidence/m6-completion-audit.md)를 확인하세요. 현재 M7 다중 장치·스트리밍을 구현 중입니다.
 MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/회수](docs/evidence/m7-stream-broker.md)를
-구성 요소별로 검증했습니다. 실행 worker·인증된 배정·Runner 연결 전이므로 공개 STREAM은 아직501입니다.
+구성 요소별로 검증했습니다. [권한 worker](docs/evidence/m7-stream-worker.md)의 실제 DB/TLS broker
+자동 조정도 로컬 검증했으며, 인증된 배정·Runner 연결 전이므로 공개 STREAM은 아직501입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

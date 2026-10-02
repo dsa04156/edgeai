@@ -14,6 +14,9 @@ public interface DataRouteRepository {
     Optional<RouteGeneration> open(UUID routeId);
     long lastGeneration(UUID routeId);
     List<RouteGeneration> history(UUID routeId,int limit,int offset);
+    /** Stable keyset page of durable grant/revoke intent and active leases for this broker. */
+    List<UUID> openGenerations(String brokerDigest,UUID after,int limit);
+    List<UUID> pendingGenerations(String brokerDigest,UUID after,int limit);
     void prepare(DataRoute route,RouteGeneration generation);
     void activate(UUID id,Instant now);
     void renew(UUID id,Instant until,Instant now);
