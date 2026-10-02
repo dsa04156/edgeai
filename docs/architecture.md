@@ -130,3 +130,9 @@ ADR0017/V15는 HMAC/Pod 신원 인증·순번 receipt·lease/Ready·idle drain�
 ADR0018은 공개 provision/replace/drain·execution 스냅샷과 Operation 합집합 조회 및 UI를 연결한다.
 VD Run 배정과 실제 Task/Result는 아직 연결하지 않았다.
 공개 등록만으로 VD를 Ready 또는 실행 가능으로 표시하지 않는다.
+
+ADR0019/V16은 VD Run/Attempt의 불변 대상, 작업별 VD RuntimeInstance와 VDTaskAllocation을
+저장한다. allocation은 지속 runtime의 세대/session/Pod와 slot·poll sequence에 결합하며,
+실제 종료 확인 후 slot을 닫는다. Result는 allocation의 Pod/vdRuntimeId를 FK로 참조한다.
+Run 잠금은 VD→Run 순서를 사용한다. 현재 이 영속 기반의 실제 DB 검증까지이며
+공개 VD Run과 poll·Runner 인증/Result 서비스 연결은 후속이다.

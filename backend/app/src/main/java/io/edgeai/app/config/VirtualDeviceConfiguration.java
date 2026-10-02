@@ -14,4 +14,5 @@ class VirtualDeviceConfiguration {
     @Bean VirtualDeviceRepository virtualDeviceRepository(JdbcTemplate jdbc) { return new JdbcVirtualDeviceRepository(jdbc); }
     @Bean VDRuntimeRepository vdRuntimeRepository(JdbcTemplate jdbc) { return new JdbcVDRuntimeRepository(jdbc); }
     @Bean VDPollRepository vdPollRepository(JdbcTemplate jdbc) { return new JdbcVDPollRepository(jdbc); }
+    @Bean io.edgeai.domain.repository.VDTaskRepository vdTaskRepository(JdbcTemplate jdbc) { return new io.edgeai.adapters.repository.JdbcVDTaskRepository(jdbc); }
 }

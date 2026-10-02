@@ -54,7 +54,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public Dispatch dispatch(UUID attemptId) {
         var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote())throw fenced();
+        if(r.remote() || r.vd())throw fenced();
         String name=c.attempt().nodeId()==null?null:nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
         return new Dispatch(r,spec(c),c.attempt().nodeId(),name,c.attempt().excludedNodeNames());
     }
@@ -73,6 +73,7 @@ public class RuntimeLifecycleService {
         if(namespace.contains("."))throw new IllegalArgumentException("Runtime namespace requires a DNS label");
         var c=lock(attemptId);var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent())return existing.get();
+        if(c.attempt().mode().equals("VD"))throw error(503,"VD_TASK_DISPATCH_UNAVAILABLE","VD 작업 배정 연결을 완료한 뒤 실행하세요.");
         if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()))throw fenced();
         validateDag(c.run().workflowVersionId());
@@ -161,7 +162,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public RuntimeInstance submitted(UUID attemptId,UUID jobUid) {
         Objects.requireNonNull(jobUid);var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote())throw fenced();
+        if(r.remote() || r.vd())throw fenced();
         if(r.jobUid()!=null && !r.jobUid().equals(jobUid))throw fenced();
         if(r.observedState().equals("TERMINATED") && !r.desiredState().equals("STOPPED"))throw fenced();
         runtimes.submitted(r.id(),jobUid,clock.instant().plusSeconds(spec(c).timeoutSeconds()),clock.instant());
@@ -172,7 +173,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public Assignment claim(UUID attemptId,long epoch,RuntimePod pod) {
         var c=lock(attemptId);var r=runtime(attemptId);active(c,r,epoch);
-        if(r.remote())throw fenced();
+        if(r.remote() || r.vd())throw fenced();
         if(!pod.jobUid().equals(r.jobUid()) || (r.producerPodUid()!=null && !r.producerPodUid().equals(pod.podUid())))throw fenced();
         if(c.attempt().nodeId()!=null) {
             var expected=nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced);
@@ -230,14 +231,14 @@ public class RuntimeLifecycleService {
         if(!Set.of("WORKLOAD_FAILED","TIMEOUT","INPUT_INVALID","OUTPUT_INVALID","STORAGE_FAILED","CANCELLED","RUNNER_FAILED").contains(reason))
             throw new IllegalArgumentException("Unknown Runner failure code");
         var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote())throw fenced();
+        if(r.remote() || r.vd())throw fenced();
         if(c.attempt().state().equals("FAILED") && r.epoch()==epoch && Objects.equals(r.producerPodUid(),podUid) && Objects.equals(r.failureReason(),reason))return;
         producer(c,r,epoch,podUid);recordFailure(c,r,reason);
     }
     @Transactional
     public void confirmStopped(UUID attemptId) {
         var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote())throw fenced(); // Remote termination requires a validated terminal provider observation.
+        if(r.remote() || r.vd())throw fenced(); // Remote termination requires a validated terminal provider observation.
         if(!r.desiredState().equals("STOPPED"))throw fenced();
         runtimes.terminated(r.id(),clock.instant());executions.reconcileRunState(c.run().id(),clock.instant());
     }
@@ -306,6 +307,7 @@ public class RuntimeLifecycleService {
     }
     private void producer(Context c,RuntimeInstance r,long epoch,UUID pod,UUID allocation) {
         active(c,r,epoch);
+        if(r.vd())throw fenced(); // VD producer authorization is connected with allocation-aware claim/commit.
         if(!c.attempt().state().equals("RUNNING") || r.remote()!=(allocation!=null) ||
             (r.remote() ? pod!=null || !r.remoteAllocationId().equals(allocation) : pod==null || !pod.equals(r.producerPodUid())))throw fenced();
     }
