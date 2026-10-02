@@ -61,7 +61,13 @@ hostname 거절, TLS 응답 정지 timeout·실제 소켓 정리도 확인했다
 
 `bash scripts/test-runner.sh`와 [Runner의 실제 MQTT 시험 명령](../../runner/README.md#스트림-전달-구성-요소-m7-진행-중)을 따른다.
 새 CI runner job은 이미지 빌드/기존 실행 회귀와 실제 MQTT9개를 성공해야 이미지를 발행한다.
-현재 기록은 로컬 결과이며 새 CI·이미지·배포 결과는 후속 확인한다.
+소스717b5cd7646012135975a88bb02a0d39f0f9b0f5를 main에 push했다.
+[CI37067700149](https://github.com/dsa04156/edgeai/actions/runs/37067700149)의 runner job은
+이미지 빌드·시험·발행까지 success다. runner artifact의 결과JSON2개와 원시 로그를 내려받아
+직접 확인했다: 20261002T213518Z-3c0dcb62의50개/88.272초,
+20261002T213700Z-5570fafb의 MQTT9개/9.242초 모두PASS/0이며 ResourceWarning이 없다.
+Runner/VD의 실행 시험은 실제 이미지이고 새 codec/journal 단위는 CI 호스트 Python에서 수행한다.
+다른 CI job과 전체 이미지/실제 Kubernetes·배포 확인은 아직 진행 중이다.
 
 남은 작업: DataRoute 영속 세대·생산자/소비자 배정·broker 계정/ACL 수명, SERVICE/Runner의 스트림
 입출력, S3 checkpoint 검증·새 Pod/Node restore, 여러 Device의 실제 BATCH/STREAM DAG,

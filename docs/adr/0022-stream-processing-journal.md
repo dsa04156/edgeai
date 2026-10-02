@@ -55,7 +55,11 @@ TLS 응답 정지의 실제 소켓 수/시간 상한 시험으로 검증하며 �
 
 이는 같은 로컬 볼륨에서의 프로세스 복구다. S3 checkpoint export/검증·새 Pod/Node의 restore,
 DataRoute generation 전환과 broker 계정/ACL 수명은 후속 구현이다. 따라서 M5 상태형 offload
-완료로 판정하지 않는다. 임의 workload의 외부 파일·HTTP 부작용도 이 트랜잭션으로 원자화되지 않는다.
+완료로 판정하지 않는다. 현재 처리 ACK 후 consumer 볼륨 자체를 잃으면 이미 확인한 입력은
+producer에서 제거됐을 수 있다. 새 Pod의 장애 복구를 지원하기 전에 ACK를 검증된 외부 checkpoint와
+연계하거나 upstream의 충분한 재생 이력을 보존해야 한다. 계획된 전환도 마지막 확정 상태를
+quiesce/export한 뒤 새 producer를 활성화해야 하며 오래된 snapshot 복원을 무손실이라 부르지 않는다.
+임의 workload의 외부 파일·HTTP 부작용도 이 트랜잭션으로 원자화되지 않는다.
 workload는 checkpoint 확정 전 외부 부작용을 만들지 않거나 별도 멱등 계약을 가져야 한다.
 다중 입력의 시간 정렬·join 의미는 SERVICE 계약에서 정하며 단순 순번 zip을 모든 센서의 의미로
 고정하지 않는다. 실제 시험의 정수 합산은 합성 참조 계산이다.
