@@ -322,9 +322,7 @@ export interface operations {
     publishProfile: {
         parameters: {
             query?: never;
-            header: {
-                "X-CSRF-TOKEN": string;
-            };
+            header?: never;
             path: {
                 kind: components["parameters"]["Kind"];
             };
@@ -332,6 +330,16 @@ export interface operations {
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "key": "temperature-sensor",
+                 *       "version": "1.0.0",
+                 *       "spec": {
+                 *         "protocol": "mqtt",
+                 *         "unit": "celsius"
+                 *       }
+                 *     }
+                 */
                 "application/json": components["schemas"]["PublishProfile"];
             };
         };

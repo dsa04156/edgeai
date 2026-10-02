@@ -83,3 +83,9 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
 M1 최종 코드 20a8d6c의 [CI 36950519908](https://github.com/dsa04156/edgeai/actions/runs/36950519908):
 scaffold/storage success, artifact result.json 8개 모두 PASS/0. 최초 fresh DB Flyway
 history schema 문제는 별도 새 DB에서 재현한 뒤 명시적 schema 설정으로 수정·검증했다.
+
+
+## Swagger UI (2026-10-02)
+
+[구성과 검증](../swagger-ui.md): 계약/자산 인증 및 원본 일치, 실제 desktop/mobile
+Swagger 렌더와 자동 CSRF Profile 등록을 통과했다. GitHub CI에 같은 검증을 포함한다.

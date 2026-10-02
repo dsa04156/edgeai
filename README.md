@@ -33,6 +33,8 @@ bash scripts/dev-dashboard.sh
 - Dashboard: <http://127.0.0.1:13080>
 - Profile 관리: <http://127.0.0.1:13080/profiles> (`.env` 개발 계정으로 연결)
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
+- Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
+- OpenAPI 계약: <http://127.0.0.1:18080/openapi.yaml>
 - API readiness: <http://127.0.0.1:18080/actuator/health/readiness>
 - API metadata: `GET /api/v1/platform` (로컬 Basic 인증 필요)
 - PostgreSQL: `127.0.0.1:15432`, MQTT: `127.0.0.1:11883`
@@ -63,6 +65,27 @@ bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 
 `verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0 기반과 M1 Profile을 검증합니다.
+
+## Swagger UI
+
+백엔드를 실행한 후 `/swagger-ui.html`을 엽니다. 브라우저 인증 창에는 `.env`의
+`EDGEAI_API_USER` / `EDGEAI_API_PASSWORD`를 입력합니다. 문서와 API 모두 인증을 요구합니다.
+Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 요청의 CSRF 토큰과
+세션 쿠키는 자동으로 연결합니다. `Authorize`의 csrfToken 입력칸은 비워 두어도 됩니다.
+문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
+
+화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
+포트를 바꾸면 같은 호스트의 API를 사용하며, Swagger 자산은 JAR에 포함되어 외부 CDN이나
+온라인 validator에 연결하지 않습니다. 인증 정보는 Swagger 브라우저 저장소에 영속 저장하지 않습니다.
+
+## CI / CD 상태
+
+- **CI 연결됨:** GitHub Actions가 push/PR마다 빌드, 단위·계약·PostgreSQL 통합,
+  Dashboard/Swagger 브라우저 시험, DB 장애·복구, MQTT 및 MinIO 검증을 실행합니다.
+- **ArgoCD/CD 미연결:** 현재 workflow에는 이미지 발행이나 환경 배포 단계가 없습니다.
+  배포용 Kubernetes manifests, ArgoCD Application 및 대상 클러스터 연결도 아직 구성하지 않았습니다.
+- CD를 구성할 때는 대상 클러스터/context, namespace, ArgoCD 설치 위치, 이미지 registry와
+  외부 접속 주소를 먼저 정해야 합니다. 현재 저장소의 테스트 성공은 배포 완료를 의미하지 않습니다.
 
 ## Profile 사용
 

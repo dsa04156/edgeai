@@ -38,3 +38,10 @@ Profile UI: http://127.0.0.1:13080/profiles
 bash scripts/test-ui.sh; bash scripts/test-profiles-stack.sh local (Compose는 compose).
 
 검증용 API/UI/PostgreSQL 프로세스는 종료하고 개발 DB 및 원시 evidence는 보존한다.
+
+
+[SWAGGER / CI-CD]
+Swagger UI `/swagger-ui.html`, 계약 `/openapi.yaml` 추가. 문서 인증과 자동 CSRF 쓰기,
+실제 desktop/mobile 등록·조회 검증 완료. 상세 근거: docs/swagger-ui.md.
+GitHub Actions CI 연결 상태를 확인했고 Swagger 시험도 기존 CI 브라우저 경로에 포함했다.
+ArgoCD/CD는 아직 연결하지 않았으며 배포 대상 클러스터·namespace·registry 등이 필요하다.

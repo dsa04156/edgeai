@@ -6,7 +6,7 @@ info:
     Profile registry contract. Published versions are immutable. Specs are JSON
     documents, not yet validated for execution by a device adapter or runtime.
 servers:
-  - url: http://127.0.0.1:18080
+  - url: /
 security:
   - localBasic: []
 paths:
@@ -66,16 +66,18 @@ paths:
         Requires Basic authentication, the session cookie from getCsrfToken and
         X-CSRF-TOKEN. Body limit 64 KiB UTF-8; nested JSON depth limit 32.
         Unknown envelope fields and duplicate JSON properties are rejected.
-      parameters:
-        - in: header
-          name: X-CSRF-TOKEN
-          required: true
-          schema: {type: string}
+      security:
+        - localBasic: []
+          csrfToken: []
       requestBody:
         required: true
         content:
           application/json:
             schema: {$ref: '#/components/schemas/PublishProfile'}
+            example:
+              key: temperature-sensor
+              version: 1.0.0
+              spec: {protocol: mqtt, unit: celsius}
       responses:
         '201':
           description: New version published
@@ -153,6 +155,11 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-TOKEN
+      description: CSRF token plus session cookie required for writes. Swagger UI obtains and supplies this automatically; leave this authorization field blank. Direct clients use getCsrfToken.
     localBasic:
       type: http
       scheme: basic

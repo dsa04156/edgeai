@@ -117,6 +117,7 @@ org.springframework:spring-test:7.0.9=testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-tx:7.0.9=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-web:7.0.9=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.springframework:spring-webmvc:7.0.9=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.webjars:swagger-ui:5.32.15=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-core:2.11.0=testCompileClasspath,testRuntimeClasspath
 org.yaml:snakeyaml:2.6=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 tools.jackson.core:jackson-core:3.1.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath

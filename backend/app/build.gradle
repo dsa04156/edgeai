@@ -11,6 +11,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'org.webjars:swagger-ui:5.32.15'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -24,4 +25,12 @@ tasks.register('integrationTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     include '**/*IntegrationTest.class'
     shouldRunAfter tasks.named('test')
+}
+
+// Serve the exact reviewed contract; do not infer a competing schema from controllers.
+tasks.named('processResources') {
+    from(rootProject.file('../contracts/openapi/platform-api.yaml')) {
+        into 'static'
+        rename { 'openapi.yaml' }
+    }
 }

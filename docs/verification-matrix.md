@@ -15,6 +15,8 @@
 | M1-CONTRACT | scripts/test-contract.sh | 생성 타입 일치, HTTP 오류/인증 계약 | local |
 | M1-DB | scripts/test-integration.sh | 3종 CRUD 중 생성/조회, 동시 재등록/충돌, 불변 trigger·UNIQUE, paging/filter | 실제 PostgreSQL |
 | M1-UI | scripts/test-profiles-stack.sh local 또는 compose | 실제 DB/API와 desktop/mobile 등록·재등록·409·새 버전·상세·인증·정밀도 | 프로젝트 전용 DB, 빌드된 UI |
+| SWAGGER-CONTRACT | scripts/test-contract.sh | 문서/자산 인증401, 렌더 자산, packaged YAML과 원본 byte 일치 | local |
+| SWAGGER-UI | scripts/test-profiles-stack.sh | desktop/mobile 실제 Swagger 렌더·자동 CSRF POST201·정확한 계약·외부 요청 없음 | 실제 DB/API/browser |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
