@@ -1,5 +1,10 @@
 {
-  "sourceRevision": "5992cdcd98d1c18169e7974f132dcfb5e1db64ab",
-  "apiDigest": "sha256:c08052d470d4297016883c63d30a4c01d07dbef9d3ac11e21619a410a4fd7e61",
-  "dashboardDigest": "sha256:71adb522ad200e7372fdce564d0213e53f9aa18c5376c6db2efa37453bc599e1"
+  "sourceRevision": "9d15fb1a44f8fa3d21934a7ec921ec04f148d641",
+  "apiDigest": "sha256:55ef39953e30ca62b3b6a9dc8e1a1132f7843dae9704013a63383622c769793c",
+  "dashboardDigest": "sha256:71adb522ad200e7372fdce564d0213e53f9aa18c5376c6db2efa37453bc599e1",
+  "runnerDigest": "sha256:74b605227b37f2bbe977033505d90b6d4d96d460e2b86436c98c04a8650b13cb",
+  "minioDigest": "sha256:5bac1e4e87604e0078ac1cd6a42fc69a542385eff0a403c22ec81c4053e5fcef",
+  "runtimeImagePlatforms": [
+    "linux/amd64"
+  ]
 }
