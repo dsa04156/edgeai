@@ -3,6 +3,7 @@ LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /work
 COPY --chown=10001:10001 runner/runner.py /opt/edgeai/runner.py
+COPY --chown=10001:10001 runner/vd.py /opt/edgeai/vd.py
 COPY --chown=10001:10001 runner/edgeai_runner /opt/edgeai/edgeai_runner
 COPY --chown=10001:10001 runner/examples /opt/edgeai/examples
 USER 10001:10001

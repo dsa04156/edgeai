@@ -217,8 +217,10 @@ class Runner:
                     # Optional measurement must not replace the workload's result/failure path.
                     pass
         try:
+            supervised = os.environ.get("EDGEAI_VD_SUPERVISED") == "true"
             process = subprocess.Popen(command, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=not supervised,
+                process_group=0 if supervised else None)
             if "telemetry" in assignment:
                 interval = integer(assignment["telemetry"]["intervalSeconds"], 1, 60)
                 metrics_thread = threading.Thread(target=measurements, args=(interval,), daemon=True)

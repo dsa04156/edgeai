@@ -46,7 +46,10 @@ Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전�
 [VERIFIED]
 M6 등록 로컬: 단위/MVC66·실제PostgreSQL89(VD9)·계약/MVC22·UI28·실DB/브라우저10 모두 PASS.
 VD 포함 DB 장애503와 같은 프로세스 복구도 PASS(20261002T144123Z-bf144394).
-실제 VD runtime과 이 신규 코드의 CI·배포는 아직 미검증이다. docs/evidence/m6-vd-registry.md.
+등록 코드0b4693c의 CI37022079299 5jobs/JSON15개 PASS, b5a9019 pin과 실제 imageID/Ready/PVCBound/ArgoSynced
+검증20261002T151449Z-3a9ad7a8 PASS. docs/evidence/m6-vd-registry.md.
+지속 supervisor·Pod compiler·내부 poll 계약을 후속 구성 요소로 추가했다. 실제 child Runner 시험과
+Java compiler/계약 검증은 docs/evidence/m6-vd-runtime.md를 따른다. 서버·VD Task 연결 완료는 아니다.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
 실제 Spring 스케줄러의 공개 Remote BATCH, 실제 제공자 SIGKILL/재시도, 취소와 출력 변조 차단,
 설정 변경 시 전송 차단·재전송, 동시 worker의 단일 실행/결과를 검증했다. NODE 전환 부분은 fixture다.
@@ -96,7 +99,7 @@ M5 실제 NODE↔REMOTE·API 재시작/취소 kind 게이트4개 Run은 CI370165
 M6 등록·원본 연결 API/UI를 검증하며 다음은 지속 VD runtime·Operation·실제 Run VD 실행이다.
 M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
 M5 Remote worker의 실제 kind 전환/재시작·CI·배포는 확인했다. 외부 실제 계약과 상태형 복원은
-M5 완료 전 남은 게이트다. M6 등록 코드의 CI·배포 확인도 이어간다.
+M5 완료 전 남은 게이트다. M6 등록 코드의 CI·배포는 확인했고 지속 runtime의 서버 연결을 이어간다.
 다음 단계는 M6 VD → M7 다중 장치/STREAM → M8 부하 → M9 운영/복구/보안 → M10 실장비다.
 아래는 M4 연결 단계의 이전 진행 기록이다.
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.

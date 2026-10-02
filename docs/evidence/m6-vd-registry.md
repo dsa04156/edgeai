@@ -48,12 +48,22 @@ JUnit failures/errors/skipped는 각 확인 시 모두0이었다. VD Profile JSO
 `test-profiles-stack.sh local` (Compose는 `compose`). 실제 API/UI 시험 프로세스는 종료하고
 프로젝트 PostgreSQL은 복구해 유지했다. V1–V12는 수정하지 않았으며 적용된 V13도 이후 변경하지 않는다.
 
-## 다음 게이트
+## CI와 실제 배포 (2026-10-03 KST)
 
-이 코드의 신규 CI·이미지·실제 배포 확인이 남는다. 기존 Remote 코드45ce85f의 CI와 배포 성공을
-새 VD 기능의 배포 증거로 사용하지 않는다. 해당 이전 결과는 [Remote kind 기록](m5-remote-kind.md)에 있다.
+코드0b4693c의 [CI37022079299](https://github.com/dsa04156/edgeai/actions/runs/37022079299)는
+runner/storage/scaffold/images/gitops 모두 success다. 검증 artifact4개 그룹을 내려받아15개
+result.json 모두 PASS/0를 확인했다. PC/모바일 UI28개와 실제 API/DB 브라우저10개 로그도 확인했다.
+실제 Runner 컨테이너14개 및 기존 kind 실행 게이트를 포함하며 지속 VD runtime 시험은 아니다.
+
+자동 이미지 pin b5a9019를 반영한 실제 클러스터에서 API/Dashboard/MinIO imageID가 source0b4693c의
+digest와 일치하고 모두Ready, PVC Bound, Argo Synced를 확인했다.
+증거 `20261002T151449Z-3a9ad7a8` PASS/0. 기존 공유 Ingress status 문제로 aggregate health는
+Progressing이며 클러스터 전체 Healthy 판정은 하지 않는다.
+
+## 다음 게이트
 
 M6의 지속 VD runtime, source/runtime binding 분리, provision/readiness·교체/drain Operation,
 Run VD 정책을 통한 실제 활성 runtime Task/Result, 재시작·실패·취소와 demo-vd는 아직 미구현이다.
+감독 프로세스와 Pod compiler 구성 요소의 후속 구현·검증은 [runtime 기록](m6-vd-runtime.md)을 따른다.
 이를 단순 Node 지정 Job이나 등록 API 성공으로 대체하지 않는다. M5 상태형 복원·실제 외부 계약,
 M7 다중 장치/스트림, M8 부하, M9 운영/복구/보안, M10 실장비/모델 수용도 남아 있다.

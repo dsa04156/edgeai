@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: EdgeAI persistent VD supervisor internal contract
+  version: 0.1.0
+  description: >-
+    M6 지속 VD의 내부 프로토콜입니다. Supervisor 구성 요소를 구현했으며 서버의 영속
+    runtime/Operation/poll 및 실제 VD Task 연결은 구현 중입니다. 공개 API가 아닙니다.
+    모든 JSON은 256KiB 이하이고 중복 필드·알 수 없는 필드를 거절합니다.
+    인증 토큰과 assignment의 claimToken은 로그·공개 응답·영속 metadata에 저장하지 않습니다.
+x-implementation-status: supervisor-component-only
+servers:
+  - url: /
+security:
+  - runtimeClaim: []
+    podIdentity: []
+paths:
+  /internal/v1/vd-runtimes/{runtimeId}/poll:
+    post:
+      operationId: vdRuntimePoll
+      summary: VD 실행 세대의 준비 상태 확인·작업 배정·종료 보고
+      description: >-
+        실제 Pod UID·VD/runtime labels·ServiceAccount·Node와 generation을 인증합니다.
+        하나의 runtime/generation에는 하나의 supervisor session만 허용합니다.
+        sequence는0부터 시작하고 수신·적용한 응답마다1 증가합니다. 네트워크 오류·429·502·503·504는
+        같은 sequence/요청 bytes로 재전송하며 서버는 멱등 처리합니다. 같은 sequence의 다른
+        요청이나 session 충돌은409입니다. 응답의 runtimeId/generation/podUid/sessionId/sequence는
+        요청과 정확히 일치해야 합니다. 재전송 허용 중에도 현재 runtime의 유효성과 서버 lease를
+        다시 확인해야 하며 폐기된 runtime에 과거 응답을 재생하지 않습니다.
+        RUN은 수용 여유 내 작업을 배정하고 DRAIN은 신규 배정 없이 완료 보고가 확인될 때까지
+        기다립니다. STOP은 즉시 종료합니다. 한번 DRAIN이면 RUN으로 돌아갈 수 없습니다.
+        lease가 만료되면 작업을 종료하며 취소 처리 후 신규 작업 시작 전에도 만료를 확인합니다.
+        일시 장애도 readiness를 제거합니다. 실제 Ready 판단은 poll·Pod 관측을 함께 사용합니다.
+        완료 보고의 exitCode는 프로세스 종료 코드일 뿐 Result의 성공을 증명하지 않습니다.
+      parameters:
+        - name: runtimeId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PollRequest'}
+      responses:
+        '200':
+          description: 동일 신원·sequence에 결합된 유효 명령과 bounded lease
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PollResponse'}
+        '400': {description: JSON 형식·중복 필드·값 범위 오류}
+        '401': {description: Runtime 또는 projected Pod 토큰 인증 실패. 즉시 종료}
+        '403': {description: 실제 Pod 신원·권한 거절. 즉시 종료}
+        '409': {description: 세대·session·sequence 충돌 또는 폐기된 runtime. 즉시 종료}
+        '429': {description: 같은 요청으로 lease 안에서 제한된 재시도}
+        '503': {description: DB·Kubernetes 일시 장애. readiness 제거 후 lease 안에서 재시도}
+components:
+  securitySchemes:
+    runtimeClaim:
+      type: http
+      scheme: bearer
+      description: VD/runtime/generation에 결합한 runtime credential. Basic 인증을 허용하지 않습니다.
+    podIdentity:
+      type: apiKey
+      in: header
+      name: X-EdgeAI-Pod-Token
+      description: audience=edgeai-vd인 projected Pod-bound token. 요청마다 파일을 다시 읽습니다.
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+      pattern: '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+    PositiveInteger:
+      type: integer
+      minimum: 1
+      maximum: 9007199254740991
+    AttemptIdentity:
+      type: object
+      additionalProperties: false
+      required: [attemptId, epoch]
+      properties:
+        attemptId: {$ref: '#/components/schemas/Uuid'}
+        epoch: {$ref: '#/components/schemas/PositiveInteger'}
+    Completion:
+      type: object
+      additionalProperties: false
+      required: [attemptId, epoch, exitCode]
+      properties:
+        attemptId: {$ref: '#/components/schemas/Uuid'}
+        epoch: {$ref: '#/components/schemas/PositiveInteger'}
+        exitCode: {type: integer, minimum: -64, maximum: 255, description: Linux 자식 프로세스 코드. 음수는 종료 신호이며0도 Result 확정을 뜻하지 않습니다.}
+    Assignment:
+      type: object
+      additionalProperties: false
+      required: [attemptId, epoch, claimToken]
+      properties:
+        attemptId: {$ref: '#/components/schemas/Uuid'}
+        epoch: {$ref: '#/components/schemas/PositiveInteger'}
+        claimToken: {type: string, minLength: 1, maxLength: 1024, pattern: '^[!-~]+$', description: 기존 Runner가 실제 입력을 claim할 때 사용하는 작업별 비공개 자격}
+    PollRequest:
+      type: object
+      additionalProperties: false
+      required: [vdId, runtimeId, generation, podUid, sessionId, sequence, state, active, completed]
+      properties:
+        vdId: {$ref: '#/components/schemas/Uuid'}
+        runtimeId: {$ref: '#/components/schemas/Uuid'}
+        generation: {$ref: '#/components/schemas/PositiveInteger'}
+        podUid: {$ref: '#/components/schemas/Uuid'}
+        sessionId: {$ref: '#/components/schemas/Uuid'}
+        sequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        state: {type: string, enum: [RUNNING, DRAINING], description: 감독 프로세스의 작업 수용 의도. 이 값만으로 DB Ready를 확정하지 않습니다.}
+        active:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/AttemptIdentity'}
+          description: 실제 현재 child Runner. attemptId 중복과 completed와의 중복을 금지합니다.
+        completed:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/Completion'}
+          description: acknowledgement를 받기 전 재전송하는 종료 보고. attemptId별 유일합니다.
+    PollResponse:
+      type: object
+      additionalProperties: false
+      required: [runtimeId, generation, podUid, sessionId, sequence, command, leaseSeconds, assignments, cancelAttempts, acknowledgedAttempts]
+      properties:
+        runtimeId: {$ref: '#/components/schemas/Uuid'}
+        generation: {$ref: '#/components/schemas/PositiveInteger'}
+        podUid: {$ref: '#/components/schemas/Uuid'}
+        sessionId: {$ref: '#/components/schemas/Uuid'}
+        sequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        command: {type: string, enum: [RUN, DRAIN, STOP]}
+        leaseSeconds: {type: integer, minimum: 1, maximum: 60}
+        assignments:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/Assignment'}
+          description: >-
+            maxConcurrentTasks 이하이며 현재 활성 작업+새 Attempt도 해당 한도를 넘지 않습니다.
+            attemptId별 유일하고 cancel/ack와 중복되지 않습니다. 같은 Attempt/epoch/token 재수신은
+            재실행하지 않으며 같은 Attempt의 다른 내용은 거절합니다. DRAIN/STOP이면 빈 배열입니다.
+        cancelAttempts:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+          description: 작업별 session을 종료합니다. 이미 종료했거나 실행하지 않은 ID는 멱등하게 무시합니다.
+        acknowledgedAttempts:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+          description: 실제 completed에 있는 ID만 허용하며 확인한 종료 보고를 제거합니다.

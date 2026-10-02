@@ -72,3 +72,32 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 실패시키지 않지만, producer 인증/claim이 차단되면 workload를 중단한다.
 
 참고: [ADR 0008](../docs/adr/0008-runtime-telemetry.md), [측정 증거](../docs/evidence/m5-runtime-telemetry.md).
+
+## 지속 VD supervisor (M6 구성 요소)
+
+같은 이미지의 `python3 /opt/edgeai/vd.py`는 지속 Pod 안에서 독립 Runner session을 실행한다.
+`python3 /opt/edgeai/vd.py --ready`는 유효한 runtime lease의 준비 상태만 확인한다.
+[내부 poll 계약](../contracts/openapi/vd-runtime-api.yaml), [ADR0014](../docs/adr/0014-virtual-device-runtime.md),
+[구성 요소 검증](../docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
+배정 연결은 후속 작업이므로 현재 공개 VD 등록만으로 이 프로세스를 기동하지 않는다.
+
+| 변수 | 용도 |
+|---|---|
+| `EDGEAI_VD_ID` / `EDGEAI_VD_RUNTIME_ID` | 영속 VD와 해당 실행 세대의 서로 다른 UUID |
+| `EDGEAI_VD_GENERATION` | 1부터 증가하는 실행 세대 |
+| `EDGEAI_VD_MAX_CONCURRENT_TASKS` | 같은 Pod 자원을 공유하는 1–16개 동시 작업 slot |
+| `EDGEAI_VD_STARTUP_SECONDS` / `EDGEAI_VD_DRAIN_SECONDS` | 준비·drain 제한 시간, 각각 1–600초 |
+| `EDGEAI_VD_CLAIM_FILE` | 요청마다 읽는 runtime credential 파일 |
+| `EDGEAI_POD_TOKEN_FILE` | audience=edgeai-vd인 projected Pod token 파일 |
+| `EDGEAI_POD_UID` / `EDGEAI_CONTROL_PLANE_URL` / `EDGEAI_WORK_DIR` | 실제 Pod 신원, 내부 origin, 전용 쓰기 가능한 volume |
+
+작업별 임시 claim과 디렉터리는 private mode로 만들고 종료 시 제거한다. 같은 volume의 supervisor
+재시작은 거절하며 새 runtime generation과 새 Pod를 만들어야 한다. 같은 Attempt 재배정은 실행하지
+않는다. 일시 장애는 readiness를 제거하고, lease 만료·인증 거절·STOP은 작업을 종료한다. DRAIN은
+신규 작업 없이 완료 보고의 확인을 기다리되 제한 시간을 적용한다. 한 작업 취소는 해당 session만
+정리하며 다른 작업은 유지한다. Linux의 subreaper/pidfd를 사용해 Runner 강제 종료 후 자식도 정리한다.
+100,000개 실행 이력 상한에 도달하면 마지막 수락 작업부터 drain을 알리고 새 배정을 받지 않는다.
+
+동시 작업의 cgroup 측정은 공유 VD 컨테이너 전체 사용량이다. 서비스 지연 파일만 작업별 측정이며
+CPU/GPU 자원을 각 작업에 독점 할당하거나 서로 신뢰하지 않는 workload를 격리하는 기능은 아니다.
+`test-runner.sh`는 기존 Runner와 VD 시험을 함께 수행하며 CI에서는 UID10001의 실제 이미지도 시험한다.

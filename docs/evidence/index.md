@@ -120,3 +120,5 @@ DB 실행 상태·Kubernetes 생성/관측·내부 API·Result·실제 kind 및 
 
 [등록 검증 기록](m6-vd-registry.md): V13·공개5 API·원본 호환성/교체 이력·revision·논리 해제,
 Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/Task 실행은 후속 게이트다.
+[지속 runtime 구성 요소](m6-vd-runtime.md)는 Pod compiler·감독 프로세스와 종료/lease/중복 방지
+시험을 다룬다. 등록 코드0b4693c는 CI37022079299와 실제 이미지/Ready/ArgoSynced까지 확인했다.

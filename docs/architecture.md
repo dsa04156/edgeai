@@ -116,3 +116,9 @@ DB 복합 FK·활성 UNIQUE·이력 변경 차단과 지연 제약으로 필수 
 
 이는 등록 계층이다. 지속 VD runtime의 소유/수명, Operation과 실제 Task 실행은 아직 연결하지 않았으며
 기존 TaskAttempt Job이나 Node ID를 VD runtime으로 취급하지 않는다. 상세는 ADR0013과 M6 요구사항을 따른다.
+
+ADR0014의 순수 `KubernetesVDPodCompiler`는 고정 SERVICE 이미지의 지속 Pod를 만든다.
+`runner/vd.py`는 runtime/generation/session/lease에 묶인 poll로 작업을 받고, 작업마다 기존 Runner를
+별도 session에서 실행한다. Pod 자체는 Task·Job과 독립이며 자원은 동시 작업이 공유한다.
+지속 실행 상태 저장·Operation·실제 Pod gateway·poll 서버·VD Run 배정은 아직 연결하지 않았다.
+구성 요소만으로 등록된 VD를 Ready 또는 실행 가능으로 표시하지 않는다.

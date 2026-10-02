@@ -115,8 +115,15 @@ ETag 또는 사용자 제공 SHA metadata만을 실제 내용 검증으로 사�
 ADR0013/V13의 영속 VD·불변 Profile 참조·원본 호환성·연결 이력·revision 수정·논리 해제와
 장치 해제 보호를 구현했다. 공개5 API, 한국어 Swagger35개, `/virtual-devices` 관리 화면을 연결한다.
 실제 PostgreSQL 동시 생성/수정/장치 해제 경합과 DB 제약, PC·모바일 실제 API 흐름을 검증한다.
-상세 결과는 `docs/evidence/m6-vd-registry.md`다. 이 단계는 M6 전체 완료가 아니다.
+상세 결과는 `docs/evidence/m6-vd-registry.md`다. CI37022079299의5 jobs/JSON15개 및
+source0b4693c 실제 이미지·Ready/PVC/ArgoSynced까지 확인했다. 이 단계는 M6 전체 완료가 아니다.
 
 다음 M6 구현은 지속 runtime·source/runtime binding 분리, provision/readiness·교체/drain Operation,
 Run VD 정책의 실제 활성 runtime Task 실행과 demo-vd다. 등록 상태 REGISTERED를 Ready로 바꾸거나
 Node ID만 복사한 별도 Job으로 실제 VD 실행 수용 게이트를 대신하지 않는다.
+
+ADR0014의 지속 supervisor·순수 Pod compiler와 내부 poll 계약을 구성 요소로 추가했다.
+실제 자식 Runner 작업·취소·lease·drain·강제 종료 후 자식 정리와 기존 Runner 회귀를 검증한다.
+현재 poll 서버·영속 VDRuntime/Operation·실제 Pod 생성·VD Task 배정은 미연결이다.
+증거는 `docs/evidence/m6-vd-runtime.md`다. 다음은 새 migration에서 실행 세대·명령·Operation·
+runtime binding 이력을 저장하고, 동일 VD 잠금 아래 교체/해제와 Task claim을 연결하는 것이다.
