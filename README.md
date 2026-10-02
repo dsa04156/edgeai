@@ -11,7 +11,9 @@ M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 �
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation·결과 확정은 CI·배포까지 검증했습니다.
 Remote 자동 worker·공개 실행/전환·제공자 설정 고정은 실제 PostgreSQL·MinIO·참조 제공자로 로컬 검증했습니다.
 worker와 실제 kind Kubernetes↔Remote 전환·API 재시작/취소까지 CI·배포 검증을 통과했습니다.
-외부 실제 시스템 수용과 상태형 복원은 남아 있습니다. M6 VD 등록·원본 연결 API/화면도 구현 중입니다.
+외부 실제 시스템 수용과 상태형 복원은 남아 있습니다. M6 VD 등록·원본 연결·실행 관리와
+VD Task 배정·Runner·결과 API/화면을 연결했습니다. 실제 Kubernetes의 Task·결과·API 재시작·
+활성 작업 중 교체·취소·재시도는 통과했으며 새 이미지의 CI·배포 검증은 진행 중입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -193,6 +195,16 @@ DEVICE/SERVICE Profile ID로 바꿔야 하며 SERVICE는 실행 규격을 충족
 활성 VD 원본으로 쓰는 장치는 바로 해제할 수 없습니다. 먼저 원본 연결을 바꾸거나 VD를 해제하세요.
 VD 해제는 원본 Device를 삭제하지 않고, 생성 재전송도 해제된 VD를 다시 활성화하지 않습니다.
 
-현재 상태는 REGISTERED/RELEASED입니다. 실제 VD runtime의 provision/readiness/교체/drain,
-Operation 추적과 Run의 VD 실행 정책은 후속 구현 범위입니다. 등록만으로 Ready를 표시하지 않습니다.
-검증 범위와 남은 수용 게이트는 [M6 등록 기록](docs/evidence/m6-vd-registry.md)을 따릅니다.
+등록 상태 REGISTERED/RELEASED와 실제 runtime의 Ready 상태는 구분합니다. 기동·교체·종료는
+Operation으로 추적하며 Pod의 실제 종료를 확인한 후 다음 세대를 시작합니다.
+`/workflows`에서 VD 정책과 Ready VD ID를 선택하면 같은 SERVICE 버전의 작업들을 해당 VD의
+빈 실행 자리에 배정합니다. retry·하위 작업은 VD ID를 유지하고, 작업 취소는 해당 자식 실행만 중단합니다.
+기능은 `EDGEAI_RUNTIME_ENABLED=true`, `EDGEAI_VD_ENABLED=true`와 실행·저장소 설정을 요구합니다.
+CPU·메모리는 공유 VD 컨테이너 측정이므로 작업별 자동 offload는 허용하지 않습니다.
+검증 범위와 남은 수용 게이트는 [M6 작업 실행 기록](docs/evidence/m6-vd-task-execution.md)을 따릅니다.
+
+`bash scripts/demo-vd.sh <명시적 Kubernetes context>`는 실제 VD 수명과 자식 작업·S3 결과를
+검증합니다. 실행이 활성화된 API의 `EDGEAI_SMOKE_API_URL`, `EDGEAI_API_USER`,
+`EDGEAI_API_PASSWORD`와 결과 저장소의 `EDGEAI_STORAGE_URL`, `EDGEAI_MINIO_USER`,
+`EDGEAI_MINIO_PASSWORD`를 환경에 설정하세요. 이 명령은 시험 VD만 정리하며 기존 데이터를
+삭제하지 않습니다. API Pod 재시작 시험은 별도 격리 `test-vd-kubernetes.py`/CI kind에서 수행합니다.

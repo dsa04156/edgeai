@@ -37,14 +37,16 @@ public class ExecutionService {
         var offload=offloadPolicy(input.get("offload"));String offloadJson=offload==null?null:JSON.canonical(input.get("offload"));
         UUID versionId=uuid(input.get("workflowVersionId"));var parameters=parameters(input.get("parameters"));
         if(!(input.get("execution") instanceof Map<?,?> policy)) throw new IllegalArgumentException("Execution policy required");
-        String mode=text(policy.get("mode"),8);UUID nodeId;String providerKey=null;
+        String mode=text(policy.get("mode"),8);UUID nodeId;UUID vdId=null;String providerKey=null;
         if(mode.equals("AUTO")) { object(policy,"mode");nodeId=null; }
         else if(mode.equals("NODE")) { object(policy,"mode","nodeId");nodeId=uuid(policy.get("nodeId")); }
         else if(mode.equals("REMOTE")){object(policy,"mode","providerKey");providerKey=text(policy.get("providerKey"),63);nodeId=null;}
-        else throw new IllegalArgumentException("Execution mode must be AUTO, NODE or REMOTE");
+        else if(mode.equals("VD")){object(policy,"mode","vdId");vdId=uuid(policy.get("vdId"));nodeId=null;}
+        else throw new IllegalArgumentException("Execution mode must be AUTO, NODE, REMOTE or VD");
         var normalized=new TreeMap<String,Object>(Map.of("workflowVersionId",versionId.toString(),"parameters",parameters,
             "execution",nodeId==null?Map.of("mode",mode):Map.of("mode",mode,"nodeId",nodeId.toString())));
         if(providerKey!=null)normalized.put("execution",Map.of("mode",mode,"providerKey",providerKey));
+        if(vdId!=null)normalized.put("execution",Map.of("mode",mode,"vdId",vdId.toString()));
         if(!retry.equals(RetryPolicy.disabled()))normalized.put("retry",document(retry));
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
@@ -53,14 +55,16 @@ public class ExecutionService {
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
+        if(vdId!=null && offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 자원 측정은 공유 컨테이너 값이므로 작업별 자동 전환을 설정할 수 없습니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
         var dag=storedDag(version.dagJson());
         if(dag.dependencies().stream().anyMatch(edge->edge.mode()==Dag.Mode.STREAM))
             throw error(501,"STREAM_NOT_IMPLEMENTED","STREAM 실행은 M7에서 구현합니다. 현재는 BATCH DAG 실행 요청을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
+        if(vdId!=null)lifecycle.validateVDRequest(vdId,versionId,runtimeNamespace);
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters));
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId);
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget);
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,workflows.definitions(versionId),dag.roots());
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);

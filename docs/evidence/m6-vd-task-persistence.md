@@ -58,3 +58,9 @@ poll receipt와 배정·완료 acknowledgement의 원자 처리, VD child Runner
 취소·drain·runtime 장애 시 모든 배정의 종료/재시도, 공개 VD 실행 정책·Swagger/UI,
 실제 supervisor→Runner→S3→Result와 Kubernetes/kind 수용 검증을 이어간다.
 새 코드 CI·배포와 전체 M6 완료는 이 문서의 로컬 PASS만으로 판정하지 않는다.
+
+후속 확인: source54fc671의 CI37051755016은5개 job 및 다운로드한15개 result.json 모두PASS/0이다.
+kind VD 수명3개와 기존 Task/S3 경로를 통과했다. pin578ce77의 실제 API/dashboard/MinIO imageID,
+Ready·PVC Bound·Argo Synced 대조는 `20261002T194048Z-458246f4` PASS다. 공유 Ingress에 따른
+aggregate health Progressing은 유지한다. 이 이전 CI의 `taskExecution=false`는 VD Task 실행을
+포함하지 않음을 뜻하며, 이후 연결과 검증은 [작업 실행 기록](m6-vd-task-execution.md)을 따른다.

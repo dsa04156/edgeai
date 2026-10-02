@@ -1070,7 +1070,10 @@ paths:
         scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로
         제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이
         비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을
-        함께 요청하면409입니다. VD는 M6 후속이며 STREAM 실행은 아직501입니다.
+        함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은
+        SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은
+        vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는
+        작업별 자동 offload를 설정할 수 없습니다. STREAM 실행은 아직501입니다.
       responses:
         '200':
           description: 현재 저장 상태 또는 동일 입력 재요청 결과입니다.
@@ -1955,6 +1958,10 @@ components:
           - REMOTE_PROVIDER_NOT_FOUND
           - REMOTE_CONFIGURATION_CHANGED
           - REMOTE_TELEMETRY_UNSUPPORTED
+          - VD_EXECUTION_DISABLED
+          - VD_NOT_READY
+          - VD_SERVICE_MISMATCH
+          - VD_AUTOMATIC_OFFLOAD_UNSUPPORTED
           - OFFLOAD_SOURCE_CHANGED
           - OFFLOAD_LIMIT
           - OFFLOAD_RECOVERY_UNSUPPORTED
@@ -2552,6 +2559,12 @@ components:
         properties:
           mode: {type: string, const: REMOTE}
           providerKey: {type: string, maxLength: 63, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$', description: 서버에 설정된 Remote 제공자 key. endpoint와 자격은 요청에 넣지 않습니다.}
+      - type: object
+        additionalProperties: false
+        required: [mode, vdId]
+        properties:
+          mode: {type: string, const: VD}
+          vdId: {type: string, format: uuid, description: 현재 Ready인 영속 VD의 ID. 모든 작업은 VD와 동일한 SERVICE Profile 버전을 사용합니다.}
     RemoteTarget:
       type: [object, 'null']
       additionalProperties: false
@@ -2681,6 +2694,7 @@ components:
       - workflowVersionId
       - mode
       - nodeId
+      - vdId
       - remoteTarget
       - retry
       - offload
@@ -2702,6 +2716,8 @@ components:
           - AUTO
           - NODE
           - REMOTE
+          - VD
+        vdId: {type: [string, 'null'], format: uuid, description: VD 실행 대상. 재시도와 하위 작업에도 유지되며 다른 mode이면 null입니다.}
         nodeId:
           type:
           - string
@@ -2787,6 +2803,7 @@ components:
       - state
       - mode
       - nodeId
+      - vdId
       - remoteTarget
       - cause
       - excludedNodeNames
@@ -2806,8 +2823,9 @@ components:
           type: integer
           minimum: 1
         remoteTarget: {$ref: '#/components/schemas/RemoteTarget'}
-        mode: {type: string, enum: [AUTO, NODE, REMOTE], description: 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.}
+        mode: {type: string, enum: [AUTO, NODE, REMOTE, VD], description: 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.}
         nodeId: {type: [string, 'null'], format: uuid}
+        vdId: {type: [string, 'null'], format: uuid, description: 이 Attempt가 실행될 VD. 명시적 NODE/REMOTE 전환 후에는 null입니다.}
         cause: {type: string, enum: [INITIAL, RETRY, OFFLOAD]}
         excludedNodeNames:
           type: array
@@ -2890,11 +2908,12 @@ components:
           properties:
             producerPodUid: {type: 'null'}
             remoteSourceMode: {enum: [SYNTHETIC, EXTERNAL]}
+            vdRuntimeId: {type: 'null'}
         else:
           properties:
             producerPodUid: {type: string}
             remoteSourceMode: {type: 'null'}
-      required: [id, taskId, attemptId, runtimeId, epoch, producerPodUid, remoteAllocationId, remoteSourceMode, manifestDigest, createdAt, artifacts]
+      required: [id, taskId, attemptId, runtimeId, epoch, producerPodUid, remoteAllocationId, remoteSourceMode, vdRuntimeId, manifestDigest, createdAt, artifacts]
       properties:
         id: {type: string, format: uuid}
         taskId: {type: string, format: uuid}
@@ -2904,6 +2923,7 @@ components:
         producerPodUid: {type: [string, 'null'], format: uuid, description: Kubernetes 결과의 실제 producer Pod UID. Remote 결과는 null입니다.}
         remoteAllocationId: {type: [string, 'null'], format: uuid, description: Remote 결과의 영속 할당 ID. producerPodUid와 정확히 하나만 제공됩니다.}
         remoteSourceMode: {enum: [null, SYNTHETIC, EXTERNAL], description: Remote 참조 계산은 SYNTHETIC입니다. 실제 외부 제공자 EXTERNAL과 구분하며 Kubernetes 결과에서는 null입니다.}
+        vdRuntimeId: {type: [string, 'null'], format: uuid, description: VD 결과의 실제 supervisor 실행 세대 ID. 해당 작업 배정과 producerPodUid에 결합되며 일반 Job/Remote 결과에서는 null입니다.}
         manifestDigest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
         createdAt: {type: string, format: date-time}
         artifacts:

@@ -21,8 +21,8 @@ public final class RunnerApiService {
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
         var current=runtimes.byAttempt(principal.attemptId()).orElseThrow();
-        if(current.jobUid()==null)lifecycle.submitted(principal.attemptId(),principal.pod().jobUid());
-        var assignment=lifecycle.claim(principal.attemptId(),principal.epoch(),principal.pod());var runtime=assignment.runtime();
+        if(!current.vd() && current.jobUid()==null)lifecycle.submitted(principal.attemptId(),principal.pod().jobUid());
+        var assignment=current.vd()?lifecycle.claimVD(principal.attemptId(),principal.epoch(),principal.vdProducer()):lifecycle.claim(principal.attemptId(),principal.epoch(),principal.pod());var runtime=assignment.runtime();
         var inputs=new TreeMap<String,Object>();
         for(var input:assignment.inputs()) {
             var artifact=input.artifact();var grant=storage.download(artifact);
@@ -36,7 +36,7 @@ public final class RunnerApiService {
     }
     public Object uploads(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");var outputs=RunnerInput.outputs(root.get("outputs"),false);
-        var assignment=lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.pod().podUid());
+        var assignment=lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
         var contents=new ArrayList<ArtifactContent>();
         for(var output:outputs) {
             var content=new ArtifactContent(assignment.runtime().taskId(),principal.attemptId(),text(output.get("port"),100),text(output.get("sha256"),64),
@@ -51,10 +51,10 @@ public final class RunnerApiService {
     }
     public Creation<TaskResult> commit(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");
-        return commits.commit(principal.attemptId(),principal.epoch(),principal.pod().podUid(),RunnerInput.manifest(root.get("outputs")));
+        return commits.commit(principal.attemptId(),principal.epoch(),principal.podUid(),RunnerInput.manifest(root.get("outputs")));
     }
     public Object fail(RunnerPrincipal principal,String body) {
-        var root=RunnerInput.parse(body,principal,"reason");lifecycle.fail(principal.attemptId(),principal.epoch(),principal.pod().podUid(),text(root.get("reason"),64));
+        var root=RunnerInput.parse(body,principal,"reason");lifecycle.fail(principal.attemptId(),principal.epoch(),principal.podUid(),text(root.get("reason"),64));
         return Map.of("attemptId",principal.attemptId().toString(),"state","FAILED");
     }
 }

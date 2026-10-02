@@ -289,7 +289,10 @@ class Supervisor:
                 else:
                     self.apply(reply)
                     body = None
-                    if self.command == "STOP" or (self.command == "DRAIN" and not self.active and not self.completed):
+                    # The server may still hold an assignment whose response was lost. Keep polling
+                    # while idle/draining so a later sequence can prove it never started; only STOP
+                    # confirms that durable allocations have all been closed.
+                    if self.command == "STOP":
                         return 0
                 stopping.wait(.25)
             return 0

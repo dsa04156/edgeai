@@ -94,7 +94,7 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 작업별 임시 claim과 디렉터리는 private mode로 만들고 종료 시 제거한다. 같은 volume의 supervisor
 재시작은 거절하며 새 runtime generation과 새 Pod를 만들어야 한다. 같은 Attempt 재배정은 실행하지
 않는다. 일시 장애는 readiness를 제거하고, lease 만료·인증 거절·STOP은 작업을 종료한다. DRAIN은
-신규 작업 없이 완료 보고의 확인을 기다리되 제한 시간을 적용한다. 한 작업 취소는 해당 session만
+신규 작업 없이 완료 보고의 확인을 기다리고, 작업이 없어도 서버의 STOP까지 poll을 계속하며 제한 시간을 적용한다. 한 작업 취소는 해당 session만
 정리하며 다른 작업은 유지한다. Linux의 subreaper/pidfd를 사용해 Runner 강제 종료 후 자식도 정리한다.
 100,000개 실행 이력 상한에 도달하면 마지막 수락 작업부터 drain을 알리고 새 배정을 받지 않는다.
 

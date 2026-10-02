@@ -11,7 +11,7 @@ public final class RunnerInput {
     public static Map<?,?> parse(String body,RunnerPrincipal principal,String... extra) {
         var fields=new ArrayList<>(List.of("epoch","podUid"));fields.addAll(List.of(extra));
         var root=object(JSON.parse(body,262144),fields.toArray(String[]::new));JSON.boundedCanonical(root,262144);
-        if(integer(root.get("epoch"))!=principal.epoch() || !uuid(root.get("podUid")).equals(principal.pod().podUid()))
+        if(integer(root.get("epoch"))!=principal.epoch() || !uuid(root.get("podUid")).equals(principal.podUid()))
             throw new ControlPlaneException(409,"PRODUCER_FENCED","인증된 Pod와 실행 epoch가 일치하지 않습니다.");
         return root;
     }

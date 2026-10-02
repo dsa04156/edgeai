@@ -36,6 +36,9 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
     public List<RuntimeInstance> activeRemote(String namespace,int limit) {
         return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
+    public List<RuntimeInstance> activeVD(String namespace,int limit) {
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND vd_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+    }
     public void create(RuntimeInstance r) {
         Timestamp now=Timestamp.from(r.createdAt());
         jdbc.update("""

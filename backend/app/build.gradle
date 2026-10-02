@@ -27,6 +27,7 @@ tasks.register('integrationTest', Test) {
     include '**/*IntegrationTest.class'
     exclude '**/ArtifactStorageIntegrationTest.class'
     exclude '**/RuntimeArtifactIntegrationTest.class'
+    exclude '**/VDTaskArtifactIntegrationTest.class'
     exclude '**/KubernetesRuntimeIntegrationTest.class'
     exclude '**/KubernetesVDIntegrationTest.class'
     exclude '**/RemoteGatewayIntegrationTest.class'
@@ -47,6 +48,7 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/RuntimeArtifactIntegrationTest.class'
+    include '**/VDTaskArtifactIntegrationTest.class'
     include '**/RemoteWorkerIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }

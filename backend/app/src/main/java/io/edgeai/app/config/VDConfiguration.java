@@ -18,6 +18,8 @@ class VDConfiguration {
     }
     @Bean VDTokenService vdTokenService(@Value("${edgeai.runtime.key-file}") String file){return new VDTokenService(file);}
     @Bean @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
+    VDTaskWorker vdTaskWorker(RuntimeRepository runtimes,VDTaskService tasks,RuntimeSettings settings){return new VDTaskWorker(runtimes,tasks,settings);}
+    @Bean @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     VDWorker vdWorker(VDRuntimeRepository runtimes,ProfileRepository profiles,VDLifecycleService lifecycle,VDGateway gateway,VDTokenService tokens,RuntimeSettings settings,Clock clock){
         return new VDWorker(runtimes,profiles,lifecycle,gateway,tokens,settings,clock);
     }

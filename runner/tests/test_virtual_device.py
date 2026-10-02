@@ -80,7 +80,7 @@ class VDHost:
                     reply["assignments"].append({"attemptId": task.attempt, "epoch": 1, "claimToken": task.token})
                     host.issued.add(task.attempt)
                 if len(host.completed) == len(host.tasks):
-                    reply["command"] = "DRAIN"
+                    reply["command"] = "STOP"
                 status = 200
                 if host.handler is not None:
                     try:
@@ -224,7 +224,7 @@ class VirtualDeviceTest(unittest.TestCase):
     def test_drain_waits_for_actual_workload_and_completion_acknowledgement(self):
         task = self.inference(1200)
         def drain(host, body, reply):
-            if task.claim_calls:
+            if task.claim_calls and task.attempt not in host.completed:
                 reply.update(command="DRAIN", assignments=[])
             return 200
         with VDHost([task], handler=drain) as host:
@@ -361,12 +361,20 @@ class VirtualDeviceTest(unittest.TestCase):
     def test_attempt_retention_limit_drains_after_last_accepted_work_without_new_assignment(self):
         a, b, c = [self.inference(600) for _ in range(3)]
         def honor_drain(host, body, reply):
-            if body["state"] == "DRAINING": reply.update(command="DRAIN", assignments=[])
+            if body["state"] == "DRAINING": reply.update(command="DRAIN" if body["active"] else "STOP", assignments=[])
             return 200
         with VDHost([a, b, c], handler=honor_drain, attempt_limit=2) as host:
             host.start(); self.assertEqual(0, host.finish()[0])
             self.assertEqual(1, len(a.commits)); self.assertEqual(1, len(b.commits)); self.assertEqual(0, c.claim_calls)
             self.assertTrue(any(body["state"] == "DRAINING" and body["active"] for body in host.requests))
+
+    def test_idle_drain_keeps_polling_until_server_confirms_stop(self):
+        def drain(host, body, reply):
+            reply.update(command="DRAIN" if body["sequence"] < 2 else "STOP", assignments=[])
+            return 200
+        with VDHost([], handler=drain) as host:
+            host.start(); self.assertEqual(0, host.finish()[0])
+            self.assertEqual([0, 1, 2], [body["sequence"] for body in host.requests])
 
 
 if __name__ == "__main__":

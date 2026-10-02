@@ -20,7 +20,7 @@ public class RuntimeTelemetryService {
     public RuntimeTelemetry record(RunnerPrincipal principal,String body) {
         var input=RunnerInput.parse(body,principal,"sequence","observedAt","intervalMillis","cpuUsageMicros","cpuLimitMillicores","memoryBytes","memoryLimitBytes","latencyMicros","latencyObservedAt");
         // The Run lock is retained until insert/prune; read server time after acquiring it.
-        lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.pod().podUid());
+        lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
         var now=clock.instant().truncatedTo(ChronoUnit.MICROS);
         long interval=RunnerInput.integer(input.get("intervalMillis"));if(interval<200 || interval>60000)throw new IllegalArgumentException("Invalid sample interval");
         var value=new RuntimeTelemetry(principal.attemptId(),RunnerInput.integer(input.get("sequence")),instant(input.get("observedAt")),now,(int)interval,

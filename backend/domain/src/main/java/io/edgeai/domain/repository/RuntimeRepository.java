@@ -9,6 +9,7 @@ public interface RuntimeRepository {
     List<UUID> readyAttempts(UUID runId,int limit);
     List<RuntimeInstance> active(String namespace,int limit);
     List<RuntimeInstance> activeRemote(String namespace,int limit);
+    List<RuntimeInstance> activeVD(String namespace,int limit);
     void create(RuntimeInstance runtime);
     void submitted(UUID runtimeId,UUID jobUid,Instant expiresAt,Instant now);
     void claimed(UUID runtimeId,RuntimePod pod,Instant now);

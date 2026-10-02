@@ -67,3 +67,8 @@ Device 해제의 DEVICE_IN_USE(409)도 계약에 반영했다. VD 상세는 현�
 ADR0018의 시작·교체·종료·실행 상태4개를 추가하여 공개 Swagger는39개 operation이다.
 기존 Operation 조회는 TASK_OFFLOAD/VD 명령 합집합을 반환한다. 각 설명에 revision·요청 키,
 202/200 재전송, 준비/물리 종료의 차이, 이력 제한과 기본 비활성·Task 연결 잔여 범위를 명시한다.
+
+ADR0020의 VD Task 실행 연결에서는 Run의 VD 정책·필수 vdId·Ready/동일 SERVICE 조건과
+비활성503·미준비/부적합409를 설명한다. Run/Attempt의 vdId와 Result의 vdRuntimeId를 공개하며,
+공유 VD 자원 기반 자동 전환은 거절한다. operation 수는39개다. 내부 poll 계약0.3은 배정 재전송,
+실제 프로세스 종료 acknowledgement, 미시작 확인, DRAIN 중 STOP까지 보고할 의무를 명시한다.

@@ -41,6 +41,11 @@
 | M5-REMOTE-COMPONENT | scripts/test-remote.sh | 참조 HTTP/TLS·실제 프로세스·파일·취소/restart·신원 검증 | 로컬 Python/OpenSSL/JDK; 외부 업체 API가 아님 |
 | M5-REMOTE-WORKER | scripts/test-runtime-results.sh | 공개 HTTP·자동 worker·고정 S3·provider binding·취소/재시도·단일 결과 | 실제 PostgreSQL/MinIO/참조 제공자; Kube 전환 부분은 fixture |
 | M5-REMOTE-KIND | scripts/test-kind.sh | 독립 HTTPS Remote·실제 NODE↔REMOTE BATCH·고정 version·API 교체/취소·종료 확인 | 추가 게이트 구현, 통과 여부는 m5-remote-kind.md 확인 |
+| M6-VD-TASK-STATE | scripts/test-integration.sh | poll/slot·재전송·세대/session·취소·종료·retry·미시작 증명·공개 VD Run | 실제 PostgreSQL, Pod/S3 receipt fixture |
+| M6-VD-TASK-STORAGE | scripts/test-runtime-results.sh | 실제 supervisor/child·응답 유실·DAG·고정 S3·취소/형제 작업 보존 | 실제 HTTP/PG/MinIO, Pod 신원 fixture |
+| M6-VD-KUBERNETES | python3 scripts/test-vd-kubernetes.py --context <명시적-context> | 실제 VD 수명·Task·API 재생성·교체·취소·재시도·S35개·자원 정리 | 격리 API/DB/MinIO, 현재 JAR; m6-vd-task-execution.md |
+| M6-VD-KIND | scripts/test-kind.sh | 빌드된 실제 이미지로 VD 수명·Task·S3·API 재시작 | 새 게이트 CI 판정은 evidence 확인 |
+| M6-VD-DEMO | scripts/demo-vd.sh <명시적-context> | 지정한 배포 API의 VD 수명·Task·교체·취소·retry·S3 | API/저장소 환경 설정 필요, API 재시작 제외 |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |

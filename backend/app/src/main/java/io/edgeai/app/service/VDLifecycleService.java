@@ -19,9 +19,10 @@ public class VDLifecycleService {
     private final ProfileRepository profiles;
     private final NodeRepository nodes;
     private final Clock clock;
+    private final VDTaskService tasks;
     private static final JsonDocuments JSON=new JsonDocuments();
-    public VDLifecycleService(VirtualDeviceRepository vds,VDRuntimeRepository runtimes,ProfileRepository profiles,NodeRepository nodes,Clock clock) {
-        this.vds=vds;this.runtimes=runtimes;this.profiles=profiles;this.nodes=nodes;this.clock=clock;
+    public VDLifecycleService(VirtualDeviceRepository vds,VDRuntimeRepository runtimes,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDTaskService tasks) {
+        this.vds=vds;this.runtimes=runtimes;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.tasks=tasks;
     }
     @Transactional
     public VDOperation provision(UUID id,long revision,String key,RuntimeSettings settings,boolean replace) {
@@ -125,7 +126,7 @@ public class VDLifecycleService {
     @Transactional
     public void drained(UUID runtimeId,UUID sessionId) {
         var r=lockedRuntime(runtimeId);
-        if(!r.desiredState().equals("DRAINING") || !Objects.equals(r.sessionId(),sessionId))throw fenced();
+        if(!r.desiredState().equals("DRAINING") || !Objects.equals(r.sessionId(),sessionId) || tasks.hasOpen(r.id()))throw fenced();
         runtimes.stop(runtimeId,null,now(r));
     }
     /** The supervisor retires before its bounded execution history is exhausted. */
@@ -164,6 +165,7 @@ public class VDLifecycleService {
         if(!r.desiredState().equals("STOPPED"))throw fenced();
         if(!runtimes.createCommandComplete(runtimeId))throw error("VD_CREATE_UNRESOLVED","생성 명령이 확정되기 전에는 종료를 확정할 수 없습니다.");
         var now=now(r);runtimes.terminated(runtimeId,vd.revision(),now);
+        tasks.supervisorGone(runtimeId);
         var pending=runtimes.pending(vd.id()).orElse(null);
         if(pending!=null && runtimeId.equals(pending.sourceRuntimeId())) {
             if(pending.kind().equals("DRAIN"))runtimes.finishOperation(pending.id(),"SUCCEEDED",null,now);

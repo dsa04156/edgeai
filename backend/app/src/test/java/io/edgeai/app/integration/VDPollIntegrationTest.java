@@ -59,6 +59,7 @@ class VDPollIntegrationTest {
     @Autowired VDLifecycleService lifecycle;
     @Autowired VDTokenService tokens;
     @Autowired VDPollService pollService;
+    @Autowired VDTaskService taskService;
     @Autowired VDPollRepository polls;
     @Autowired VDRuntimeRepository runtimes;
     @Autowired VirtualDeviceRepository vdRepository;
@@ -111,7 +112,7 @@ class VDPollIntegrationTest {
     @Test void readinessRequiresPollAndObservedPodAndReplayStateSurvivesServiceRecreation()throws Exception {
         var f=fixture(true);var first=body(f,0);String reply=request(f,first,200);assertThat(reply).contains("\"command\":\"RUN\"");
         assertThat(lifecycle.get(f.runtime().id()).observedState()).isEqualTo("UNREADY");assertThat(runtimes.operation(f.operation().id()).orElseThrow().state()).isEqualTo("RUNNING");
-        var recreated=new VDPollService(vdRepository,polls,lifecycle,clock,3);var p=identities.get(f.runtime().id());
+        var recreated=new VDPollService(vdRepository,polls,lifecycle,taskService,clock,3);var p=identities.get(f.runtime().id());
         var replay=new TransactionTemplate(transactions).execute(s->recreated.poll(new VDPrincipal(f.runtime().id(),f.vd().id(),1,p),encode(first).getBytes(StandardCharsets.UTF_8)));
         assertThat(encode(replay)).isEqualTo(reply);assertThat(polls.find(f.runtime().id()).orElseThrow().sequence()).isZero();
         ready(f);request(f,body(f,1),200);assertThat(lifecycle.get(f.runtime().id()).ready(clock.instant())).isTrue();

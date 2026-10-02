@@ -34,7 +34,7 @@ class ResultControllerTest {
     }
     @Test void remoteResultExposesAllocationAndSyntheticSourceWithoutInventingAPod()throws Exception{
         UUID task=UUID.randomUUID(),allocation=UUID.randomUUID();
-        var result=new TaskResultsResponse.Result(UUID.randomUUID(),task,UUID.randomUUID(),UUID.randomUUID(),2,null,"sha256:"+"a".repeat(64),java.time.Instant.now(),List.of(),allocation,"SYNTHETIC");
+        var result=new TaskResultsResponse.Result(UUID.randomUUID(),task,UUID.randomUUID(),UUID.randomUUID(),2,null,"sha256:"+"a".repeat(64),java.time.Instant.now(),List.of(),allocation,"SYNTHETIC",null);
         when(results.results(task)).thenReturn(new TaskResultsResponse(task,List.of(result)));
         mvc.perform(get("/api/v1/tasks/"+task+"/results").with(user("fixture"))).andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].producerPodUid").value(org.hamcrest.Matchers.nullValue()))

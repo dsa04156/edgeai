@@ -219,7 +219,7 @@ def main():
                 vd_wait(lambda: before.isdisjoint({p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}), 60, 'Old API Pod did not terminate')
                 scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
                 return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-            scenario.run(restart_vd_api)
+            scenario.run(restart_vd_api, tasks=True)
             print('PASS: isolated kind runtime and VD lifecycle acceptance', flush=True)
             return 0
         finally:

@@ -98,7 +98,7 @@ public class OffloadService {
         if(run.offloadPolicyJson()==null || !run.state().equals("RUNNING") || !task.state().equals("RUNNING"))return Optional.empty();
         var policy=offloadPolicy(JSON.decode(run.offloadPolicyJson()));var attempt=executions.attempts(taskId).getFirst();
         var runtime=runtimes.byAttempt(attempt.id()).orElse(null);
-        if(!attempt.state().equals("RUNNING") || runtime==null || !runtime.namespace().equals(namespace) || !runtime.desiredState().equals("RUNNING") ||
+        if(!attempt.state().equals("RUNNING") || runtime==null || runtime.vd() || !runtime.namespace().equals(namespace) || !runtime.desiredState().equals("RUNNING") ||
             !runtime.observedState().equals("RUNNING") || runtime.producerPodUid()==null || runtime.expiresAt()==null || !now.isBefore(runtime.expiresAt()))return Optional.empty();
         var history=operations.forTask(taskId);
         if(history.size()>=8 || history.stream().filter(o->!o.trigger().equals("MANUAL")).count()>=policy.maxTransfers() ||

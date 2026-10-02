@@ -8,6 +8,7 @@ import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.storage.*;
 import io.edgeai.domain.workflow.*;
+import io.edgeai.domain.vd.*;
 import java.time.*;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,9 +29,16 @@ public class RuntimeLifecycleService {
     private final RemoteRepository remotes;
     private final Clock clock;
     private final boolean autoDispatch;
+    private final VirtualDeviceRepository vds;
+    private final VDRuntimeRepository vdRuntimes;
+    private final VDTaskRepository vdTasks;
+    private final boolean vdEnabled;
+    private final int dispatchSeconds;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch) {
+            ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch,
+            VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds) {
         this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.remotes=remotes;this.clock=clock;this.autoDispatch=autoDispatch;
+        this.vds=vds;this.vdRuntimes=vdRuntimes;this.vdTasks=vdTasks;this.vdEnabled=vdEnabled;this.dispatchSeconds=dispatchSeconds;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
@@ -73,7 +81,7 @@ public class RuntimeLifecycleService {
         if(namespace.contains("."))throw new IllegalArgumentException("Runtime namespace requires a DNS label");
         var c=lock(attemptId);var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent())return existing.get();
-        if(c.attempt().mode().equals("VD"))throw error(503,"VD_TASK_DISPATCH_UNAVAILABLE","VD 작업 배정 연결을 완료한 뒤 실행하세요.");
+        if(c.attempt().mode().equals("VD"))return planVD(c,namespace);
         if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()))throw fenced();
         validateDag(c.run().workflowVersionId());
@@ -82,6 +90,66 @@ public class RuntimeLifecycleService {
         var value=new RuntimeInstance(UUID.randomUUID(),attemptId,c.task().id(),c.run().id(),c.attempt().epoch(),namespace,
             "edgeai-"+attemptId,UUID.randomUUID(),"RUNNING","PENDING",null,null,null,null,null,null,now,now);
         runtimes.create(value);return value;
+    }
+    @Transactional
+    public void validateVDRequest(UUID vdId,UUID versionId,String namespace) {
+        if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
+        var vd=vds.find(vdId,true).orElseThrow(()->error(404,"VD_NOT_FOUND","VD를 찾을 수 없습니다."));
+        var current=vdRuntimes.current(vdId).orElseThrow(()->error(409,"VD_NOT_READY","VD를 먼저 기동하세요."));
+        if(vd.state()!=VirtualDevice.State.REGISTERED || !current.ready(clock.instant()) || !current.namespace().equals(namespace))
+            throw error(409,"VD_NOT_READY","현재 namespace의 Ready VD만 실행 대상으로 선택할 수 있습니다.");
+        validateVDProfiles(vd,versionId);
+    }
+    private void validateVDProfiles(VirtualDevice vd,UUID versionId) {
+        if(workflows.definitions(versionId).stream().anyMatch(d->!d.serviceProfileVersionId().equals(vd.serviceProfileVersionId())))
+            throw error(409,"VD_SERVICE_MISMATCH","모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 합니다.");
+    }
+    private RuntimeInstance planVD(Context c,String namespace) {
+        if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
+        if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()) ||
+            c.attempt().vdId()==null || !c.attempt().vdId().equals(c.run().vdId()))throw fenced();
+        var vd=vds.find(c.attempt().vdId(),false).orElseThrow(RuntimeLifecycleService::fenced);
+        validateVDProfiles(vd,c.run().workflowVersionId());validateDag(c.run().workflowVersionId());
+        var spec=spec(c);inputs(c,spec);parameters(c);var now=clock.instant();
+        // Retries/children can queue during replacement; only the public initial request requires Ready.
+        var r=new RuntimeInstance(UUID.randomUUID(),c.attempt().id(),c.task().id(),c.run().id(),c.attempt().epoch(),namespace,null,UUID.randomUUID(),
+            "RUNNING","PENDING",null,null,null,null,now.plusSeconds(dispatchSeconds),null,now,now,null,vd.id());
+        runtimes.create(r);return r;
+    }
+    @Transactional
+    public VDTaskAllocation allocateVD(UUID attemptId,UUID supervisorId,int slot,long sequence) {
+        var c=lock(attemptId);var r=runtime(attemptId);var vr=vdRuntimes.runtime(supervisorId).orElseThrow(RuntimeLifecycleService::fenced);
+        var now=clock.instant();
+        if(!r.vd() || !r.vdId().equals(vr.vdId()) || !r.namespace().equals(vr.namespace()) || !vr.ready(now) ||
+            !r.desiredState().equals("RUNNING") || !r.observedState().equals("PENDING") || !now.isBefore(r.expiresAt()) ||
+            !c.attempt().state().equals("DISPATCHING") || !c.task().state().equals("RUNNING") || !c.run().state().equals("RUNNING"))throw fenced();
+        var a=new VDTaskAllocation(UUID.randomUUID(),r.id(),r.vdId(),vr.id(),vr.generation(),vr.sessionId(),vr.podUid(),slot,sequence,now,null,null,null,null);
+        vdTasks.create(a,now.plusSeconds(spec(c).timeoutSeconds()));return vdTasks.byRuntime(r.id()).orElseThrow();
+    }
+    @Transactional
+    public Assignment claimVD(UUID attemptId,long epoch,VDTaskProducer proof) {
+        var c=lock(attemptId);var r=runtime(attemptId);active(c,r,epoch);var a=vdAuthority(r,proof.podUid());
+        var vr=vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow(RuntimeLifecycleService::fenced);
+        if(!a.vdRuntimeId().equals(proof.runtimeId()) || a.generation()!=proof.generation() || !a.sessionId().equals(proof.sessionId()) ||
+            !vr.nodeUid().equals(proof.nodeUid()) || !vr.nodeName().equals(proof.nodeName()))throw fenced();
+        var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
+        vdTasks.claimed(r.id(),proof.podUid(),proof.nodeUid(),proof.nodeName(),clock.instant());
+        return new Assignment(runtime(attemptId),spec,parameters,inputs);
+    }
+    /** Called only with authenticated completion/absence evidence or confirmed supervisor deletion. */
+    @Transactional
+    public void finishVD(UUID attemptId,String reason,Long sequence,Integer exitCode) {
+        var c=lock(attemptId);var r=runtime(attemptId);if(!r.vd())throw fenced();
+        var a=vdTasks.byRuntime(r.id()).orElse(null);
+        if(a!=null && !a.open())return;
+        if(!Set.of("PROCESS_EXIT","NOT_STARTED","POD_GONE","UNASSIGNED").contains(reason) ||
+            a==null && !reason.equals("UNASSIGNED") || a!=null && reason.equals("UNASSIGNED"))throw fenced();
+        if(a!=null && reason.equals("POD_GONE") && !vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().terminal())throw fenced();
+        if(a!=null && reason.equals("NOT_STARTED") && (sequence==null || sequence<=a.assignedSequence() || r.producerPodUid()!=null))throw fenced();
+        if(r.desiredState().equals("RUNNING"))recordFailure(c,r,reason.equals("PROCESS_EXIT")?(Objects.equals(exitCode,0)?"RESULT_MISSING":"WORKLOAD_FAILED"):"RUNTIME_LOST");
+        var now=clock.instant();runtimes.terminated(r.id(),now);
+        if(a!=null)vdTasks.close(r.id(),reason,sequence,exitCode,now);
+        executions.reconcileRunState(r.runId(),now);
     }
     @Transactional
     public RuntimeInstance planRemote(UUID attemptId,String namespace,RemoteTarget target) {
@@ -221,7 +289,7 @@ public class RuntimeLifecycleService {
                     !artifact.sha256().equals(output.sha256()) || artifact.bytes()!=output.bytes() || !artifact.mediaType().equals(output.mediaType()))
                 throw new IllegalArgumentException("Verification receipt differs from declared artifact");
         }
-        var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified,r.remoteAllocationId());
+        var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified,r.remoteAllocationId(),r.vd()?vdTasks.byRuntime(r.id()).orElseThrow().vdRuntimeId():null);
         runtimes.commit(result,now);runtimes.releaseReadyChildren(r.runId(),now);executions.reconcileRunState(r.runId(),now);
         if(autoDispatch)startRun(r.runId(),r.namespace());
         return new Creation<>(result,true);
@@ -231,7 +299,7 @@ public class RuntimeLifecycleService {
         if(!Set.of("WORKLOAD_FAILED","TIMEOUT","INPUT_INVALID","OUTPUT_INVALID","STORAGE_FAILED","CANCELLED","RUNNER_FAILED").contains(reason))
             throw new IllegalArgumentException("Unknown Runner failure code");
         var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote() || r.vd())throw fenced();
+        if(r.remote())throw fenced();
         if(c.attempt().state().equals("FAILED") && r.epoch()==epoch && Objects.equals(r.producerPodUid(),podUid) && Objects.equals(r.failureReason(),reason))return;
         producer(c,r,epoch,podUid);recordFailure(c,r,reason);
     }
@@ -307,9 +375,18 @@ public class RuntimeLifecycleService {
     }
     private void producer(Context c,RuntimeInstance r,long epoch,UUID pod,UUID allocation) {
         active(c,r,epoch);
-        if(r.vd())throw fenced(); // VD producer authorization is connected with allocation-aware claim/commit.
+        if(r.vd())vdAuthority(r,pod);
         if(!c.attempt().state().equals("RUNNING") || r.remote()!=(allocation!=null) ||
             (r.remote() ? pod!=null || !r.remoteAllocationId().equals(allocation) : pod==null || !pod.equals(r.producerPodUid())))throw fenced();
+    }
+    private VDTaskAllocation vdAuthority(RuntimeInstance r,UUID podUid) {
+        if(!r.vd())throw fenced();var a=vdTasks.byRuntime(r.id()).orElseThrow(RuntimeLifecycleService::fenced);
+        var vr=vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow(RuntimeLifecycleService::fenced);var now=clock.instant();
+        if(!a.open() || !a.podUid().equals(podUid) || !a.vdId().equals(r.vdId()) || vr.terminal() ||
+            !Set.of("RUNNING","DRAINING").contains(vr.desiredState()) || !Objects.equals(vr.sessionId(),a.sessionId()) ||
+            vr.generation()!=a.generation() || !Objects.equals(vr.podUid(),a.podUid()) || vr.leaseUntil()==null || !now.isBefore(vr.leaseUntil()) ||
+            vr.drainDeadline()!=null && !now.isBefore(vr.drainDeadline()))throw fenced();
+        return a;
     }
     private static RemoteIdentity remoteIdentity(RuntimeInstance r){return new RemoteIdentity(r.remoteAllocationId(),r.runId(),r.taskId(),r.attemptId(),r.epoch());}
     private static void validateRemoteOutputs(ServiceExecutionSpec spec,List<RemoteFile> outputs) {

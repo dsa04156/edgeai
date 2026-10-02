@@ -38,6 +38,18 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   await page.getByRole("button", { name: "DAG 발행", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("새 버전으로 발행");
 
+  // This local stack deliberately disables runtime execution; VD must surface that state without creating a Run.
+  await page.getByRole("combobox", { name: /실행 위치 정책/ }).selectOption("VD");
+  const vdId = randomUUID(); await page.getByLabel("실행할 가상 장치 ID", { exact: true }).fill(vdId);
+  await expect(page.getByText("공유 자원 측정으로는 작업별 자동 전환을 설정할 수 없습니다.", { exact: false })).toBeVisible();
+  const vdRequest = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith("/api/control-plane/workflow-runs"));
+  await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  const vdResponse = await vdRequest; expect(vdResponse.status()).toBe(503);
+  expect(vdResponse.request().postDataJSON().execution).toEqual({ mode: "VD", vdId });
+  expect(vdResponse.request().postDataJSON().offload).toBeUndefined();
+  await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("VD 실행 설정");
+  await page.getByRole("region", { name: "선택한 DAG · 1.0.0", exact: true }).screenshot({ path: testInfo.outputPath("vd-execution-disabled.png") });
+  await page.getByRole("combobox", { name: /실행 위치 정책/ }).selectOption("AUTO");
   await page.getByRole("textbox", { name: "실행 매개변수 JSON", exact: true }).fill('{"serial":9007199254740993}');
   await page.getByLabel("최대 실행 횟수", { exact: true }).fill("3");
   await page.getByLabel("재시도 대기 시간(초)", { exact: true }).fill("7");

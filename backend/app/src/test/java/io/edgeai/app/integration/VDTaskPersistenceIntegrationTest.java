@@ -179,11 +179,10 @@ class VDTaskPersistenceIntegrationTest {
         var f=fixture(1,1);var r=f.work().getFirst();var vr=f.supervisor();allocate(f,r,1);
         transaction(()->{executions.run(r.runId(),true);runtimes.stop(r.id(),"RUNTIME_LOST",Instant.now());runtimes.terminated(r.id(),Instant.now());return null;});
         invalid(()->transaction(()->{tasks.close(r.id(),"POD_GONE",null,null,Instant.now());return null;}));
-        lifecycle.drain(f.vd().id(),0,"pod-lost");lifecycle.drained(vr.id(),vr.sessionId());
+        lifecycle.fail(vr.id(),"RUNTIME_LOST");
         jdbc.update("UPDATE edgeai.vd_runtime_command SET completed=true,lease_owner=NULL,lease_until=NULL WHERE runtime_id=? AND kind='CREATE'",vr.id());
         // Explicit physical absence fixture; real Kubernetes evidence is a separate acceptance gate.
         lifecycle.confirmStopped(vr.id());
-        transaction(()->{tasks.close(r.id(),"POD_GONE",null,null,Instant.now());return null;});
         assertThat(tasks.open(vr.id())).isEmpty();assertThat(tasks.byRuntime(r.id()).orElseThrow().closeReason()).isEqualTo("POD_GONE");
         assertThat(tasks.assigned(vr.id(),1)).hasSize(1);assertThat(runtimes.result(r.taskId())).isEmpty();
     }

@@ -30,13 +30,13 @@ worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Ru
 실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
-Flyway V1–V16, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
+Flyway V1–V18, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
 M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
 V14는 내부 runtime/Operation·명령 lease·교체/drain 상태와 registry hook을 추가한다.
 ADR0016의 실제 Pod gateway/worker·HMAC 자격, Pod-bound TokenReview·UID 소유/삭제·watch/relist를
 추가했다. ADR0017/V15는 인증된 poll·순번 저장·lease/Ready·idle drain을 연결했다.
 ADR0018은 공개 시작·교체·종료·실행 상태4 API, Operation 합집합 조회와 UI를 추가했다.
-VD는 기본 비활성이며 실제 Pod/poll 전체 수용과 Run VD Task/Result 연결은 남았다.
+VD는 기본 비활성이다. 실제 Pod/poll 수용과 Run VD Task/Result 연결은 후속 ADR0020에서 검증했다.
 상세: docs/evidence/m6-vd-lifecycle.md 및 docs/evidence/m6-vd-gateway.md.
 poll 상세: docs/evidence/m6-vd-poll.md. 실제 Python 감독 프로세스→Spring HTTP→PostgreSQL을
 검증하며 Kubernetes 신원/Ready는 fixture다. 실제 Task 배정/Result 종단은 아니다.
@@ -51,6 +51,14 @@ Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전�
 새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
 
 [VERIFIED]
+ADR0020/V17–V18 VD Task 실행 연결: 최종 단위82(200158Z-ee581287), PG136(194641Z-b03db31a),
+Runner28(193208Z-5ed6569a), 계약4/MVC25(194047Z-64c4bfc6), 실제 Python/HTTP/MinIO/DB16
+(194722Z-7921adcd), UI32·추가VD UI2(200200Z-939513e3), 실제API/DB 브라우저10·Swagger39·
+DB503/동일프로세스복구(195553Z-5fe1b1f1) PASS/0. 날짜는 모두20261002 UTC다.
+실제Kubernetes 격리API/DB/MinIO·V1–V18·VD 수명/Task4개·고정S3파일5개·API Pod 재생성·
+활성 교체·개별 취소·재시도·물리종료195417Z-ea2a6d9b PASS/0. 시험소유자원0개 별도확인.
+새 코드 CI kind·새 이미지 배포는 남았고 전체 M6 완료를 판정하지 않는다.
+상세: docs/evidence/m6-vd-task-execution.md. M5 잔여·M7–M10과 전체목표 active를 유지한다.
 M6 등록 로컬: 단위/MVC66·실제PostgreSQL89(VD9)·계약/MVC22·UI28·실DB/브라우저10 모두 PASS.
 VD 포함 DB 장애503와 같은 프로세스 복구도 PASS(20261002T144123Z-bf144394).
 등록 코드0b4693c의 CI37022079299 5jobs/JSON15개 PASS, b5a9019 pin과 실제 imageID/Ready/PVCBound/ArgoSynced

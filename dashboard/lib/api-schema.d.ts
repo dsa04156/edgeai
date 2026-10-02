@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 M6 후속이며 STREAM 실행은 아직501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM 실행은 아직501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -731,7 +731,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "VD_EXECUTION_DISABLED" | "VD_NOT_READY" | "VD_SERVICE_MISMATCH" | "VD_AUTOMATIC_OFFLOAD_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -965,6 +965,14 @@ export interface components {
             mode: "REMOTE";
             /** @description 서버에 설정된 Remote 제공자 key. endpoint와 자격은 요청에 넣지 않습니다. */
             providerKey: string;
+        } | {
+            /** @constant */
+            mode: "VD";
+            /**
+             * Format: uuid
+             * @description 현재 Ready인 영속 VD의 ID. 모든 작업은 VD와 동일한 SERVICE Profile 버전을 사용합니다.
+             */
+            vdId: string;
         };
         /** @description 요청 시 고정된 제공자 설정. SYNTHETIC 참조 계산은 실장비 검증이 아닙니다. 비밀정보와 endpoint는 반환하지 않습니다. */
         RemoteTarget: {
@@ -1056,7 +1064,12 @@ export interface components {
             workflowVersionId: string;
             remoteTarget: components["schemas"]["RemoteTarget"];
             /** @enum {string} */
-            mode: "AUTO" | "NODE" | "REMOTE";
+            mode: "AUTO" | "NODE" | "REMOTE" | "VD";
+            /**
+             * Format: uuid
+             * @description VD 실행 대상. 재시도와 하위 작업에도 유지되며 다른 mode이면 null입니다.
+             */
+            vdId: string | null;
             /** Format: uuid */
             nodeId: string | null;
             retry: components["schemas"]["RetryPolicy"];
@@ -1099,9 +1112,14 @@ export interface components {
              * @description 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.
              * @enum {string}
              */
-            mode: "AUTO" | "NODE" | "REMOTE";
+            mode: "AUTO" | "NODE" | "REMOTE" | "VD";
             /** Format: uuid */
             nodeId: string | null;
+            /**
+             * Format: uuid
+             * @description 이 Attempt가 실행될 VD. 명시적 NODE/REMOTE 전환 후에는 null입니다.
+             */
+            vdId: string | null;
             /** @enum {string} */
             cause: "INITIAL" | "RETRY" | "OFFLOAD";
             /** @description AUTO에서 제외할 이전 실행 노드. 재시도도 동일 제약을 유지합니다. */
@@ -1155,6 +1173,11 @@ export interface components {
              * @enum {unknown}
              */
             remoteSourceMode: null | "SYNTHETIC" | "EXTERNAL";
+            /**
+             * Format: uuid
+             * @description VD 결과의 실제 supervisor 실행 세대 ID. 해당 작업 배정과 producerPodUid에 결합되며 일반 Job/Remote 결과에서는 null입니다.
+             */
+            vdRuntimeId: string | null;
             manifestDigest: string;
             /** Format: date-time */
             createdAt: string;

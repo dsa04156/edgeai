@@ -35,6 +35,7 @@ export function WorkflowConsole() {
   const [task, setTask] = useState<Schema["TaskDetail"] | null>(null); const [key, setKey] = useState("");
   const [results, setResults] = useState<Schema["TaskResults"] | null>(null);
   const [mode, setMode] = useState("AUTO"); const [providerKey, setProviderKey] = useState("reference"); const [offloadMode, setOffloadMode] = useState("NODE"); const [parameters, setParameters] = useState("{}");
+  const [vdId, setVdId] = useState("");
   const [retryAttempts, setRetryAttempts] = useState(1);
   const [automaticOffload, setAutomaticOffload] = useState<AutomaticOffloadPolicy | null>(null);
   const [retryBackoff, setRetryBackoff] = useState(5); const [retryWindow, setRetryWindow] = useState(600);
@@ -93,6 +94,7 @@ export function WorkflowConsole() {
     });
   }
   function disconnect() {
+    setVdId("");
     setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
     setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setOffload(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setAutomaticOffload(null); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
   }
@@ -137,14 +139,15 @@ export function WorkflowConsole() {
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
           if (retryAttempts > 1 && retryOn.length === 0) throw new Error("재시도할 오류를 한 개 이상 선택하세요.");
           if (automaticOffload && [automaticOffload.cpuPercent, automaticOffload.memoryPercent, automaticOffload.latencyMicros].every(v => v == null)) throw new Error("자동 전환 기준을 한 개 이상 입력하세요.");
-          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : { mode, nodeId }, parameters: objectJson(parameters),
-            ...(automaticOffload && mode !== "REMOTE" ? { offload: automaticOffload } : {}),
+          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : mode === "VD" ? { mode, vdId } : { mode, nodeId }, parameters: objectJson(parameters),
+            ...(automaticOffload && mode !== "REMOTE" && mode !== "VD" ? { offload: automaticOffload } : {}),
             ...(retryAttempts > 1 ? { retry: { maxAttempts: retryAttempts, backoffSeconds: retryBackoff, maxElapsedSeconds: retryWindow, retryOn } } : {}) }, key);
           const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
-          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (e.target.value === "REMOTE") setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option></select></label>
+          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
           {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
           {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
+          {mode === "VD" && <><label>실행할 가상 장치 ID<input required maxLength={36} value={vdId} onChange={e => setVdId(e.target.value)} placeholder="Ready인 VD UUID" /></label><p className="hint"><a href="/virtual-devices">가상 장치</a>에서 준비 상태와 ID를 확인하세요. 모든 작업은 VD와 같은 SERVICE 버전을 사용하며 실행 자리가 비면 시작합니다. 공유 자원 측정으로는 작업별 자동 전환을 설정할 수 없습니다.</p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
           <label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>
@@ -154,7 +157,7 @@ export function WorkflowConsole() {
             <fieldset className="retry-errors"><legend>재시도할 오류</legend>{retryChoices.map(([code, label]) => <label key={code}><input type="checkbox" checked={retryOn.includes(code)} onChange={e => setRetryOn(e.target.checked ? [...retryOn, code] : retryOn.filter(item => item !== code))} />{label}</label>)}</fieldset>
             <p className="hint">각 작업의 최초 실행 시도부터 허용 기간을 계산합니다. 이전 실행의 종료를 확인한 뒤 다시 실행하며, 입력·출력 오류와 취소는 재시도하지 않습니다.</p>
           </>}
-          {mode !== "REMOTE" && <OffloadPolicyFields value={automaticOffload} onChange={setAutomaticOffload} />}
+          {mode !== "REMOTE" && mode !== "VD" && <OffloadPolicyFields value={automaticOffload} onChange={setAutomaticOffload} />}
           <label>실행 요청 키<input value={key} readOnly className="mono" /></label><p className="hint">같은 키·내용을 다시 보내면 기존 실행을 반환합니다. 다른 실행을 만들 때 새 키를 발급하세요.</p>
           <div className="toolbar"><button type="button" onClick={() => setKey(requestKey())}>새 실행 키 만들기</button><button className="primary">실행 요청 저장</button></div>
         </fieldset></form>
@@ -164,6 +167,7 @@ export function WorkflowConsole() {
         <div className="pagination"><button disabled={busy || runOffset === 0} onClick={() => void action(() => loadRuns(runOffset - 20))}>이전 실행</button><span>{runOffset / 20 + 1} 페이지</span><button disabled={busy || runs?.nextOffset == null} onClick={() => void action(() => loadRuns(runs!.nextOffset!))}>다음 실행</button></div>
       </section>
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
+        {run.run.vdId && <p className="digest mono">실행 대상 VD {run.run.vdId}</p>}
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <OffloadPolicySummary value={run.run.offload} />
         <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
@@ -171,6 +175,7 @@ export function WorkflowConsole() {
         {task && (task.attempts[0]?.mode === "REMOTE"
           ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>
           : <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />)}
+        {task?.attempts[0]?.vdId && <p className="hint">현재 작업의 VD: {task.attempts[0].vdId}. CPU·메모리는 VD 컨테이너 전체의 공유 측정값입니다.</p>}
         {task && <div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
           <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>
@@ -198,6 +203,7 @@ export function WorkflowConsole() {
           {results.items.length === 0 ? <p className="muted">아직 확정된 결과가 없습니다.</p> : results.items.map(result => <div key={result.id}>
             <p className="hint">파일 검증 완료 · {new Date(result.createdAt).toLocaleString()}</p>
             {result.remoteAllocationId && <p className="hint">{result.remoteSourceMode === "SYNTHETIC" ? "Remote 참조 계산 · 실장비 검증 아님" : result.remoteSourceMode === "EXTERNAL" ? "외부 Remote 실행" : "Remote 실행 · 출처 확인 필요"}</p>}
+            {result.vdRuntimeId && <p className="hint digest">가상 장치 실행 결과 · VD Runtime {result.vdRuntimeId} · Pod {result.producerPodUid}</p>}
             <div className="table-scroll"><table><caption className="sr-only">검증된 출력 파일</caption><thead><tr><th>출력 포트</th><th>크기</th><th>형식</th></tr></thead><tbody>{result.artifacts.map(artifact => <tr key={artifact.port}><td>{artifact.port}</td><td>{artifact.bytes.toLocaleString()} bytes</td><td>{artifact.mediaType}</td></tr>)}</tbody></table></div>
             <details><summary>결과 ID·체크섬·파일 버전</summary><p className="digest mono">Result {result.id}</p><p className="digest mono">Attempt {result.attemptId}</p>{result.remoteAllocationId && <p className="digest mono">RemoteAllocation {result.remoteAllocationId}</p>}{result.artifacts.map(artifact => <div key={artifact.port}><h4>{artifact.port}</h4><p className="digest mono">SHA-256 {artifact.sha256}</p><p className="digest mono">버전 {artifact.objectVersion}</p><p className="digest mono">{artifact.bucket}/{artifact.objectKey}</p></div>)}</details>
           </div>)}

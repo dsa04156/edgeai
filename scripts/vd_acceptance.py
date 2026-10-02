@@ -1,4 +1,4 @@
-"""Actual VD Pod/supervisor/control-plane acceptance. No Task/hardware acceptance is implied."""
+"""Actual VD Pod/supervisor/control-plane acceptance, with optional Task and S3 gates. No hardware acceptance is implied."""
 import argparse
 import base64
 import http.cookiejar
@@ -88,15 +88,17 @@ class VDScenario:
     def publish(self, kind, suffix, spec):
         return self.request('profiles/' + kind, 'POST', {'key': self.prefix + '-' + suffix, 'version': '1.0.0', 'spec': spec}, expected=201)['id']
 
-    def create(self, suffix, placement, impossible=False):
+    def create(self, suffix, placement, impossible=False, task_capacity=1):
         service = json.loads((ROOT / 'contracts/profiles/service-execution.example.json').read_text())
         service.update(image=self.image, platform={'os': 'linux', 'architectures': ['amd64']})
+        if task_capacity > 1:
+            service['inputs'] = {'input': {'mediaType': 'application/json', 'maxBytes': 1048576, 'required': False}}
         if impossible:
             service['resources']['requests']['cpu'] = '100000'
             service['resources']['limits']['cpu'] = '100000'
         sp = self.publish('SERVICE', suffix, service)
         vp = self.publish('VD', suffix, {'apiVersion': 'edgeai.vd/v1', 'type': 'emulation', 'serviceProfileVersionId': sp, 'sources': {},
-            'state': {'mode': 'STATELESS'}, 'runtime': {'maxConcurrentTasks': 1, 'startupTimeoutSeconds': 15 if impossible else 180, 'drainTimeoutSeconds': 10}})
+            'state': {'mode': 'STATELESS'}, 'runtime': {'maxConcurrentTasks': task_capacity, 'startupTimeoutSeconds': 15 if impossible else 180, 'drainTimeoutSeconds': 30 if task_capacity > 1 else 10}})
         vd = self.request('virtual-devices', 'POST', {'key': self.prefix + '-' + suffix, 'displayName': 'VD lifecycle acceptance', 'profileVersionId': vp, 'sources': [], 'placement': placement}, expected=201)
         self.created.append(vd['id'])
         status = self.execution(vd['id'])
@@ -208,13 +210,91 @@ class VDScenario:
         self.report['cases'].append({'case': 'startup-failure', 'vdId': identity, 'unschedulablePodUids': sorted(set(unschedulable)), 'generations': snapshot['runtimeHistory'], 'operations': snapshot['operations'], 'resourcesRemaining': 0})
         print('PASS: actual unschedulable VD startup timeout, failed Operation and physical cleanup', flush=True)
 
+    def task_execution(self, restart=None):
+        vd = self.create('tasks', {'mode': 'AUTO'}, task_capacity=2); identity = vd['id']
+        operation = self.command(identity, 'provision', 0); first, pod = self.ready(identity, operation['id'])
+        service_id = self.request('virtual-devices/' + identity)['vd']['serviceProfileVersionId']
+        artifacts, runs = [], []
+        def launch(suffix, task_specs, dependencies=None, retry=None):
+            wf = self.request('workflows', 'POST', {'key': self.prefix + '-tasks-' + suffix, 'displayName': 'Actual VD Tasks ' + suffix}, expected=201)
+            nodes = [{'key': key, 'serviceProfileVersionId': service_id, 'parameters': parameters} for key, parameters in task_specs]
+            version = self.request('workflows/' + wf['id'] + '/versions', 'POST', {'version': '1.0.0', 'tasks': nodes, 'dependencies': dependencies or []}, expected=201)
+            body = {'workflowVersionId': version['id'], 'execution': {'mode': 'VD', 'vdId': identity}, 'parameters': {}}
+            if retry: body['retry'] = retry
+            key = str(uuid.uuid4()); run = self.request('workflow-runs', 'POST', body, key=key, expected=201)
+            assert run['mode'] == 'VD' and run['vdId'] == identity and run['nodeId'] is None and run['remoteTarget'] is None
+            assert self.request('workflow-runs', 'POST', body, key=key)['id'] == run['id']
+            return run['id']
+        def parameters(delay=0, features=None):
+            return {'features': [2, 1] if features is None else features, 'weights': [2, 3], 'bias': 1, 'simulationDelayMillis': delay}
+        def detail(run): return self.request('workflow-runs/' + run)
+        def running(run, key):
+            task = next(t for t in detail(run)['tasks'] if t['key'] == key)
+            state = self.request('tasks/' + task['id'])
+            assert state['task']['state'] not in ('FAILED', 'CANCELLED', 'SKIPPED'), 'VD child failed before claim'
+            return state if state['attempts'] and state['attempts'][0]['state'] == 'RUNNING' else None
+        def succeeded(run, runtime):
+            snapshot = wait(lambda: detail(run) if detail(run)['run']['state'] == 'SUCCEEDED' else None, 150, 'Actual VD tasks did not commit results')
+            results = []
+            for task in snapshot['tasks']:
+                attempts = self.request('tasks/' + task['id'])['attempts']; assert len(attempts) == 1
+                assert attempts[0]['mode'] == 'VD' and attempts[0]['vdId'] == identity
+                items = self.request('tasks/' + task['id'] + '/results')['items']; assert len(items) == 1
+                result = items[0]
+                assert result['vdRuntimeId'] == runtime['id'] and result['producerPodUid'] == runtime['podUid'] and result['attemptId'] == attempts[0]['id'] and result['remoteAllocationId'] is None
+                assert len(result['artifacts']) == 1
+                artifacts.append({'artifact': result['artifacts'][0], 'expected': {'sourceMode': 'SYNTHETIC', 'score': 8, 'prediction': 1, 'features': [2, 1]}})
+                results.append(result)
+            runs.append({'id': run, 'state': 'SUCCEEDED', 'vdRuntimeId': runtime['id'], 'results': results})
+        initial = launch('restart-dag', [('root', parameters(25000 if restart else 1500)), ('independent', parameters(25000 if restart else 1500)), ('child', parameters(0, [99, 99]))],
+            [{'fromTask': 'root', 'toTask': 'child', 'fromPort': 'output', 'toPort': 'input', 'mode': 'BATCH'}])
+        wait(lambda: running(initial, 'root') and running(initial, 'independent'), 30, 'Parallel VD children did not claim')
+        restart_proof = None
+        if restart:
+            restart_proof = restart(); self.csrf = self.request('csrf')['token']
+            recovered, same_pod = self.ready(identity, operation['id'])
+            assert recovered['id'] == first['id'] and same_pod['metadata']['uid'] == pod['metadata']['uid']
+        succeeded(initial, first)
+        # A live child must finish on the source generation before physical deletion and replacement.
+        replacement_run = launch('replace-live', [('root', parameters(6000))])
+        wait(lambda: running(replacement_run, 'root'), 30, 'Replacement source child did not claim')
+        replacement = self.command(identity, 'replace', 0); second, _ = self.ready(identity, replacement['id'])
+        succeeded(replacement_run, first)
+        assert second['generation'] == first['generation'] + 1
+        history = self.execution(identity)['runtimeHistory']; assert history[1]['observedState'] == 'TERMINATED' and history[1]['updatedAt'] <= second['createdAt']
+        cancel_run = launch('cancel-one', [('slow', parameters(12000)), ('fast', parameters(300))])
+        slow = wait(lambda: running(cancel_run, 'slow'), 30, 'Selected VD child did not start')
+        self.request('tasks/' + slow['task']['id'] + '/cancel', 'POST', {})
+        wait(lambda: self.request('tasks/' + slow['task']['id'])['task']['state'] == 'CANCELLED', 30, 'Selected VD child did not terminate')
+        fast = next(t for t in detail(cancel_run)['tasks'] if t['key'] == 'fast')
+        wait(lambda: self.request('tasks/' + fast['id'])['task']['state'] == 'SUCCEEDED', 30, 'Sibling child did not complete')
+        assert not self.request('tasks/' + slow['task']['id'] + '/results')['items']
+        result = self.request('tasks/' + fast['id'] + '/results')['items'][0]
+        assert result['vdRuntimeId'] == second['id'] and result['producerPodUid'] == second['podUid']
+        artifacts.append({'artifact': result['artifacts'][0], 'expected': {'sourceMode': 'SYNTHETIC', 'score': 8, 'prediction': 1, 'features': [2, 1]}})
+        assert self.execution(identity)['current']['id'] == second['id'] and any(r['kind'] == 'Pod' and r['metadata']['uid'] == second['podUid'] for r in self.resources(identity))
+        runs.append({'id': cancel_run, 'cancelledTaskId': slow['task']['id'], 'siblingResult': result})
+        failed_run = launch('failure-retry', [('invalid', parameters(0, []))], retry={'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 120, 'retryOn': ['WORKLOAD_FAILED']})
+        failed = wait(lambda: detail(failed_run) if detail(failed_run)['run']['state'] == 'FAILED' else None, 45, 'VD failure/retry did not become terminal')
+        task = failed['tasks'][0]; attempts = self.request('tasks/' + task['id'])['attempts']
+        assert len(attempts) == 2 and all(a['state'] == 'FAILED' and a['vdId'] == identity for a in attempts)
+        assert not self.request('tasks/' + task['id'] + '/results')['items']; runs.append({'id': failed_run, 'attempts': attempts, 'state': 'FAILED'})
+        verification = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts), text=True, capture_output=True, env=self.env, timeout=60)
+        assert verification.returncode == 0, 'VD actual S3 content/version verification failed; details suppressed'
+        print(verification.stdout.strip(), flush=True)
+        drain = self.command(identity, 'drain', 0)
+        wait(lambda: self.request('operations/' + drain['id'])['state'] == 'SUCCEEDED' and self.execution(identity)['current'] is None and not self.resources(identity), 90, 'VD Task drain did not physically finish')
+        self.report['cases'].append({'case': 'task-execution', 'vdId': identity, 'sourceMode': 'SYNTHETIC', 'runs': runs, 'restart': restart_proof, 'generations': self.execution(identity)['runtimeHistory'], 'verifiedArtifacts': len(artifacts), 'resourcesRemaining': 0})
+        self.report.update(taskExecution=True, scope='real-kubernetes-vd-task-and-lifecycle')
+        print('PASS: actual VD child DAG/Result, API restart, live replacement, isolated cancellation, failure/retry and physical drain', flush=True)
+
     def cleanup(self):
         self.csrf = self.request('csrf')['token']
         for vd in self.created:
             self.request('virtual-devices/' + vd, 'DELETE')
             wait(lambda: self.execution(vd)['current'] is None and not self.resources(vd), 90, 'Scenario VD cleanup incomplete')
 
-    def run(self, restart=None):
+    def run(self, restart=None, tasks=False):
         try:
             self.exercise({'mode': 'AUTO'}, 'auto-restart' if restart else 'auto', restart)
             def target():
@@ -227,20 +307,22 @@ class VDScenario:
             node = wait(target, 45, 'No matching real Node was observed')
             self.exercise({'mode': 'NODE', 'nodeId': node['id']}, 'node')
             self.startup_failure()
+            if tasks: self.task_execution(restart)
         finally:
             self.cleanup()
         self.report_path.parent.mkdir(exist_ok=True, parents=True)
         self.report_path.write_text(json.dumps(self.report, indent=2) + '\n')
-        print('PASS: VD lifecycle evidence saved; Task execution and hardware acceptance remain separate', flush=True)
+        print('PASS: VD evidence saved; Task execution=' + str(self.report['taskExecution']) + '; hardware acceptance remains separate', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--context', required=True)
     parser.add_argument('--report', default='.tools/vd-smoke.json')
+    parser.add_argument('--tasks', action='store_true', help='Verify actual child Tasks and fixed-version S3 results; requires storage environment')
     args = parser.parse_args()
     scenario = VDScenario(args.context, args.report)
-    scenario.run()
+    scenario.run(tasks=args.tasks)
 
 
 if __name__ == '__main__':

@@ -142,4 +142,9 @@ ADR0018은 공개 provision/replace/drain·Operation/실행 상태 API와 UI를 
 다음은 VD Run 배정·Task claim/Result·취소/실패와 전체 M6 수용이다.
 ADR0019/V16의 VD 대상·작업 배정·공급자/결과 FK와 domain/repository를 추가하고
 실제 PostgreSQL의 용량·이력·신원·잠금 순서를 검증했다. 상세는 docs/evidence/m6-vd-task-persistence.md다.
-공개 VD Run·poll 배정·Runner 인증/Result 서비스 연결은 아직 남아 있다.
+후속 ADR0020/V17–V18에서 공개 VD Run·poll 배정·Runner 인증/Result 서비스를 연결했다.
+배정·취소·완료 확인을 같은 VD→Run 잠금으로 처리하고 미시작 종료는 후속 순번의 증명을 요구한다.
+실제 PG136개·단위82개·Runner28개·실제 S3/DB16개·실API/DB 브라우저10개 및 VD UI2개를 통과했다.
+실제 Kubernetes의 VD 수명3개와 Task/DAG·API 재생성·활성 교체·개별 취소·재시도·S3 파일5개도
+20261002T195417Z-ea2a6d9b에서 통과했다. 새 이미지의 CI kind·배포 검증은 남았다.
+상세와 fixture/실제 경계는 `docs/evidence/m6-vd-task-execution.md`를 따른다.

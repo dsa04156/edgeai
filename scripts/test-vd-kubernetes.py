@@ -59,16 +59,16 @@ def main():
         return pod if any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in pod.get('status', {}).get('conditions', [])) else None
     pin = json.loads((ROOT / 'deploy/kubernetes/overlays/dev/release.json').read_text())
     jar = (ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes(); jar_hash = hashlib.sha256(jar).hexdigest()
-    api_name, db_name = root + '-api', root + '-db'
+    api_name, db_name, storage_name = root + '-api', root + '-db', root + '-storage'
     api_image = 'ghcr.io/dsa04156/edgeai-api@' + pin['apiDigest']
     postgres = 'public.ecr.aws/docker/library/postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
     auth = {'EDGEAI_API_USER': 'vd-test', 'EDGEAI_API_PASSWORD': secrets.token_hex(24)}
-    credentials = {**auth, 'EDGEAI_DB_PASSWORD': secrets.token_hex(24), 'EDGEAI_MINIO_USER': 'unused-vd-test', 'EDGEAI_MINIO_PASSWORD': secrets.token_hex(24), 'signing.key': secrets.token_hex(32)}
+    credentials = {**auth, 'EDGEAI_DB_PASSWORD': secrets.token_hex(24), 'EDGEAI_MINIO_USER': 'vd-test', 'EDGEAI_MINIO_PASSWORD': secrets.token_hex(24), 'signing.key': secrets.token_hex(32)}
     def secret_env(name, key): return {'name': name, 'valueFrom': {'secretKeyRef': {'name': root, 'key': key}}}
     def env(name, value): return {'name': name, 'value': value}
     try:
         create('Secret', root, stringData=credentials)
-        for name, port in ((db_name, 5432), (api_name, 18080)):
+        for name, port in ((db_name, 5432), (api_name, 18080), (storage_name, 9000)):
             create('Service', name, spec={'selector': {'edgeai.io/test-resource': name}, 'ports': [{'name': 'service', 'port': port, 'targetPort': port}]})
         create('Pod', db_name, spec={'restartPolicy': 'Never', 'automountServiceAccountToken': False, 'nodeSelector': {'kubernetes.io/arch': 'amd64'},
             'securityContext': {'runAsNonRoot': True, 'runAsUser': 70, 'runAsGroup': 70, 'fsGroup': 70, 'seccompProfile': {'type': 'RuntimeDefault'}},
@@ -79,6 +79,16 @@ def main():
                 'readinessProbe': {'exec': {'command': ['pg_isready', '-U', 'edgeai', '-d', 'edgeai']}, 'periodSeconds': 2},
                 'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/postgresql/data'}]}], 'volumes': [{'name': 'data', 'emptyDir': {}}]})
         wait(lambda: is_ready(db_name), 120, 'Isolated test PostgreSQL not ready')
+        create('Pod', storage_name, spec={'restartPolicy': 'Never', 'automountServiceAccountToken': False, 'nodeSelector': {'kubernetes.io/arch': 'amd64'},
+            'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
+            'containers': [{'name': 'minio', 'image': 'ghcr.io/dsa04156/edgeai-minio@' + pin['minioDigest'], 'args': ['server', '/data', '--console-address', ':9001'],
+                'env': [secret_env('MINIO_ROOT_USER', 'EDGEAI_MINIO_USER'), secret_env('MINIO_ROOT_PASSWORD', 'EDGEAI_MINIO_PASSWORD')],
+                'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
+                'resources': {'requests': {'cpu': '100m', 'memory': '256Mi'}, 'limits': {'cpu': '1', 'memory': '1Gi'}},
+                'readinessProbe': {'httpGet': {'path': '/minio/health/ready', 'port': 9000}, 'periodSeconds': 2},
+                'volumeMounts': [{'name': 'data', 'mountPath': '/data'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
+            'volumes': [{'name': 'data', 'emptyDir': {}}, {'name': 'tmp', 'emptyDir': {}}]})
+        wait(lambda: is_ready(storage_name), 120, 'Isolated versioned storage not ready')
         api_spec = {'restartPolicy': 'Never', 'serviceAccountName': 'edgeai-control-plane', 'automountServiceAccountToken': True, 'nodeSelector': {'kubernetes.io/arch': 'amd64'},
             'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
             'containers': [{'name': 'api', 'image': api_image, 'command': ['sh', '-c', 'while [ ! -f /tmp/start ]; do sleep 0.2; done; exec java -XX:MaxRAMPercentage=75.0 -jar /tmp/current-api.jar'],
@@ -86,7 +96,8 @@ def main():
                     env('EDGEAI_KUBE_ENABLED', 'true'), env('EDGEAI_RUNTIME_ENABLED', 'true'), env('EDGEAI_VD_ENABLED', 'true'), env('EDGEAI_VD_LEASE_SECONDS', '60'),
                     env('EDGEAI_RUNTIME_NAMESPACE', 'edgeai-runtimes'), env('EDGEAI_RUNTIME_CONTROL_PLANE_URL', 'http://' + api_name + '.edgeai.svc:18080'),
                     env('EDGEAI_KUBE_API_URL', 'https://kubernetes.default.svc'), env('EDGEAI_KUBE_TOKEN_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/token'), env('EDGEAI_KUBE_CA_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'),
-                    env('EDGEAI_RUNNER_KEY_FILE', '/var/run/edgeai-test/signing.key'), env('EDGEAI_STORAGE_URL', 'http://127.0.0.1:1')]
+                    env('EDGEAI_RUNNER_KEY_FILE', '/var/run/edgeai-test/signing.key'), env('EDGEAI_STORAGE_URL', 'http://' + storage_name + '.edgeai.svc:9000'),
+                    env('EDGEAI_STORAGE_RUNNER_URL', 'http://' + storage_name + '.edgeai.svc:9000')]
                     + [secret_env(name, name) for name in credentials if name != 'signing.key'],
                 'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
                 'resources': {'requests': {'cpu': '250m', 'memory': '512Mi'}, 'limits': {'cpu': '2', 'memory': '1Gi'}},
@@ -102,25 +113,29 @@ def main():
             call(['-n', 'edgeai', 'exec', api_name, '--', 'touch', '/tmp/start'])
             wait(lambda: is_ready(api_name), 120, 'Isolated API not ready')
             return pod['metadata']['uid']
-        def forward():
+        def forward(name=api_name, target_port=18080, health_path='/actuator/health/readiness'):
             with socket.socket() as sock: sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
-            process = subprocess.Popen(k + ['-n', 'edgeai', 'port-forward', '--address', '127.0.0.1', 'svc/' + api_name, f'{port}:18080'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = subprocess.Popen(k + ['-n', 'edgeai', 'port-forward', '--address', '127.0.0.1', 'svc/' + name, f'{port}:{target_port}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             forwards.append(process); url = 'http://127.0.0.1:' + str(port)
             def health():
                 assert process.poll() is None, 'Owned API forward exited'
                 try:
-                    with urllib.request.urlopen(url + '/actuator/health/readiness', timeout=2) as r: return r.status == 200
+                    with urllib.request.urlopen(url + health_path, timeout=2) as r: return r.status == 200
                 except OSError: return False
             wait(health, 30, 'Owned API forward not ready'); return url
-        first_uid = start_api()
-        scenario = VDScenario(args.context, '.tools/vd-kubernetes.json', {**os.environ, **auth, 'EDGEAI_SMOKE_API_URL': forward(), 'EDGEAI_SMOKE_PROXY_URL': ''})
+        storage_url = forward(storage_name, 9000, '/minio/health/ready')
+        test_env = {**os.environ, **{k: v for k, v in credentials.items() if k != 'signing.key'}, 'EDGEAI_STORAGE_URL': storage_url, 'EDGEAI_ARTIFACT_BUCKET': 'edgeai-artifacts'}
+        subprocess.run(['node', 'scripts/bootstrap-artifact-bucket.mjs'], env=test_env, check=True, timeout=30)
+        current_api_uid = start_api()
+        scenario = VDScenario(args.context, '.tools/vd-kubernetes.json', {**test_env, 'EDGEAI_SMOKE_API_URL': forward(), 'EDGEAI_SMOKE_PROXY_URL': ''})
         def restart():
-            started = time.monotonic(); remove('pod', api_name, first_uid)
-            records.remove(('pod', api_name, first_uid))
-            fresh_uid = start_api(); assert fresh_uid != first_uid
+            nonlocal current_api_uid
+            started = time.monotonic(); old_uid = current_api_uid; remove('pod', api_name, old_uid)
+            records.remove(('pod', api_name, old_uid))
+            fresh_uid = start_api(); assert fresh_uid != old_uid; current_api_uid = fresh_uid
             scenario.origin = forward()
-            return {'kind': 'actual-kubernetes-api-pod', 'oldUid': first_uid, 'newUid': fresh_uid, 'jarSha256': jar_hash, 'databasePodPreserved': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-        scenario.run(restart)
+            return {'kind': 'actual-kubernetes-api-pod', 'oldUid': old_uid, 'newUid': fresh_uid, 'jarSha256': jar_hash, 'databasePodPreserved': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
+        scenario.run(restart, tasks=True)
     except BaseException:
         for kind, name, uid in records:
             if kind != 'pod': continue

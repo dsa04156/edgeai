@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: EdgeAI persistent VD supervisor internal contract
-  version: 0.2.0
+  version: 0.3.0
   description: >-
-    M6 지속 VD의 내부 프로토콜입니다. Supervisor와 서버 인증·영속 sequence·readiness·idle drain을
-    연결했습니다. 현재 assignments는 비어 있으며 배정되지 않은 active/completed는409입니다.
-    실제 VD Task 배정·claim/Result 연결은 구현 중입니다. 공개 API가 아닙니다.
+    M6 지속 VD의 내부 프로토콜입니다. 인증·영속 sequence·readiness·작업 배정과
+    child Runner의 claim/Result를 연결합니다. 배정되지 않은 active/completed는409입니다.
+    구현 및 실제 Kubernetes 수용 여부는 별도 검증 기록을 따릅니다. 공개 API가 아닙니다.
     모든 JSON은 256KiB 이하이고 중복 필드·알 수 없는 필드를 거절합니다.
     인증 토큰과 assignment의 claimToken은 로그·공개 응답·영속 metadata에 저장하지 않습니다.
-x-implementation-status: authenticated-idle-lifecycle
+x-implementation-status: task-exchange
 servers:
   - url: /
 security:
@@ -30,11 +30,13 @@ paths:
         재전송은 순번·요청 내용을 한번 반영하지만 현재 상태에 따라 응답 명령이 RUN에서
         DRAIN/STOP으로 진행할 수 있습니다. 공백을 포함해 요청 bytes가 달라지면409입니다.
         RUN은 수용 여유 내 작업을 배정하고 DRAIN은 신규 배정 없이 완료 보고가 확인될 때까지
-        기다립니다. STOP은 즉시 종료합니다. 한번 DRAIN이면 RUN으로 돌아갈 수 없습니다.
+        기다립니다. 빈 DRAIN도 poll을 계속하며 STOP을 받아 종료합니다. 한번 DRAIN이면 RUN으로 돌아갈 수 없습니다.
         lease가 만료되면 작업을 종료하며 취소 처리 후 신규 작업 시작 전에도 만료를 확인합니다.
         일시 장애도 readiness를 제거합니다. 실제 Ready 판단은 poll·Pod 관측을 함께 사용합니다.
         완료 보고의 exitCode는 프로세스 종료 코드일 뿐 Result의 성공을 증명하지 않습니다.
-        현재 idle runtime은 미배정 작업이 없고 active/completed도 비어 있을 때 drain을
+        작업의 결과 확정이나 취소 요청만으로 slot을 반환하지 않습니다. 실제 종료 보고를 확인한 후 반환합니다.
+        응답 유실 뒤 취소된 미시작 배정은 다음 순번의 active/completed에 없고 claim 전인 경우에만 닫습니다.
+        같은 순번을 재전송할 때는 새 작업을 추가하지 않습니다. 열린 배정이 모두 닫히면 drain을
         DB에STOPPED로 저장한 뒤STOP을 반환합니다. supervisor가 자체DRAINING을 보고하면
         추적 가능한REPLACE를 저장하며 이전 Pod 종료 확인 전에는 다음 세대를 만들지 않습니다.
       parameters:

@@ -23,3 +23,5 @@ M3에서 AUTO/NODE 요청과 불변 DAG·Idempotency-Key·취소를 확정했다
 M5/ADR0012에서 기존 Run/Offload에 REMOTE 제공자 선택을 추가했다. 당시 Operation 수는30개였다. M6 등록·실행 관리 추가 후39개다.
 Remote 자동 측정 전환은 미지원이며 실제 외부 API 수용시험·상태형 복원은 남아 있다. 참조 제공자의 실제 kind 양방향 전환은 검증했다.
 실제 실행/검증된 Result commit은 M4, VD는 M6, STREAM 실행은 M7이다.
+ADR0020은 기존 Run 생성에 `execution={mode:VD,vdId}`를 추가한다. Ready·동일 SERVICE 검증,
+VD 내부 Task 배정/종료와 결과의 실제 vdRuntimeId를 연결하며 공개 operation 수는39개를 유지한다.
