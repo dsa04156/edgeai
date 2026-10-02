@@ -1,6 +1,6 @@
 # M2 Device/Node 검증
 
-2026-10-02. 로컬 구현과 검증을 마쳤으며 M2 CI/배포 검증은 별도로 확인한다.
+2026-10-02. M2 로컬·CI·배포 검증 완료. 전체 플랫폼은 M3–M10 후속 범위를 유지한다.
 구현 계약은 ADR 0003, 원본 REST 계약은 contracts/openapi/platform-api.yaml이다.
 
 | testRunId | 범위 | 결과 |
@@ -33,6 +33,24 @@ ArgoCD AppProject는 namespace ServiceAccount만 추가 허용하고 clusterReso
 - 실제 kubectl proxy에서 JDK HTTP/2 cleartext Upgrade는 HTTP500, 같은 URL의 HTTP/1.1은 200으로 재현했다.
   loopback HTTP만 HTTP/1.1로 고정하고 단위 회귀와 실노드 대조를 통과했다. HTTPS CA 검증은 유지한다.
 
-남은 범위: M2 새 이미지/클러스터 내 ServiceAccount 관측 배포 확인, M3–M10 전체 구현.
+## CI 및 실제 배포
+
+코드 `3cfc41bc92b8d7036bf6b18280644b117bdc7f1b`의
+[CI 36966964979](https://github.com/dsa04156/edgeai/actions/runs/36966964979)는
+scaffold/storage/images/gitops 모두 success다. 최초 시도의 Maven Central403은
+같은 POM 4개를200으로 확인 후 코드 변경 없이 failed job을 재실행해 해소됐다.
+내려받은 세 검증 artifact의 result.json 9개 모두 PASS/0임을 확인했다.
+Docker build record는 일반 zip artifact가 아니어서 별도 검증 artifact만 지정해 내려받았다.
+
+Actions가 `d56f673`으로 고정한 API/UI digest와 실제 Pod imageID가 일치한다.
+DB/API/UI 각1/1 Ready, PVC Bound, ArgoCD Synced를 확인했다.
+
+| testRunId | 실제 배포 검증 | 결과 |
+|---|---|---|
+| 20261002T051528Z-b69dcf3d | Ingress UI/assets/Swagger/Profile/Device lifecycle·CSRF·충돌·session fence·해제 | PASS/0 |
+| 20261002T051546Z-5657d8c7 | 전용 ServiceAccount/CA/HTTPS로 관측한 Node10개를 kubectl UID·metadata와 대조, 합성 attachment replay/release | PASS/0 |
+| 20261002T051753Z-35363223 | 실행 imageID=CI digest, PodReady, PVCBound, ArgoSynced | PASS/0 |
+
+남은 범위: M3–M10 전체 구현.
 기존 Argo Ingress health Progressing, 공유 control-plane 상태, 운영 identity/TLS/HA/백업은 기존 위험을 유지한다.
 원시 result.json/로그/브라우저 증거는 Git에서 제외한 runs 및 dashboard/test-results에 보존한다.

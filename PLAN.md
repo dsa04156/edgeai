@@ -7,7 +7,7 @@
 
 | 단계 | 남은 구현·검증 게이트 |
 |---|---|
-| M2 | Device CRUD/해제, Node 실관측, attachment 이력, session fencing, observation 중복/순서/만료, UI·실DB·실 Kubernetes 읽기 |
+| M2 | 완료 — Device/Node/Observation, UI·실DB·CI·실 Kubernetes 읽기·배포 검증 |
 | M3 | 불변 Workflow DAG 버전, Run/Task/Attempt, 의존성·중복 실행·취소·조회, UI·동시성 |
 | M4 | PodSpec 요구사항, AUTO/NODE scheduler bind, Job watch/reconciliation, Runner, S3 artifact 검증 후 Result commit, 실제 kind E2E |
 | M5 | 동일 Task 새 Attempt, retry budget, 실행 중 offload/fence/drain/route 전환, remote adapter 계약·장애·늦은 결과 차단 |
@@ -17,7 +17,7 @@
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-현재 M2부터 구현한다. 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
+현재 M3를 구현한다. 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.
 

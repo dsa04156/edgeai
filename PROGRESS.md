@@ -1,7 +1,7 @@
 # 진행 상태
 
 [STATUS]
-M2 Device/Node 구현·로컬 검증 완료. M2 CI·배포 검증은 진행 중이며 전체 플랫폼은 PARTIAL.
+M2 Device/Node 구현·로컬·CI·실제 배포 검증 완료. M3 구현 중이며 전체 플랫폼은 PARTIAL.
 M0/M1 및 초기 CI/CD 완료 기록은 아래에 보존한다. 현재 상세는 docs/evidence/m2-device-node.md.
 공개 저장소: https://github.com/dsa04156/edgeai
 코드 20a8d6c의 CI 36950519908: scaffold/storage 모두 success, 결과 JSON 8개 PASS/0.
@@ -31,7 +31,7 @@ M1 로컬 범위의 차단 없음. 로컬 Docker 소켓 권한 제한은 portabl
 별도 전체 구현 계약·실장비·2세부 API·성능 기준은 필요한 단계에서 확인한다.
 
 [NEXT]
-M2 CI·배포 확인 후 M3 Workflow/Run/Task/Attempt를 구현한다.
+M3 Workflow/Run/Task/Attempt와 Dashboard를 구현·검증한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh
 Profile UI: http://127.0.0.1:13080/profiles
@@ -130,3 +130,15 @@ Profile/Device/Swagger PC·모바일6, DB 중단503/복구와 실제 Kubernetes 
 nodes patch·secrets list·pods create가 허용되지 않는 것을 확인했다.
 M2 코드의 새 GitHub CI, GHCR 이미지 및 클러스터 내 HTTPS/CA/ServiceAccount 경로 검증은 다음 확인 대상이다.
 M3–M10은 아직 미완료이며 전체 목표를 M2로 축소하지 않는다.
+
+[M2 CI·배포 확인 — 2026-10-02]
+코드 3cfc41b의 GitHub Actions 36966964979 재실행: scaffold/storage/images/gitops 모두 success.
+최초 시도는 Maven Central 의존성 다운로드403으로 backend 시험 전에 실패했다.
+동일 POM 4개를 HTTP200으로 확인하고 코드 변경 없이 실패 job을 재실행해 통과했다.
+다운로드한 platform/storage/image artifact의 result.json 9개 모두 PASS/0이다.
+Actions가 d56f673으로 이미지 digest를 기록했고 실제 Pod imageID가 일치한다.
+Argo Synced, DB/API/UI 각Ready1/1, PVC Bound. 기존 Ingress status 문제로 aggregate health는 Progressing이다.
+Ingress에서 Device 관리·CSRF·session fence·관측 정밀도·해제 및 실제 Node10개 UID/metadata 대조를 통과했다.
+전용 ServiceAccount/CA/HTTPS의 실제 cluster 내 노드 읽기 경로도 확인했다.
+근거: m2-kubernetes-http 20261002T051528Z-b69dcf3d,
+m2-kubernetes-nodes 20261002T051546Z-5657d8c7, m2-gitops-state 20261002T051753Z-35363223.
