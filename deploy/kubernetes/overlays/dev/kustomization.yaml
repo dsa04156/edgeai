@@ -6,8 +6,8 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:a09959fe41eed8140ffd93e86eeb3052274887fa66a40b0828d594ddd1492595
+    digest: sha256:b1ccdfb0543e851841f4581560e22006d10571f9ce39aa7687d5e9877a392f96
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:1cea372a7ac17cdf7504869a7f37489c6de0aa60fc5e706730af3d87908a2775
+    digest: sha256:a4a5c6fd1f99703db0fa550ff95cfdae722c8489857d6a38499556804fda355a
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:61a0ec2b9271a092b5f260cbcb76ee099779bf90ef5f0d50e5de570b22eb33a2
+    digest: sha256:acf8ec784292bb31dd9c1d014d352c430d816158e0c0f318f687fe1e47278785

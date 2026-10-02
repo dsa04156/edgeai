@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "e777233d31d9e9cdea427c160de21f30c00d3a96",
-  "apiDigest": "sha256:a09959fe41eed8140ffd93e86eeb3052274887fa66a40b0828d594ddd1492595",
-  "dashboardDigest": "sha256:1cea372a7ac17cdf7504869a7f37489c6de0aa60fc5e706730af3d87908a2775",
-  "runnerDigest": "sha256:9b4bdf2b1aec8d37c4064433b9c625f2846a2c3dd4cb3c47b2cbd752fb121064",
-  "minioDigest": "sha256:61a0ec2b9271a092b5f260cbcb76ee099779bf90ef5f0d50e5de570b22eb33a2",
+  "sourceRevision": "f886dd77b641a09b49f4ebbe7099f05ef10ed228",
+  "apiDigest": "sha256:b1ccdfb0543e851841f4581560e22006d10571f9ce39aa7687d5e9877a392f96",
+  "dashboardDigest": "sha256:a4a5c6fd1f99703db0fa550ff95cfdae722c8489857d6a38499556804fda355a",
+  "runnerDigest": "sha256:661b57d223593c806443b57a2b8a1e3a0216532a31bd3c221968571f02d44091",
+  "minioDigest": "sha256:acf8ec784292bb31dd9c1d014d352c430d816158e0c0f318f687fe1e47278785",
   "runtimeImagePlatforms": [
     "linux/amd64"
   ]
