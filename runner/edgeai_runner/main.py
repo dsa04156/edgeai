@@ -124,7 +124,10 @@ class Runner:
         body = json_encode(payload)
         if len(body) > MAX_JSON:
             raise RunnerError("INVALID_RESPONSE")
-        for attempt in range(3):
+        # Initial Pod status/Job observation may lag the already running process.
+        # Claim may retry within its existing 30-second deadline; fenced identity never retries.
+        retries = 16 if operation == "claim" else 3
+        for attempt in range(retries):
             try:
                 # Kubelet rotates this Pod-bound credential; reread it for each control-plane request.
                 pod_token = self.pod_token_file.read_text().strip()
@@ -146,8 +149,8 @@ class Runner:
                     raise RunnerError("CONTROL_PLANE_REJECTED") from None
             except (urllib.error.URLError, TimeoutError, OSError):
                 pass
-            if attempt < 2:
-                cancelled.wait(min(self.timeout(), 0.25 * (2 ** attempt)))
+            if attempt < retries - 1:
+                cancelled.wait(min(self.timeout(), 2, 0.25 * (2 ** attempt)))
         raise RunnerError("CONTROL_PLANE_UNAVAILABLE")
 
     def download(self, assignment, directory):

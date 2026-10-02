@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Fixture:
-    def __init__(self, command, parameters=None, inputs=None, timeout=10, retry_commit=False, fenced=False):
+    def __init__(self, command, parameters=None, inputs=None, timeout=10, retry_commit=False, fenced=False, pending_claims=0):
         self.image = os.environ.get("EDGEAI_RUNNER_IMAGE")
         if self.image:
             command = ["python3" if value == sys.executable else value.replace(str(ROOT / "runner/examples"),"/opt/edgeai/examples") for value in command]
@@ -27,6 +27,7 @@ class Fixture:
         self.pod_token = "pod-test-only-" + uuid.uuid4().hex
         self.outputs, self.manifests, self.commits, self.failures = {}, {}, [], []
         self.commit_calls = 0
+        self.claim_calls = 0
         self.assignment = {"runId": self.run, "taskId": self.task, "attemptId": self.attempt, "epoch": 1,
             "command": command, "args": [], "parameters": parameters or {}, "inputs": inputs or {},
             "outputs": {"output": {"mediaType": "application/json", "maxBytes": 1048576}}, "timeoutSeconds": timeout}
@@ -50,6 +51,9 @@ class Fixture:
                     return self.reply(409,{})
                 operation = self.path.rsplit("/",1)[1]
                 if operation == "claim":
+                    fixture.claim_calls += 1
+                    if fixture.claim_calls <= pending_claims:
+                        return self.reply(503,{})
                     return self.reply(409 if fenced else 200, fixture.assignment)
                 if operation == "uploads":
                     grants = []
@@ -158,6 +162,15 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(0,f.finish(f.start())[0])
             self.assertIn(b"9007199254740993",f.outputs["output"])
             self.assertIn(b"0.12345678901234567890123456789",f.outputs["output"])
+
+    def test_startup_status_lag_retries_claim_without_restarting_workload(self):
+        with Fixture([sys.executable,str(ROOT / "runner/examples/linear.py")],
+                {"features":[2,3],"weights":[4,-1],"bias":-2},pending_claims=4) as f:
+            code,out = f.finish(f.start())
+            self.assertEqual(0,code)
+            self.assertEqual(5,f.claim_calls)
+            self.assertEqual(1,out.count("RUNNER_WORKLOAD_START"))
+            self.assertEqual(1,len(f.commits))
 
     def test_missing_output_and_symlink_cannot_be_committed(self):
         for body in ["pass", "import os; os.symlink('/etc/hostname',os.path.join(os.environ['EDGEAI_OUTPUT_DIR'],'output'))"]:

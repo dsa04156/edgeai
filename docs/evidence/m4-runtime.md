@@ -90,9 +90,9 @@ PostgreSQL 단독 시험의 Pod 신원과 artifact receipt는 fixture다. 별도
 
 ## 남은 M4 작업과 제한
 
-1. 검증된 Runner·MinIO 이미지 배포, 영속 signing key·저장소 bucket 설정과 실행 활성화.
-2. 실제 Runner의 BATCH 입력 전달과 취소·리소스 종료·누락/늦은 결과에 대한 종단 검증.
-3. Result 공개 API·UI·Swagger와 실제 kind의 scheduler→Runner→MinIO→Result 수용시험.
+1. 실제 Runner의 BATCH 입력 전달과 취소·리소스 종료·누락/늦은 결과에 대한 종단 검증.
+2. 실제 kind의 scheduler→Runner→MinIO→Result 및 재시작/producer fault 수용시험.
+3. 실제 Runner가 만든 Result의 PC/모바일 화면 검증.
 
 presigned PUT의 checksum 헤더는 서명하지만 SDK는 Content-Length/Content-Type을 서명에서
 제외한다. 현재 내용·크기·형식 검증은 commit 전에 수행하며, 업로드 전 정확한 크기 제한을
@@ -100,7 +100,7 @@ presigned PUT의 checksum 헤더는 서명하지만 SDK는 Content-Length/Conten
 
 CI에 실제 MinIO artifact 검증·Runner 컨테이너 job·PostgreSQL과 S3를 함께 사용하는 결과 검증을 추가했다.
 로컬 Docker 권한 제한은 유지한다. V5 서비스 코드의 CI·새 배포 상태 확인은 아래 기록을 따른다.
-`test-kind.sh`와 `demo-workflow.sh`는 전체 실행 경로가 없어 계속 BLOCKED다.
+`test-kind.sh`와 `demo-workflow.sh`는 아래 최신 기록의 실제 시험 구현으로 교체했으며 성공은 아직 검증 전이다.
 전체 플랫폼의 LOCAL_VERIFIED/FULL_ACCEPTANCE를 주장하지 않는다.
 
 ## V5 코드의 CI·배포 확인
@@ -176,3 +176,30 @@ PC/모바일 결과 UI screenshot을 직접 확인했다. 결과 표시 UI fixtu
 검증한 image digest와 전용5Gi PVC로 실제 클러스터에 초기 배포했다. API key mount/스토리지 주소와
 runtime 활성화 GitOps 설정은 server dry-run을 통과했으며 실제 활성화와 full Runner 수용시험은 다음 검증이다.
 `smoke-runtime.py`와 실제 버전/내용 검증 스크립트를 준비했다. 아직 실행 성공 증거는 없다.
+
+## Result 배포·실제 Runner 첫 실행과 kind 게이트
+
+`2cbaf36`의 [CI36983413818](https://github.com/dsa04156/edgeai/actions/runs/36983413818)은
+5 jobs success, 다운로드한 검증 결과JSON13개 PASS/0이다. pin `eb33bfd`와 실제 API/UI/MinIO
+Pod imageID가 일치하고 Ready였다. 소유 namespace/RBAC, 영속 키, private/versioned bucket과
+runtime=true 배포 설정이 반영됐다. M4의 완전한 실행 수용시험을 통과했다는 뜻은 아니다.
+
+`20261002T082855Z-4eb06c3e`: 실제 AUTO Run의 root는 SUCCEEDED·Result 확정, child는
+producer claim 없이 JOB_FAILED였다. `20261002T082942Z-d3237537` 재실행에서는 root가
+`RUNNER_FAILED FENCED`, producer claim 없음·JOB_FAILED였다. 두 실패 모두 해당 리소스는 정리됐다.
+삭제 전 고정 Runner 이벤트만 읽도록 observer를 추가했으며 토큰/서명URL/작업 payload는 수집하지 않는다.
+
+Pod 프로세스가 먼저 시작하고 kubelet의 Pending→Running 반영이 늦으면 기존 gateway가 401을
+반환하고 Runner가 영구 fence로 종료하는 경로를 코드와 HTTP fixture에서 확인했다. Pending 신원은
+503으로 재시도하고 Running에서만 기존 Job/Pod/Node 검사를 통과시킨다. 잘못된 token·삭제 중·종료된
+Pod는 계속 거절한다. claim만 기존30초 deadline 안에서 backoff 재시도하며 다른 요청의 횟수는 유지한다.
+실제 두 실패의 원인 여부와 수정 효과는 새 이미지의 클러스터 재검증으로 확인해야 한다.
+
+`20261002T083045Z-97e992b4`: Java 단위38개 PASS/0, Pending→Running 재시도와 종료 Pod 거절 포함.
+`20261002T083046Z-83cf4467`: Python Runner8개 PASS/0, 연속4회503 후 실제 workload 단1회 실행·commit 포함.
+`20261002T082908Z-3ea0cda4`: 로컬 Docker 권한 제한을 재확인, kind preflight BLOCKED/2.
+
+kind용 임시 kubeconfig·별도 Secret 복구 경로·3노드·실제 이미지/S3/DB와 정리 스크립트를 구현했다.
+CI는 새 kind 게이트 통과 후에만 API/화면 이미지를 발행한다. API 재시작·같은Job/Attempt 보존,
+wrong version/size/hash·동시 commit·다른 Pod 신원·취소 뒤 늦은 commit 시험도 추가했다.
+이 변경의 새 CI/kind 및 실제 배포 재검증은 아직 수행 전이다.

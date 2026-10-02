@@ -110,8 +110,13 @@ public final class KubernetesRuntimeGateway implements RuntimeGateway {
         UUID podUid=uid(single(extras.path("authentication.kubernetes.io/pod-uid")));RuntimeNames.dns(name,253);
         var pod=read(pods+"/"+name,true);if(pod==null)throw new RuntimeGatewayException(AUTH_REJECTED);
         if(!owned(pod,r,name).equals(podUid) || pod.path("metadata").has("deletionTimestamp") ||
-                !pod.path("spec").path("serviceAccountName").asText().equals(serviceAccount) || !pod.path("status").path("phase").asText().equals("Running"))
+                !pod.path("spec").path("serviceAccountName").asText().equals(serviceAccount))
             throw new RuntimeGatewayException(AUTH_REJECTED);
+        // The process can start before kubelet publishes Running. Keep auth closed, but
+        // distinguish that observation lag from revoked/foreign credentials so claim can retry.
+        String phase=pod.path("status").path("phase").asText();
+        if(phase.equals("Pending"))throw new RuntimeGatewayException(UNAVAILABLE);
+        if(!phase.equals("Running"))throw new RuntimeGatewayException(AUTH_REJECTED);
         var job=read(jobs+"/"+r.jobName(),true);if(job==null)throw new RuntimeGatewayException(AUTH_REJECTED);jobIdentity(job,r);
         UUID jobUid=uid(job.path("metadata").path("uid").asText());boolean owner=false;
         for(var reference:pod.path("metadata").path("ownerReferences"))

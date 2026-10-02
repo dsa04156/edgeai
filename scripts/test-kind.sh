@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-printf "%s\n" "BLOCKED: M4 scheduler→Job→Result integration is not implemented." >&2
-exit 2
+source "$(dirname "$0")/lib.sh"
+require_docker
+exec python3 scripts/test-kind.py

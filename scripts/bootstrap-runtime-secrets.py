@@ -10,6 +10,7 @@ import subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--context', required=True)
+parser.add_argument('--state-dir', default='.tools/kubernetes', help='Private recovery directory; use a separate directory for each cluster')
 args = parser.parse_args()
 kubectl = ['kubectl', '--context', args.context, '--request-timeout=15s']
 labels = {'app.kubernetes.io/part-of':'edgeai','app.kubernetes.io/managed-by':'edgeai-bootstrap'}
@@ -28,7 +29,9 @@ def owned(value):
 namespace = call(['get','namespace','edgeai','-o','json'])
 if not owned(namespace) or 'deletionTimestamp' in namespace['metadata']:
     raise SystemExit('Refusing an unowned or terminating control plane namespace.')
-directory = Path('.tools/kubernetes')
+directory = Path(args.state_dir)
+if directory.is_symlink():
+    raise SystemExit('Private recovery directory cannot be a symlink.')
 directory.mkdir(parents=True, exist_ok=True)
 
 def private_file(path, content):

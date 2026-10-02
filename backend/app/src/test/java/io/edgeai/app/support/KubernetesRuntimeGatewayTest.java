@@ -114,6 +114,18 @@ class KubernetesRuntimeGatewayTest {
         assertThat(gateway.stop(runtime)).isFalse();assertThat(secret).isNull();
         assertThat(gateway.stop(runtime)).isTrue();assertThat(deletes).isEqualTo(2);
     }
+    @Test void kubeletStartupObservationLagIsRetryableButTerminatedPodsStayFenced() {
+        gateway.ensureJob(runtime,compiled,"fixture-claim");pod();
+        pod.put("status",Map.of("phase","Pending"));
+        reason(RuntimeGatewayException.Reason.UNAVAILABLE,()->gateway.authenticatePod(runtime,"pod-bound-fixture"));
+        reason(RuntimeGatewayException.Reason.AUTH_REJECTED,()->gateway.authenticatePod(runtime,"bad-token"));
+        pod.put("status",Map.of("phase","Running"));
+        assertThat(gateway.authenticatePod(runtime,"pod-bound-fixture").podUid()).isEqualTo(podUid);
+        for(String phase:List.of("Succeeded","Failed","Unknown")) {
+            pod.put("status",Map.of("phase",phase));
+            reason(RuntimeGatewayException.Reason.AUTH_REJECTED,()->gateway.authenticatePod(runtime,"pod-bound-fixture"));
+        }
+    }
     @Test void foreignNamespaceAndForeignJobAreNeverMutated() {
         ownedNamespace=false;reason(RuntimeGatewayException.Reason.OWNERSHIP_CONFLICT,()->gateway.ensureJob(runtime,compiled,"fixture-claim"));assertThat(jobPosts).isZero();
         ownedNamespace=true;gateway.ensureJob(runtime,compiled,"fixture-claim");metadata(job).put("labels",Map.of("app.kubernetes.io/part-of","other"));

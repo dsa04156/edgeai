@@ -1,6 +1,6 @@
 # EdgeAI Kubernetes 배포
 
-`base`는 API·Dashboard·PostgreSQL, `overlays/dev`는 namespace·Ingress·이미지 digest를 정의한다.
+`base`는 API·Dashboard·PostgreSQL·MinIO, `overlays/dev`는 namespace·Ingress·이미지 digest를 정의한다.
 ArgoCD는 `overlays/dev`를 감시한다. 초기 연결·검증·롤백은 [CI/CD 문서](../../docs/cicd.md)를 따른다.
 
 ```bash
@@ -17,7 +17,7 @@ Application은 Actions가 최초 이미지를 발행하고 `bootstrap` 태그를
 
 현재 개발 배포는 amd64 서버 노드에 단일 API·Dashboard·PostgreSQL을 배치한다.
 PVC 5 GiB는 기본 StorageClass를 사용한다. 자동 prune과 cascade deletion은 사용하지 않는다.
-MinIO·MQTT는 현재 M3 관리/실행 요청 저장 경로에 필요하지 않아 이 배포에 포함하지 않는다.
+MinIO는 M4 결과 파일 저장에 사용한다. MQTT/STREAM 데이터 경로는 후속 M7 범위다.
 
 M2 API는 전용 `edgeai-control-plane` ServiceAccount와 마운트된 CA/토큰으로
 Kubernetes Node API를 읽는다. bootstrap은 소유 label을 확인하고 `edgeai-node-reader`
@@ -51,4 +51,6 @@ MinIO는 전용5Gi PVC를 사용하며 외부 Ingress에 노출하지 않는다.
 전체 Runner 시험은 `scripts/smoke-runtime.py --context <context>`이며 `EDGEAI_SMOKE_API_URL`,
 API 인증 환경 변수와 `EDGEAI_STORAGE_URL`/저장소 인증이 필요하다. API는 공개 Result 조회를 지원해야 한다.
 AUTO/NODE BATCH·실제 파일 체크섬/계산값·실행 중 취소·불가능한 affinity를 시험하고 해당 Run 리소스를 정리한다.
-이 명령은 현재 준비 단계이며 실제 실행 결과는 evidence에 기록한다. 실제 kind 게이트의 대체는 아니다.
+같은 시험은 `bash scripts/demo-workflow.sh <context>`로 실행할 수 있다. 실제 실행 결과는 evidence에
+기록한다. 실제 kind 게이트의 대체는 아니다. bootstrap의 `--state-dir`로 클러스터별 비밀정보 복구
+디렉터리를 분리하며, 기존 배포의 복구 파일을 다른 클러스터에 재사용하지 않는다.
