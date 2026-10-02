@@ -77,6 +77,8 @@ poll d89d2bb CI37040484693 5jobs/JSON15개·실제Runner27·기존kind22Run PASS
 실제 Kubernetes VD 수명3개(AUTO+API Pod 재시작, NODE, Unschedulable 시작 실패)는
 20261002T182533Z-cfdb17d2 PASS/0. 같은VD의 교체·이전poll차단·drain·자원0개를 확인했다.
 docs/evidence/m6-vd-kubernetes.md. 새 kind CI·VD Task 연결·새 코드 CI/배포는 별도이며 미완료다.
+후속00692fc CI37048443291은 신규 실제VD3개·기존kind/S3결과20·5jobs/결과JSON15 PASS.
+d96ca85 pin 실제imageID·Ready/PVCBound/ArgoSynced190322Z-175c5b86 PASS. VD Task 연결은 남는다.
 공개 실행8981a94 CI37044509505 5jobs/결과JSON15 PASS. pin f6a996e 실제imageID·Ready/PVCBound/ArgoSynced
 183056Z-6979449b PASS. 신규 VD kind 게이트와 Task 연결 완료를 뜻하지 않는다.
 ADR0019/V16 VD Task 영속 기반: PostgreSQL124(신규8)·최종 단위82·계약4/MVC25·실API/DB PC모바일10과

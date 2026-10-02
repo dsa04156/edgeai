@@ -138,7 +138,7 @@ ADR0018은 공개 provision/replace/drain·Operation/실행 상태 API와 UI를 
 동시 요청·멱등성·준비/종료 이력과 UI 상태/재전송을 검증한다. 상세는 docs/evidence/m6-vd-public-execution.md다.
 실제 Kubernetes Pod→supervisor→poll→Ready/교체/drain과 API Pod 재시작·시작 실패 정리는
 20261002T182533Z-cfdb17d2에서 통과했다. docs/evidence/m6-vd-kubernetes.md에 범위·실패 근거를 기록한다.
-새 demo-vd/kind 검사를 연결했으며 새 kind CI는 아직 미검증이다.
+새 demo-vd/kind 검사를 연결했고 CI37048443291의 실제 VD3개·기존 실행/S3 경로와 배포 검증도 통과했다.
 다음은 VD Run 배정·Task claim/Result·취소/실패와 전체 M6 수용이다.
 ADR0019/V16의 VD 대상·작업 배정·공급자/결과 FK와 domain/repository를 추가하고
 실제 PostgreSQL의 용량·이력·신원·잠금 순서를 검증했다. 상세는 docs/evidence/m6-vd-task-persistence.md다.

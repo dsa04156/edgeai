@@ -7,7 +7,7 @@
 
 재현: `bash scripts/test-vd-kubernetes.sh <explicit-context>`.
 `scripts/vd_acceptance.py`를 실제 VD가 활성화된 API에서 실행하는 `demo-vd.sh`와
-격리 kind 검사에도 연결했다. 새 kind 연결의 CI 성공은 아직 확인하지 않았다.
+격리 kind 검사에도 연결했다. 신규 kind CI 결과는 아래에 기록한다.
 
 ## 실제 관측
 
@@ -44,6 +44,21 @@ kind 호출의 전용 `KUBECONFIG`를 두 Kubernetes subprocess 경계에 명시
 
 ## 남은 범위
 
-VD 실행은 기존 배포에서 기본 비활성이다. 새 kind 게이트의 CI·이미지 검증,
+VD 실행은 기존 배포에서 기본 비활성이다.
 VD Run의 Task 배정/claim/Result·취소/실패 연결은 남는다. M5의 상태형 복원·실제 외부 계약 수용,
 M7–M10도 미완료다. 이 결과로 M6 전체 완료를 판정하지 않는다.
+
+## 실제 kind CI와 배포
+
+`00692fc7f8c8bc334bad4a6ef1e8692bbae0246b`의 CI `37048443291`은
+scaffold/storage/runner/images/gitops 5개 작업이 모두 성공했다. 검증 artifact의 결과 JSON15개도
+모두 PASS/0이다. 기존 실제 실행 경로·고정 S3 결과20개와 추가 VD 수명3개를 함께 통과했다.
+`.tools/kind-vd.json`의 scope는 `real-kubernetes-vd-idle-lifecycle`, taskExecution은 false다.
+AUTO의 실제 API Pod 교체는12.099초였고 두 정상 경로에서 각각2세대·이전poll차단·자원0개,
+Unschedulable 실패 경로에서1세대·자원0개를 확인했다. 종료 시 API/UI/DB/MinIO/참조 provider가
+모두 Ready였으며 생성한 kind 클러스터만 삭제했다. 이전 CI의 Dashboard Ready 진단 제한은
+각 이전 증거에 남기며 이번 최종 관측과 구분한다.
+
+GitOps pin `d96ca85`와 실제 API/Dashboard/MinIO imageID 일치·Ready·PVC Bound·Argo Synced는
+`20261002T190322Z-175c5b86` PASS/0이다. 기존 공유 Ingress status에 따른 aggregate health
+Progressing은 유지된다. V16 Task 영속 기반은 이 CI 소스 이후 변경이며 별도 검증 대상이다.
