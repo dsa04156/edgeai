@@ -10,7 +10,7 @@
 위 항목과 DB 장애·복구 및 실제 MinIO S3 검증을 완료했다. 코드 b469f62의 CI 36834353000은 두 job 모두 success다.
 요구사항별 증거는 `docs/evidence/m0-completion-audit.md`에서 확인한다.
 
-## M1 Profile
+## 완료: M1 Profile
 
 계약·Flyway V2·순수 도메인/저장 adapter·HTTP·Dashboard 수직 슬라이스를 구현했다.
 구체적 결정은 ADR 0002에 기록한다. 검증 결과는 PROGRESS와 M1 evidence를 따른다.

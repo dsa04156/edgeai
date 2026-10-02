@@ -79,3 +79,7 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
 
 [상세 결과](m1-profile.md): Profile 등록·목록·버전 조회, digest·동시 등록·불변성,
 실제 PostgreSQL/API/desktop·mobile UI 검증. M0 완료 기록은 이전 상태의 역사적 증거다.
+
+M1 최종 코드 20a8d6c의 [CI 36950519908](https://github.com/dsa04156/edgeai/actions/runs/36950519908):
+scaffold/storage success, artifact result.json 8개 모두 PASS/0. 최초 fresh DB Flyway
+history schema 문제는 별도 새 DB에서 재현한 뒤 명시적 schema 설정으로 수정·검증했다.

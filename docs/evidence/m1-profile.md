@@ -55,4 +55,29 @@ public에 있으므로 Flyway가 비어 있지 않은 edgeai schema를 거절했
 기존 migration 내용, baselineOnMigrate, clean 설정은 변경하지 않았다.
 
 수정 후 완전히 새 DB 통합 시험 `20261002T012015Z-0e19456e`는 PASS/0이다.
-기존 로컬 DB는 별도 통합 시험 결과로 확인한다.
+기존 로컬 DB `20261002T012050Z-53390dc0`도 PASS/0이다.
+수정된 앱의 실제 브라우저와 DB 장애·복구 `20261002T012120Z-82ed2f8c`도 PASS/0이다.
+
+
+## 최종 CI 확인
+
+코드 **20a8d6cadb6b2664697e5a513c3d69261b1e58a3**의
+[GitHub Actions 36950519908](https://github.com/dsa04156/edgeai/actions/runs/36950519908)은
+scaffold와 storage 두 job 모두 success다. 새 PostgreSQL 17 환경에서 첫 초기화와
+다중 앱 context, API/UI 실제 연결, DB 중지503 및 재시작 복구를 모두 통과했다.
+다운로드한 artifact의 result.json 8개를 직접 확인했으며 전부 PASS/exit 0이다.
+
+| CI 시험 | testRunId | 결과 |
+|---|---|---|
+| infra | 20261002T012153Z-d805da96 | PASS / 0 |
+| unit | 20261002T012212Z-74ad176d | PASS / 0 |
+| contract | 20261002T012257Z-7bda0587 | PASS / 0 |
+| UI | 20261002T012306Z-51b8701a | PASS / 0 |
+| PostgreSQL | 20261002T012319Z-c4090bd8 | PASS / 0 |
+| Profile UI / health / outage / recovery | 20261002T012331Z-70a3a657 | PASS / 0 |
+| MinIO build/start | 20261002T012136Z-d07ed61a | PASS / 0 |
+| MinIO object roundtrip | 20261002T012331Z-f466a218 | PASS / 0 |
+
+후속 완료 기록 커밋은 문서만 갱신하며 위 코드의 검증 근거를 재사용한다.
+검증용 API/UI/PostgreSQL 프로세스는 종료했다. 개발 데이터와 재현에 사용한 별도 시험 DB는
+.tools/pgdata에 보존하며, 실패 CI/시험 로그도 삭제하지 않았다.

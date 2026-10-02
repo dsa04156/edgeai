@@ -1,9 +1,10 @@
 # 진행 상태
 
 [STATUS]
-M1 Profile 구현 및 로컬 검증 완료. 전체 플랫폼은 PARTIAL.
+M1 Profile 구현·로컬·CI 검증 완료. 전체 플랫폼은 PARTIAL.
 공개 저장소: https://github.com/dsa04156/edgeai
-첫 CI의 fresh DB Flyway history 위치 문제를 재현·수정했다. 수정본 CI를 확인한다.
+코드 20a8d6c의 CI 36950519908: scaffold/storage 모두 success, 결과 JSON 8개 PASS/0.
+https://github.com/dsa04156/edgeai/actions/runs/36950519908
 
 [IMPLEMENTED]
 DEVICE/SERVICE/VD 등록·목록·버전 조회, OpenAPI 생성 타입, Flyway V2,
@@ -17,6 +18,7 @@ unit, contract, 실제 PostgreSQL integration, UI lint/typecheck/build/offline b
 동시 8개 동일 요청은 생성 1개·행 1개, 다른 내용 경쟁은 승자 1개·충돌 1개.
 같은 키의 세 종류 분리, DB UPDATE/DELETE/TRUNCATE 차단, 정밀한 숫자 보존을 확인했다.
 DB 중지/재시작 시 기존 API/UI 프로세스의 readiness 장애 및 복구를 확인했다.
+CI의 새로운 PostgreSQL 17에서도 동일 검증을 통과했다. Flyway history는 edgeai로 고정한다.
 
 [EVIDENCE]
 docs/evidence/m1-profile.md와 docs/evidence/runs/<testRunId>.
@@ -34,3 +36,5 @@ M2 Device/Node/Observation: ProfileVersion 참조·장치/Node 분리·세션/�
 Profile UI: http://127.0.0.1:13080/profiles
 재현: bash scripts/test-unit.sh; bash scripts/test-contract.sh; bash scripts/test-integration.sh;
 bash scripts/test-ui.sh; bash scripts/test-profiles-stack.sh local (Compose는 compose).
+
+검증용 API/UI/PostgreSQL 프로세스는 종료하고 개발 DB 및 원시 evidence는 보존한다.
