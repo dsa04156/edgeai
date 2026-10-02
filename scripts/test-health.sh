@@ -26,6 +26,9 @@ if expected=='DOWN':
         status,body=get(api+'/api/v1/'+resource,{'Authorization':'Basic '+credentials})
         assert status==503 and body['code']=='DEVICE_STORE_UNAVAILABLE'
     print('PASS: Device and Node reads return a sanitized 503 during a real database outage')
+    status,body=get(api+'/api/v1/virtual-devices',{'Authorization':'Basic '+credentials})
+    assert status==503 and body['code']=='VD_STORE_UNAVAILABLE'
+    print('PASS: VD reads return a sanitized 503 during a real database outage')
     for resource in ['workflows', 'workflow-runs']:
         status,body=get(api+'/api/v1/'+resource,{'Authorization':'Basic '+credentials})
         assert status==503 and body['code']=='WORKFLOW_STORE_UNAVAILABLE'
@@ -39,6 +42,8 @@ assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
 assert get(ui+'/api/health')==(200,{'status':'UP'})
 assert get(api+'/api/v1/platform')==(401,None)
 _,body=get(api+'/api/v1/platform',{'Authorization':'Basic '+credentials})
-assert body=={'name':'edgeai','version':'0.1.0','milestone':'M4','capabilities':['profiles','devices','nodes','workflows','runs','tasks','results']}
+assert body=={'name':'edgeai','version':'0.1.0','milestone':'M4','capabilities':['profiles','devices','nodes','workflows','runs','tasks','results','virtual-devices']}
+status,body=get(api+'/api/v1/virtual-devices?limit=1',{'Authorization':'Basic '+credentials})
+assert status==200 and isinstance(body['items'],list)
 print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
 PY

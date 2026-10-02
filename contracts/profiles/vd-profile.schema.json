@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EdgeAI VD Profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "type",
+    "serviceProfileVersionId",
+    "sources",
+    "state",
+    "runtime"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "edgeai.vd/v1"
+    },
+    "type": {
+      "enum": [
+        "sensorMirror",
+        "processing",
+        "emulation"
+      ]
+    },
+    "serviceProfileVersionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sources": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "maxLength": 100,
+        "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deviceProfileVersionId",
+          "required",
+          "sourceModes"
+        ],
+        "properties": {
+          "deviceProfileVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "sourceModes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "LIVE",
+                "REPLAY",
+                "SYNTHETIC"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "const": "STATELESS"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxConcurrentTasks",
+        "startupTimeoutSeconds",
+        "drainTimeoutSeconds"
+      ],
+      "properties": {
+        "maxConcurrentTasks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "startupTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "drainTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        }
+      }
+    }
+  },
+  "description": "sensorMirror/processing은 required=true인 source를 하나 이상 선언해야 합니다. 등록은 실제 runtime Ready나 데이터 전송 검증이 아닙니다.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "sensorMirror",
+              "processing"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "minProperties": 1,
+            "not": {
+              "additionalProperties": {
+                "properties": {
+                  "required": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

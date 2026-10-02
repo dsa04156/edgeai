@@ -463,7 +463,7 @@ paths:
       - Device
       operationId: releaseDevice
       summary: 장치 해제 및 세션 종료
-      description: 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
+      description: 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 활성 VD 원본으로 사용 중이면 DEVICE_IN_USE(409)이며 먼저 VD 연결을 교체하거나 해제해야 합니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
       responses:
         '200':
           description: 요청 성공. 재전송은 기존 객체를 반환합니다.
@@ -1515,6 +1515,123 @@ paths:
         '401': {description: Basic 인증 필요}
         '404': {description: Operation이 없습니다.}
         '503': {description: 저장소 연결 실패}
+  /api/v1/virtual-devices:
+    post:
+      tags: [VD]
+      operationId: createVirtualDevice
+      summary: VD 식별자와 원본 장치 연결 등록
+      description: >-
+        edgeai.vd/v1 규격의 VD Profile과 실제 DEVICE/SERVICE 버전을 검증하고 원본 연결을 원자적으로 저장합니다.
+        같은 key와 생성 입력은 기존 VD를 반환하고 다른 입력은409입니다. 해제 뒤 재전송도 기존 VD이며 재활성화하지 않습니다.
+        현재 REGISTERED는 논리 등록만 완료된 상태입니다. 실제 Runtime 생성·Ready·VD 경유 Task 실행은 후속 연결 범위입니다.
+      security: [{localBasic: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VirtualDeviceCreate'}
+      responses:
+        '201':
+          description: 논리 VD와 원본 연결 생성. 실제 Runtime 준비 완료를 뜻하지 않습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '200':
+          description: 같은 생성 입력의 기존 VD
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+    get:
+      tags: [VD]
+      operationId: listVirtualDevices
+      summary: 등록·해제된 VD 목록 조회
+      description: key 순서로 논리 VD를 조회합니다. REGISTERED를 Ready로 해석하지 마세요. 해제 이력도 보존합니다.
+      parameters:
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}, description: 한 페이지 수}
+      - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}, description: 건너뛸 수}
+      responses:
+        '200':
+          description: VD 목록과 다음 offset
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextOffset]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/VirtualDevice'}}
+                  nextOffset: {type: [integer, 'null']}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}:
+    parameters:
+    - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}, description: 원본·실행 위치 변경에도 유지할 VD UUID}
+    get:
+      tags: [VD]
+      operationId: getVirtualDevice
+      summary: VD 설정과 활성·과거 원본 연결 조회
+      description: 최신 revision, 불변 Profile 참조와 source 이력을 조회합니다. closedAt이 null인 연결만 현재 원본입니다. 이력은 최신100개이며 더 있으면 sourceHistoryTruncated=true입니다.
+      responses:
+        '200':
+          description: VD 상세
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDeviceDetail'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+    patch:
+      tags: [VD]
+      operationId: updateVirtualDevice
+      summary: revision을 확인하여 VD 이름·원본·배치 의도 수정
+      description: >-
+        이름·sources 전체 집합·placement를 함께 보내세요. Profile 참조와 vdId는 유지합니다.
+        변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다.
+        오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다.
+      security: [{localBasic: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VirtualDeviceUpdate'}
+      responses:
+        '200':
+          description: 최신 VD 설정. 같은 내용이면 revision도 유지합니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+    delete:
+      tags: [VD]
+      operationId: releaseVirtualDevice
+      summary: VD 논리 해제와 원본 연결 종료
+      description: 현재 등록만 된 VD를 RELEASED로 표시하고 활성 source를 닫습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 실제 Runtime drain은 후속 연결 범위입니다.
+      security: [{localBasic: [], csrfToken: []}]
+      responses:
+        '200':
+          description: 해제된 VD
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
 components:
   securitySchemes:
     csrfToken:
@@ -1539,6 +1656,11 @@ components:
         - VD
       description: 'DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다.'
   responses:
+    VirtualDeviceError:
+      description: 잘못된 입력400·없는 VD/Profile/Device/Node404·중복 키/revision/원본 충돌409·64KiB 초과413·DB 장애503입니다. code와 message를 확인하세요.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
     Invalid:
       description: 종류·키·버전·페이지·JSON 형식이 잘못되었습니다.
       content:
@@ -1687,6 +1809,13 @@ components:
           - OFFLOAD_RECOVERY_UNSUPPORTED
           - OFFLOAD_TARGET_INVALID
           - OPERATION_NOT_FOUND
+          - INVALID_VIRTUAL_DEVICE
+          - VD_NOT_FOUND
+          - VD_CONFLICT
+          - VD_RELEASED
+          - VD_SOURCE_INCOMPATIBLE
+          - VD_STORE_UNAVAILABLE
+          - DEVICE_IN_USE
         message:
           type: string
     PlatformInfo:
@@ -1705,6 +1834,7 @@ components:
         milestone:
           type: string
           const: M4
+          description: 전체 수용 검증을 완료한 최종 단계. 진행 중 단계의 일부 기능은 capabilities에 포함될 수 있습니다.
         capabilities:
           type: array
           items:
@@ -1721,6 +1851,7 @@ components:
         - runs
         - tasks
         - results
+        - virtual-devices
     Health:
       type: object
       required:
@@ -2738,6 +2869,88 @@ components:
           type:
           - integer
           - 'null'
+    VirtualDeviceSources:
+      type: array
+      maxItems: 16
+      description: Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다.
+      items:
+        type: object
+        additionalProperties: false
+        required: [sourceKey, deviceId]
+        properties:
+          sourceKey: {$ref: '#/components/schemas/ProfileKey'}
+          deviceId: {type: string, format: uuid}
+    VirtualDevicePlacement:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required: [mode]
+        properties:
+          mode: {const: AUTO}
+      - type: object
+        additionalProperties: false
+        required: [mode, nodeId]
+        properties:
+          mode: {const: NODE}
+          nodeId: {type: string, format: uuid}
+      description: 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다.
+    VirtualDeviceCreate:
+      type: object
+      additionalProperties: false
+      required: [key, displayName, profileVersionId, sources, placement]
+      properties:
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        profileVersionId: {type: string, format: uuid, description: edgeai.vd/v1 규격의 발행된 VD Profile UUID}
+        sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
+        placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
+    VirtualDeviceUpdate:
+      type: object
+      additionalProperties: false
+      required: [revision, displayName, sources, placement]
+      properties:
+        revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
+        placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
+    VirtualDevice:
+      type: object
+      required: [id, key, displayName, profileVersionId, serviceProfileVersionId, state, revision, placement, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        displayName: {type: string}
+        profileVersionId: {type: string, format: uuid}
+        serviceProfileVersionId: {type: string, format: uuid}
+        state: {type: string, enum: [REGISTERED, RELEASED], description: 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.}
+        revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    VDSourceBinding:
+      type: object
+      required: [id, vdId, sourceKey, deviceId, deviceProfileVersionId, sourceMode, openedRevision, closedRevision, openedAt, closedAt]
+      properties:
+        id: {type: string, format: uuid}
+        vdId: {type: string, format: uuid}
+        sourceKey: {type: string}
+        deviceId: {type: string, format: uuid}
+        deviceProfileVersionId: {type: string, format: uuid}
+        sourceMode: {type: string, enum: [LIVE, REPLAY, SYNTHETIC]}
+        openedRevision: {type: integer, format: int64}
+        closedRevision: {type: [integer, 'null'], format: int64}
+        openedAt: {type: string, format: date-time}
+        closedAt: {type: [string, 'null'], format: date-time}
+    VirtualDeviceDetail:
+      type: object
+      required: [vd, activeSources, sourceHistory, sourceHistoryTruncated]
+      properties:
+        vd: {$ref: '#/components/schemas/VirtualDevice'}
+        activeSources: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/VDSourceBinding'}}
+        sourceHistory: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/VDSourceBinding'}}
+        sourceHistoryTruncated: {type: boolean}
+
+
 tags:
 - name: 플랫폼
   description: 현재 서버 정보와 실제 구현된 기능을 확인합니다.
@@ -2762,3 +2975,7 @@ tags:
 
 - name: Operation
   description: 비동기 전환·종료·새 실행 확인 상태
+
+
+- name: VD
+  description: 영속 VD 등록과 원본 연결·이력 관리

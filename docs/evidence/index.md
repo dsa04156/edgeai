@@ -112,4 +112,11 @@ DB 실행 상태·Kubernetes 생성/관측·내부 API·Result·실제 kind 및 
 
 후속 검증: [자동 전환](m5-automatic-offload.md), [Remote adapter](m5-remote-adapter.md),
 [Remote 영속 상태/결과](m5-remote-runtime.md), [Remote worker/공개 API](m5-remote-worker.md).
-마지막 항목은 로컬 자동 실행·파일·취소·재시도 증거이며 실제 kind Remote 종단과 외부 수용은 남는다.
+[실제 kind Remote 종단](m5-remote-kind.md)은 추가4개 포함22Run·S3결과20개와 CI·배포까지 통과했다.
+외부 수용·상태형 복원은 남는다.
+
+
+## M6 VD 등록·원본 연결 (진행 중)
+
+[등록 검증 기록](m6-vd-registry.md): V13·공개5 API·원본 호환성/교체 이력·revision·논리 해제,
+Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/Task 실행은 후속 게이트다.

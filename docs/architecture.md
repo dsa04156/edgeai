@@ -105,3 +105,14 @@ ADR0009/V9에서 Run의 선택적 offload 정책을 저장하고 OffloadWorker�
 연속된 같은 지표·freshness·warmup/cooldown·한도를 만족하면 Run 잠금에서 판단 근거와 전환을
 원자적으로 저장한다. 자동 위치는 이전 실행 노드를 제외하는 AUTO 제약이며 kube-scheduler가
 선택한다. 이전 노드로 돌아가지 않으며 실패한 producer의 재시도는 기존 retry 경로로 분리한다.
+
+
+## VD 등록과 원본 연결 (ADR0013/V13)
+
+VirtualDevice는 불변 VD/SERVICE Profile 버전을 참조하고 원본 Device와 별도 ID를 가진다.
+VDSourceBinding은 slot별 현재 연결과 열린/닫힌 revision을 보존한다. API 수정은 VD 행을 잠그고
+원본 Device UUID 순서로 잠근다. 장치 해제와 연결을 직렬화하며 활성 binding의 Device 해제는409다.
+DB 복합 FK·활성 UNIQUE·이력 변경 차단과 지연 제약으로 필수 source 집합·해제 상태도 검증한다.
+
+이는 등록 계층이다. 지속 VD runtime의 소유/수명, Operation과 실제 Task 실행은 아직 연결하지 않았으며
+기존 TaskAttempt Job이나 Node ID를 VD runtime으로 취급하지 않는다. 상세는 ADR0013과 M6 요구사항을 따른다.

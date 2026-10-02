@@ -40,6 +40,8 @@ test("Device connection fails visibly without presenting invented node data", as
 test("Control Plane proxy rejects unlisted routes and write methods before forwarding", async ({ request }) => {
   const id = "00000000-0000-0000-0000-000000000000";
   for (const [method, path] of [["POST", "nodes"], ["DELETE", `nodes/${id}`], ["PATCH", "devices"],
+    ["PUT", `virtual-devices/${id}`], ["POST", `virtual-devices/${id}`], ["PATCH", "virtual-devices"],
+    ["GET", `virtual-devices/${id}/runtime`],
     ["GET", `devices/${id}/sessions`], ["PUT", `devices/${id}/attachments/not-a-uuid`], ["GET", "actuator/env"],
     ["POST", `tasks/${id}/attempts`], ["DELETE", `workflows/${id}`], ["PATCH", `workflow-runs/${id}`], ["GET", "tasks"]]) {
     expect((await request.fetch(`/api/control-plane/${path}`, { method })).status()).toBe(404);
@@ -53,5 +55,16 @@ test("Workflow connection failure does not display invented runs", async ({ page
   await page.getByRole("button", { name: "연결", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("Control Plane에 연결할 수 없습니다");
   await expect(page.getByRole("heading", { name: "실행 이력" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("VD connection failure does not display invented readiness", async ({ page }) => {
+  await page.goto("/virtual-devices");
+  await page.getByLabel("사용자 이름", { exact: true }).fill("offline-test");
+  await page.getByLabel("비밀번호", { exact: true }).fill("offline-test-only");
+  await page.getByRole("button", { name: "연결", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("Control Plane에 연결할 수 없습니다");
+  await expect(page.getByRole("heading", { name: "등록된 가상 장치", exact: true })).toHaveCount(0);
+  await expect(page.getByText("등록됨은 실행 준비 완료를 뜻하지 않습니다.", { exact: false })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

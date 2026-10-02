@@ -27,6 +27,7 @@ class PlatformControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("edgeai"))
             .andExpect(jsonPath("$.milestone").value("M4"))
-            .andExpect(jsonPath("$.capabilities[0]").value("profiles"));
+            .andExpect(jsonPath("$.capabilities[0]").value("profiles"))
+            .andExpect(jsonPath("$.capabilities[7]").value("virtual-devices"));
     }
 }

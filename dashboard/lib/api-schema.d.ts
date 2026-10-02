@@ -186,7 +186,7 @@ export interface paths {
         post?: never;
         /**
          * 장치 해제 및 세션 종료
-         * @description 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
+         * @description 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 활성 VD 원본으로 사용 중이면 DEVICE_IN_USE(409)이며 먼저 VD 연결을 교체하거나 해제해야 합니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
          */
         delete: operations["releaseDevice"];
         options?: never;
@@ -547,6 +547,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/virtual-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 등록·해제된 VD 목록 조회
+         * @description key 순서로 논리 VD를 조회합니다. REGISTERED를 Ready로 해석하지 마세요. 해제 이력도 보존합니다.
+         */
+        get: operations["listVirtualDevices"];
+        put?: never;
+        /**
+         * VD 식별자와 원본 장치 연결 등록
+         * @description edgeai.vd/v1 규격의 VD Profile과 실제 DEVICE/SERVICE 버전을 검증하고 원본 연결을 원자적으로 저장합니다. 같은 key와 생성 입력은 기존 VD를 반환하고 다른 입력은409입니다. 해제 뒤 재전송도 기존 VD이며 재활성화하지 않습니다. 현재 REGISTERED는 논리 등록만 완료된 상태입니다. 실제 Runtime 생성·Ready·VD 경유 Task 실행은 후속 연결 범위입니다.
+         */
+        post: operations["createVirtualDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * VD 설정과 활성·과거 원본 연결 조회
+         * @description 최신 revision, 불변 Profile 참조와 source 이력을 조회합니다. closedAt이 null인 연결만 현재 원본입니다. 이력은 최신100개이며 더 있으면 sourceHistoryTruncated=true입니다.
+         */
+        get: operations["getVirtualDevice"];
+        put?: never;
+        post?: never;
+        /**
+         * VD 논리 해제와 원본 연결 종료
+         * @description 현재 등록만 된 VD를 RELEASED로 표시하고 활성 source를 닫습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 실제 Runtime drain은 후속 연결 범위입니다.
+         */
+        delete: operations["releaseVirtualDevice"];
+        options?: never;
+        head?: never;
+        /**
+         * revision을 확인하여 VD 이름·원본·배치 의도 수정
+         * @description 이름·sources 전체 집합·placement를 함께 보내세요. Profile 참조와 vdId는 유지합니다. 변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다. 오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다.
+         */
+        patch: operations["updateVirtualDevice"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -596,7 +651,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -611,7 +666,8 @@ export interface components {
          *         "workflows",
          *         "runs",
          *         "tasks",
-         *         "results"
+         *         "results",
+         *         "virtual-devices"
          *       ]
          *     }
          */
@@ -619,7 +675,10 @@ export interface components {
             /** @constant */
             name: "edgeai";
             version: string;
-            /** @constant */
+            /**
+             * @description 전체 수용 검증을 완료한 최종 단계. 진행 중 단계의 일부 기능은 capabilities에 포함될 수 있습니다.
+             * @constant
+             */
             milestone: "M4";
             capabilities: string[];
         };
@@ -1124,8 +1183,100 @@ export interface components {
             items: components["schemas"]["WorkflowRun"][];
             nextOffset: number | null;
         };
+        /** @description Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다. */
+        VirtualDeviceSources: {
+            sourceKey: components["schemas"]["ProfileKey"];
+            /** Format: uuid */
+            deviceId: string;
+        }[];
+        /** @description 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다. */
+        VirtualDevicePlacement: {
+            /** @constant */
+            mode: "AUTO";
+        } | {
+            /** @constant */
+            mode: "NODE";
+            /** Format: uuid */
+            nodeId: string;
+        };
+        VirtualDeviceCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /**
+             * Format: uuid
+             * @description edgeai.vd/v1 규격의 발행된 VD Profile UUID
+             */
+            profileVersionId: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            placement: components["schemas"]["VirtualDevicePlacement"];
+        };
+        VirtualDeviceUpdate: {
+            /** Format: int64 */
+            revision: number;
+            displayName: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            placement: components["schemas"]["VirtualDevicePlacement"];
+        };
+        VirtualDevice: {
+            /** Format: uuid */
+            id: string;
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** Format: uuid */
+            profileVersionId: string;
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            /**
+             * @description 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.
+             * @enum {string}
+             */
+            state: "REGISTERED" | "RELEASED";
+            /** Format: int64 */
+            revision: number;
+            placement: components["schemas"]["VirtualDevicePlacement"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        VDSourceBinding: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            vdId: string;
+            sourceKey: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: uuid */
+            deviceProfileVersionId: string;
+            /** @enum {string} */
+            sourceMode: "LIVE" | "REPLAY" | "SYNTHETIC";
+            /** Format: int64 */
+            openedRevision: number;
+            /** Format: int64 */
+            closedRevision: number | null;
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt: string | null;
+        };
+        VirtualDeviceDetail: {
+            vd: components["schemas"]["VirtualDevice"];
+            activeSources: components["schemas"]["VDSourceBinding"][];
+            sourceHistory: components["schemas"]["VDSourceBinding"][];
+            sourceHistoryTruncated: boolean;
+        };
     };
     responses: {
+        /** @description 잘못된 입력400·없는 VD/Profile/Device/Node404·중복 키/revision/원본 충돌409·64KiB 초과413·DB 장애503입니다. code와 message를 확인하세요. */
+        VirtualDeviceError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
         /** @description 종류·키·버전·페이지·JSON 형식이 잘못되었습니다. */
         Invalid: {
             headers: {
@@ -3163,6 +3314,214 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listVirtualDevices: {
+        parameters: {
+            query?: {
+                /** @description 한 페이지 수 */
+                limit?: number;
+                /** @description 건너뛸 수 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description VD 목록과 다음 offset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["VirtualDevice"][];
+                        nextOffset: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    createVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VirtualDeviceCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 생성 입력의 기존 VD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            /** @description 논리 VD와 원본 연결 생성. 실제 Runtime 준비 완료를 뜻하지 않습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            413: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    getVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description VD 상세 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDeviceDetail"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    releaseVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 해제된 VD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    updateVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VirtualDeviceUpdate"];
+            };
+        };
+        responses: {
+            /** @description 최신 VD 설정. 같은 내용이면 revision도 유지합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            413: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
         };
     };
 }

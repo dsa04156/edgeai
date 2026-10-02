@@ -71,7 +71,7 @@ GitOps는 f6c5a2d로 검증한 이미지 digest를 기록했다. Remote는 배�
 Ready/PVCBound/ArgoSynced임을 확인했다. 기존 공유 Ingress status 제한으로 aggregate health는 Progressing이다.
 이전6009136 검증은 [영속 Remote 연결 기록](m5-remote-runtime.md)에 보존한다.
 
-실제 kind Kubernetes↔Remote 전환, API 프로세스 재시작 중 명령 복구·취소, 외부 endpoint/auth/API 계약과
-상태형 복원은 남는다. 현재 제공자 하나의 참조 프로토콜·SYNTHETIC 계산 검증이며 실제 OCI/모델/장비
+실제 kind Kubernetes↔Remote 전환·API 프로세스 재시작/취소는 [후속 실제 게이트](m5-remote-kind.md)에서 통과했다.
+외부 endpoint/auth/API 계약과 상태형 복원은 남는다. 현재 제공자 하나의 참조 프로토콜·SYNTHETIC 계산 검증이며 실제 OCI/모델/장비
 수용이나 성능/대규모 부하 증거가 아니다. 장시간 전송 lease와 미확정 S3 version/강제 종료 임시 파일
 정리는 추가 검증·운영 과제다. 전체 플랫폼 LOCAL_VERIFIED/FULL_ACCEPTANCE로 판정하지 않는다.

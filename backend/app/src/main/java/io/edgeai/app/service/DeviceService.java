@@ -56,6 +56,7 @@ public class DeviceService {
     public Device release(UUID id) {
         var device=find(id,true);
         if (device.state()==Device.State.RELEASED) return device;
+        if (repository.hasVirtualDeviceBindings(id)) throw error(409,"DEVICE_IN_USE","VD의 원본으로 연결된 장치입니다. VD 연결을 교체하거나 해제한 후 다시 시도하세요.");
         var now=clock.instant();repository.closeSessions(id,now);repository.closeAttachments(id,now);repository.release(id,now);
         return find(id,false);
     }

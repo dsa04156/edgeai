@@ -1,7 +1,7 @@
 # M5 실제 Kubernetes↔Remote 전환 — 추가 게이트
 
-이 기록은 검증 프로그램과 구성 요소 시험이다. 새 kind 종단 실행 결과는 아직 대기이며,
-소스에 검증 조건이 있다는 이유만으로 실제 전환 성공을 판정하지 않는다. M5는 진행 중이다.
+source45ce85f의 CI37016556197에서 실제 kind22Run과 결과 파일20개 검증을 통과했다.
+구성 요소 시험과 실제 종단 결과를 아래에 구분한다. 외부 수용·상태형 복원이 남아 M5는 진행 중이다.
 
 ## 추가한 실제 경로
 
@@ -36,8 +36,27 @@ TLS 시험은 신뢰 CA·hostname 검증, 무인증401·유효 bearer, 파일 �
 로컬 Docker 권한 제한 때문에 실제 kind 수용은 GitHub runner에서 확인한다.
 `20261002T134938Z-0d00cb3b`의 로컬 kind 실행은 같은 Docker 접근 제한으로 BLOCKED/exit2였다.
 
+## 실제 CI·배포 확인
+
+[CI37016556197](https://github.com/dsa04156/edgeai/actions/runs/37016556197),
+source `45ce85f9c7ea5249057556251ed490629a9d5b52`: 5 jobs 모두 success.
+platform/storage/runner/image artifact 네 그룹을 내려받아 result.json15개 모두 PASS/0을 확인했다.
+Docker build 기록은 ZIP 형식이 아니어서 전체 artifact 다운로드가 실패했으며, 검증 artifact만
+선택해 다시 내려받았다. 검증 자료 누락을 성공으로 간주하지 않았다.
+
+`20261002T140450Z-743ceafa`의 실제 kind 보고서에는 기존18개와 새 Remote4개, 총22Run이 있다.
+Remote BATCH의 실제 allocation당 executions1, API 교체 후 동일 Attempt와 제공자 Pod 보존,
+NODE→REMOTE의 이전 Pod commit401·새 epoch2, REMOTE→NODE의 제공자 CANCELLED·새 Pod Result와
+전환 중 API 교체 복구, Remote 취소 뒤 하위/결과 부재를 확인했다. 결과 파일20개의 고정 S3 version·
+크기·SHA·실제 합성 계산값 검증과 생성한 kind cluster 삭제도 로그에 남아 있다.
+
+GitOps `861663f`가 같은 source의 검증 digest를 기록했다. 실제 기존 클러스터 검증
+`20261002T143130Z-1956d7e0`에서 API/Dashboard/MinIO imageID 일치·Ready·PVCBound·ArgoSynced를
+확인했다. 기존 공유 Ingress status 제한으로 Argo aggregate health는 Progressing이다.
+kind 종료 직전 진단에는 Dashboard ready=false가 한 번 기록되었다. 실제 HTTP proxy를 통한22Run은
+통과했지만 이 진단의 원인은 확인되지 않았다. 이후 기존 배포의 Dashboard Ready 확인과는 구분한다.
+
 ## 남은 확인
 
-추가 네 Run의 CI 결과·원시 보고서와 시험 종료 뒤 클러스터 삭제를 확인해야 한다.
 실제 외부2세부 API·장비/모델·상태형 복원은 별도 미완료 범위이며 참조 SYNTHETIC 제공자로 대체하지 않는다.
 원래 M0–M10 범위와 LOCAL_VERIFIED/FULL_ACCEPTANCE의 전체 게이트는 유지한다.

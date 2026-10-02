@@ -3,7 +3,7 @@
 [STATUS]
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.
-M5 Remote 자동 worker·공개 실행/전환 API·고정 제공자 binding은 로컬 및 CI37013658656을 통과했다. 실제 kind Remote 종단·외부 수용은 남았다. 상세: docs/evidence/m5-remote-worker.md.
+M5 Remote 자동 worker·공개 실행/전환 API·고정 제공자 binding은 로컬 및 CI37013658656을 통과했다. 후속 CI37016556197의 실제 kind22Run·결과20개도 통과했다. 외부 수용·상태형 복원은 남았다. 상세: docs/evidence/m5-remote-kind.md.
 현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
@@ -30,7 +30,9 @@ worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Ru
 실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
-Flyway V1–V12, 계층형 Spring 패키지, 한국어 Swagger30개, GitHub Actions/GHCR/ArgoCD 연결.
+Flyway V1–V13, 계층형 Spring 패키지, 한국어 Swagger35개, GitHub Actions/GHCR/ArgoCD 연결.
+M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
+실제 VD runtime/Operation/Run VD 실행은 남았다. 상세: docs/evidence/m6-vd-registry.md.
 M3는 실행 요청 저장이며 실제 Runner 실행·검증된 Result는 M4다.
 M4 실행 규격·Job compiler·S3 artifact adapter·독립 Runner를 추가했다.
 V5의 RuntimeInstance·CREATE/DELETE 명령 lease·봉인된 Result/Artifact와 실행 상태 전이를 추가했다.
@@ -42,6 +44,9 @@ Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전�
 새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
 
 [VERIFIED]
+M6 등록 로컬: 단위/MVC66·실제PostgreSQL89(VD9)·계약/MVC22·UI28·실DB/브라우저10 모두 PASS.
+VD 포함 DB 장애503와 같은 프로세스 복구도 PASS(20261002T144123Z-bf144394).
+실제 VD runtime과 이 신규 코드의 CI·배포는 아직 미검증이다. docs/evidence/m6-vd-registry.md.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
 실제 Spring 스케줄러의 공개 Remote BATCH, 실제 제공자 SIGKILL/재시도, 취소와 출력 변조 차단,
 설정 변경 시 전송 차단·재전송, 동시 worker의 단일 실행/결과를 검증했다. NODE 전환 부분은 fixture다.
@@ -86,11 +91,12 @@ M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
-M5 실제 NODE↔REMOTE·API 재시작/취소 kind 게이트4개 Run을 추가했다. TLS2/참조 제공자13·Runner14·
-실제 Kubernetes server dry-run은 통과했으며 신규 kind 종단 결과는 아직 대기다. docs/evidence/m5-remote-kind.md.
+M5 실제 NODE↔REMOTE·API 재시작/취소 kind 게이트4개 Run은 CI37016556197에서 통과했다.
+기존18개 포함22Run/실제S3결과20개/원시JSON15개 PASS,861663f GitOps와 실제 imageID/Ready/ArgoSynced도 확인했다.
+M6 등록·원본 연결 API/UI를 검증하며 다음은 지속 VD runtime·Operation·실제 Run VD 실행이다.
 M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
-M5 Remote worker 코드의 CI·이미지·배포를 확인하고 실제 kind의 Kubernetes↔Remote 전환 및
-API 프로세스 재시작 종단을 추가 검증한다. 외부 실제 계약과 상태형 복원도 M5 완료 전 남은 게이트다.
+M5 Remote worker의 실제 kind 전환/재시작·CI·배포는 확인했다. 외부 실제 계약과 상태형 복원은
+M5 완료 전 남은 게이트다. M6 등록 코드의 CI·배포 확인도 이어간다.
 다음 단계는 M6 VD → M7 다중 장치/STREAM → M8 부하 → M9 운영/복구/보안 → M10 실장비다.
 아래는 M4 연결 단계의 이전 진행 기록이다.
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.

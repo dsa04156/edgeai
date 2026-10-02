@@ -93,3 +93,7 @@ select { min-width: 0; max-width: 100%; }
 .retry-errors input[type="checkbox"], .checkbox-row input[type="checkbox"] { width: 20px; height: 20px; min-height: 20px; flex: 0 0 auto; accent-color: var(--signal); }
 
 .offload-policy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+
+.vd-table { min-width: 480px; }
+.vd-table th, .vd-table td:not(:first-child) { white-space: nowrap; }
+.vd-table td:first-child { width: 55%; }

@@ -37,14 +37,16 @@ ADR0011/V10–V11의 RemoteAllocation·producer fencing·결과 API/화면은 CI
 ADR0012/V12는 자동 Remote worker·직접 S3 전송·공개 Run/Offload REMOTE 선택·불변 제공자 binding을
 연결했다. 단위60·PostgreSQL80·실제 S3/DB/provider14·UI26·실DB브라우저8·DB 장애/복구를 로컬 검증했다.
 실제 Spring 스케줄러 BATCH, 제공자 프로세스 재시작·재시도·취소·변조·중복 처리도 포함한다.
-Kubernetes↔Remote 전환의 Kubernetes 부분은 fixture이며 실제 kind 전환/API 프로세스 재시작 종단,
+초기 Kubernetes↔Remote 통합 시험의 Kubernetes 부분은 fixture였다. 후속45ce85f CI37016556197에서
+실제 kind22Run(새Remote4개 포함)·S3 결과20개·API 교체/취소와 클러스터 삭제를 확인했다.
 상태형 복원 및 실제 외부 계약 수용은 남는다. worker f6dc087의 CI37013658656은5 jobs/JSON15개와
 기존 실제 kind18Run을 통과했고 GitOps f6c5a2d에 이미지 digest를 기록했다.
 실제 imageID·Ready/PVCBound/ArgoSynced도 `20261002T135530Z-df0f3f31`에서 확인했다.
 상세는 `docs/evidence/m5-remote-worker.md`다. M5 완료로 판정하지 않는다.
 후속으로 독립 TLS Remote Pod/PVC와 실제 양방향 전환·API 교체/취소의 kind4개 Run을 추가했다.
-TLS2·참조 제공자13·Runner14·실서버 manifest 검증은 통과했다. 새 kind 종단 결과는 아직 대기이며
-`docs/evidence/m5-remote-kind.md`에서 성공 여부를 별도로 확인한다.
+TLS2·참조 제공자13·Runner14·실서버 manifest 검증과 새 실제 kind 종단을 통과했다.
+CI37016556197은5jobs/JSON15개 PASS이며 GitOps861663f와 실제 배포 imageID/Ready/PVC/ArgoSynced도
+확인했다. 상세와 kind 종료 직전 Dashboard Ready 진단 한계는 `docs/evidence/m5-remote-kind.md`를 따른다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.
@@ -106,3 +108,15 @@ Kubernetes의 [노드 지정](https://kubernetes.io/docs/concepts/scheduling-evi
 [watch/relist](https://kubernetes.io/docs/reference/using-api/api-concepts/)를 확인했다.
 S3 [무결성 계약](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html)에 따라
 ETag 또는 사용자 제공 SHA metadata만을 실제 내용 검증으로 사용하지 않는다.
+
+
+## M6 진행: VD 등록·원본 연결
+
+ADR0013/V13의 영속 VD·불변 Profile 참조·원본 호환성·연결 이력·revision 수정·논리 해제와
+장치 해제 보호를 구현했다. 공개5 API, 한국어 Swagger35개, `/virtual-devices` 관리 화면을 연결한다.
+실제 PostgreSQL 동시 생성/수정/장치 해제 경합과 DB 제약, PC·모바일 실제 API 흐름을 검증한다.
+상세 결과는 `docs/evidence/m6-vd-registry.md`다. 이 단계는 M6 전체 완료가 아니다.
+
+다음 M6 구현은 지속 runtime·source/runtime binding 분리, provision/readiness·교체/drain Operation,
+Run VD 정책의 실제 활성 runtime Task 실행과 demo-vd다. 등록 상태 REGISTERED를 Ready로 바꾸거나
+Node ID만 복사한 별도 Job으로 실제 VD 실행 수용 게이트를 대신하지 않는다.

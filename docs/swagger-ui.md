@@ -53,3 +53,11 @@ M4에서 `GET /tasks/{taskId}/results`를 추가해 총28개 operation을 제공
 배포 계정은 `.tools/kubernetes/edgeai-runtime.env`의 `EDGEAI_API_USER`/`EDGEAI_API_PASSWORD`를 사용한다.
 코드 39eb6fe의 CI 36958143060과 실제 Kubernetes HTTP 시험
 20261002T031016Z-1de769da / 20261002T031127Z-a1448527이 PASS/0이다.
+
+
+## M6 VD 등록 API
+
+VirtualDevice 생성/목록/상세/수정/해제5개 operation을 추가하여 공개 Swagger는35개 operation이다.
+각 역할·필수 원본 조건·revision 충돌·논리 해제·등록과 런타임 Ready의 차이를 한국어로 설명한다.
+Device 해제의 DEVICE_IN_USE(409)도 계약에 반영했다. VD 상세는 현재 연결 전체와 최근100개 이력을
+구분한다. OpenAPI 원본에서 Dashboard 타입과 JAR 문서를 함께 생성한다.

@@ -10,7 +10,8 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 검증을 통과했습니다.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation·결과 확정은 CI·배포까지 검증했습니다.
 Remote 자동 worker·공개 실행/전환·제공자 설정 고정은 실제 PostgreSQL·MinIO·참조 제공자로 로컬 검증했습니다.
-worker 코드의 CI도 통과했으며 실제 kind Remote 종단·외부 시스템 연결은 남아 있습니다.
+worker와 실제 kind Kubernetes↔Remote 전환·API 재시작/취소까지 CI·배포 검증을 통과했습니다.
+외부 실제 시스템 수용과 상태형 복원은 남아 있습니다. M6 VD 등록·원본 연결 API/화면도 구현 중입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -41,6 +42,7 @@ bash scripts/dev-dashboard.sh
 - Dashboard: <http://127.0.0.1:13080>
 - Profile 관리: <http://127.0.0.1:13080/profiles> (`.env` 개발 계정으로 연결)
 - 장치·노드 관리: <http://127.0.0.1:13080/devices>
+- 가상 장치·원본 연결 관리: <http://127.0.0.1:13080/virtual-devices>
 - 워크플로·실행 요청 관리: <http://127.0.0.1:13080/workflows>
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
 - Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
@@ -178,3 +180,19 @@ STREAM 실행은 M7이며 현재 요청은 501입니다.
 허용하며 최초 NODE 지정 이후에도 다른 호환 노드로 이동할 수 있습니다. 이전 노드를 제외하고
 Kubernetes가 새 위치를 선택합니다. 작업 상세에서 결정에 쓴 정책·측정과 전환 이력을 확인합니다.
 미수집·오래된·누락 표본은 판단에 쓰지 않습니다. [ADR0009](docs/adr/0009-automatic-offload-policy.md).
+
+
+## 가상 장치 등록·원본 연결 (M6 진행 중)
+
+`/virtual-devices`에서 VD Profile 버전과 원본 Device를 연결합니다.
+Profile 형식은 [VD 규격](contracts/profiles/vd-profile.schema.json)과
+[예시](contracts/profiles/vd-profile.example.json)를 따릅니다. 예시 UUID는 실제 발행된
+DEVICE/SERVICE Profile ID로 바꿔야 하며 SERVICE는 실행 규격을 충족해야 합니다.
+
+원본 교체·표시 이름·배치 의도 수정은 revision을 검사하며, VD ID와 연결 이력을 보존합니다.
+활성 VD 원본으로 쓰는 장치는 바로 해제할 수 없습니다. 먼저 원본 연결을 바꾸거나 VD를 해제하세요.
+VD 해제는 원본 Device를 삭제하지 않고, 생성 재전송도 해제된 VD를 다시 활성화하지 않습니다.
+
+현재 상태는 REGISTERED/RELEASED입니다. 실제 VD runtime의 provision/readiness/교체/drain,
+Operation 추적과 Run의 VD 실행 정책은 후속 구현 범위입니다. 등록만으로 Ready를 표시하지 않습니다.
+검증 범위와 남은 수용 게이트는 [M6 등록 기록](docs/evidence/m6-vd-registry.md)을 따릅니다.
