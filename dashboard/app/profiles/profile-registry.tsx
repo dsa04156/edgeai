@@ -4,6 +4,8 @@ import { parse, stringify, isLosslessNumber } from "lossless-json";
 import { useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 
+import { ConnectionPanel } from "../components/connection-panel";
+
 type Profile = components["schemas"]["ProfileVersion"];
 type Kind = Profile["kind"];
 type Page = { items: Profile[]; nextOffset: number | null };
@@ -83,16 +85,7 @@ export function ProfileRegistry() {
   }
 
   return <>
-    <section className="panel" aria-labelledby="connection-title">
-      <h2 id="connection-title">개발 계정 연결</h2>
-      {auth ? <div className="toolbar"><p>연결됨 · 이 탭을 새로고침하면 다시 연결해야 합니다.</p><button disabled={busy} onClick={disconnect}>연결 해제</button></div>
-        : <form onSubmit={login} className="login-form">
-          <label>사용자 이름<input name="username" autoComplete="username" required maxLength={100} /></label>
-          <label>비밀번호<input name="password" type="password" autoComplete="current-password" required maxLength={256} /></label>
-          <button className="primary" disabled={busy}>{busy ? "연결 중…" : "연결"}</button>
-          <p className="hint">로컬 개발 환경에 설정한 계정을 사용하세요. 입력한 계정 정보는 브라우저 저장소에 보관하지 않습니다.</p>
-        </form>}
-    </section>
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p role="alert" className="error">{error}</p>}
     {auth && <>
@@ -129,7 +122,7 @@ export function ProfileRegistry() {
       </section>
       {detail && <section className="panel" aria-labelledby="detail-title">
         <div className="toolbar"><h2 id="detail-title">{detail.key} · {detail.version}</h2><span className="stage">발행됨 · 불변</span></div>
-        <p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
+        <p className="mono digest">버전 ID {detail.id}</p><p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
       </section>}
       <section className="panel" aria-labelledby="publish-title">
         <h2 id="publish-title">{names[kind]} Profile 새 버전 등록</h2>

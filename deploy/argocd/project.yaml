@@ -10,6 +10,7 @@ spec:
     - {server: 'https://kubernetes.default.svc', namespace: edgeai}
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:
+    - {group: '', kind: ServiceAccount}
     - {group: '', kind: ConfigMap}
     - {group: '', kind: Service}
     - {group: '', kind: PersistentVolumeClaim}

@@ -4,7 +4,7 @@
 Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 최종 Kubernetes 노드 선택은 kube-scheduler가 담당합니다.
 
-현재 범위는 **M1 Profile 등록·목록·버전 조회**입니다. Device·Workflow·Runner는 후속 단계입니다.
+현재 구현 범위는 **M2 Profile·장치 관리·Kubernetes 노드 관측**입니다. Workflow·Runner는 후속 단계입니다.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
 ## 빠른 시작
@@ -32,6 +32,7 @@ bash scripts/dev-dashboard.sh
 
 - Dashboard: <http://127.0.0.1:13080>
 - Profile 관리: <http://127.0.0.1:13080/profiles> (`.env` 개발 계정으로 연결)
+- 장치·노드 관리: <http://127.0.0.1:13080/devices>
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
 - Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
 - OpenAPI 계약: <http://127.0.0.1:18080/openapi.yaml>
@@ -58,13 +59,15 @@ bash scripts/verify-all.sh scaffold
 bash scripts/test-integration.sh  # 실제 PostgreSQL 필요
 bash scripts/test-infra.sh        # Compose의 PostgreSQL·MQTT 필요
 bash scripts/test-health.sh       # DB + API + Dashboard 실행 필요
-bash scripts/test-profiles-stack.sh compose # 실제 Profile UI + DB 장애·복구; 로컬 PG는 local
+bash scripts/test-profiles-stack.sh compose # 실제 Profile/Device/Swagger UI + DB 장애·복구; 로컬 PG는 local
+bash scripts/test-node-inventory.sh <context> # 기존 context는 변경하지 않고 실제 Node 목록만 읽음
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 ```
 
 `verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
-GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0 기반과 M1 Profile을 검증합니다.
+GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M2를 검증합니다.
+실제 Kubernetes 노드 관측은 별도 클러스터 검증이며 CI fixture 시험과 구분합니다.
 
 ## Swagger UI
 
@@ -102,6 +105,21 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 
 Profile 통합 시험은 고유 `test-*`/`browser*` 키를 사용합니다. 발행 불변성 때문에
 시험 행도 개발 DB에 보존합니다. 반복 시험에는 전용 개발 DB를 사용하세요.
+
+## 장치·노드 사용
+
+`/devices`에서 DEVICE Profile 버전 UUID를 선택하고 장치 키·이름·데이터 출처를 등록합니다.
+Profile UUID는 `/profiles`의 상세에서 확인할 수 있습니다. 장치 등록 후 연결 상태는 보고 없음입니다.
+장치 에이전트는 `/api/v1/devices/{id}/sessions`에 재접속마다 새 `bootId`를 보내고,
+발급된 sessionId와 증가 sequence로 `/observations`에 상태를 보고합니다.
+실제·재생·합성 데이터는 sourceMode로 구분합니다. Swagger에서 각 입력·응답·오류를 확인하세요.
+API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 등록·보고·재접속·해제합니다.
+
+로컬 Node 관측은 기본 비활성입니다. Kubernetes 배포에서는 전용 ServiceAccount로
+15초마다 실제 Node 목록을 읽습니다. 목록은 UID·Ready 상태·CPU/메모리 allocatable·아키텍처를
+보여주며 마지막 관측이 60초를 넘으면 만료로 표시합니다. CPU/메모리는 현재 잔여량이 아닙니다.
+로컬 설정은 `.env.example`의 `EDGEAI_KUBE_*`, 권한 구성은 [배포 문서](deploy/kubernetes/README.md),
+장치/세션/이력 규칙은 [ADR 0003](docs/adr/0003-device-node-observation.md)을 따릅니다.
 
 ## 개발 기준
 

@@ -4,6 +4,7 @@ import { ProfileRegistry } from "./profile-registry";
 export default function Profiles() {
   return <main>
     <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">M1 · Profile</span></header>
+    <nav className="section-nav" aria-label="관리 메뉴"><Link href="/profiles" aria-current="page">Profile 관리</Link><Link href="/devices">장치·노드 관리</Link></nav>
     <section>
       <p className="eyebrow">PROFILE REGISTRY</p>
       <h1>실행의 기준을 버전으로 남깁니다.</h1>

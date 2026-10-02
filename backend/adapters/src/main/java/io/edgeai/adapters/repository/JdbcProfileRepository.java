@@ -38,6 +38,11 @@ public final class JdbcProfileRepository implements ProfileRepository {
     }
 
     @Override
+    public Optional<ProfileVersion> find(UUID id) {
+        return jdbc.query("SELECT * FROM edgeai.profile_version WHERE id=?", ROW, id).stream().findFirst();
+    }
+
+    @Override
     public List<ProfileVersion> list(ProfileIdentity.Kind kind, String key, int limit, int offset) {
         String filter = key == null ? "" : " AND profile_key = ?";
         String sql = "SELECT * FROM edgeai.profile_version WHERE kind = ?" + filter +

@@ -41,7 +41,9 @@ scaffold/storage 모두 success다. 내려받은 결과 JSON 8개 모두 PASS/0�
 생성 타입과 패키징 계약을 갱신했고 실제 PC/모바일 Swagger에서 한국어 설명과 등록을 확인한다.
 후속 완료 기록은 문서만 변경하므로 이 코드의 검증을 재사용한다.
 
-현재 구현된 7개 operation을 설명한다. 아직 구현하지 않은 M2+ API는 별도 후속 범위다.
+M2에서 Device 8개·Node 2개를 추가해 현재 구현된 17개 operation을 설명한다.
+장치 등록→노드 연결→세션→관측의 사용 순서와 revision/epoch/sequence 충돌·해제·신선도를 명시한다.
+아직 구현하지 않은 M3+ API는 후속 범위다.
 배포 주소: [Swagger UI](http://edgeai.192.168.0.56.sslip.io/swagger-ui.html),
 [대체 사설망 주소](http://edgeai.10.254.192.217.nip.io/swagger-ui.html).
 배포 계정은 `.tools/kubernetes/edgeai-runtime.env`의 `EDGEAI_API_USER`/`EDGEAI_API_PASSWORD`를 사용한다.

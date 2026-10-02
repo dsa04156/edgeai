@@ -1,7 +1,8 @@
 # 진행 상태
 
 [STATUS]
-M1 Profile 구현·로컬·CI 검증 완료. 전체 플랫폼은 PARTIAL.
+M2 Device/Node 구현·로컬 검증 완료. M2 CI·배포 검증은 진행 중이며 전체 플랫폼은 PARTIAL.
+M0/M1 및 초기 CI/CD 완료 기록은 아래에 보존한다. 현재 상세는 docs/evidence/m2-device-node.md.
 공개 저장소: https://github.com/dsa04156/edgeai
 코드 20a8d6c의 CI 36950519908: scaffold/storage 모두 success, 결과 JSON 8개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36950519908
@@ -30,7 +31,7 @@ M1 로컬 범위의 차단 없음. 로컬 Docker 소켓 권한 제한은 portabl
 별도 전체 구현 계약·실장비·2세부 API·성능 기준은 필요한 단계에서 확인한다.
 
 [NEXT]
-M2 Device/Node/Observation: ProfileVersion 참조·장치/Node 분리·세션/관측 계약부터 구현.
+M2 CI·배포 확인 후 M3 Workflow/Run/Task/Attempt를 구현한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh
 Profile UI: http://127.0.0.1:13080/profiles
@@ -113,3 +114,19 @@ gitops-state 20261002T031127Z-a7f88d2d, ingress-swagger 20261002T031127Z-a144852
 공유 Traefik/클러스터 설정은 변경하지 않았다. 작업 중 기존 control-plane 노드의 DiskPressure와
 scheduler lease 갱신 실패도 관측했으며 이후 Pod 배치는 재개됐다. 클러스터 전체 안정성은 별도 운영 점검 대상이다.
 로컬 검증 API/UI/DB와 일회성 registry probe Pod는 종료·제거했다. 배포 서비스와 PVC는 유지한다.
+
+[M2 DEVICE/NODE — 2026-10-02 로컬 검증]
+Device 8개·Node 2개 API, Flyway V3, controller/service/domain/repository 계층,
+장치 등록/조회/revision 이름 수정/논리 해제·활성 연결 이력·bootId/epoch session fence·관측을 구현했다.
+Profile UUID 참조·DEVICE 종류 FK, 활성 attachment/session partial UNIQUE 및 Device row lock을 적용했다.
+실제 Kubernetes Node UID/Ready/allocatable/labels를 CA 검증·토큰 파일 기반 adapter로 관측한다.
+실패 snapshot은 캐시를 제거하지 않으며 60초를 넘은 상태는 STALE로 조회한다.
+Dashboard /devices와 Profile 메뉴를 연결하고 Swagger의 17개 operation에 역할·오류를 설명한다.
+
+단위19·실제 PostgreSQL 통합13·계약 타입/YAML, UI lint/typecheck/build 및 offline12,
+Profile/Device/Swagger PC·모바일6, DB 중단503/복구와 실제 Kubernetes 노드10개 대조를 통과했다.
+실노드 연결 시험은 SYNTHETIC Device의 관리 이력이며 물리 장치 데이터 수신 시험이 아니다.
+전용 ServiceAccount의 get/list nodes만 허용하는 bootstrap RBAC를 준비했고
+nodes patch·secrets list·pods create가 허용되지 않는 것을 확인했다.
+M2 코드의 새 GitHub CI, GHCR 이미지 및 클러스터 내 HTTPS/CA/ServiceAccount 경로 검증은 다음 확인 대상이다.
+M3–M10은 아직 미완료이며 전체 목표를 M2로 축소하지 않는다.

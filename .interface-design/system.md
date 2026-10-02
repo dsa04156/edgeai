@@ -21,3 +21,11 @@
 오류 토큰 --error #a03030 / --error-surface #fff1f0; 입력 경계 #b7c3ca,
 focus 녹색2px outline+3px offset. JSON/digest는 monospace와 overflow 처리.
 인증 전/대기/빈 목록/오류/발행/충돌/상세 상태를 각각 실제 응답에 연결한다.
+
+## M2 장치·노드 화면 확장
+
+동일 토큰·폭·44px 컨트롤을 사용하며 Profile/장치 메뉴는 실제 구현 경로만 연결한다.
+등록/상세/최근 이력/Node 관측을 semantic section/table/form으로 표현한다.
+Device의 데이터 출처와 연결 상태를 분리하고 Node allocatable은 잔여 자원으로 표시하지 않는다.
+연결 해제는 화면 내 확인 후 실행하며 이력 보존을 설명한다. 원시 JSON은 접힌 details에 둔다.
+Kubernetes 비활성/실패로 관측이 없으면 빈 목록, 60초 경과 시 관측 만료로 표시한다.

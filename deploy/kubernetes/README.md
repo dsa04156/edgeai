@@ -17,4 +17,10 @@ Application은 Actions가 최초 이미지를 발행하고 `bootstrap` 태그를
 
 현재 개발 배포는 amd64 서버 노드에 단일 API·Dashboard·PostgreSQL을 배치한다.
 PVC 5 GiB는 기본 StorageClass를 사용한다. 자동 prune과 cascade deletion은 사용하지 않는다.
-MinIO·MQTT는 현재 M1 요청 경로에 필요하지 않아 이 배포에 포함하지 않는다.
+MinIO·MQTT는 현재 M2 관리 API 요청 경로에 필요하지 않아 이 배포에 포함하지 않는다.
+
+M2 API는 전용 `edgeai-control-plane` ServiceAccount와 마운트된 CA/토큰으로
+Kubernetes Node API를 읽는다. bootstrap은 소유 label을 확인하고 `edgeai-node-reader`
+ClusterRole/Binding을 준비한다. 권한은 core/v1 nodes의 get/list뿐이며 다른 리소스를 읽거나
+클러스터 자원을 수정할 수 없다. ArgoCD AppProject의 clusterResourceWhitelist는 계속 비어 있다.
+Bootstrap RBAC는 `bootstrap/node-reader.json`, namespace ServiceAccount는 GitOps로 관리한다.

@@ -16,19 +16,19 @@ flowchart LR
   R --> API
 ```
 
-위 그림은 목표 구조다. 현재 M1에서는 Next.js → Spring Boot → PostgreSQL의 Profile
-등록·목록·조회와 readiness 경로를 구현했다. Device·Workflow·외부 실행 연동은 후속 범위다.
+위 그림은 목표 구조다. 현재 M2에서는 Next.js → Spring Boot → PostgreSQL의 Profile·Device
+관리, 세션·관측·연결 이력과 Kubernetes Node 읽기 adapter를 구현했다. Workflow·작업 실행은 후속 범위다.
 
 | 경로 | 책임 |
 |---|---|
 | backend/app | 실행 진입점, controller, service, DTO, 인증·설정·예외 처리 |
 | backend/domain | 외부 SDK에 의존하지 않는 도메인 모델과 저장소 인터페이스 |
-| backend/adapters | PostgreSQL 저장소 구현, 추후 Kubernetes·KubeEdge·storage·MQTT·remote 경계 |
+| backend/adapters | PostgreSQL 저장소·Kubernetes Node 읽기 구현, 추후 실행·KubeEdge·storage·MQTT·remote 경계 |
 | dashboard | 사용자 UI, 계약에서 생성한 API 타입 |
 | runner | 후속 M4 실행·결과 커밋 프로세스 |
 | simulator | 장치·Remote·장애 재현; 실장비 증거와 분리 |
 | contracts | 구현 전에 확정하는 OpenAPI |
-| deploy | 개발 Compose, 추후 격리 kind/운영 manifests |
+| deploy | 개발 Compose, GitOps 배포 manifests, 추후 격리 kind 시험 |
 
 PostgreSQL은 관리 상태·결과 metadata, Object Storage는 대형 artifact,
 MQTT는 장치 스트림을 담당한다. 네 물리/논리 객체 Device·Node·VD·Runtime은 구분한다.
@@ -43,17 +43,20 @@ Gradle의 세 모듈은 하나의 Spring Boot 서버로 조립된다.
 backend/
 ├── app/src/main/java/io/edgeai/app/
 │   ├── EdgeAiApplication.java
-│   ├── controller/   # HTTP 엔드포인트: Profile, Platform, CSRF
-│   ├── service/      # Profile 발행·조회 및 트랜잭션
+│   ├── controller/   # HTTP 엔드포인트: Profile, Device, Node, Platform, CSRF
+│   ├── service/      # Profile/Device 관리, Node 관측 조정, 트랜잭션
 │   ├── dto/          # API 응답·페이지·오류 DTO
 │   ├── config/       # Security, Swagger UI, 저장소 빈 조립
 │   ├── exception/    # 예외 타입 및 HTTP 오류 응답 변환
 │   └── support/      # Profile JSON 파싱·정규화 보조 코드
 ├── domain/src/main/java/io/edgeai/domain/
 │   ├── profile/      # ProfileIdentity, ProfileVersion
-│   └── repository/   # ProfileRepository 인터페이스
+│   ├── device/       # Device, Attachment, Session, Observation
+│   ├── node/         # ExecutionNode, NodeInventory port
+│   └── repository/   # 저장소 인터페이스
 └── adapters/src/main/java/io/edgeai/adapters/
-    └── repository/   # JdbcProfileRepository 구현
+    ├── kubernetes/   # 실제 Node API, CA/token/pagination
+    └── repository/   # Profile/Device/Node JDBC 구현
 ```
 
 요청 처리는 `controller → service → ProfileRepository → JdbcProfileRepository` 순서다.

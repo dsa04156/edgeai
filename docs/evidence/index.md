@@ -89,3 +89,8 @@ history schema 문제는 별도 새 DB에서 재현한 뒤 명시적 schema 설�
 
 [구성과 검증](../swagger-ui.md): 계약/자산 인증 및 원본 일치, 실제 desktop/mobile
 Swagger 렌더와 자동 CSRF Profile 등록을 통과했다. GitHub CI에 같은 검증을 포함한다.
+
+## M2 Device/Node (2026-10-02)
+
+[검증 결과](m2-device-node.md): 장치 lifecycle·동시성·세션 fence·관측·이력,
+실제 PostgreSQL·PC/모바일 UI 및 Kubernetes Node 10개 대조. CI와 배포 검증 상태를 구분한다.

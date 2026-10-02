@@ -22,7 +22,8 @@ spec:
     metadata:
       labels: {app: edgeai-api}
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: edgeai-control-plane
+      automountServiceAccountToken: true
       nodeSelector: {kubernetes.io/arch: amd64}
       securityContext:
         runAsNonRoot: true
@@ -36,6 +37,11 @@ spec:
           envFrom:
             - configMapRef: {name: edgeai-config}
             - secretRef: {name: edgeai-runtime}
+          env:
+            - {name: EDGEAI_KUBE_ENABLED, value: 'true'}
+            - {name: EDGEAI_KUBE_API_URL, value: 'https://kubernetes.default.svc'}
+            - {name: EDGEAI_KUBE_TOKEN_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/token}
+            - {name: EDGEAI_KUBE_CA_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

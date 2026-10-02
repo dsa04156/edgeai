@@ -1,5 +1,26 @@
 # 개발 계획
 
+## 활성 목표: M0–M10 전체 구현과 검증
+
+2026-10-02 사용자가 전체 단계의 구현·검증을 지시했다. M1 이후를 진행하며 전체 완료를
+현재 구현 범위로 축소하지 않는다. 매 단계 OpenAPI/DDL/코드/UI/시험/증거를 함께 갱신한다.
+
+| 단계 | 남은 구현·검증 게이트 |
+|---|---|
+| M2 | Device CRUD/해제, Node 실관측, attachment 이력, session fencing, observation 중복/순서/만료, UI·실DB·실 Kubernetes 읽기 |
+| M3 | 불변 Workflow DAG 버전, Run/Task/Attempt, 의존성·중복 실행·취소·조회, UI·동시성 |
+| M4 | PodSpec 요구사항, AUTO/NODE scheduler bind, Job watch/reconciliation, Runner, S3 artifact 검증 후 Result commit, 실제 kind E2E |
+| M5 | 동일 Task 새 Attempt, retry budget, 실행 중 offload/fence/drain/route 전환, remote adapter 계약·장애·늦은 결과 차단 |
+| M6 | 영속 VD, source/runtime binding 분리, provision/readiness/replacement/drain 및 Operation 상태, UI |
+| M7 | 다중 장치 BATCH/STREAM DAG, 데이터 route/generation, backpressure·재연결·실제 데이터 흐름 |
+| M8 | 100→300→1,000 장치 부하, 측정 환경·지연·오류·자원 증거 및 병목 개선 |
+| M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
+| M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
+
+현재 M2부터 구현한다. 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
+사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
+수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.
+
 ## 완료: M0 초기화
 
 1. 설계 출처·범위·미확정 사항을 로컬 docs로 정리한다.

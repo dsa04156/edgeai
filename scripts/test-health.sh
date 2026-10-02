@@ -22,12 +22,16 @@ if expected=='DOWN':
     status,body=get(api+'/api/v1/profiles/DEVICE',{'Authorization':'Basic '+credentials})
     assert status==503 and body['code']=='PROFILE_STORE_UNAVAILABLE'
     print('PASS: Profile reads return 503/PROFILE_STORE_UNAVAILABLE during a real database outage')
+    for resource in ['devices', 'nodes']:
+        status,body=get(api+'/api/v1/'+resource,{'Authorization':'Basic '+credentials})
+        assert status==503 and body['code']=='DEVICE_STORE_UNAVAILABLE'
+    print('PASS: Device and Node reads return a sanitized 503 during a real database outage')
     print('PASS: PostgreSQL outage → Spring readiness 503/DOWN → Next.js health 503/DOWN')
     raise SystemExit(0)
 assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
 assert get(ui+'/api/health')==(200,{'status':'UP'})
 assert get(api+'/api/v1/platform')==(401,None)
 _,body=get(api+'/api/v1/platform',{'Authorization':'Basic '+credentials})
-assert body=={'name':'edgeai','version':'0.1.0','milestone':'M1','capabilities':['profiles']}
+assert body=={'name':'edgeai','version':'0.1.0','milestone':'M2','capabilities':['profiles','devices','nodes']}
 print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
 PY

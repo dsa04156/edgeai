@@ -17,6 +17,11 @@
 | M1-UI | scripts/test-profiles-stack.sh local 또는 compose | 실제 DB/API와 desktop/mobile 등록·재등록·409·새 버전·상세·인증·정밀도 | 프로젝트 전용 DB, 빌드된 UI |
 | SWAGGER-CONTRACT | scripts/test-contract.sh | 문서/자산 인증401, 렌더 자산, packaged YAML과 원본 byte 일치 | local |
 | SWAGGER-UI | scripts/test-profiles-stack.sh | desktop/mobile 실제 Swagger 렌더·자동 CSRF POST201·정확한 계약·외부 요청 없음 | 실제 DB/API/browser |
+| M2-UNIT | scripts/test-unit.sh | 60초 신선도, 입력 제한, 모든 쓰기 CSRF, Node pagination·실패·HTTP proxy | local |
+| M2-DB | scripts/test-integration.sh | 재등록/충돌, 동시 생성·재접속·보고, session fence, FK·활성 UNIQUE·attachment 이력 | 실제 PostgreSQL |
+| M2-UI | scripts/test-profiles-stack.sh local 또는 compose | PC·모바일 등록/수정/보고/재접속/해제, 이전 session 409, 큰 숫자 보존, DB 장애·복구 | 실제 DB/API/browser |
+| M2-NODE | scripts/test-node-inventory.sh <명시적-context> | 실제 Node UID·메타데이터 대조 및 Ready Node에 합성 장치 연결/중복/해제 | 읽기 가능한 실제 Kubernetes, 로컬 DB, 빌드된 UI |
+| M2-DEPLOY | scripts/smoke-deployment.py | 배포 HTTP 경유 장치 lifecycle, CSRF, 201/200/409, Node 조회 | 실행 중인 API/UI·환경 변수 인증 |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |

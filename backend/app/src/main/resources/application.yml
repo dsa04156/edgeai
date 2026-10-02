@@ -27,6 +27,12 @@ server:
   error:
     include-message: never
     include-stacktrace: never
+edgeai:
+  kubernetes:
+    enabled: ${EDGEAI_KUBE_ENABLED:false}
+    url: ${EDGEAI_KUBE_API_URL:https://kubernetes.default.svc}
+    token-file: ${EDGEAI_KUBE_TOKEN_FILE:}
+    ca-file: ${EDGEAI_KUBE_CA_FILE:}
 management:
   endpoints:
     web:

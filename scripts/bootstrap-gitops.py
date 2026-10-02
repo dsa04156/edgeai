@@ -51,4 +51,16 @@ else:
             'metadata':{'name':'edgeai-runtime','namespace':'edgeai','labels':{'app.kubernetes.io/part-of':'edgeai'}},
             'stringData':{key:value for key,value in values.items() if key.endswith('_PASSWORD')}})
     print('Created edgeai-runtime; credentials saved locally with mode 600 at .tools/kubernetes/edgeai-runtime.env')
+node_reader = json.loads(Path('deploy/kubernetes/bootstrap/node-reader.json').read_text())
+for resource in node_reader['items']:
+    current = read(resource['kind'], resource['metadata']['name'])
+    if current:
+        labels = current['metadata'].get('labels', {})
+        if labels.get('app.kubernetes.io/part-of') != 'edgeai' or labels.get('app.kubernetes.io/managed-by') != 'edgeai-bootstrap':
+            raise SystemExit('Refusing to change an unowned node-reader RBAC resource')
+# Cluster-level read access is bootstrapped explicitly. ArgoCD stays namespace-scoped.
+for dry_run in [True, False]:
+    command = kubectl + ['apply'] + (['--dry-run=server'] if dry_run else []) + ['-f', '-']
+    subprocess.run(command, input=json.dumps(node_reader), check=True, text=True, stdout=subprocess.DEVNULL)
+print('Node reader ready: only get/list nodes for edgeai/edgeai-control-plane.')
 print('Bootstrap ready. Apply deploy/argocd only after CI has published image digests.')

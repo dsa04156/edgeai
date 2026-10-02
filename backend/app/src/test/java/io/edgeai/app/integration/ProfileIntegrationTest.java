@@ -119,7 +119,8 @@ class ProfileIntegrationTest {
         assertThatThrownBy(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)
             .executeWithoutResult(status -> {
                 status.setRollbackOnly(); // Never remove data, even if the guard regresses.
-                jdbc.execute("TRUNCATE edgeai.profile_version");
+                // Include referencing tables so the immutable trigger is exercised after M2 added FKs.
+                jdbc.execute("TRUNCATE edgeai.profile_version CASCADE");
             }))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> jdbc.update("INSERT INTO edgeai.profile_version SELECT ?, kind, profile_key, version, spec, digest, created_at FROM edgeai.profile_version WHERE id = ?", UUID.randomUUID(), value.id()))

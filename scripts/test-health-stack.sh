@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/lib.sh"
 load_env
+if [[ "${EDGEAI_NODE_E2E:-0}" == 1 ]]; then
+  export EDGEAI_KUBE_ENABLED=true EDGEAI_KUBE_API_URL=http://127.0.0.1:18081
+  export EDGEAI_KUBE_TOKEN_FILE='' EDGEAI_KUBE_CA_FILE=''
+fi
 restart_mode="${1:-none}"
 [[ "$restart_mode" == none || "$restart_mode" == compose || "$restart_mode" == local ]] || blocked 'Usage: test-health-stack.sh [compose|local]'
 backend/gradlew -p backend :app:bootJar --console=plain
@@ -33,11 +37,16 @@ cleanup() {
 }
 trap cleanup EXIT
 for attempt in {1..60}; do
-  kill -0 "$api_pid" "$ui_pid" 2>/dev/null || { printf 'FAIL: owned service process exited. See .tools/*-smoke.log\n' >&2; exit 1; }
+  for service_pid in "$api_pid" "$ui_pid"; do
+    kill -0 "$service_pid" 2>/dev/null || { printf 'FAIL: owned service process exited. See .tools/*-smoke.log\n' >&2; exit 1; }
+  done
   if curl -fsS --max-time 3 "http://127.0.0.1:$EDGEAI_DASHBOARD_PORT/api/health" >/dev/null 2>&1; then break; fi
   sleep 1
 done
 bash scripts/test-health.sh
+if [[ "${EDGEAI_NODE_E2E:-0}" == 1 ]]; then
+  python3 scripts/probe-nodes.py
+fi
 if [[ "${EDGEAI_DEPLOYMENT_SMOKE:-0}" == 1 ]]; then
   python3 scripts/smoke-deployment.py
 fi

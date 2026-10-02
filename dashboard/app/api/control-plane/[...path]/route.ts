@@ -6,8 +6,14 @@ export const dynamic = "force-dynamic";
 async function forward(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const target = path.join("/");
-  const allowed = target === "csrf" || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target);
-  if (!allowed || (request.method === "POST" && !/^profiles\/(DEVICE|SERVICE|VD)$/.test(target)))
+  const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
+  const allowed = request.method === "GET" ? target === "csrf"
+    || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
+    || new RegExp(`^(devices|nodes)(/${uuid})?$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || target === "devices" || new RegExp(`^devices/${uuid}/(sessions|observations)$`).test(target)
+    : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
+    : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^devices/${uuid}$`).test(target);
+  if (!allowed)
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Basic "))
@@ -18,7 +24,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const csrf = request.headers.get("x-csrf-token");
   if (csrf) headers.set("X-CSRF-TOKEN", csrf);
   let body: string | undefined;
-  if (request.method === "POST") {
+  if (["POST", "PATCH", "PUT"].includes(request.method)) {
     if (!request.headers.get("content-type")?.startsWith("application/json"))
       return NextResponse.json({ message: "JSON 요청이 필요합니다." }, { status: 415 });
     // Stream with a hard byte cap before buffering the complete request.
@@ -56,3 +62,6 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
 }
 export const GET = forward;
 export const POST = forward;
+export const PATCH = forward;
+export const PUT = forward;
+export const DELETE = forward;

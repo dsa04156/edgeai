@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * 플랫폼 정보와 구현된 기능 조회
-         * @description 서버 이름·버전·현재 개발 단계·사용 가능한 기능을 반환합니다. 관리 화면의 기능 표시나 서버 연결 확인에 사용합니다. 현재 capabilities에는 profiles가 포함됩니다. 인증이 필요합니다.
+         * @description 서버 이름·버전·현재 개발 단계와 실제 구현된 profiles/devices/nodes 기능을 반환합니다. 인증이 필요합니다.
          */
         get: operations["getPlatform"];
         put?: never;
@@ -144,6 +144,169 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 장치 목록과 연결 상태 조회
+         * @description key 문자열 오름차순으로 조회합니다. 해제된 장치도 이력 조회를 위해 포함합니다. 활성 세션의 최근 보고가 60초보다 오래되면 STALE이며, 보고 전에는 UNKNOWN입니다.
+         */
+        get: operations["listDevices"];
+        put?: never;
+        /**
+         * 물리 장치 등록
+         * @description DEVICE Profile의 발행 UUID를 참조해 장치를 등록합니다. 같은 key와 동일 생성 입력은 200, 새로운 장치는 201, 다른 생성 입력은 409입니다. LIVE/REPLAY/SYNTHETIC으로 데이터 출처를 구분합니다. 등록만으로 실제 연결을 ONLINE으로 표시하지 않습니다. 요청 최대 16 KiB.
+         */
+        post: operations["registerDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 장치 상세·연결 이력·최근 관측 조회
+         * @description 장치와 최근 연결/세션/관측 각각 최대 20개를 반환합니다. 시간은 UTC이며 신선도는 서버 수신 시각으로 판단합니다. raw 스트림은 저장하지 않습니다.
+         */
+        get: operations["getDevice"];
+        put?: never;
+        post?: never;
+        /**
+         * 장치 해제 및 세션 종료
+         * @description 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
+         */
+        delete: operations["releaseDevice"];
+        options?: never;
+        head?: never;
+        /**
+         * 장치 표시 이름 수정
+         * @description 상세 조회에서 받은 revision과 새 displayName을 전송합니다. 동시에 수정되어 revision이 바뀌면 409입니다. Profile 참조·key·sourceMode는 변경하지 않습니다.
+         */
+        patch: operations["updateDevice"];
+        trace?: never;
+    };
+    "/api/v1/devices/{deviceId}/attachments/{nodeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+                nodeId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 장치를 관측된 실행 노드에 연결
+         * @description 최근 60초 안에 실제 관측된 Ready Node와 port를 연결합니다. 기존 활성 연결은 닫고 새 이력을 만들며 동일 node/port 재전송은 이력을 추가하지 않습니다. 장치당 활성 연결은 하나입니다.
+         */
+        put: operations["attachDevice"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{deviceId}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 재접속·재부팅 세션 시작
+         * @description bootId는 재부팅/재접속마다 새 UUID입니다. 현재 bootId 재전송은 200, 새 bootId는 기존 세션을 닫고 epoch를 올려 201입니다. 닫힌 bootId는 재사용할 수 없습니다. 이전 세션의 관측은 차단됩니다.
+         */
+        post: operations["openDeviceSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{deviceId}/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 장치 상태·작은 관측 데이터 보고
+         * @description 현재 sessionId, 증가하는 sequence, observedAt, ONLINE/OFFLINE, attributes를 보냅니다. 동일 sequence/내용 재전송은 200, 내용 변경·역순·이전 세션은 409입니다. observedAt은 서버보다 최대 30초 미래·24시간 과거를 허용합니다. 요청 최대 16 KiB이며 raw stream/대형 파일은 대상이 아닙니다.
+         */
+        post: operations["reportDeviceObservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 관측된 Kubernetes 실행 노드 목록
+         * @description 실제 Kubernetes Node API 관측을 저장한 목록입니다. 60초 넘게 관측되지 않으면 STALE, 성공한 전체 관측에서 사라지면 REMOVED입니다. 관측을 설정하지 않은 환경은 빈 목록이며 가짜 노드를 생성하지 않습니다.
+         */
+        get: operations["listNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{nodeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nodeId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 실행 노드 상태·자원·레이블 조회
+         * @description nodeId는 Kubernetes UID입니다. CPU/메모리는 Kubernetes quantity 문자열, labels는 관측된 노드 레이블입니다. physical Device와 별개인 실행 호스트를 나타냅니다.
+         */
+        get: operations["getNode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -193,16 +356,18 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE";
             message: string;
         };
         /**
          * @example {
          *       "name": "edgeai",
          *       "version": "0.1.0",
-         *       "milestone": "M1",
+         *       "milestone": "M2",
          *       "capabilities": [
-         *         "profiles"
+         *         "profiles",
+         *         "devices",
+         *         "nodes"
          *       ]
          *     }
          */
@@ -211,7 +376,7 @@ export interface components {
             name: "edgeai";
             version: string;
             /** @constant */
-            milestone: "M1";
+            milestone: "M2";
             capabilities: string[];
         };
         /**
@@ -222,6 +387,134 @@ export interface components {
         Health: {
             /** @enum {string} */
             status: "UP" | "DOWN" | "OUT_OF_SERVICE" | "UNKNOWN";
+        };
+        DeviceCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** Format: uuid */
+            profileVersionId: string;
+            /** @enum {string} */
+            sourceMode: "LIVE" | "REPLAY" | "SYNTHETIC";
+        };
+        DevicePatch: {
+            revision: number;
+            displayName: string;
+        };
+        DeviceAttachmentInput: {
+            port: string;
+        };
+        DeviceSessionInput: {
+            /** Format: uuid */
+            bootId: string;
+        };
+        DeviceObservationInput: {
+            /** Format: uuid */
+            sessionId: string;
+            sequence: number;
+            /** Format: date-time */
+            observedAt: string;
+            /** @enum {string} */
+            status: "ONLINE" | "OFFLINE";
+            attributes: {
+                [key: string]: unknown;
+            };
+        };
+        Device: {
+            /** Format: uuid */
+            id: string;
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** Format: uuid */
+            profileVersionId: string;
+            /** @enum {string} */
+            sourceMode: "LIVE" | "REPLAY" | "SYNTHETIC";
+            /** @enum {string} */
+            state: "ACTIVE" | "RELEASED";
+            revision: number;
+            sessionEpoch: number;
+            /** @enum {string} */
+            connectionStatus: "UNKNOWN" | "ONLINE" | "OFFLINE" | "STALE" | "RELEASED";
+            /** Format: date-time */
+            lastSeenAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        DeviceAttachment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: uuid */
+            nodeId: string;
+            port: string;
+            /** Format: date-time */
+            attachedAt: string;
+            /** Format: date-time */
+            detachedAt: string | null;
+        };
+        DeviceSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: uuid */
+            bootId: string;
+            epoch: number;
+            lastSequence: number;
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt: string | null;
+        };
+        DeviceObservation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: uuid */
+            sessionId: string;
+            sequence: number;
+            /** Format: date-time */
+            observedAt: string;
+            /** @enum {string} */
+            status: "ONLINE" | "OFFLINE";
+            attributes: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        DeviceDetail: {
+            device: components["schemas"]["Device"];
+            attachments: components["schemas"]["DeviceAttachment"][];
+            sessions: components["schemas"]["DeviceSession"][];
+            observations: components["schemas"]["DeviceObservation"][];
+        };
+        ExecutionNode: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            architecture: string;
+            operatingSystem: string;
+            /** @enum {string} */
+            status: "READY" | "NOT_READY" | "UNKNOWN" | "REMOVED" | "STALE";
+            cpu: string;
+            memory: string;
+            labels: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            observedAt: string;
+        };
+        DevicePage: {
+            items: components["schemas"]["Device"][];
+            nextOffset: number | null;
+        };
+        NodePage: {
+            items: components["schemas"]["ExecutionNode"][];
+            nextOffset: number | null;
         };
     };
     responses: {
@@ -561,6 +854,768 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: {
+                /** @description 최대 항목 수 */
+                limit?: number;
+                /** @description nextOffset을 전달해 다음 페이지를 조회합니다. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePage"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    registerDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceCreate"];
+            };
+        };
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description 새 객체 생성. 기존 객체의 ID는 바뀌지 않습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetail"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    releaseDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePatch"];
+            };
+        };
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    attachDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+                nodeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceAttachmentInput"];
+            };
+        };
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAttachment"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    openDeviceSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceSessionInput"];
+            };
+        };
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceSession"];
+                };
+            };
+            /** @description 새 객체 생성. 기존 객체의 ID는 바뀌지 않습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceSession"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reportDeviceObservation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceObservationInput"];
+            };
+        };
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceObservation"];
+                };
+            };
+            /** @description 새 객체 생성. 기존 객체의 ID는 바뀌지 않습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceObservation"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 요청 크기 제한을 초과했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listNodes: {
+        parameters: {
+            query?: {
+                /** @description 최대 항목 수 */
+                limit?: number;
+                /** @description nextOffset을 전달해 다음 페이지를 조회합니다. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePage"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nodeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionNode"];
+                };
+            };
+            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치·노드·참조 Profile이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
             };
         };
     };
