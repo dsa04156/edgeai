@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "54fc6718614f4a472755dfe5868910d315fb03d9",
-  "apiDigest": "sha256:3fd58efc707b0364318c464033d8ed0677d8ee395a45b5b85cd4e62f8fcfdbf5",
-  "dashboardDigest": "sha256:c0ef0d9c15ca07506f224c55ae7ca296ababacdbeb0c3552e1f70d994be303af",
-  "runnerDigest": "sha256:eb305bb557542733c6f9a68e433ac34b67ea1a7b2f64ad1ceae91b32b1c5fbcc",
-  "minioDigest": "sha256:8f4fdbf34ee344708d460db040113146022283f98c25be8916b8f8b767f409a2",
+  "sourceRevision": "2ec9462052c3e9fbdd043cf3c29a05f3a63668ed",
+  "apiDigest": "sha256:74c69be16c44069a6ff652443a7e9ad7fbb874306da42bd706f38c38ef333743",
+  "dashboardDigest": "sha256:b65f93b337844f26003758a8123a18409c66b778a01ede6d2f7f4de22550f0df",
+  "runnerDigest": "sha256:2b4ee2285d9d78afeb9ec822d8d750b612f736cdc40e096f341d67bec8ac5103",
+  "minioDigest": "sha256:b2fef6fc44b77d61c8b05fe9248b0b57da3ef60aea00a1d5650446f097b33465",
   "runtimeImagePlatforms": [
     "linux/amd64"
   ]
