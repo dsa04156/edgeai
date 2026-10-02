@@ -44,3 +44,14 @@ Dashboard uses [lossless-json](https://github.com/josdejong/lossless-json) for
 spec submission and detail rendering so large integer/decimal values are not
 rounded by native JavaScript JSON parsing. The dependency is exactly pinned in
 package.json and the workspace lockfile.
+
+
+Flyway history is explicitly pinned to `edgeai` (`spring.flyway.default-schema`).
+Leaving it implicit caused a first-start/restart difference: creating a schema
+named after the PostgreSQL user changes the effective default search_path. Fresh
+CI reproduced this; an already initialized local database initially masked it.
+No applied migration was edited and baseline/clean were not enabled.
+M0's V1 is schema creation only and remains idempotent when history initializes
+in the explicitly configured schema. A DB already containing Profile rows but
+history only in public (the failed first M1 commit f3b2145) needs explicit history
+reconciliation before reuse; the app intentionally does not auto-baseline it.

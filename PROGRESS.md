@@ -3,7 +3,7 @@
 [STATUS]
 M1 Profile 구현 및 로컬 검증 완료. 전체 플랫폼은 PARTIAL.
 공개 저장소: https://github.com/dsa04156/edgeai
-M1 GitHub CI 결과는 push 후 확인한다.
+첫 CI의 fresh DB Flyway history 위치 문제를 재현·수정했다. 수정본 CI를 확인한다.
 
 [IMPLEMENTED]
 DEVICE/SERVICE/VD 등록·목록·버전 조회, OpenAPI 생성 타입, Flyway V2,

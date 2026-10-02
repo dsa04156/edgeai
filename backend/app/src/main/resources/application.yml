@@ -9,6 +9,7 @@ spring:
       maximum-pool-size: 5
       connection-timeout: 5000
   flyway:
+    default-schema: edgeai
     enabled: true
     clean-disabled: true
   security:

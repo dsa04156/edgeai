@@ -42,3 +42,17 @@ spec은 JSON 문서이며 kind별 실행 스키마·장치 호환성·이미지 
 발행 불변성 때문에 고유 키로 생성한 시험 행도 개발 DB에 보존한다.
 M1에는 Kubernetes 동작이 없으며 kind·실장비 시험을 이 단계에서 실행했다고 주장하지 않는다.
 전체 플랫폼 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아직 아니다. 다음 단계는 M2 Device/Node.
+
+
+## 최초 CI의 새 DB 초기화 실패와 수정
+
+CI 36950026136의 storage는 성공했지만 scaffold의 PostgreSQL integration이 실패했다.
+빈 DB에서 첫 Spring context가 public에 Flyway history를 만들고 V1이 edgeai schema를
+생성한 뒤, 다음 context의 PostgreSQL 기본 schema가 edgeai로 바뀌었다. 이때 history는
+public에 있으므로 Flyway가 비어 있지 않은 edgeai schema를 거절했다.
+로컬의 별도 신규 DB에서도 같은 실패를 재현했다(20261002T011929Z-404a85e1).
+`spring.flyway.default-schema: edgeai`를 명시하고 회귀 검사도 해당 값을 확인하도록 바꿨다.
+기존 migration 내용, baselineOnMigrate, clean 설정은 변경하지 않았다.
+
+수정 후 완전히 새 DB 통합 시험 `20261002T012015Z-0e19456e`는 PASS/0이다.
+기존 로컬 DB는 별도 통합 시험 결과로 확인한다.
