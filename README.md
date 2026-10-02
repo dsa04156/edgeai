@@ -208,3 +208,6 @@ CPU·메모리는 공유 VD 컨테이너 측정이므로 작업별 자동 offloa
 `EDGEAI_API_PASSWORD`와 결과 저장소의 `EDGEAI_STORAGE_URL`, `EDGEAI_MINIO_USER`,
 `EDGEAI_MINIO_PASSWORD`를 환경에 설정하세요. 이 명령은 시험 VD만 정리하며 기존 데이터를
 삭제하지 않습니다. API Pod 재시작 시험은 별도 격리 `test-vd-kubernetes.py`/CI kind에서 수행합니다.
+이전 producer 차단 검사에 내부 API도 필요하므로 API origin은 필요 시 별도 loopback
+`kubectl port-forward service/edgeai-api`로 연결하세요. `EDGEAI_SMOKE_PROXY_URL`에 공개
+Dashboard origin을 주면 CRUD/Run은 실제 Next.js proxy를 통과하고 내부 신원 검사는 직접 API를 씁니다.

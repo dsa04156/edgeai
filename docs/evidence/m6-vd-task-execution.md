@@ -95,3 +95,16 @@ sequence CHECK를 `vd_task_allocation_check`, 기존 closure를 `_check1`로 생
 현재 코드의 실제 Kubernetes Task 수용과 실제 API/DB 화면 검증은 위 범위에서 통과했다.
 새 CI kind에는 기존 Run/Remote 회귀 뒤 VD Task 수용을 연결했다. 새 이미지 CI·실제 배포
 검증은 남아 있으며 이 파일의 로컬 PASS만으로 전체 M6 완료를 판정하지 않는다.
+
+## 소스 push와 CI 진행
+
+구현 소스 `2ec9462052c3e9fbdd043cf3c29a05f3a63668ed`를 main에 push했다.
+[CI37059110890](https://github.com/dsa04156/edgeai/actions/runs/37059110890)의5개 job은 모두
+success다. 내려받은 result.json15개는 모두PASS/0이며 실제 PG136개/skip0, 컨테이너 Runner28개,
+UI34개, 실제 API/DB 브라우저10개와 Swagger도 로그에서 확인했다.
+새 이미지의 실제 kind는 기존 Run22개/S3결과20개와 VD4개 수명/작업 시나리오를 통과했다.
+`kind-vd.json`의 taskExecution=true, VD 작업 Run4개와 고정 S3결과5개, 각 시험 자원0개를
+확인했다. API Pod 재생성은 idle11.102초/작업 중9.945초이며 같은 VD 세대·작업을 유지했다.
+GitOps pin6ee527d가 위 소스의 검증된 digest를 기록했다. 신규 실제 배포는 최종 확인 대상이다.
+개발 overlay의 명시적 VD 활성화 patch는 서버 dry-run `20261002T201750Z-6b2923b7` PASS이며
+CI 전체 통과 후 해당 검증 이미지로 적용한다. 로컬 실행 기본값은 계속 비활성이다.

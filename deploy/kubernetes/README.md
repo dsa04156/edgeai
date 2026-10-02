@@ -29,6 +29,10 @@ ClusterRole/Binding을 준비한다. 권한은 core/v1 nodes의 get/list뿐이�
 Bootstrap RBAC는 `bootstrap/node-reader.json`, namespace ServiceAccount는 GitOps로 관리한다.
 # M4 runtime 준비
 
+dev overlay는 CI의 실제 VD Task 수용까지 통과한 이미지에서 `EDGEAI_VD_ENABLED=true`를
+API 컨테이너에 명시한다. 로컬/공통 애플리케이션 기본값은 false다. 추가 권한 확대 없이 기존
+전용 namespace의 VD Pod·Secret 권한을 사용한다. 실제 상태는 VD execution/Operation으로 확인한다.
+
 `python3 scripts/bootstrap-runtime.py --context <명시적-context>`는 소유 labels를 확인한 뒤
 `edgeai-runtimes`와 Runner SA, 제어 서버의 namespace 제한 Job/Pod/Secret 권한과 TokenReview
 권한을 준비한다. 기존 제어 서버 namespace/SA가 필요하며 공유 리소스를 인수하지 않는다.

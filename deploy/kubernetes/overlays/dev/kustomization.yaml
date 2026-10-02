@@ -4,6 +4,8 @@ namespace: edgeai
 resources:
   - ../../base
   - ingress.yaml
+patches:
+  - path: vd-execution.yaml
 images:
   - name: ghcr.io/dsa04156/edgeai-api
     digest: sha256:74c69be16c44069a6ff652443a7e9ad7fbb874306da42bd706f38c38ef333743
