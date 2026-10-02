@@ -35,7 +35,9 @@
 | M4-WORKER | scripts/test-integration.sh | 응답 유실·새 worker·취소 종료 확인·늦은 Job·누락 결과·watch 만료·deadline | 실제 PostgreSQL; K8 응답은 fixture |
 | M4-K8-GATEWAY | scripts/test-runtime-kubernetes.sh <명시적-context> | 실제 제한된 SA/TLS·AUTO/NODE scheduler·Pod TokenReview·watch·UID 삭제 | 소유 namespace/RBAC 필요; 대기 컨테이너이며 Runner 전체 경로와 구분 |
 | M4-RUNNER-IMAGE | EDGEAI_RUNNER_IMAGE=<image> scripts/test-runner.sh | 같은 프로토콜 시험을 비루트·읽기 전용 컨테이너로 수행 | Linux Docker; CI runner job |
-| M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
+| M4-KIND | scripts/test-kind.sh | 실제 AUTO/NODE→Job→Runner→S3→Result→BATCH, API 재시작·artifact/producer fault·취소 | Linux amd64 Docker, 전용 폐기 kind; 성공 증거는 M4 evidence 확인 |
+| M4-DEPLOY | scripts/demo-workflow.sh <명시적-context> | 실제 BATCH·파일 계산값/체크섬·실행 취소·affinity/CPU 부족·출력 누락·하위 SKIPPED | 실행 활성화된 API/K8/MinIO; 합성 workload |
+| M4-RESULT-UI | 실제 Result의 배포 화면 조회 | 실제 API의 Result ID/파일 크기/SHA/version과 PC·모바일 표시 대조, overflow 없음 | 실제 배포·브라우저; 전체 DAG 성공과 별개 |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |

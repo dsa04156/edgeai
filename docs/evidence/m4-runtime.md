@@ -92,7 +92,7 @@ PostgreSQL 단독 시험의 Pod 신원과 artifact receipt는 fixture다. 별도
 
 1. 실제 Runner의 BATCH 입력 전달과 취소·리소스 종료·누락/늦은 결과에 대한 종단 검증.
 2. 실제 kind의 scheduler→Runner→MinIO→Result 및 재시작/producer fault 수용시험.
-3. 실제 Runner가 만든 Result의 PC/모바일 화면 검증.
+3. 실행 게이트 통과 후 새 이미지의 실제 배포 회귀.
 
 presigned PUT의 checksum 헤더는 서명하지만 SDK는 Content-Length/Content-Type을 서명에서
 제외한다. 현재 내용·크기·형식 검증은 commit 전에 수행하며, 업로드 전 정확한 크기 제한을
@@ -203,3 +203,43 @@ kind용 임시 kubeconfig·별도 Secret 복구 경로·3노드·실제 이미�
 CI는 새 kind 게이트 통과 후에만 API/화면 이미지를 발행한다. API 재시작·같은Job/Attempt 보존,
 wrong version/size/hash·동시 commit·다른 Pod 신원·취소 뒤 늦은 commit 시험도 추가했다.
 이 변경의 새 CI/kind 및 실제 배포 재검증은 아직 수행 전이다.
+
+`494ae37`에 재시도 수정과 실제 kind CI 게이트를 push했고 Actions36984655502에서 검증 중이다.
+`20261002T083220Z-41a1c38e`: 변경 후 OpenAPI/내부 계약·MVC PASS/0.
+`20261002T083613Z-1ba364be`: 실제 배포 PC1440/모바일390 화면에서 첫 Run의 성공한 root Result
+ID·79byte·SHA·version을 공개 API와 대조하고 수평 넘침이 없음을 확인했다. 같은 고정 버전의 MinIO
+파일을 다시 읽어 실제 SHA/크기/계산값(score0.25, features[2,1])도 일치했다. screenshot 두 장을
+직접 검토했고 `output/playwright/real-result-{desktop,mobile}.png`에 보존했다.
+이 Result는 실패한 전체 DAG 중 성공한 root의 결과다. 하위 실행·전체 Run 성공을 증명하지 않는다.
+최초 S3 재조회는 MinIO rollout으로 기존 port-forward 연결이 끝나 실패했다. 종료된 handle과
+연결 거절을 확인하고 새 Pod에 재연결한 뒤 동일 object/version 검증을 통과했다.
+
+`20261002T083849Z-3a33a3a2`: 수정 gateway의 실제 Kubernetes2개 회귀 PASS/0.
+제한된 SA/TLS·AUTO/NODE 배치·실제 Pod token·watch·UID 기반 Job/Pod/Secret 종료를 다시 확인했다.
+대기 컨테이너 시험이므로 새 Runner 전체 경로를 대신하지 않는다. 별도 CI36984655502의 kind 시험이 진행 중이다.
+
+## 실제 kind·기존 클러스터 전체 실행 통과
+
+`494ae37`의 [CI36984655502](https://github.com/dsa04156/edgeai/actions/runs/36984655502)은
+5 jobs success, 다운로드한 결과JSON14개 PASS/0이다. kind `20261002T083920Z-edc458f0`의 원시
+로그와 `kind-runtime.json`을 직접 확인했다. 임의 이름의 전용3노드 클러스터·별도 DB/S3/키에서:
+
+- AUTO/NODE 각각 2단계 BATCH, 실제 Pod UID/배치 노드·단일 Attempt·Result·리소스 종료.
+- 실행 중 API 교체 후 같은 Job UID/Attempt 유지, 나머지 BATCH 완료.
+- 실제 S3 version 누락/크기/해시 오류400 ARTIFACT_INVALID, 동시commit201/200으로 같은 Result1개.
+- 다른 실제 Pod token으로 claim409, 취소·Pod 종료 뒤 늦은commit401, 결과 생성 없음.
+- 실행 중 취소·불가능한 affinity, Job/Pod/Secret 잔여0.
+- 실제 고정버전 artifact7개의 길이/SHA/계산값 대조. 시험 후 생성한 kind 클러스터만 삭제.
+
+Actions pin `1c286b2`의 API/UI/MinIO imageID·Ready·PVC Bound·Argo Synced는
+`20261002T084513Z-d2d5a6ad` PASS/0. aggregate health Progressing은 기존 공유 Ingress status 제한이다.
+`20261002T084526Z-b0e53961`: 기존 Kubernetes1.31.14에서 새 Runner/API를 사용한 실제 AUTO/NODE
+BATCH와 artifact4개 내용 검증·실행 취소·affinity 및 CPU 부족·출력 누락·작업 실패·하위SKIPPED,
+모든 해당 Run의 리소스 종료 PASS/0. 이전 FENCED 실패 이후 수정 이미지로 전체 실행이 통과했다.
+모든 workload는 참조 CPU 계산의 SYNTHETIC 데이터이며 실제 모델·가속기·장치 acceptance가 아니다.
+
+추가한 CPU 부족·출력 누락·프로세스 실패 시험은 기존 클러스터에서 먼저 통과했고 다음 CI kind에
+포함한다. `20261002T084654Z-018ce37c`는 runtime=true 배포의 UI/assets·Swagger·인증/CSRF·
+Profile/Device/Node·불변 DAG·Run 재전송·분기 및 전체취소 회귀 PASS/0이다. 해당CRUD probe는
+의도적으로 스케줄되지 않는 작업으로 관리 동작을 시험하며 실제 계산 증거는 위 종단 시험이 담당한다.
+추가3개 실패조건의 다음 CI kind 결과를 확인한 뒤 M4 완료를 판정한다.

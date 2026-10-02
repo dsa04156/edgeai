@@ -8,7 +8,8 @@ SERVICE Profile spec의 `apiVersion=edgeai/v1` 실행 형식을 별도 JSON Sche
 기존 발행 Profile은 변경하지 않는다. registry의 JSON 보관과 소비 시 실행 검증을 구분한다.
 이미지는 sha256 digest로 고정하고 workload command/args, 입출력 포트, CPU/memory와
 선택적 GPU/NPU extended resource, arch/OS, timeout, node selector/tolerations/runtime class를 명시한다.
-M4 Runner 프로토콜은 Linux amd64/arm64에서 제공한다. 다른 OS/architecture는 조용히 대체하지 않고 거절한다.
+실행 규격은 Linux amd64/arm64를 표현한다. 현재 참조 Runner 이미지의 CI 검증 플랫폼은 linux/amd64이며,
+ARM 이미지·실장비 검증은 M10에서 별도로 수행한다. 다른 OS/architecture는 조용히 대체하지 않고 거절한다.
 QoS는 자원 요구에서 계산하며 명시한 QoS가 있으면 일치해야 한다. GPU/NPU는 정수 자원 요청만 표현하며 공유·분할을 주장하지 않는다.
 
 AUTO는 요구조건을 Kubernetes Job에 표현한다. NODE는 관측된 Node 이름의 required node affinity
@@ -33,6 +34,9 @@ Attempt Secret만으로는 같은 Job의 중복 Pod를 구분할 수 없다. 내
 HMAC 키로 namespace/Attempt/epoch/nonce에 결합한 Bearer token과, 매 요청 파일에서 다시 읽은
 Pod-bound token을 함께 요구한다. TokenReview의 audience·ServiceAccount·Pod UID를 검증하고
 실제 Running Pod와 Job owner UID, Node UID를 조회한다. 호출자가 선언한 Pod UID만 신뢰하지 않는다.
+Pod 프로세스보다 kubelet Running 상태 게시가 늦을 수 있으므로 Pending 관측은503으로 응답한다.
+Runner의 최초 claim은30초 deadline 내에서 backoff 재시도하며, 실제 Running 상태가 된 뒤에만
+인증을 통과한다. 잘못된/삭제된/종료된 Pod의401/409는 재시도하지 않는다.
 일반 Basic 인증은 내부 Runner API 권한을 얻지 못한다. 내부 경로에는 최대 256KiB 본문 제한을 적용한다.
 Control Plane에는 전용 namespace의 Jobs get/list/watch/create/delete, Pods get/list,
 Secrets get/create/delete와 해당 namespace 조회·TokenReview create만 추가한다. Node 읽기는 기존 권한을 사용한다.

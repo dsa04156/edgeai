@@ -1,6 +1,7 @@
-# 구현 계약 — M0–M3 작업 기준
+# 구현 계약 — M0–M4 작업 기준
 
-상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행 요청 구현 범위. 별도 전체 계약 원문은 아직 확인되지 않았다.
+상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result 구현 범위.
+M4 구현·검증은 진행 중이다. 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
 
@@ -49,6 +50,19 @@
 - M3는 실행 요청 관리다. 실제 Pod/Runner/Result는 M4, STREAM 실행은 M7(현재 501)이다.
 - 상세한 한도·상태·정규화 규칙은 ADR 0004를 따른다.
 
+## M4 실행·Result 수용 범위
+
+- SERVICE 규격을 소비할 때 digest 고정 이미지·입출력·자원·플랫폼·제한을 검증한다.
+- AUTO 요구조건/NODE hard affinity를 Job으로 만들고 실제 scheduler bind를 관측한다.
+- 현재 Attempt에 Runtime/명령 lease를 연결하고 재시작·생성 응답 유실을 조정한다.
+- 내부 API는 Attempt HMAC과 실제 Pod-bound TokenReview를 함께 요구한다. Pending 관측은 재시도한다.
+- Runner는 실제 workload를 실행하고 고정 버전 S3 artifact를 업로드한다. 서버는 실제 bytes를 검사한 뒤
+  현재 producer/epoch·취소 상태를 다시 확인하여 Result와 Task/Attempt를 원자적으로 확정한다.
+- 검증된 BATCH 선행 출력만 하위 입력으로 사용하며 실패·취소는 하위 전파와 실제 리소스 종료를 확인한다.
+- 공개 Result API/Swagger/UI는 검증된 metadata만 노출한다. 인증 토큰이나 presigned URL은 공개 조회에 없다.
+- 실제 kind에서 AUTO/NODE BATCH·CPU/affinity 부족·취소·API 재시작·artifact 오류·중복/늦은 producer를 검증한다.
+- 계약의 상세는 ADR0005와 OpenAPI를 따르며, 실제 통과 여부는 M4 evidence로 판단한다.
+
 ## 후속 구현에서 유지할 불변 조건
 
 - 발행 ProfileVersion·WorkflowVersion 불변.
@@ -62,5 +76,5 @@
 
 ## 미확정
 
-M4 이후 상세 lifecycle·오류·DDL·실행/result commit API, production identity/RBAC,
+M5 이후 상세 retry/offload/VD/STREAM 계약, 운영 사용자 identity/RBAC,
 2세부 실제 API, 실장비 inventory, GPU/NPU 공유 방식, 성능 수용 수치.

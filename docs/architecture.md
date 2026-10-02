@@ -22,7 +22,8 @@ Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes �
 현재 M4에는 실행 규격 검증·Job compiler·S3 artifact adapter·독립 Python Runner가 추가됐다.
 V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·검증된 결과 확정·BATCH 해제·취소를
 같은 Run 행 잠금 아래 연결한다. Kubernetes worker와 내부 Runner HTTP 인증/API는 구현했다.
-실행은 기본 비활성이며 배포 저장소·키·이미지 연결과 Runner 전체 경로 검증이 남아 있다.
+로컬 실행 기본값은 비활성이며 배포는 저장소·키·이미지를 연결하고 활성화했다. 실제 root Result까지
+확인했으나 전체 BATCH 실행과 kind 게이트는 검증 중이다. 현재 제한은 M4 evidence를 따른다.
 
 | 경로 | 책임 |
 |---|---|

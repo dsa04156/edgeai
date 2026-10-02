@@ -33,7 +33,7 @@ M4 구성 요소의 단위30·계약·호스트 Runner7·실제 MinIO4·Kubernet
 기존 PostgreSQL·실제 PC/모바일8·DB 장애 복구 회귀를 확인했다.
 첫 M4 구성 요소의 CI·Runner 컨테이너·배포 이미지/Ingress를 확인했다.
 V5 상태 서비스의 실제 PostgreSQL31·MinIO+DB2·PC/모바일8·계약·DB 장애 복구를 추가 검증했다.
-실제 kind 실행 스크립트·CI 게이트를 구현 중이며 아직 성공 증거는 없다.
+실제3노드 kind에서 AUTO/NODE BATCH·API 재시작·artifact/producer fault·취소 시험을 통과했다.
 이후 단위35·실제 PostgreSQL41·내부 API 계약 및 실제 Kubernetes gateway2개를 검증했다.
 실제 gateway 시험은 AUTO/NODE 배치·Pod TokenReview·unbound token 거절·watch·UID 삭제를 확인했으며,
 대기 컨테이너를 사용하므로 Runner→MinIO→Result 전체 경로 검증과 구분한다.
@@ -53,6 +53,10 @@ M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 Result/API 코드2cbaf36 CI36983413818 5jobs/JSON13개 통과, eb33bfd pin과 실제 API/UI/MinIO imageID 일치.
 첫 실제 Runner 실행은 root Result를 만들었지만 하위 실행 또는 다음 Run의 claim에서 FENCED로 실패했다.
 Pending Pod 관측 지연을 재시도하도록 수정했고 Java38·Runner8 회귀 통과. 새 CI/kind·배포 재검증이 남았다.
+494ae37 CI36984655502 5jobs/JSON14개 및 실제kind 통과. 실제 root Result PC/모바일·고정S3 대조 PASS.
+1c286b2의 실제 imageID/Ready/Argo 확인 후 기존클러스터 AUTO/NODE BATCH·취소·CPU/affinity 부족·
+출력누락·작업실패·하위SKIPPED·파일4개 체크섬/계산값 검증 PASS. runtime=true 배포의 Swagger/인증/CRUD 회귀도 PASS.
+추가실패조건3개의 다음kind CI 결과를 확인한 뒤 M4 완료 판정.
 상세 구현 순서: PLAN.md. 기존 demo-workflow/test-kind의 실제 실행 기준을 유지한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh

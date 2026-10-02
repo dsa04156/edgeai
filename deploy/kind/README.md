@@ -16,7 +16,8 @@ worker2개이며 API/화면의 실제 빌드 이미지를 kind에 적재한다. 
 
 시험 범위는 실제 AUTO/NODE 배치, 2단계 BATCH의 저장된 입력 전달, 파일 version/크기/SHA와 계산값,
 실행 중 API 교체 후 동일 Job/Attempt 유지, 잘못된 artifact 거절·동시 commit 단일 Result,
-서로 다른 Pod 신원 거절·취소 뒤 늦은 commit 거절, 실제 실행 취소와 불가능한 affinity이다.
+서로 다른 Pod 신원 거절·취소 뒤 늦은 commit 거절, 실제 실행 취소와 불가능한 affinity/CPU 부족,
+출력 누락·프로세스 실패 뒤 하위 SKIPPED와 Result 부재를 포함한다.
 `--faults`는 전용 kind context·namespace 소유 label이 일치할 때만 허용한다.
 원시 credentials/Pod spec/log/Secret은 artifact에 수집하지 않으며 고정 Runner 이벤트만 읽는다.
 

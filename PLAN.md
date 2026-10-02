@@ -21,8 +21,10 @@ M3의 CI·배포 검증을 완료했으며 현재 M4 실제 실행 경로를 구
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
 BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생성/관측 worker·내부 인증/API를
 연결했고 실제 클러스터의 scheduler·Pod TokenReview·UID 삭제를 대기 컨테이너로 검증했다.
-로컬 실행은 기본 비활성이고 실제 배포는 실행 활성화·Result API/UI를 반영했다. 첫 Runner 종단 시험의
-claim 실패를 진단하며 Pending Pod 관측 지연 재시도와 kind 수용시험을 구현·검증 중이다.
+로컬 실행은 기본 비활성이고 실제 배포는 실행 활성화·Result API/UI를 반영했다. Pending Pod 관측 지연
+재시도 수정 뒤 실제 kind의 AUTO/NODE BATCH·재시작·artifact/producer fault와 기존 클러스터 종단
+실행을 통과했다. CPU 부족·출력 누락·프로세스 실패의 추가 조건도 기존 클러스터에서 통과했고,
+동일 조건의 다음 kind CI 확인 후 M4 완료를 판정한다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

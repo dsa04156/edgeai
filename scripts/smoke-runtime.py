@@ -237,9 +237,13 @@ if args.faults:
     finally:
         if request('workflow-runs/'+probe_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(probe_id)
 
-for case in ['cancel-running','unsatisfiable-affinity']:
+for case in ['cancel-running','unsatisfiable-affinity','insufficient-cpu']:
     spec=copy.deepcopy(base);spec['command']=['python3','-c','import time; time.sleep(110)']
     if case=='unsatisfiable-affinity':spec['nodeSelector']={'edgeai.io/test-constraint':uuid.uuid4().hex}
+    if case=='insufficient-cpu':
+        # Valid resource contract, deliberately greater than any available node's capacity.
+        spec['resources']['requests']['cpu']='1000000'
+        spec['resources']['limits']['cpu']='1000000'
     run=create(workflow(case,profile(case,spec)),{'mode':'AUTO'});run_id=run['id']
     captured=None;fence_proof={}
     try:
@@ -248,7 +252,8 @@ for case in ['cancel-running','unsatisfiable-affinity']:
             if case=='cancel-running':
                 task=request('workflow-runs/'+run_id)['tasks'][0]
                 return any(p['status'].get('phase')=='Running' for p in pods) and request('tasks/'+task['id'])['attempts'][0]['state']=='RUNNING'
-            return any(not p['spec'].get('nodeName') and any(c.get('reason')=='Unschedulable' for c in p['status'].get('conditions',[])) for p in pods)
+            return any(not p['spec'].get('nodeName') and any(c.get('reason')=='Unschedulable' and
+                (case!='insufficient-cpu' or 'Insufficient cpu' in c.get('message','')) for c in p['status'].get('conditions',[])) for p in pods)
         wait(observed,60,'Did not observe real '+case)
         if args.faults and case=='cancel-running':
             pod=next(r for r in resources(run_id) if r['kind']=='Pod' and r['status'].get('phase')=='Running')
@@ -271,6 +276,25 @@ for case in ['cancel-running','unsatisfiable-affinity']:
     for task in request('workflow-runs/'+run_id)['tasks']:assert request('tasks/'+task['id']+'/results')['items']==[]
     report['runs'].append({'id':run_id,'case':case,'state':'CANCELLED','resourcesRemaining':0,'fencing':fence_proof})
     print('PASS: real '+case+'; producer stopped, empty results, no remaining resources',flush=True)
+
+for case,command in [('missing-output','pass'),('workload-failure','raise SystemExit(7)')]:
+    spec=copy.deepcopy(base);spec['command']=['python3','-c',command]
+    run=create(workflow(case,profile(case,spec),child),{'mode':'AUTO'});run_id=run['id']
+    try:
+        def failed():
+            detail=request('workflow-runs/'+run_id)
+            assert detail['run']['state'] not in ('SUCCEEDED','CANCELLED'),'Invalid workload was reported as successful/cancelled'
+            return detail if detail['run']['state']=='FAILED' else None
+        detail=wait(failed,90,'Invalid workload did not fail')
+        tasks={t['key']:t for t in detail['tasks']}
+        assert tasks['root']['state']=='FAILED' and tasks['child']['state']=='SKIPPED'
+        for task in detail['tasks']:assert request('tasks/'+task['id']+'/results')['items']==[]
+        assert request('tasks/'+tasks['child']['id'])['attempts']==[],'Failed parent released a downstream Attempt'
+        cleaned(run_id)
+        report['runs'].append({'id':run_id,'case':case,'state':'FAILED','downstream':'SKIPPED','resourcesRemaining':0})
+        print('PASS: real '+case+'; no Result, downstream skipped, no remaining resources',flush=True)
+    finally:
+        if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
 
 verification=subprocess.run(['node','scripts/verify-runtime-artifacts.mjs'],input=json.dumps(artifacts),text=True,capture_output=True,timeout=90)
 if verification.returncode:raise AssertionError('Actual S3 output verification failed; response suppressed')
