@@ -75,7 +75,7 @@ class RuntimeArtifactIntegrationTest {
         var v=workflows.publish(w.id(),json.canonical(Map.of("version","1.0.0","tasks",tasks,"dependencies",List.of(Map.of("fromTask","root","toTask","child","fromPort","output","toPort","input","mode","BATCH"))))).value();
         WorkflowRun run;
         if(remote){
-            var fixture=new WorkflowRun(UUID.randomUUID(),v.id(),UUID.randomUUID(),json.digest("remote-s3-fixture",Map.of("version",v.id().toString())),"REMOTE",null,"{}",RetryPolicy.disabled(),null,"PENDING",Instant.now(),Instant.now());
+            var fixture=new WorkflowRun(UUID.randomUUID(),v.id(),UUID.randomUUID(),json.digest("remote-s3-fixture",Map.of("version",v.id().toString())),"REMOTE",null,"{}",RetryPolicy.disabled(),null,"PENDING",Instant.now(),Instant.now(),new RemoteTarget("reference","sha256:"+"a".repeat(64),"SYNTHETIC"));
             run=new TransactionTemplate(transactions).execute(s->{assertThat(repository.create(fixture)).isTrue();repository.initialize(fixture,definitions.definitions(v.id()),Set.of("root"));return fixture;});
         }else run=executions.create(UUID.randomUUID().toString(),json.canonical(Map.of("workflowVersionId",v.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of()))).value();
         var runTasks=executions.detail(run.id()).tasks();UUID task=runTasks.stream().filter(t->t.key().equals("root")).findFirst().orElseThrow().id();

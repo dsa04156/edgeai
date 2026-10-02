@@ -20,7 +20,7 @@ test("result view distinguishes pending, verified metadata and unavailable stora
       if (phase === "unavailable") return route.fulfill({ status: 503, json: { code: "RESULT_STORE_UNAVAILABLE", message: "결과 저장소에 연결할 수 없습니다. 복구 후 다시 시도하세요." } });
       body = { taskId, items: phase === "pending" || phase === "retry" ? [] : [{ id: resultId, taskId, attemptId, runtimeId: runId, epoch: 1, producerPodUid: phase === "remote" ? null : attemptId,
         remoteAllocationId: phase === "remote" ? "55555555-5555-4555-8555-555555555555" : null, remoteSourceMode: phase === "remote" ? "SYNTHETIC" : null,
-        manifestDigest: "a".repeat(64), createdAt: now, artifacts: [{ port: "output", bucket: "edgeai-artifacts", objectKey: `tasks/${taskId}/attempts/${attemptId}/output`,
+        manifestDigest: "sha256:" + "a".repeat(64), createdAt: now, artifacts: [{ port: "output", bucket: "edgeai-artifacts", objectKey: `tasks/${taskId}/attempts/${attemptId}/output`,
           objectVersion: "fixture-version", bytes: 1234, mediaType: "application/json", sha256: "b".repeat(64) }] }] };
     } else return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
     await route.fulfill({ status: 200, json: body });

@@ -28,7 +28,7 @@ M5는 Run별 RetryPolicy·V6 task_retry 예약과 RETRY_WAIT를 추가한다. �
 직렬화하고 실제 이전 Runtime 종료 후 새 Attempt/epoch를 만든다. V7 task_offload와 OffloadService는
 명시적인 실행 중 NODE 전환을 같은 잠금으로 처리한다. 이전 producer 차단→물리 종료→새 Attempt 및
 target claim 확인 순서이며 Operation 성공과 Task 결과 성공을 구분한다. 실제 배치는 scheduler가 담당한다.
-Remote·상태형 checkpoint·STREAM route는 남은 범위다.
+상태형 checkpoint·STREAM route와 실제 외부 Remote 계약 수용은 남은 범위다.
 V8 runtime_telemetry는 현재 producer가 보고한 cgroup 사용량과 서비스 지연을 Attempt별 최신64개로
 보존한다. Runner 내부 인증과 Run 잠금으로 종료된 producer를 차단하며 Task 상세는 최신 Attempt의
 측정만 제공한다. 측정 수집과 자동 전환의 판단·실행은 별도 단계다(ADR0008).
@@ -39,9 +39,11 @@ HTTP 참조 adapter와 SQLite 기반 합성 제공자를 실제 HTTP/TLS·별도
 ADR0011/V10–V11은 RuntimeInstance와 RemoteAllocation을 1:1로 연결하고 Kubernetes/Remote 명령
 조회를 분리한다. Remote 결과는 allocation 신원을 가지며 Job/Pod/Node UID는 null이다. 제공자의 성공
 관측만으로 결과를 확정하지 않고 실제 S3 검증 후 현재 Attempt/epoch/lease/취소를 다시 확인한다.
-결과 API·화면에서 SYNTHETIC 참조 계산을 표시한다. 이 내부 경로는 실제 DB/S3/HTTP로 로컬 검증했다.
-자동 Remote worker·공개 REMOTE 요청/전환·제공자 설정 연결은 남아 있다. 실제 외부 API는 제공된 계약에
-맞춘 별도 adapter가 필요하다. 상세 검증 및 한계는 `docs/evidence/m5-remote-runtime.md`를 따른다.
+결과 API·화면에서 SYNTHETIC 참조 계산을 표시한다. 이 내부 경로는 실제 DB/S3/HTTP와 CI·배포를 검증했다.
+ADR0012/V12는 공개 REMOTE Run/Offload부터 제공자 binding을 고정하고 RemoteWorker가 명령/관측과
+직접 S3 입출력 전송을 수행한다. 외부 I/O는 DB 트랜잭션 밖이며 Result 확정 때 producer를 재검사한다.
+실제 Spring 스케줄러·공개 HTTP·제공자·DB/S3는 로컬 검증했다. 실제 Kubernetes↔Remote 종단과 외부
+계약 수용은 남았다. 상세 검증 및 한계는 `docs/evidence/m5-remote-worker.md`를 따른다.
 
 | 경로 | 책임 |
 |---|---|

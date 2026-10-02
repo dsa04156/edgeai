@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용하며 VD는 M6 후속입니다. STREAM 실행은 아직 501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 M6 후속이며 STREAM 실행은 아직501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -517,8 +517,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 실행 중인 작업을 다른 노드로 전환
-         * @description 실제 producer가 claim한 현재 Attempt만 전환합니다. SERVICE에 recovery.mode=RESTART 선언이 필요합니다. 이전 producer를 즉시 차단하고 실제 종료를 확인한 뒤 같은 Task에서 새 Attempt/epoch를 만듭니다. targetNodeId는 현재 노드와 다르고 Profile 요구조건에 맞는 최근 READY 노드여야 합니다. 같은 키·내용은 같은 Operation을 반환하며, 다른 입력은409입니다. 작업별 최대8회, 동시에1개입니다. Operation의 성공은 새 노드에서 실행을 시작했다는 뜻이며 Task 결과 성공과 구분합니다.
+         * 실행 중인 작업을 다른 노드 또는 Remote로 전환
+         * @description 실제 producer가 claim한 현재 Attempt만 전환합니다. SERVICE에 recovery.mode=RESTART 선언이 필요합니다. 이전 producer를 즉시 차단하고 실제 종료를 확인한 뒤 같은 Task에서 새 Attempt/epoch를 만듭니다. targetNodeId는 현재 노드와 다르고 Profile 요구조건에 맞는 최근 READY 노드여야 합니다. Remote로 전환할 때는 targetNodeId 대신 targetProviderKey를 지정합니다. 제공자 설정은 접수 시 고정되며, 실제 Remote 종료를 확인한 뒤 새 실행으로 이동합니다. 동일 제공자로의 재전환은 허용하지 않습니다. 같은 키·내용은 같은 Operation을 반환하며, 다른 입력은409입니다. 작업별 최대8회, 동시에1개입니다. Operation의 성공은 새 위치에서 실행을 시작했다는 뜻이며 Task 결과 성공과 구분합니다.
          */
         post: operations["offloadTask"];
         delete?: never;
@@ -536,7 +536,7 @@ export interface paths {
         };
         /**
          * 비동기 실행 전환 상태 조회
-         * @description 현재 TASK_OFFLOAD Operation의 이전/새 Attempt, 대상 노드, drain/start 마감과 실패 코드를 조회합니다. DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다. FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
+         * @description 현재 TASK_OFFLOAD Operation의 이전/새 Attempt, 대상 노드 또는 고정 Remote 제공자, drain/start 마감과 실패 코드를 조회합니다. DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다. FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
          */
         get: operations["getOperation"];
         put?: never;
@@ -596,7 +596,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND";
             message: string;
         };
         /**
@@ -821,7 +821,19 @@ export interface components {
             mode: "NODE";
             /** Format: uuid */
             nodeId: string;
+        } | {
+            /** @constant */
+            mode: "REMOTE";
+            /** @description 서버에 설정된 Remote 제공자 key. endpoint와 자격은 요청에 넣지 않습니다. */
+            providerKey: string;
         };
+        /** @description 요청 시 고정된 제공자 설정. SYNTHETIC 참조 계산은 실장비 검증이 아닙니다. 비밀정보와 endpoint는 반환하지 않습니다. */
+        RemoteTarget: {
+            providerKey: string;
+            configurationDigest: string;
+            /** @enum {string} */
+            sourceMode: "SYNTHETIC" | "EXTERNAL";
+        } | null;
         /**
          * @description Task별 자동 재시도 정책. 생략하면 최초 1회만 실행합니다. 같은 Task ID에서 새 Attempt/epoch를 만들며 이전 실행의 종료와 대기 시간을 확인합니다. 입력·출력 오류, 결과 누락, 소유권 충돌과 취소는 재시도하지 않습니다.
          * @example {
@@ -844,7 +856,7 @@ export interface components {
             retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
         } & unknown;
         /**
-         * @description 명시적으로 활성화하는 작업별 자동 재시작 전환. 생략/null이면 비활성입니다. 모든 SERVICE는 recovery.mode=RESTART여야 합니다. 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있습니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 기존 실행 노드는 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+         * @description 명시적으로 활성화하는 작업별 자동 재시작 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 모든 SERVICE는 recovery.mode=RESTART여야 합니다. 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있습니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 기존 실행 노드는 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
          * @example {
          *       "cpuPercent": 90,
          *       "memoryPercent": 90,
@@ -903,8 +915,9 @@ export interface components {
             id: string;
             /** Format: uuid */
             workflowVersionId: string;
+            remoteTarget: components["schemas"]["RemoteTarget"];
             /** @enum {string} */
-            mode: "AUTO" | "NODE";
+            mode: "AUTO" | "NODE" | "REMOTE";
             /** Format: uuid */
             nodeId: string | null;
             retry: components["schemas"]["RetryPolicy"];
@@ -942,11 +955,12 @@ export interface components {
             taskId: string;
             number: number;
             epoch: number;
+            remoteTarget: components["schemas"]["RemoteTarget"];
             /**
              * @description 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.
              * @enum {string}
              */
-            mode: "AUTO" | "NODE";
+            mode: "AUTO" | "NODE" | "REMOTE";
             /** Format: uuid */
             nodeId: string | null;
             /** @enum {string} */
@@ -1035,12 +1049,14 @@ export interface components {
              * Format: uuid
              * @description 다른 READY 노드 UUID. scheduler가 hard affinity를 적용합니다.
              */
-            targetNodeId: string;
+            targetNodeId?: string;
+            /** @description Remote 전환 대상. targetNodeId와 정확히 하나만 지정합니다. */
+            targetProviderKey?: string;
             /** @description 이전 Runtime 종료 확인 제한 시간 */
             drainTimeoutSeconds: number;
             /** @description 새 Attempt 생성부터 producer claim까지 제한 시간 */
             startTimeoutSeconds: number;
-        };
+        } & (unknown | unknown);
         OffloadOperation: {
             /** Format: uuid */
             id: string;
@@ -1054,9 +1070,10 @@ export interface components {
             targetAttemptId: string | null;
             /**
              * Format: uuid
-             * @description 수동 전환의 지정 노드. 자동 전환은 null이며 scheduler가 선택합니다.
+             * @description NODE 전환의 지정 노드. Remote 또는 자동 전환이면 null입니다.
              */
             targetNodeId: string | null;
+            remoteTarget: components["schemas"]["RemoteTarget"];
             /** @enum {string} */
             trigger: "MANUAL" | "CPU" | "MEMORY" | "LATENCY";
             excludedNodeNames: string[];
@@ -3072,7 +3089,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Task 또는 대상 Node가 없습니다. */
+            /** @description Task 또는 대상 Node·Remote 제공자가 없습니다. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3088,7 +3105,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description 저장소 연결 실패. 동일 키로 재전송하세요. */
+            /** @description 저장소 연결 실패 또는 실행·Remote 기능이 비활성입니다. 설정 확인 후 동일 키로 재전송하세요. */
             503: {
                 headers: {
                     [name: string]: unknown;

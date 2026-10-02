@@ -28,6 +28,14 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  remote:
+    enabled: ${EDGEAI_REMOTE_ENABLED:false}
+    provider-key: ${EDGEAI_REMOTE_PROVIDER_KEY:reference}
+    url: ${EDGEAI_REMOTE_URL:}
+    token-file: ${EDGEAI_REMOTE_TOKEN_FILE:}
+    ca-file: ${EDGEAI_REMOTE_CA_FILE:}
+    source-mode: ${EDGEAI_REMOTE_SOURCE_MODE:SYNTHETIC}
+    timeout-seconds: ${EDGEAI_REMOTE_TIMEOUT_SECONDS:10}
   runtime:
     enabled: ${EDGEAI_RUNTIME_ENABLED:false}
     worker-enabled: ${EDGEAI_RUNTIME_WORKER_ENABLED:true}

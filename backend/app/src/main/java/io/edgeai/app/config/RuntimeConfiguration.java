@@ -17,7 +17,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 @EnableScheduling
 @ConditionalOnProperty(name="edgeai.runtime.enabled",havingValue="true")
 class RuntimeConfiguration {
-    @Bean(name="taskScheduler") ThreadPoolTaskScheduler runtimeScheduler(){var scheduler=new ThreadPoolTaskScheduler();scheduler.setPoolSize(3);scheduler.setThreadNamePrefix("edgeai-controller-");return scheduler;}
+    @Bean(name="taskScheduler") ThreadPoolTaskScheduler runtimeScheduler(){var scheduler=new ThreadPoolTaskScheduler();scheduler.setPoolSize(5);scheduler.setThreadNamePrefix("edgeai-controller-");return scheduler;}
     @Bean RuntimeSettings runtimeSettings(@Value("${edgeai.runtime.namespace}") String namespace,@Value("${edgeai.runtime.service-account}") String account,
             @Value("${edgeai.runtime.control-plane-url}") String url,@Value("${edgeai.runtime.dispatch-seconds:120}") int timeout){return new RuntimeSettings(namespace,account,URI.create(url),timeout);}
     @Bean(destroyMethod="close") RuntimeGateway runtimeGateway(RuntimeSettings settings,@Value("${edgeai.kubernetes.url}") String url,
@@ -37,5 +37,10 @@ class RuntimeConfiguration {
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     RuntimeWorker runtimeWorker(RuntimeRepository runtimes,RuntimeLifecycleService lifecycle,RuntimeGateway gateway,RunnerTokenService tokens,RuntimeSettings settings,Clock clock){
         return new RuntimeWorker(runtimes,lifecycle,gateway,tokens,settings,clock);
+    }
+    @Bean
+    @ConditionalOnProperty(name={"edgeai.remote.enabled","edgeai.runtime.worker-enabled"},havingValue="true",matchIfMissing=false)
+    RemoteWorker remoteWorker(RuntimeRepository runtimes,RuntimeLifecycleService lifecycle,ArtifactCommitService commits,S3ArtifactStore files,RemoteProvider provider,RuntimeSettings settings,Clock clock){
+        return new RemoteWorker(runtimes,lifecycle,commits,files,provider,settings,clock);
     }
 }

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("running offload retains task identity and distinguishes transfer success from result success", async ({ page }, testInfo) => {
+for (const destination of ["NODE", "REMOTE"] as const) test(`running ${destination} offload retains task identity and distinguishes transfer success from result success`, async ({ page }, testInfo) => {
   // Presentation/HTTP request fixture; actual PG and Kubernetes transfer have separate gates.
   const runId = "11111111-1111-4111-8111-111111111111", taskId = "22222222-2222-4222-8222-222222222222";
   const source = "33333333-3333-4333-8333-333333333333", target = "44444444-4444-4444-8444-444444444444";
@@ -13,10 +13,10 @@ test("running offload retains task identity and distinguishes transfer success f
     const run = { id: runId, workflowVersionId: runId, state: "RUNNING", mode: "AUTO", parameters: {}, createdAt: now, updatedAt: now };
     const task = { id: taskId, runId, key: "analyze", state: phase === "draining" ? "OFFLOADING" : "RUNNING", createdAt: now, updatedAt: now };
     const operation = { id: operationId, kind: "TASK_OFFLOAD", taskId, sourceAttemptId: source, targetAttemptId: phase === "draining" ? null : target,
-      targetNodeId: nodeId, state: phase === "draining" ? "DRAINING" : phase === "starting" ? "STARTING" : "SUCCEEDED", failureReason: null, createdAt: now, updatedAt: now };
+      targetNodeId: destination === "NODE" ? nodeId : null, remoteTarget: destination === "REMOTE" ? { providerKey: "reference", sourceMode: "SYNTHETIC", configurationDigest: "sha256:" + "a".repeat(64) } : null, state: phase === "draining" ? "DRAINING" : phase === "starting" ? "STARTING" : "SUCCEEDED", failureReason: null, createdAt: now, updatedAt: now };
     if (path === `tasks/${taskId}/offload`) {
       const request = route.request(); expect(request.method()).toBe("POST");
-      expect(request.postDataJSON()).toEqual({ sourceAttemptId: source, targetNodeId: nodeId, drainTimeoutSeconds: 60, startTimeoutSeconds: 120 });
+      expect(request.postDataJSON()).toEqual({ sourceAttemptId: source, ...(destination === "NODE" ? { targetNodeId: nodeId } : { targetProviderKey: "reference" }), drainTimeoutSeconds: 60, startTimeoutSeconds: 120 });
       keys.push(request.headers()["idempotency-key"]); expect(request.headers()["x-csrf-token"]).toBe("ui-fixture");
       if (++calls === 1) return route.fulfill({ status: 503, json: { message: "전환 저장소 복구 후 동일 요청을 재전송하세요." } });
       phase = "draining"; return route.fulfill({ status: 202, json: { ...operation, state: "DRAINING" } });
@@ -29,7 +29,7 @@ test("running offload retains task identity and distinguishes transfer success f
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
     else if (path === `tasks/${taskId}/results`) body = { taskId, items: [] };
     else if (path === `tasks/${taskId}`) body = { task, attempts: [
-      ...(phase === "starting" || phase === "transferred" ? [{ id: target, taskId, number: 2, epoch: 2, cause: "OFFLOAD", mode: "NODE", nodeId, state: phase === "starting" ? "DISPATCHING" : "RUNNING" }] : []),
+      ...(phase === "starting" || phase === "transferred" ? [{ id: target, taskId, number: 2, epoch: 2, cause: "OFFLOAD", mode: destination, nodeId: destination === "NODE" ? nodeId : null, remoteTarget: operation.remoteTarget, state: phase === "starting" ? "DISPATCHING" : "RUNNING" }] : []),
       { id: source, taskId, number: 1, epoch: 1, cause: "INITIAL", mode: "AUTO", nodeId: null, state: phase === "running" ? "RUNNING" : "OFFLOADED" },
     ], offloads: phase === "running" ? [] : [operation] };
     else return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
@@ -42,15 +42,17 @@ test("running offload retains task identity and distinguishes transfer success f
   await page.getByRole("button", { name: runId, exact: true }).click();
   await page.getByRole("button", { name: "analyze", exact: true }).click();
   const region = page.getByRole("region", { name: "실행 위치 전환", exact: true });
-  await region.getByRole("button", { name: "다른 노드로 전환", exact: true }).click();
-  await region.getByLabel("전환할 노드", { exact: true }).fill(nodeId);
+  await region.getByRole("button", { name: "실행 위치 전환", exact: true }).click();
+  await region.getByRole("combobox", { name: "전환 대상 종류", exact: true }).selectOption(destination);
+  if (destination === "NODE") await region.getByLabel("전환할 노드", { exact: true }).fill(nodeId);
+  else await region.getByLabel("전환할 Remote 제공자 key", { exact: true }).fill("reference");
   await region.screenshot({ path: testInfo.outputPath("offload-request.png") });
   await region.getByRole("button", { name: "전환 요청", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "동일 요청을 재전송" })).toBeVisible();
   await region.getByRole("button", { name: "전환 요청", exact: true }).click();
   await expect(region).toContainText("이전 실행 종료 중");
   expect(keys[0]).toMatch(/^[a-f0-9-]{36}$/); expect(keys[1]).toBe(keys[0]);
-  await expect(region.getByRole("button", { name: "다른 노드로 전환", exact: true })).toHaveCount(0);
+  await expect(region.getByRole("button", { name: "실행 위치 전환", exact: true })).toHaveCount(0);
   phase = "starting";
   await page.getByRole("button", { name: "결과 새로고침", exact: true }).click();
   await expect(region).toContainText("새 실행 확인 중");
@@ -58,6 +60,7 @@ test("running offload retains task identity and distinguishes transfer success f
   phase = "transferred";
   await page.getByRole("button", { name: "결과 새로고침", exact: true }).click();
   await expect(region).toContainText("전환 성공 · 새 실행 시작됨");
+  if (destination === "REMOTE") await expect(region).toContainText("Remote reference · SYNTHETIC");
   await expect(page.getByRole("region", { name: "검증된 결과 · analyze", exact: true })).toContainText("아직 확정된 결과가 없습니다.");
   await expect(page.getByRole("region", { name: "선택한 실행", exact: true }).locator(".stage")).toHaveText("실행 중");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

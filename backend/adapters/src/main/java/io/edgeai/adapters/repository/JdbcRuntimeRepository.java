@@ -148,7 +148,7 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
                     OR NOT EXISTS(SELECT 1 FROM edgeai.task_result result WHERE result.task_id=parent.id AND result.committed)))
             RETURNING t.id
             """,(r,n)->r.getObject(1,UUID.class),Timestamp.from(now),runId);
-        for(UUID id:ids) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) SELECT ?,?,1,1,'QUEUED',w.mode,w.node_id,'INITIAL',?,? FROM edgeai.workflow_run w WHERE w.id=?",UUID.randomUUID(),id,Timestamp.from(now),Timestamp.from(now),runId);
+        for(UUID id:ids) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at,remote_provider_key,remote_configuration_digest,remote_source_mode) SELECT ?,?,1,1,'QUEUED',w.mode,w.node_id,'INITIAL',?,?,w.remote_provider_key,w.remote_configuration_digest,w.remote_source_mode FROM edgeai.workflow_run w WHERE w.id=?",UUID.randomUUID(),id,Timestamp.from(now),Timestamp.from(now),runId);
     }
     public Optional<RuntimeCommand> leaseCommand(String namespace,UUID owner,Instant now,Duration duration) {
         return lease(namespace,owner,now,duration,false);

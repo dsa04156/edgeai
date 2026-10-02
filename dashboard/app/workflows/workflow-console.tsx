@@ -34,7 +34,7 @@ export function WorkflowConsole() {
   const [run, setRun] = useState<Schema["RunDetail"] | null>(null); const [runJson, setRunJson] = useState("");
   const [task, setTask] = useState<Schema["TaskDetail"] | null>(null); const [key, setKey] = useState("");
   const [results, setResults] = useState<Schema["TaskResults"] | null>(null);
-  const [mode, setMode] = useState("AUTO"); const [parameters, setParameters] = useState("{}");
+  const [mode, setMode] = useState("AUTO"); const [providerKey, setProviderKey] = useState("reference"); const [offloadMode, setOffloadMode] = useState("NODE"); const [parameters, setParameters] = useState("{}");
   const [retryAttempts, setRetryAttempts] = useState(1);
   const [automaticOffload, setAutomaticOffload] = useState<AutomaticOffloadPolicy | null>(null);
   const [retryBackoff, setRetryBackoff] = useState(5); const [retryWindow, setRetryWindow] = useState(600);
@@ -137,13 +137,14 @@ export function WorkflowConsole() {
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
           if (retryAttempts > 1 && retryOn.length === 0) throw new Error("재시도할 오류를 한 개 이상 선택하세요.");
           if (automaticOffload && [automaticOffload.cpuPercent, automaticOffload.memoryPercent, automaticOffload.latencyMicros].every(v => v == null)) throw new Error("자동 전환 기준을 한 개 이상 입력하세요.");
-          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : { mode, nodeId }, parameters: objectJson(parameters),
-            ...(automaticOffload ? { offload: automaticOffload } : {}),
+          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : { mode, nodeId }, parameters: objectJson(parameters),
+            ...(automaticOffload && mode !== "REMOTE" ? { offload: automaticOffload } : {}),
             ...(retryAttempts > 1 ? { retry: { maxAttempts: retryAttempts, backoffSeconds: retryBackoff, maxElapsedSeconds: retryWindow, retryOn } } : {}) }, key);
           const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
-          <label>실행 위치 정책<select value={mode} onChange={e => setMode(e.target.value)}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option></select></label>
+          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (e.target.value === "REMOTE") setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option></select></label>
           {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
+          {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
           <label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>
@@ -153,36 +154,39 @@ export function WorkflowConsole() {
             <fieldset className="retry-errors"><legend>재시도할 오류</legend>{retryChoices.map(([code, label]) => <label key={code}><input type="checkbox" checked={retryOn.includes(code)} onChange={e => setRetryOn(e.target.checked ? [...retryOn, code] : retryOn.filter(item => item !== code))} />{label}</label>)}</fieldset>
             <p className="hint">각 작업의 최초 실행 시도부터 허용 기간을 계산합니다. 이전 실행의 종료를 확인한 뒤 다시 실행하며, 입력·출력 오류와 취소는 재시도하지 않습니다.</p>
           </>}
-          <OffloadPolicyFields value={automaticOffload} onChange={setAutomaticOffload} />
+          {mode !== "REMOTE" && <OffloadPolicyFields value={automaticOffload} onChange={setAutomaticOffload} />}
           <label>실행 요청 키<input value={key} readOnly className="mono" /></label><p className="hint">같은 키·내용을 다시 보내면 기존 실행을 반환합니다. 다른 실행을 만들 때 새 키를 발급하세요.</p>
           <div className="toolbar"><button type="button" onClick={() => setKey(requestKey())}>새 실행 키 만들기</button><button className="primary">실행 요청 저장</button></div>
         </fieldset></form>
       </section>}
       <section aria-labelledby="runs-title"><div className="toolbar"><h2 id="runs-title">실행 이력</h2><button disabled={busy} onClick={() => void action(async () => { await loadRuns(); if (run) await showRun(run.run.id); })}>실행 새로고침</button></div>
-        {runs?.items.length ? <div className="table-scroll"><table><caption className="sr-only">실행 요청 목록</caption><thead><tr><th>Run ID</th><th>상태 / 정책</th><th>생성 시각</th></tr></thead><tbody>{runs.items.map(r => <tr key={r.id}><td><button className="version-link mono" disabled={busy} onClick={() => void action(() => showRun(r.id))}>{r.id}</button></td><td>{stateNames[r.state]}<span className="block muted">{r.mode}</span></td><td>{new Date(r.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 실행 요청이 없습니다. 발행한 DAG 버전을 선택해 요청을 만드세요.</p>}
+        {runs?.items.length ? <div className="table-scroll"><table><caption className="sr-only">실행 요청 목록</caption><thead><tr><th>Run ID</th><th>상태 / 정책</th><th>생성 시각</th></tr></thead><tbody>{runs.items.map(r => <tr key={r.id}><td><button className="version-link mono" disabled={busy} onClick={() => void action(() => showRun(r.id))}>{r.id}</button></td><td>{stateNames[r.state]}<span className="block muted">{r.mode}{r.remoteTarget ? ` · ${r.remoteTarget.providerKey} · ${r.remoteTarget.sourceMode}` : ""}</span></td><td>{new Date(r.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 실행 요청이 없습니다. 발행한 DAG 버전을 선택해 요청을 만드세요.</p>}
         <div className="pagination"><button disabled={busy || runOffset === 0} onClick={() => void action(() => loadRuns(runOffset - 20))}>이전 실행</button><span>{runOffset / 20 + 1} 페이지</span><button disabled={busy || runs?.nextOffset == null} onClick={() => void action(() => loadRuns(runs!.nextOffset!))}>다음 실행</button></div>
       </section>
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <OffloadPolicySummary value={run.run.offload} />
         <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
-        {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
-        {task && <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />}
+        {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.remoteTarget ? ` · ${a.remoteTarget.providerKey} · ${a.remoteTarget.sourceMode}` : ""}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
+        {task && (task.attempts[0]?.mode === "REMOTE"
+          ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>
+          : <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />)}
         {task && <div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
-          <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 다른 노드에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>
-          {task.task.state === "RUNNING" && task.attempts.some(a => a.state === "RUNNING") && !offload && <button disabled={busy} onClick={() => setOffload({ sourceAttemptId: task.attempts.find(a => a.state === "RUNNING")!.id, key: requestKey() })}>다른 노드로 전환</button>}
+          <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>
+          {task.task.state === "RUNNING" && task.attempts.some(a => a.state === "RUNNING") && !offload && <button disabled={busy} onClick={() => setOffload({ sourceAttemptId: task.attempts.find(a => a.state === "RUNNING")!.id, key: requestKey() })}>실행 위치 전환</button>}
           {offload && <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); const taskId = task.task.id; void action(async () => {
-            await post(`tasks/${taskId}/offload`, { sourceAttemptId: offload.sourceAttemptId, targetNodeId: String(data.get("targetNodeId")), drainTimeoutSeconds: Number(data.get("drainTimeoutSeconds")), startTimeoutSeconds: Number(data.get("startTimeoutSeconds")) }, offload.key);
+            await post(`tasks/${taskId}/offload`, { sourceAttemptId: offload.sourceAttemptId, ...(offloadMode === "REMOTE" ? { targetProviderKey: String(data.get("targetProviderKey")) } : { targetNodeId: String(data.get("targetNodeId")) }), drainTimeoutSeconds: Number(data.get("drainTimeoutSeconds")), startTimeoutSeconds: Number(data.get("startTimeoutSeconds")) }, offload.key);
             await showRun(run.run.id); await showTask(taskId); await loadRuns(); setNotice("전환 요청을 접수했습니다. 이전 실행 종료와 새 실행 시작 상태를 확인하세요.");
           }); }}><fieldset disabled={busy} className="publish-fields">
-            <label>전환할 노드<input name="targetNodeId" list="offload-target-nodes" required maxLength={36} placeholder="다른 READY 노드 UUID" /></label>
+            <label>전환 대상 종류<select value={offloadMode} onChange={e => setOffloadMode(e.target.value)}><option value="NODE">Kubernetes 노드</option><option value="REMOTE">Remote 제공자</option></select></label>
+            {offloadMode === "REMOTE" ? <label>전환할 Remote 제공자 key<input name="targetProviderKey" defaultValue="reference" required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" /></label> : <label>전환할 노드<input name="targetNodeId" list="offload-target-nodes" required maxLength={36} placeholder="다른 READY 노드 UUID" /></label>}
             <datalist id="offload-target-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.status}</option>)}</datalist>
             <div className="form-row"><label>이전 실행 종료 제한(초)<input name="drainTimeoutSeconds" type="number" min={1} max={600} defaultValue={60} required /></label><label>새 실행 시작 제한(초)<input name="startTimeoutSeconds" type="number" min={1} max={600} defaultValue={120} required /></label></div>
             <div className="toolbar"><button className="primary">전환 요청</button><button type="button" onClick={() => setOffload(null)}>전환 닫기</button></div>
           </fieldset></form>}
           {task.offloads?.length ? <ul className="history-list">{task.offloads.map(o => <li key={o.id}>
-            <strong>{o.state === "SUCCEEDED" ? "전환 성공 · 새 실행 시작됨" : stateNames[o.state]}</strong> · {o.targetNodeId ? nodes.find(n => n.id === o.targetNodeId)?.name || o.targetNodeId : "다른 호환 노드 자동 배치"}
+            <strong>{o.state === "SUCCEEDED" ? "전환 성공 · 새 실행 시작됨" : stateNames[o.state]}</strong> · {o.remoteTarget ? `Remote ${o.remoteTarget.providerKey} · ${o.remoteTarget.sourceMode}` : o.targetNodeId ? nodes.find(n => n.id === o.targetNodeId)?.name || o.targetNodeId : "다른 호환 노드 자동 배치"}
             {o.trigger && <span className="block muted">{({ MANUAL: "사용자 요청", CPU: "CPU 사용률 기준 충족", MEMORY: "메모리 사용률 기준 충족", LATENCY: "서비스 지연 기준 충족" })[o.trigger]}</span>}
             {o.decision && <details><summary>자동 판단 근거 · 측정 {o.decision.samples.length}개</summary><OffloadPolicySummary value={o.decision.policy} /><p className="hint">판단 시각: {new Date(o.decision.evaluatedAt).toLocaleString()}</p><p className="digest">제외 노드: {o.excludedNodeNames.join(", ")}</p><pre aria-label="자동 전환 판단 근거">{JSON.stringify(o.decision, null, 2)}</pre></details>}
             {o.failureReason && <span className="block muted">실패 코드: {o.failureReason}</span>}

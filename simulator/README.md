@@ -33,7 +33,8 @@ python3 simulator/remote_server.py \
 parameters의 `simulationDelayMillis`는0~60000의 장애 시험 전용 대기다. 성능 측정값이 아니다.
 실행 마감은 예약 때의 `expiresAt`으로 고정하고 제공자 시각으로 강제한다. 이 참조 구현은
 SERVICE.timeoutSeconds를 별도 타이머로 시행하지 않으므로 플랫폼 연결 시 더 짧은 마감을 예약해야 한다.
-현재 이 서버는 Run/Task/Result 공개 API나 실제 클러스터 배포에 연결되어 있지 않다.
+플랫폼의 공개 REMOTE Run과 RemoteWorker를 통한 연결은 [설정 문서](../docs/remote.md)를 따른다.
+공개 API→실제 제공자→MinIO→Result는 로컬 검증했으며 실제 클러스터 배포에서는 Remote가 기본 비활성이다.
 
 시험 전용 `--fault-file`은 비공개 로컬 JSON 파일로 `reserve_timeout_once`를 주입한다.
 예약을 DB에 확정한 뒤 응답만 지연해 timeout→GET/replay 복구를 확인한다. 네트워크 장애 주입 API는 없다.

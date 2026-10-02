@@ -2,6 +2,6 @@ package io.edgeai.app.dto;
 import io.edgeai.domain.execution.TaskAttempt;
 import java.time.Instant;
 import java.util.UUID;
-public record TaskAttemptResponse(UUID id, UUID taskId, int number, long epoch, String state,String mode,UUID nodeId,String cause, java.util.List<String> excludedNodeNames, Instant createdAt, Instant updatedAt) {
-    public static TaskAttemptResponse from(TaskAttempt a) { return new TaskAttemptResponse(a.id(),a.taskId(),a.number(),a.epoch(),a.state(),a.mode(),a.nodeId(),a.cause(),a.excludedNodeNames(),a.createdAt(),a.updatedAt()); }
+public record TaskAttemptResponse(UUID id, UUID taskId, int number, long epoch, String state,String mode,UUID nodeId,String cause, java.util.List<String> excludedNodeNames, Instant createdAt, Instant updatedAt,io.edgeai.domain.remote.RemoteTarget remoteTarget) {
+    public static TaskAttemptResponse from(TaskAttempt a) { return new TaskAttemptResponse(a.id(),a.taskId(),a.number(),a.epoch(),a.state(),a.mode(),a.nodeId(),a.cause(),a.excludedNodeNames(),a.createdAt(),a.updatedAt(),a.remoteTarget()); }
 }

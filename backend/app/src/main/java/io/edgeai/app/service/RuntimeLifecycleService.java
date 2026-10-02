@@ -73,13 +73,7 @@ public class RuntimeLifecycleService {
         if(namespace.contains("."))throw new IllegalArgumentException("Runtime namespace requires a DNS label");
         var c=lock(attemptId);var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent())return existing.get();
-        if(c.attempt().mode().equals("REMOTE")) {
-            // A retry inherits the immutable provider binding from its previous allocation.
-            var previous=executions.attempts(c.task().id()).stream().filter(a->a.number()<c.attempt().number())
-                .max(Comparator.comparingInt(TaskAttempt::number)).orElseThrow(RuntimeLifecycleService::fenced);
-            var old=runtime(previous.id());if(!old.remote())throw fenced();
-            return planRemote(attemptId,namespace,remotes.find(old.remoteAllocationId()).orElseThrow().target());
-        }
+        if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()))throw fenced();
         validateDag(c.run().workflowVersionId());
         var spec=spec(c);inputs(c,spec);parameters(c);
@@ -91,7 +85,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public RuntimeInstance planRemote(UUID attemptId,String namespace,RemoteTarget target) {
         RuntimeNames.dns(namespace,63);if(namespace.contains("."))throw new IllegalArgumentException("Worker scope requires a DNS label");
-        Objects.requireNonNull(target);var c=lock(attemptId);var existing=runtimes.byAttempt(attemptId);
+        Objects.requireNonNull(target);var c=lock(attemptId);if(!target.equals(c.attempt().remoteTarget()))throw fenced();var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent()) {
             var r=existing.get();if(!r.remote() || !r.namespace().equals(namespace) || !remotes.find(r.remoteAllocationId()).orElseThrow().target().equals(target))throw fenced();
             return r;
@@ -249,7 +243,7 @@ public class RuntimeLifecycleService {
     }
     @Transactional
     public void observeFailure(UUID attemptId,String reason) {
-        if(!Set.of("DISPATCH_TIMEOUT","RUNTIME_TIMEOUT","RUNTIME_LOST","JOB_FAILED","RESULT_MISSING","OWNERSHIP_CONFLICT").contains(reason))
+        if(!Set.of("DISPATCH_TIMEOUT","RUNTIME_TIMEOUT","RUNTIME_LOST","JOB_FAILED","RESULT_MISSING","OWNERSHIP_CONFLICT","INPUT_INVALID","OUTPUT_INVALID","WORKLOAD_FAILED").contains(reason))
             throw new IllegalArgumentException("Unknown runtime observation failure");
         var c=lock(attemptId);var r=runtime(attemptId);
         if(!r.desiredState().equals("RUNNING") || !Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING"))return;

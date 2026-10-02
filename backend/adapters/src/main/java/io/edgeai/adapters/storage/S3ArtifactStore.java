@@ -6,13 +6,16 @@ import io.minio.errors.ErrorResponseException;
 import io.minio.Http.Method;
 import io.minio.messages.VersioningConfiguration;
 import java.net.URI;
+import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.io.*;
 import java.security.MessageDigest;
 import java.time.*;
 import java.util.*;
 import okhttp3.OkHttpClient;
 
 /** Fixed-bucket, version-bound artifact verification; never trusts ETag or user SHA metadata. */
-public final class S3ArtifactStore implements ArtifactStore, AutoCloseable {
+public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, AutoCloseable {
     private static final int EXPIRY_SECONDS = 600;
     private final MinioClient client, signer;
     private final String bucket;
@@ -74,6 +77,41 @@ public final class S3ArtifactStore implements ArtifactStore, AutoCloseable {
                 .object(artifact.objectKey()).versionId(artifact.versionId()).expiry(EXPIRY_SECONDS).build());
             return new ArtifactGrant(URI.create(url), Map.of(), clock.instant().plusSeconds(EXPIRY_SECONDS));
         } catch (Exception e) { throw sanitized(e); }
+    }
+    @Override public void downloadFile(VerifiedArtifact artifact,Path destination) {
+        if(!bucket.equals(artifact.bucket()))throw new IllegalArgumentException("Artifact belongs to another bucket");
+        validateVersion(artifact.versionId());Path temporary=null;
+        try {
+            var stat=client.statObject(StatObjectArgs.builder().bucket(bucket).object(artifact.objectKey()).versionId(artifact.versionId()).build());
+            if(!artifact.versionId().equals(stat.versionId()) || artifact.bytes()!=stat.size() || !artifact.mediaType().equals(stat.contentType()))
+                throw new ArtifactVerificationException("Pinned input metadata differs");
+            temporary=Files.createTempFile(destination.toAbsolutePath().getParent(),".edgeai-input-",".part",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            try(var input=client.getObject(GetObjectArgs.builder().bucket(bucket).object(artifact.objectKey()).versionId(artifact.versionId()).build());var output=Files.newOutputStream(temporary)) {
+                transfer(input,output,artifact.bytes(),artifact.sha256());
+            }
+            Files.createLink(destination,temporary); // Atomic publication without overwriting an existing file.
+        } catch(ArtifactVerificationException e){throw e;}
+        catch(Exception e){throw sanitized(e);}
+        finally { if(temporary!=null)try{Files.deleteIfExists(temporary);}catch(IOException e){throw new ArtifactStoreUnavailableException();} }
+    }
+    @Override public String uploadFile(ArtifactContent content,Path source) {
+        try {
+            if(!Files.isRegularFile(source,LinkOption.NOFOLLOW_LINKS) || Files.size(source)!=content.bytes())throw new ArtifactVerificationException("Output must be a regular file of the declared size");
+            try(var input=Files.newInputStream(source,LinkOption.NOFOLLOW_LINKS)){transfer(input,OutputStream.nullOutputStream(),content.bytes(),content.sha256());}
+            if(client.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(bucket).build()).status()!=VersioningConfiguration.Status.ENABLED)
+                throw new ArtifactVerificationException("Artifact bucket versioning must be enabled");
+            try(var input=Files.newInputStream(source,LinkOption.NOFOLLOW_LINKS)) {
+                String version=client.putObject(PutObjectArgs.builder().bucket(bucket).object(content.objectKey()).stream(input,content.bytes(),-1L)
+                    .contentType(content.mediaType()).userMetadata(Map.of("sha256",content.sha256())).build()).versionId();
+                validateVersion(version);return version;
+            }
+        } catch(ArtifactVerificationException e){throw e;}
+        catch(Exception e){throw sanitized(e);}
+    }
+    private static void transfer(InputStream input,OutputStream output,long expected,String sha) throws Exception {
+        var digest=MessageDigest.getInstance("SHA-256");long length=0;byte[] buffer=new byte[65536];int size;
+        while((size=input.read(buffer))!=-1){length+=size;if(length>expected)throw new ArtifactVerificationException("File exceeds declared bytes");digest.update(buffer,0,size);output.write(buffer,0,size);}
+        if(length!=expected || !MessageDigest.isEqual(digest.digest(),HexFormat.of().parseHex(sha)))throw new ArtifactVerificationException("File digest or length differs");
     }
     private static void validateVersion(String value) {
         if (value == null || value.isBlank() || value.equals("null") || value.length() > 1024 || value.chars().anyMatch(Character::isISOControl))

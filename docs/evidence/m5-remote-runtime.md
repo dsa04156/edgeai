@@ -2,8 +2,9 @@
 
 범위는 ADR0011/V10–V11, RemoteRepository, RuntimeLifecycleService의 Remote 경로,
 ArtifactCommitService와 결과 API/OpenAPI/화면이다. M0–M4 완료 판정은 유지하며 M5는 진행 중이다.
-현재 공개 Run/Offload API의 실행 선택은 AUTO/NODE다. REMOTE fixture는 내부 저장소로 생성하고
+이 기록의 source6009136에서 공개 Run/Offload API의 실행 선택은 AUTO/NODE다. REMOTE fixture는 내부 저장소로 생성하고
 시험이 명시적으로 제공자 호출을 수행한다. 자동 Remote worker나 실제 외부 시스템 수용시험은 아니다.
+후속 자동 worker·공개 REMOTE 선택은 [ADR0012 검증](m5-remote-worker.md)에 따로 기록한다.
 
 ## 직접 확인한 증거
 
@@ -67,13 +68,25 @@ BEFORE trigger 뒤에 계산하므로 해당 시점의 NEW.producer_kind를 기�
 수정 후77개(20261002T121911Z-a3877c2a), 추가 늦은 결과/lease 시험 포함80개 모두 통과했다.
 후속 fixture 컴파일 실패(20261002T122326Z-6042bf48)는 결과 서비스와 지역변수의 이름 충돌을 수정했다.
 
-## 남은 연결과 배포 상태
+## 최초 검증 시 남은 연결
 
 1. Remote worker의 CREATE/DELETE lease, 관측/재조정, 고정 입력 전송·출력 저장, 재시작 복구.
 2. 최초 공개 Run/Offload 요청부터 하위 작업·재시도·전환까지 유지하는 제공자 선택과 설정 digest 검증.
 3. 공개 REMOTE 선택 API/화면, Kubernetes↔Remote 전환·취소·장애의 자동 종단 시험과 CI/실제 배포 확인.
 4. 실제 외부 endpoint/auth/계약 정합화, 상태형 복원과 실장비/모델 수용. SYNTHETIC 계산은 대체 증거가 아니다.
 
-이번 플랫폼 연결 코드의 신규 CI·배포는 아직 대기다. 이전 참조 adapter0143094의
-CI37003825328/실제 배포 검증은 `m5-remote-adapter.md`에 기록한다. Argo aggregate health의 기존
-공유 Ingress status 제한은 유지한다. 전체 플랫폼 LOCAL_VERIFIED/FULL_ACCEPTANCE로 판정하지 않는다.
+1–3의 worker·공개 선택·binding 및 로컬 자동 실행은 후속 ADR0012에 구현했다. 실제 kind Remote 종단과
+외부 수용은 남아 있다. 이전 참조 adapter0143094의 검증은 `m5-remote-adapter.md`에 기록한다.
+
+## 후속 CI·실제 배포 확인
+
+source `6009136ab70ffc58a3d11e6cab559ae5f79dff11`의
+[Actions37008176219](https://github.com/dsa04156/edgeai/actions/runs/37008176219)는
+scaffold/storage/runner/images/gitops 5 jobs 모두 success다. 내려받은 네 artifact 그룹의
+result.json15개 모두 PASS/exit0이며 실제 Kubernetes Runner/recovery 게이트도 통과했다.
+
+`20261002T130758Z-54ea0071`은 실제 API/Dashboard/MinIO imageID가 GitOps75c6632에 기록한
+6009136 이미지 digest와 일치함을 확인했다. Ready/PVCBound/ArgoSynced도 PASS다.
+이는 신규 Remote worker 이전 영속 연결 버전의 배포 확인이다. Argo aggregate health는 기존
+공유 Traefik/Ingress status 공백으로 Progressing이며 공유 설정은 변경하지 않았다.
+전체 플랫폼 LOCAL_VERIFIED/FULL_ACCEPTANCE로 판정하지 않는다.

@@ -19,6 +19,7 @@ public interface ExecutionRepository {
     void clearRetry(UUID taskId);
     TaskAttempt startRetry(UUID taskId,Instant now);
     TaskAttempt startOffload(UUID taskId,UUID nodeId,List<String> excluded,Instant now);
+    TaskAttempt startRemoteOffload(UUID taskId,io.edgeai.domain.remote.RemoteTarget target,Instant now);
     void failTask(UUID taskId,Instant now);
     void cancelTask(UUID taskId, String terminalState, String reason, Instant now);
     void reconcileRunState(UUID runId, Instant now);

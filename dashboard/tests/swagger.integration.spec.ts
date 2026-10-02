@@ -24,7 +24,7 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.locator("#operations-Workflow-publishWorkflowVersion .opblock-summary-description")).toHaveText("검증된 DAG 버전 발행");
   await expect(page.locator("#operations-Run-createWorkflowRun .opblock-summary-description")).toHaveText("워크플로 실행 요청 생성");
   await expect(page.locator("#operations-Result-getTaskResults .opblock-summary-description")).toHaveText("작업의 검증된 결과와 artifact 메타데이터 조회");
-  await expect(page.locator("#operations-Task-offloadTask .opblock-summary-description")).toHaveText("실행 중인 작업을 다른 노드로 전환");
+  await expect(page.locator("#operations-Task-offloadTask .opblock-summary-description")).toHaveText("실행 중인 작업을 다른 노드 또는 Remote로 전환");
   await expect(page.locator("#operations-Operation-getOperation .opblock-summary-description")).toHaveText("비동기 실행 전환 상태 조회");
   await page.screenshot({ path: testInfo.outputPath("swagger-ui.png"), fullPage: true });
 

@@ -13,14 +13,14 @@ public final class JdbcOffloadRepository implements OffloadRepository {
     private static final RowMapper<OffloadOperation> ROW=(r,n)->new OffloadOperation(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getObject("run_id",UUID.class),
         r.getObject("source_attempt_id",UUID.class),r.getObject("target_attempt_id",UUID.class),r.getObject("target_node_id",UUID.class),r.getObject("idempotency_key",UUID.class),
         r.getString("request_digest"),r.getString("namespace"),r.getString("state"),r.getString("failure_reason"),instant(r,"drain_deadline"),r.getInt("start_timeout_seconds"),
-        instant(r,"start_deadline"),instant(r,"created_at"),instant(r,"updated_at"),r.getString("trigger"),List.of((String[])r.getArray("excluded_node_names").getArray()),r.getString("decision"));
+        instant(r,"start_deadline"),instant(r,"created_at"),instant(r,"updated_at"),r.getString("trigger"),List.of((String[])r.getArray("excluded_node_names").getArray()),r.getString("decision"),RemoteTargets.read(r));
     public boolean create(OffloadOperation o) {
         return jdbc.update("""
             INSERT INTO edgeai.task_offload(id,task_id,run_id,source_attempt_id,target_node_id,idempotency_key,request_digest,namespace,state,
-                drain_deadline,start_timeout_seconds,created_at,updated_at,trigger,excluded_node_names,decision)
-            VALUES (?,?,?,?,?,?,?,?,'DRAINING',?,?,?,?,?,CAST(? AS text[]),CAST(? AS jsonb)) ON CONFLICT(idempotency_key) DO NOTHING
+                drain_deadline,start_timeout_seconds,created_at,updated_at,trigger,excluded_node_names,decision,remote_provider_key,remote_configuration_digest,remote_source_mode)
+            VALUES (?,?,?,?,?,?,?,?,'DRAINING',?,?,?,?,?,CAST(? AS text[]),CAST(? AS jsonb),?,?,?) ON CONFLICT(idempotency_key) DO NOTHING
             """,o.id(),o.taskId(),o.runId(),o.sourceAttemptId(),o.targetNodeId(),o.idempotencyKey(),o.requestDigest(),o.namespace(),Timestamp.from(o.drainDeadline()),
-            o.startTimeoutSeconds(),Timestamp.from(o.createdAt()),Timestamp.from(o.updatedAt()),o.trigger(),"{"+String.join(",",o.excludedNodeNames())+"}",o.decisionJson())==1;
+            o.startTimeoutSeconds(),Timestamp.from(o.createdAt()),Timestamp.from(o.updatedAt()),o.trigger(),"{"+String.join(",",o.excludedNodeNames())+"}",o.decisionJson(),RemoteTargets.key(o.remoteTarget()),RemoteTargets.digest(o.remoteTarget()),RemoteTargets.source(o.remoteTarget()))==1;
     }
     public Optional<OffloadOperation> find(UUID id){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE id=?",ROW,id).stream().findFirst();}
     public Optional<OffloadOperation> byKey(UUID key){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE idempotency_key=?",ROW,key).stream().findFirst();}

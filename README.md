@@ -8,9 +8,10 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 실제 Kubernetes Runner 실행, MinIO 파일 검증과 결과 저장까지 연결했습니다.
 로컬 실행은 기본 비활성이고 전용 클러스터 배포는 활성화되어 있습니다.
 M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 검증을 통과했습니다.
-실행 측정·자동 전환과 Remote 참조 adapter는 CI·배포까지 검증했습니다. RemoteAllocation·결과 확정은
-실제 PostgreSQL·MinIO·참조 제공자와 로컬 검증했습니다. Remote 자동 worker·공개 실행 선택과 실제 외부
-시스템 연결은 남아 있습니다. 상세는 [Remote 플랫폼 연결 기록](docs/evidence/m5-remote-runtime.md)을 따릅니다.
+실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation·결과 확정은 CI·배포까지 검증했습니다.
+Remote 자동 worker·공개 실행/전환·제공자 설정 고정은 실제 PostgreSQL·MinIO·참조 제공자로 로컬 검증했습니다.
+실제 kind Remote 종단·새 worker 코드의 CI/배포·외부 시스템 연결은 남아 있습니다.
+상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
@@ -72,7 +73,7 @@ bash scripts/test-profiles-stack.sh compose # 실제 Profile/Device/Workflow/Swa
 bash scripts/test-node-inventory.sh <context> # 기존 context는 변경하지 않고 실제 Node 목록만 읽음
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
-bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 결과 확정·취소 경쟁·참조 Remote BATCH
+bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 결과·취소 경합·공개 Remote BATCH/worker/장애
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
 bash scripts/test-remote.sh       # 실제 Remote 참조 프로세스/HTTP/SQLite·파일·장애 시험
 ```
@@ -141,7 +142,8 @@ API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 �
 발행합니다. 작업 간 포트 연결과 BATCH/STREAM 모드를 정의하며 순환·잘못된 참조·중복 입력 포트는
 거절합니다. 같은 버전의 같은 내용은 기존 버전을 반환하고, 내용 변경은 새 버전이 필요합니다.
 
-발행한 버전을 선택해 AUTO 또는 관측된 Node UUID의 NODE 정책으로 실행 요청을 저장합니다.
+발행한 버전을 선택해 AUTO, 관측된 Node UUID의 NODE 또는 서버에 설정된 제공자의 REMOTE 정책으로 실행 요청을 저장합니다.
+Remote 활성화·제공자·파일 설정은 [Remote 실행 문서](docs/remote.md)를 따릅니다.
 `Idempotency-Key`는 요청을 재전송해도 실행을 중복 생성하지 않게 합니다. 다른 실행을 만들 때는
 **새 실행 키 만들기**를 누릅니다. 작업별 Attempt와 상태를 조회하고 작업 또는 실행을 취소할 수 있습니다.
 작업 취소는 그 결과를 기다리는 하위 작업을 건너뛰고 별도 분기는 유지합니다.
@@ -150,13 +152,13 @@ API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 �
 활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.
 Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허용 기간·오류를 지정합니다.
 재시도는 같은 Task에서 새 Attempt/epoch를 만들며 상세 계약은 Swagger RetryPolicy를 따릅니다.
-실행 중인 작업을 선택하면 **다른 노드로 전환**을 요청할 수 있습니다. SERVICE에
+실행 중인 작업을 선택하면 **실행 위치 전환**에서 NODE 또는 Remote를 요청할 수 있습니다. SERVICE에
 `recovery.mode=RESTART`가 선언되어야 하며, 이전 실행을 종료한 뒤 고정 입력으로 다시 시작합니다.
 전환 상태는 Task 상세와 `GET /api/v1/operations/{operationId}`에서 확인합니다.
 전환 성공은 새 실행 시작을 의미하며 결과 성공은 별도로 확인합니다([ADR 0007](docs/adr/0007-running-offload.md)).
 최신 Runner의 측정은 선택한 작업의 **실행 측정**에서 확인합니다. CPU·메모리의 제한이 없거나 측정하지
 못한 값은 미확인/미수집으로 표시하고, 새 Attempt에 이전 값이 이어지지 않습니다. 서비스 지연 보고
-방식은 [Runner 문서](runner/README.md)를 따릅니다.
+방식은 [Runner 문서](runner/README.md)를 따릅니다. 현재 Remote는 자원·지연 측정을 지원하지 않습니다.
 STREAM 실행은 M7이며 현재 요청은 501입니다.
 상세 계약은 [ADR 0004](docs/adr/0004-workflow-run-task.md)와 Swagger의 Workflow/실행/작업 태그를 따릅니다.
 

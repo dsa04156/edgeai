@@ -109,3 +109,7 @@ DB 실행 상태·Kubernetes 생성/관측·내부 API·Result·실제 kind 및 
 
 [재시도 진행 근거](m5-retry-offload.md). ADR0006·V6·공개 정책/API/UI·실DB 경합을 구현하며
 실제 kind 재시도 검증과 실행 중 offload·Remote 연동을 이어간다. 전체 수용 완료를 의미하지 않는다.
+
+후속 검증: [자동 전환](m5-automatic-offload.md), [Remote adapter](m5-remote-adapter.md),
+[Remote 영속 상태/결과](m5-remote-runtime.md), [Remote worker/공개 API](m5-remote-worker.md).
+마지막 항목은 로컬 자동 실행·파일·취소·재시도 증거이며 실제 kind Remote 종단과 외부 수용은 남는다.

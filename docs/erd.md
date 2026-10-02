@@ -17,7 +17,7 @@ Task당 활성 Attempt 하나는 V4 partial UNIQUE로 구현했다.
 초안의 최소 1개 카디널리티가 생성 직후·Pending 상태에도 성립하는지는 M3/M6에서 검토한다.
 
 Operation은 V7 task_offload, producer claim/명령 outbox는 V5 Runtime 경로로 구체화했다.
-VDSlot, RemoteAllocation, DataRoute, Checkpoint, 범용 Inbox/ApiIdempotency/AuditEvent는 후속 기능에서 추가한다.
+RemoteAllocation은 V10에서 구현했다. VDSlot, DataRoute, Checkpoint, 범용 Inbox/ApiIdempotency/AuditEvent는 후속 기능에서 추가한다.
 M0 Flyway는 `edgeai` schema만 초기화하며 이 초안을 확정된 테이블로 변환하지 않는다.
 
 
@@ -66,4 +66,9 @@ V8 runtime_telemetry는 (attempt_id,sequence) PK·현재 producer의 관측/수�
 CPU/memory/선택적 latency를 저장한다. Attempt별 최신64개 보관은 서비스 트랜잭션이 관리한다.
 V9는 workflow_run.offload_policy, task_attempt.excluded_node_names, task_offload.trigger/decision/제외 목록을 추가한다.
 자동 target Node는 null이며 scheduler가 선택한다. 수동/자동 결정 일관성과 제외 배열 제약을 적용한다.
-V1–V9는 로컬 적용된 migration이며 수정하지 않는다.
+V10 remote_allocation은 runtime_instance와1:1로 제공자/설정/sourceMode, 고정 요청과 revision 관측을 보존한다.
+Runtime과 Result는 Kubernetes Pod 또는 RemoteAllocation 중 하나의 producer만 참조한다.
+V11은 PostgreSQL BEFORE trigger 시점의 생성 컬럼 비교를 제외하고 결과의 원본 컬럼 봉인을 유지한다.
+V12는 workflow_run/task_attempt/task_offload에 Remote 제공자 binding을 추가하고 실행 대상 변경을 차단한다.
+새 allocation은 Attempt의 고정 제공자와 일치해야 하며 수동 offload는 Node/Remote 중 정확히 하나를 갖는다.
+V1–V12는 로컬 적용된 migration이며 수정하지 않는다.

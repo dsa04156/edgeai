@@ -60,7 +60,7 @@ class RemoteRuntimeIntegrationTest {
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",tasks,"dependencies",List.of(Map.of("fromTask","root","toTask","child","fromPort","output","toPort","input","mode","BATCH"))))).value();
         // Internal placement fixture. This does not claim that the public REMOTE selection API is connected.
         var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("remote-fixture",Map.of("version",version.id().toString())),"REMOTE",null,"{}",
-            new RetryPolicy(2,2,600,Set.of("RUNTIME_LOST")),null,"PENDING",clock.instant(),clock.instant());
+            new RetryPolicy(2,2,600,Set.of("RUNTIME_LOST")),null,"PENDING",clock.instant(),clock.instant(),target);
         new TransactionTemplate(transactions).execute(s->{assertThat(repository.create(run)).isTrue();repository.initialize(run,definitions.definitions(version.id()),Set.of("root"));return null;});
         var rows=executions.detail(run.id()).tasks();UUID root=rows.stream().filter(t->t.key().equals("root")).findFirst().orElseThrow().id();
         UUID child=rows.stream().filter(t->t.key().equals("child")).findFirst().orElseThrow().id();

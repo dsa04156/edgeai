@@ -32,10 +32,14 @@ ADR0009·V9의 선택적 측정 기반 자동 전환 정책·판단 이력·AUTO
 실제 kind18Run 및 기존 클러스터의 source951c4bd 배포까지 검증했다.
 ADR0010 Remote 참조 계약/HTTP adapter/영속 계산 시뮬레이터는 로컬 HTTP/TLS10개·실제 프로세스13개와
 CI37003825328의 5 jobs/결과JSON15개 및 source0143094 실제 배포 검증을 통과했다.
-ADR0011/V10–V11의 RemoteAllocation·producer fencing·결과 API/화면을 추가했다. PostgreSQL80개와
-실제 참조 제공자→MinIO→DB 결과→Remote 하위 BATCH를 로컬 검증했다. 자동 worker, 공개 Run/Offload의
-REMOTE 선택, 최초 요청부터 유지하는 제공자 binding, 재시작/전환 종단 및 실제 외부 계약 수용은 남는다.
-현재 연결 범위의 상세는 `docs/evidence/m5-remote-runtime.md`다. M5 완료로 판정하지 않는다.
+ADR0011/V10–V11의 RemoteAllocation·producer fencing·결과 API/화면은 CI37008176219의
+5 jobs/결과JSON15개와 source6009136 실제 배포 검증을 통과했다.
+ADR0012/V12는 자동 Remote worker·직접 S3 전송·공개 Run/Offload REMOTE 선택·불변 제공자 binding을
+연결했다. 단위60·PostgreSQL80·실제 S3/DB/provider14·UI26·실DB브라우저8·DB 장애/복구를 로컬 검증했다.
+실제 Spring 스케줄러 BATCH, 제공자 프로세스 재시작·재시도·취소·변조·중복 처리도 포함한다.
+Kubernetes↔Remote 전환의 Kubernetes 부분은 fixture이며 실제 kind 전환/API 프로세스 재시작 종단,
+상태형 복원 및 실제 외부 계약 수용은 남는다. 현재 worker 코드의 신규 CI·배포는 확인 대상이다.
+상세는 `docs/evidence/m5-remote-worker.md`다. M5 완료로 판정하지 않는다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

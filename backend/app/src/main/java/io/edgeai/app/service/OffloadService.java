@@ -23,24 +23,29 @@ public class OffloadService {
     private final RuntimeLifecycleService lifecycle;
     private final Clock clock;
     private final TelemetryRepository telemetry;
+    private final RemoteProvider remoteProvider;
     public OffloadService(OffloadRepository operations,ExecutionRepository executions,RuntimeRepository runtimes,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry) {
+            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry,RemoteProvider remoteProvider) {
         this.operations=operations;this.executions=executions;this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.lifecycle=lifecycle;this.clock=clock;this.telemetry=telemetry;
+        this.remoteProvider=remoteProvider;
     }
     @Transactional
     public Creation<OffloadOperation> request(UUID taskId,String key,String body) {
-        var input=parse(body,"sourceAttemptId","targetNodeId","drainTimeoutSeconds","startTimeoutSeconds");
-        UUID idempotency=uuid(key),source=uuid(input.get("sourceAttemptId")),target=uuid(input.get("targetNodeId"));
+        var raw=parameters(JSON.parse(body,65536));boolean remote=raw.containsKey("targetProviderKey");
+        var input=object(raw,"sourceAttemptId",remote?"targetProviderKey":"targetNodeId","drainTimeoutSeconds","startTimeoutSeconds");
+        UUID idempotency=uuid(key),source=uuid(input.get("sourceAttemptId")),target=remote?null:uuid(input.get("targetNodeId"));
+        String providerKey=remote?text(input.get("targetProviderKey"),63):null;
         int drain=seconds(input.get("drainTimeoutSeconds")),start=seconds(input.get("startTimeoutSeconds"));
-        String digest=JSON.digest("edgeai-task-offload-v1",Map.of("taskId",taskId.toString(),"sourceAttemptId",source.toString(),"targetNodeId",target.toString(),"drainTimeoutSeconds",drain,"startTimeoutSeconds",start));
+        String digest=JSON.digest("edgeai-task-offload-v1",Map.of("taskId",taskId.toString(),"sourceAttemptId",source.toString(),remote?"targetProviderKey":"targetNodeId",remote?providerKey:target.toString(),"drainTimeoutSeconds",drain,"startTimeoutSeconds",start));
         var previous=operations.byKey(idempotency);if(previous.isPresent())return replay(previous.get(),digest);
+        var remoteTarget=remote?remoteProvider.select(providerKey):null;
         var initial=executions.task(taskId).orElseThrow(()->error(404,"TASK_NOT_FOUND","작업을 찾을 수 없습니다."));
         var run=executions.run(initial.runId(),true).orElseThrow();var task=executions.task(taskId).orElseThrow();
         previous=operations.byKey(idempotency);if(previous.isPresent())return replay(previous.get(),digest);
         var attempt=executions.attempt(source).orElseThrow(()->error(409,"OFFLOAD_SOURCE_CHANGED","현재 실행 중인 Attempt를 선택하세요."));
         var runtime=runtimes.byAttempt(source).orElse(null);
         if(!attempt.taskId().equals(taskId) || !attempt.state().equals("RUNNING") || !task.state().equals("RUNNING") || !run.state().equals("RUNNING") ||
-                runtime==null || !runtime.desiredState().equals("RUNNING") || !runtime.observedState().equals("RUNNING") || runtime.producerPodUid()==null ||
+                runtime==null || !runtime.desiredState().equals("RUNNING") || !runtime.observedState().equals("RUNNING") || (!runtime.remote() && runtime.producerPodUid()==null) ||
                 runtime.expiresAt()==null || !clock.instant().isBefore(runtime.expiresAt()))
             throw error(409,"OFFLOAD_SOURCE_CHANGED","실제 producer가 실행 중인 현재 Attempt만 전환할 수 있습니다.");
         var history=operations.forTask(taskId);
@@ -49,12 +54,16 @@ public class OffloadService {
         var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
         var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
         if(!spec.recoveryMode().equals("RESTART"))throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","SERVICE Profile에 recovery.mode=RESTART를 선언한 작업만 재시작 전환할 수 있습니다.");
-        var node=nodes.find(target).orElseThrow(()->error(404,"NODE_NOT_FOUND","대상 노드를 찾을 수 없습니다."));
-        var labels=parameters(JSON.decode(node.labelsJson()));
-        if(target.equals(runtime.nodeUid()) || !node.status(clock.instant()).equals("READY") || !node.operatingSystem().equals("linux") ||
+        if(remoteTarget!=null) {
+            if(remoteTarget.equals(attempt.remoteTarget()))throw error(409,"OFFLOAD_TARGET_INVALID","현재 제공자와 다른 실행 위치를 선택하세요.");
+        } else {
+            var node=nodes.find(target).orElseThrow(()->error(404,"NODE_NOT_FOUND","대상 노드를 찾을 수 없습니다."));
+            var labels=parameters(JSON.decode(node.labelsJson()));
+            if(target.equals(runtime.nodeUid()) || !node.status(clock.instant()).equals("READY") || !node.operatingSystem().equals("linux") ||
                 !spec.architectures().contains(node.architecture()) || spec.nodeSelector().entrySet().stream().anyMatch(e->!e.getValue().equals(labels.get(e.getKey()))))
             throw error(409,"OFFLOAD_TARGET_INVALID","현재 노드와 다르고 SERVICE 요구조건에 맞는 최근 READY 노드를 선택하세요.");
-        var now=clock.instant();var operation=new OffloadOperation(UUID.randomUUID(),taskId,run.id(),source,null,target,idempotency,digest,runtime.namespace(),"DRAINING",null,now.plusSeconds(drain),start,null,now,now);
+        }
+        var now=clock.instant();var operation=new OffloadOperation(UUID.randomUUID(),taskId,run.id(),source,null,target,idempotency,digest,runtime.namespace(),"DRAINING",null,now.plusSeconds(drain),start,null,now,now,"MANUAL",List.of(),null,remoteTarget);
         if(!operations.create(operation))return replay(operations.byKey(idempotency).orElseThrow(),digest);
         runtimes.offload(runtime.id(),now);return new Creation<>(operation,true);
     }
@@ -76,7 +85,7 @@ public class OffloadService {
         if(operation.state().equals("DRAINING")) {
             if(!now.isBefore(operation.drainDeadline())){fail(operation,"SOURCE_DRAIN_TIMEOUT",now);return;}
             if(!task.state().equals("OFFLOADING") || !runtimes.retryReady(task.id()))return;
-            var attempt=executions.startOffload(task.id(),operation.targetNodeId(),operation.excludedNodeNames(),now);
+            var attempt=operation.remoteTarget()==null?executions.startOffload(task.id(),operation.targetNodeId(),operation.excludedNodeNames(),now):executions.startRemoteOffload(task.id(),operation.remoteTarget(),now);
             lifecycle.plan(attempt.id(),operation.namespace());operations.starting(id,attempt.id(),now.plusSeconds(operation.startTimeoutSeconds()),now);
         } else if(operation.state().equals("STARTING") && !now.isBefore(operation.startDeadline()))fail(operation,"TARGET_START_TIMEOUT",now);
     }

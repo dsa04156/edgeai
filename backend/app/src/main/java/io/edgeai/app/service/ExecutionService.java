@@ -23,10 +23,12 @@ public class ExecutionService {
     private final RuntimeLifecycleService lifecycle;
     private final boolean runtimeEnabled;
     private final String runtimeNamespace;
+    private final RemoteProvider remoteProvider;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
+        this.remoteProvider=remoteProvider;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -35,17 +37,22 @@ public class ExecutionService {
         var offload=offloadPolicy(input.get("offload"));String offloadJson=offload==null?null:JSON.canonical(input.get("offload"));
         UUID versionId=uuid(input.get("workflowVersionId"));var parameters=parameters(input.get("parameters"));
         if(!(input.get("execution") instanceof Map<?,?> policy)) throw new IllegalArgumentException("Execution policy required");
-        String mode=text(policy.get("mode"),8);UUID nodeId;
+        String mode=text(policy.get("mode"),8);UUID nodeId;String providerKey=null;
         if(mode.equals("AUTO")) { object(policy,"mode");nodeId=null; }
         else if(mode.equals("NODE")) { object(policy,"mode","nodeId");nodeId=uuid(policy.get("nodeId")); }
-        else throw new IllegalArgumentException("Execution mode must be AUTO or NODE");
+        else if(mode.equals("REMOTE")){object(policy,"mode","providerKey");providerKey=text(policy.get("providerKey"),63);nodeId=null;}
+        else throw new IllegalArgumentException("Execution mode must be AUTO, NODE or REMOTE");
         var normalized=new TreeMap<String,Object>(Map.of("workflowVersionId",versionId.toString(),"parameters",parameters,
             "execution",nodeId==null?Map.of("mode",mode):Map.of("mode",mode,"nodeId",nodeId.toString())));
+        if(providerKey!=null)normalized.put("execution",Map.of("mode",mode,"providerKey",providerKey));
         if(!retry.equals(RetryPolicy.disabled()))normalized.put("retry",document(retry));
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
+        if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
+        var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
+        if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
         var dag=storedDag(version.dagJson());
         if(dag.dependencies().stream().anyMatch(edge->edge.mode()==Dag.Mode.STREAM))
@@ -53,7 +60,7 @@ public class ExecutionService {
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters));
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId);
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now);
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,workflows.definitions(versionId),dag.roots());
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
