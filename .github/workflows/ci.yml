@@ -117,6 +117,16 @@ jobs:
         env:
           EDGEAI_RUNNER_IMAGE: edgeai-runner:verify
         run: bash scripts/collect-evidence.sh runner-container bash scripts/test-runner.sh
+      - name: Prepare isolated MQTT integration dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mosquitto
+          python3 -m venv .tools/stream-venv
+          .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
+      - name: Verify actual multi-source MQTT, journal recovery, ACL and TLS
+        env:
+          EDGEAI_STREAM_PYTHON: .tools/stream-venv/bin/python
+        run: bash scripts/collect-evidence.sh stream-mqtt bash scripts/test-stream.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:

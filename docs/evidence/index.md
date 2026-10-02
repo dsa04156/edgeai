@@ -134,3 +134,9 @@ HTTP 장애/영속 DB 명령 복구를 구분해 검증한다. 감독 프로세�
 
 [공개 VD 실행 관리](m6-vd-public-execution.md)는 시작/교체/종료·실행 스냅샷·Operation 조회와
 화면을 검증한다. 실제 PostgreSQL/MVC와 UI fixture·실제 API stack의 범위를 구분한다.
+
+## M7 다중 장치·스트리밍 (진행 중)
+
+[전달 구성 요소](m7-stream-transport.md): frame/처리 확인·실제 SQLite 프로세스 복구와
+MQTT 두 입력/계산/결과·backpressure·broker 재시작·ACL/TLS를 검증한다.
+제어 서버 DataRoute·Runner 스트림 workload·S3 checkpoint/새 Pod 복원·공개 실행 연결은 남는다.

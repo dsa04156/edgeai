@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgeai.example/contracts/streams/ack-v1",
+  "title": "EdgeAI stream processing acknowledgement v1",
+  "description": "Authenticated consumer processing watermark after an atomic checkpoint. This is not an MQTT PUBACK or a Result commit. Wire size is limited to 2048 bytes by the codec.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "routeId", "generation", "producer", "sequence"],
+  "properties": {
+    "apiVersion": {"const": "edgeai.stream-ack/v1"},
+    "routeId": {"$ref": "frame-v1#/$defs/uuid"},
+    "generation": {"$ref": "frame-v1#/$defs/counter"},
+    "producer": {"oneOf": [{"$ref": "frame-v1#/$defs/deviceSession"}, {"$ref": "frame-v1#/$defs/taskAttempt"}]},
+    "sequence": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
+  }
+}

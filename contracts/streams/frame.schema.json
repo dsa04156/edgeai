@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgeai.example/contracts/streams/frame-v1",
+  "title": "EdgeAI stream frame v1",
+  "description": "Bounded wire structure. The codec additionally verifies canonical base64, exact payload bytes and SHA-256. Parsing is not producer authorization, processing acknowledgement or Result commit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "routeId", "generation", "producer", "sequence", "kind", "mediaType", "payloadBase64", "sha256"],
+  "properties": {
+    "apiVersion": {"const": "edgeai.stream/v1"},
+    "routeId": {"$ref": "#/$defs/uuid"},
+    "generation": {"$ref": "#/$defs/counter"},
+    "sequence": {"$ref": "#/$defs/counter"},
+    "producer": {"oneOf": [{"$ref": "#/$defs/deviceSession"}, {"$ref": "#/$defs/taskAttempt"}]},
+    "kind": {"enum": ["DATA", "END"]},
+    "mediaType": {"type": ["string", "null"], "maxLength": 127, "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"},
+    "payloadBase64": {"type": "string", "maxLength": 349528, "pattern": "^[A-Za-z0-9+/]*={0,2}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "END"}}},
+      "then": {"properties": {"mediaType": {"type": "null"}, "payloadBase64": {"const": ""}, "sha256": {"const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}},
+      "else": {"properties": {"mediaType": {"type": "string"}}}
+    }
+  ],
+  "$defs": {
+    "uuid": {"type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "counter": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "deviceSession": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "deviceId", "sessionId", "epoch"],
+      "properties": {"kind": {"const": "DEVICE_SESSION"}, "deviceId": {"$ref": "#/$defs/uuid"}, "sessionId": {"$ref": "#/$defs/uuid"}, "epoch": {"$ref": "#/$defs/counter"}}
+    },
+    "taskAttempt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "attemptId", "epoch"],
+      "properties": {"kind": {"const": "TASK_ATTEMPT"}, "attemptId": {"$ref": "#/$defs/uuid"}, "epoch": {"$ref": "#/$defs/counter"}}
+    }
+  }
+}

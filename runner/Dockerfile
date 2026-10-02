@@ -2,6 +2,8 @@ FROM python:3.13-slim-bookworm@sha256:5024f48ba9441d4b13a95d3945abc6365538e3a311
 LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /work
+COPY runner/requirements-stream.txt /opt/edgeai/requirements-stream.txt
+RUN pip install --no-cache-dir --require-hashes --only-binary=:all: -r /opt/edgeai/requirements-stream.txt
 COPY --chown=10001:10001 runner/runner.py /opt/edgeai/runner.py
 COPY --chown=10001:10001 runner/vd.py /opt/edgeai/vd.py
 COPY --chown=10001:10001 runner/edgeai_runner /opt/edgeai/edgeai_runner

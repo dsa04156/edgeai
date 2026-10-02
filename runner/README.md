@@ -1,6 +1,6 @@
 # Runner
 
-Python 표준 라이브러리로 Attempt claim → 입력 다운로드·SHA-256 확인 → 실제 자식 프로세스
+Python으로 Attempt claim → 입력 다운로드·SHA-256 확인 → 실제 자식 프로세스
 실행 → 출력 업로드 → Result commit 요청을 수행한다. 내부 HTTP 인증/API, DB 상태 전이,
 검증된 결과 확정, Kubernetes worker를 구현했다. 실행은 `EDGEAI_RUNTIME_ENABLED=true`로
 명시적으로 활성화해야 한다. 현재 전용 배포는 활성화되어 있으며 M4 전체 경로와 M5 재시도·명시적
@@ -79,7 +79,8 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 `python3 /opt/edgeai/vd.py --ready`는 유효한 runtime lease의 준비 상태만 확인한다.
 [내부 poll 계약](../contracts/openapi/vd-runtime-api.yaml), [ADR0014](../docs/adr/0014-virtual-device-runtime.md),
 [구성 요소 검증](../docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
-배정 연결은 후속 작업이므로 현재 공개 VD 등록만으로 이 프로세스를 기동하지 않는다.
+배정 연결까지 [M6 수용](../docs/evidence/m6-completion-audit.md)을 통과했다.
+공개 VD 등록 후 별도 실행 시작 API로 기동한다.
 
 | 변수 | 용도 |
 |---|---|
@@ -101,3 +102,27 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 동시 작업의 cgroup 측정은 공유 VD 컨테이너 전체 사용량이다. 서비스 지연 파일만 작업별 측정이며
 CPU/GPU 자원을 각 작업에 독점 할당하거나 서로 신뢰하지 않는 workload를 격리하는 기능은 아니다.
 `test-runner.sh`는 기존 Runner와 VD 시험을 함께 수행하며 CI에서는 UID10001의 실제 이미지도 시험한다.
+
+## 스트림 전달 구성 요소 (M7 진행 중)
+
+`stream_protocol`은 [frame](../contracts/streams/frame.schema.json)과
+[처리 확인](../contracts/streams/ack.schema.json)을 검증한다. `stream_journal`은 제한된 로컬
+SQLite에 입력·계산 상태·출력을 원자 저장한다. `stream_mqtt`는 고정 Paho MQTT2.1.0을 사용하며
+실제 MQTT5 전달·경로별 ACL·TLS·재연결을 담당한다. 제어 서버의 인증된 binding과 broker ACL
+설정이 전제다. 계정 생성·DataRoute API·공개 STREAM Run·Runner workload 연결은 아직 미구현이다.
+
+```bash
+python3 -m venv .tools/stream-venv
+.tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
+EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
+```
+
+실제 `mosquitto`, `mosquitto_passwd`, `openssl` 실행 파일을 요구하며 없으면 성공으로 건너뛰지 않는다.
+별도 경로는 `EDGEAI_MOSQUITTO_BINARY`, `EDGEAI_MOSQUITTO_PASSWD_BINARY`로 지정한다.
+시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
+종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
+
+`test-runner.sh`의50개에는 codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
+MQTT 통합은 별도9개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
+다르며 후자는 아직 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
+[실제 검증 기록](../docs/evidence/m7-stream-transport.md).
