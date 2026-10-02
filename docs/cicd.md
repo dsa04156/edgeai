@@ -20,6 +20,9 @@ flowchart LR
 - 저장소: `https://github.com/dsa04156/edgeai.git`, 브랜치 `main`.
 - 이미지: `ghcr.io/dsa04156/edgeai-api`, `ghcr.io/dsa04156/edgeai-dashboard`.
 - 식별 태그: `sha-<전체 소스 커밋>`. 실제 배포는 태그 대신 digest를 사용한다.
+- Kubernetes PostgreSQL은 Docker Official Images의 ECR Public 미러를 사용한다.
+  CI에서 검증한 Docker Hub 이미지와 동일한 digest이며, 실제 노드의 Docker Hub CDN 연결
+  reset이 반복되어 같은 노드에서 ECR 이미지 실행을 확인한 후 전환했다.
 - 배포 상태: `deploy/kubernetes/overlays/dev/kustomization.yaml`과 `release.json`.
 - 이미지 변경은 `deploy: pin verified images ... [skip ci]` 커밋으로 기록한다.
   `GITHUB_TOKEN`으로 만든 커밋은 후속 Actions 실행을 재귀적으로 만들지 않는다.
@@ -60,7 +63,7 @@ Public으로 설정하면 노드는 자격 증명 없이 pull할 수 있다. Pri
 ```bash
 kubectl --context kubernetes-admin@kubernetes apply -f deploy/argocd/project.yaml
 kubectl --context kubernetes-admin@kubernetes apply -f deploy/argocd/application.yaml
-kubectl --context kubernetes-admin@kubernetes -n argocd get application edgeai-dev
+kubectl --context kubernetes-admin@kubernetes -n argocd get applications.argoproj.io edgeai-dev
 kubectl --context kubernetes-admin@kubernetes -n edgeai get pods,svc,pvc,ingress
 ```
 
@@ -86,3 +89,4 @@ Actions 성공은 이미지와 Git 상태 갱신의 성공이며, 배포 완료�
 - [GHCR 권한과 인증](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [ArgoCD 자동 동기화](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)
 - [Next.js standalone 출력](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)
+- [Docker Official Images ECR Public 제공](https://aws.amazon.com/blogs/containers/docker-official-images-now-available-on-amazon-elastic-container-registry-public/)
