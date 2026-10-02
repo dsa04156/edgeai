@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: edgeai
+  namespace: argocd
+spec:
+  description: EdgeAI development control plane
+  sourceRepos: [https://github.com/dsa04156/edgeai.git]
+  destinations:
+    - {server: 'https://kubernetes.default.svc', namespace: edgeai}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: '', kind: ConfigMap}
+    - {group: '', kind: Service}
+    - {group: '', kind: PersistentVolumeClaim}
+    - {group: apps, kind: Deployment}
+    - {group: apps, kind: StatefulSet}
+    - {group: networking.k8s.io, kind: Ingress}

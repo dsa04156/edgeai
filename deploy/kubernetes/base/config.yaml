@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edgeai-config
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+data:
+  EDGEAI_DB_HOST: edgeai-postgres
+  EDGEAI_DB_PORT: '5432'
+  EDGEAI_DB_NAME: edgeai
+  EDGEAI_DB_USER: edgeai
+  EDGEAI_API_PORT: '18080'
+  EDGEAI_API_USER: edgeai
+  EDGEAI_BIND_ADDRESS: 0.0.0.0
+  EDGEAI_API_BASE_URL: http://edgeai-api:18080

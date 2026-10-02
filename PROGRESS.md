@@ -44,7 +44,7 @@ bash scripts/test-ui.sh; bash scripts/test-profiles-stack.sh local (Compose는 c
 Swagger UI `/swagger-ui.html`, 계약 `/openapi.yaml` 추가. 문서 인증과 자동 CSRF 쓰기,
 실제 desktop/mobile 등록·조회 검증 완료. 상세 근거: docs/swagger-ui.md.
 GitHub Actions CI 연결 상태를 확인했고 Swagger 시험도 기존 CI 브라우저 경로에 포함했다.
-ArgoCD/CD는 아직 연결하지 않았으며 배포 대상 클러스터·namespace·registry 등이 필요하다.
+최초 Swagger 추가 시점에는 ArgoCD/CD가 미연결이었다. 이후 진행 상태는 아래 CI/CD 기록을 따른다.
 
 Swagger 포함 코드 fd729ca의 CI 36952012074: scaffold/storage success, 결과 JSON 8개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36952012074
@@ -66,3 +66,20 @@ DB 중단 시 503와 동일 API/UI 프로세스의 복구까지 모두 통과했
 - contract: 20261002T015811Z-9c7e25cf
 - integration: 20261002T015818Z-9cb09f25
 - health/Profile/Swagger: 20261002T015826Z-4e61b9e7
+
+[CI/CD 연결 및 API 설명 — 진행 중]
+사용자 요청에 따라 GitHub Actions → GHCR → Git digest 갱신 → ArgoCD 흐름을 구현했다.
+기존 context/ArgoCD/Traefik/local-path를 조회했고 전용 edgeai namespace와 Secret을 준비했다.
+Kustomize/ArgoCD manifests는 실제 클러스터 server dry-run을 통과했다.
+API/DB 주소의 환경 설정, 비루트 컨테이너, Next.js standalone, 실제 컨테이너 HTTP 검증을 추가했다.
+Swagger의 모든 operation에 한국어 역할·입력·응답·오류 설명과 예시를 보강했다.
+
+로컬 검증: unit 11개, 계약 타입/패키징 일치, UI lint/typecheck/build 및 8개 검사,
+실제 PostgreSQL 통합 6개, Profile/Swagger PC·모바일 4개 및 DB 장애·복구 통과.
+근거: unit 20261002T023728Z-2552d567, contract 20261002T023734Z-c96a7d3a,
+UI 20261002T023836Z-0ecc2310, integration 20261002T023843Z-e5d47cee,
+health 20261002T024516Z-13e1707a (모두 PASS/0).
+Swagger 설명 선택자가 두 영역과 일치한 실패는 텍스트 범위로 수정했다.
+Profile 브라우저에서 성공 문구 대기 실패가 한 번 발생해 실제 새 버전 POST 201을 먼저 확인하도록 보강했다.
+로컬 Docker 권한 제한으로 이미지 빌드·발행은 GitHub runner에서 검증한다.
+최초 CI 이미지 발행, GHCR pull 가능 여부 및 ArgoCD 실제 동기화는 이 기록 시점에 아직 미검증이다.

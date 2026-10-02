@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-dashboard
+spec:
+  selector: {app: edgeai-dashboard}
+  ports:
+    - {name: http, port: 13080, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-dashboard
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app: edgeai-dashboard}
+  template:
+    metadata:
+      labels: {app: edgeai-dashboard}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/arch: amd64}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: dashboard
+          image: ghcr.io/dsa04156/edgeai-dashboard:bootstrap
+          ports: [{name: http, containerPort: 13080}]
+          env:
+            - name: EDGEAI_API_BASE_URL
+              valueFrom:
+                configMapKeyRef: {name: edgeai-config, key: EDGEAI_API_BASE_URL}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 512Mi}
+          startupProbe:
+            httpGet: {path: /api/live, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /api/live, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - {name: cache, mountPath: /app/dashboard/.next/cache}
+      volumes:
+        - name: cache
+          emptyDir: {}

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: edgeai-dev
+  namespace: argocd
+spec:
+  project: edgeai
+  source:
+    repoURL: https://github.com/dsa04156/edgeai.git
+    targetRevision: main
+    path: deploy/kubernetes/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: edgeai
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    retry:
+      limit: 3
+      backoff: {duration: 10s, factor: 2, maxDuration: 1m}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { controlPlaneOrigin } from "../../../../lib/control-plane";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     headers.set("Content-Type", "application/json");
   }
   try {
-    const response = await fetch(`http://127.0.0.1:${process.env.EDGEAI_API_PORT || "18080"}/api/v1/${target}${request.nextUrl.search}`, {
+    const response = await fetch(`${controlPlaneOrigin()}/api/v1/${target}${request.nextUrl.search}`, {
       method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
     });
     const outgoing = new Headers({ "Content-Type": response.headers.get("content-type") || "application/json", "Cache-Control": "no-store" });

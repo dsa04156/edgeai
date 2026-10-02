@@ -78,14 +78,14 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 포트를 바꾸면 같은 호스트의 API를 사용하며, Swagger 자산은 JAR에 포함되어 외부 CDN이나
 온라인 validator에 연결하지 않습니다. 인증 정보는 Swagger 브라우저 저장소에 영속 저장하지 않습니다.
 
-## CI / CD 상태
+## CI / CD
 
 - **CI 연결됨:** GitHub Actions가 push/PR마다 빌드, 단위·계약·PostgreSQL 통합,
   Dashboard/Swagger 브라우저 시험, DB 장애·복구, MQTT 및 MinIO 검증을 실행합니다.
-- **ArgoCD/CD 미연결:** 현재 workflow에는 이미지 발행이나 환경 배포 단계가 없습니다.
-  배포용 Kubernetes manifests, ArgoCD Application 및 대상 클러스터 연결도 아직 구성하지 않았습니다.
-- CD를 구성할 때는 대상 클러스터/context, namespace, ArgoCD 설치 위치, 이미지 registry와
-  외부 접속 주소를 먼저 정해야 합니다. 현재 저장소의 테스트 성공은 배포 완료를 의미하지 않습니다.
+- **이미지·GitOps:** 검증한 backend/Dashboard 이미지를 GHCR에 발행하고 digest를 Git에 기록합니다.
+  ArgoCD `edgeai-dev`가 `deploy/kubernetes/overlays/dev`를 감시하도록 구성했습니다.
+- 실제 연결·배포 검증 상태는 [진행 상태](PROGRESS.md), 초기 연결과 접속 주소는
+  [CI/CD 문서](docs/cicd.md)를 확인하세요. GitHub 검사 성공과 Kubernetes 배포 건강 상태는 별도로 확인합니다.
 
 ## Profile 사용
 

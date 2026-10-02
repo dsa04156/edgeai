@@ -74,3 +74,101 @@ jobs:
           name: m0-storage-${{ github.run_id }}
           path: docs/evidence/runs/
           retention-days: 14
+  images:
+    needs: [scaffold, storage]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api_digest: ${{ steps.publish.outputs.api_digest }}
+      dashboard_digest: ${{ steps.publish.outputs.dashboard_digest }}
+    env:
+      EDGEAI_API_IMAGE: ghcr.io/dsa04156/edgeai-api:sha-${{ github.sha }}
+      EDGEAI_DASHBOARD_IMAGE: ghcr.io/dsa04156/edgeai-dashboard:sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build API image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.EDGEAI_API_IMAGE }}
+          labels: org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Build dashboard image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: dashboard/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.EDGEAI_DASHBOARD_IMAGE }}
+          labels: org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+      - name: Generate isolated image-test credentials
+        run: |
+          python3 - <<'PY'
+          import os,secrets
+          with os.fdopen(os.open('.env', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'w') as file:
+              file.write('EDGEAI_API_USER=edgeai\n')
+              for key in ['EDGEAI_API_PASSWORD', 'EDGEAI_DB_PASSWORD']:
+                  file.write(key + '=' + secrets.token_hex(24) + '\n')
+          PY
+      - name: Verify built containers against a real database
+        run: bash scripts/collect-evidence.sh images bash scripts/test-images.sh
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the exact tested images
+        id: publish
+        run: |
+          docker push "$EDGEAI_API_IMAGE"
+          docker push "$EDGEAI_DASHBOARD_IMAGE"
+          api_ref=$(docker inspect "$EDGEAI_API_IMAGE" --format '{{index .RepoDigests 0}}')
+          dashboard_ref=$(docker inspect "$EDGEAI_DASHBOARD_IMAGE" --format '{{index .RepoDigests 0}}')
+          echo "api_digest=${api_ref##*@}" >> "$GITHUB_OUTPUT"
+          echo "dashboard_digest=${dashboard_ref##*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: image-verification-${{ github.run_id }}
+          path: docs/evidence/runs/
+          retention-days: 14
+  gitops:
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Record tested digests for ArgoCD
+        env:
+          VERIFIED_REVISION: ${{ github.sha }}
+          API_DIGEST: ${{ needs.images.outputs.api_digest }}
+          DASHBOARD_DIGEST: ${{ needs.images.outputs.dashboard_digest }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$VERIFIED_REVISION" ]; then
+            echo 'A newer main revision exists; leaving deployment pins for its pipeline.'
+            exit 0
+          fi
+          python3 scripts/update-images.py --revision "$VERIFIED_REVISION" --api "$API_DIGEST" --dashboard "$DASHBOARD_DIGEST"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/kubernetes/overlays/dev/kustomization.yaml deploy/kubernetes/overlays/dev/release.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "deploy: pin verified images for $VERIFIED_REVISION [skip ci]"
+          git push origin HEAD:main

@@ -15,7 +15,7 @@ PY
 mkdir -p .tools
 java -jar backend/app/build/libs/edgeai-control-plane.jar > .tools/api-smoke.log 2>&1 &
 api_pid=$!
-node dashboard/node_modules/next/dist/bin/next start dashboard --hostname 127.0.0.1 --port "$EDGEAI_DASHBOARD_PORT" > .tools/ui-smoke.log 2>&1 &
+node dashboard/scripts/start.mjs > .tools/ui-smoke.log 2>&1 &
 ui_pid=$!
 db_stopped=false
 restore_db() {

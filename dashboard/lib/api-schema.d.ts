@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read implemented platform capabilities */
+        /**
+         * 플랫폼 정보와 구현된 기능 조회
+         * @description 서버 이름·버전·현재 개발 단계·사용 가능한 기능을 반환합니다. 관리 화면의 기능 표시나 서버 연결 확인에 사용합니다. 현재 capabilities에는 profiles가 포함됩니다. 인증이 필요합니다.
+         */
         get: operations["getPlatform"];
         put?: never;
         post?: never;
@@ -28,7 +31,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Application and PostgreSQL readiness */
+        /**
+         * 서버와 PostgreSQL의 요청 처리 준비 상태 확인
+         * @description 애플리케이션과 PostgreSQL이 함께 준비되어 있으면 200/UP을 반환합니다. DB 연결 장애 등으로 요청을 처리할 수 없으면 503/DOWN을 반환합니다. Kubernetes readiness probe가 사용하며 인증은 필요하지 않습니다. 내부 접속 정보는 응답하지 않습니다.
+         */
         get: operations["getReadiness"];
         put?: never;
         post?: never;
@@ -45,7 +51,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Obtain a CSRF token and session cookie before a write */
+        /**
+         * 쓰기 요청에 사용할 CSRF 토큰 발급
+         * @description Basic 인증 후 호출하면 token과 EDGEAI_SESSION 세션 쿠키를 받습니다. 직접 POST를 호출하는 클라이언트는 같은 쿠키와 X-CSRF-TOKEN 헤더, Basic 인증을 함께 보내야 합니다. 토큰은 로그인용 액세스 토큰이 아닙니다. Swagger에서는 자동 처리하므로 수동 입력할 필요가 없습니다.
+         */
         get: operations["getCsrfToken"];
         put?: never;
         post?: never;
@@ -60,18 +69,26 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
         };
-        /** List published versions in ascending key and version text order */
+        /**
+         * 종류별 프로필 버전 목록 조회
+         * @description 선택한 종류의 발행 버전을 페이지로 조회합니다. key를 지정하면 해당 키와 정확히 일치하는 버전만 반환합니다.
+         *
+         *     key와 version의 문자열 오름차순입니다. 따라서 1.0.0 → 10.0.0 → 2.0.0 순서일 수 있으며 최신 버전을 계산하는 API가 아닙니다. 다음 페이지는 nextOffset을 offset으로 전달하며, null이면 마지막입니다.
+         */
         get: operations["listProfiles"];
         put?: never;
         /**
-         * Publish an immutable version, or return an identical existing version
-         * @description Requires Basic authentication, the session cookie from getCsrfToken and
-         *     X-CSRF-TOKEN. Body limit 64 KiB UTF-8; nested JSON depth limit 32.
-         *     Unknown envelope fields and duplicate JSON properties are rejected.
+         * 프로필 새 버전 등록
+         * @description DEVICE(장치 규격), SERVICE(서비스 규격), VD(가상 장치 규격) 중 종류를 선택해 JSON 문서를 발행합니다.
+         *
+         *     새 key/version은 201, 같은 종류·key·version에 같은 내용을 재전송하면 기존 id와 생성 시각을 유지한 200을 반환합니다. 같은 버전에 다른 내용을 보내면 409이며 version을 올려 등록해야 합니다. 발행 후 수정·삭제할 수 없습니다.
+         *
+         *     Basic 인증·세션 쿠키·CSRF 토큰이 필요합니다. 요청은 UTF-8 기준 64 KiB 이하, spec은 비어 있지 않은 JSON 객체여야 합니다. 최대 중첩 깊이는 32이며 중복 JSON 키와 key/version/spec 이외의 최상위 필드는 거절합니다. 아래 규격은 입력 예시이며 실제 장치/런타임 호환성 검증은 후속 개발 범위입니다.
          */
         post: operations["publishProfile"];
         delete?: never;
@@ -85,14 +102,40 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
+                /** @description 조회할 프로필의 고유 키입니다. */
                 key: components["schemas"]["ProfileKey"];
+                /** @description 조회할 정확한 발행 버전입니다. 예: 1.0.0 */
                 version: components["schemas"]["Version"];
             };
             cookie?: never;
         };
-        /** Get an exact immutable version */
+        /**
+         * 프로필의 특정 버전 상세 조회
+         * @description kind·key·version으로 발행 버전 하나를 정확히 조회합니다. 저장된 spec, 내용 식별용 SHA-256 digest, 최초 생성 시각을 반환합니다. 이전 버전 내용을 확인하거나 후속 장치/실행 기능에서 참조할 버전을 선택할 때 사용합니다. 해당 버전이 없으면 404를 반환합니다.
+         */
         get: operations["getProfileVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/actuator/health/liveness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 서버 프로세스 생존 상태 확인
+         * @description Spring Boot 프로세스가 정상인지 확인합니다. DB 상태는 검사하지 않으므로 DB 장애만으로 서버를 반복 재시작하지 않습니다. Kubernetes liveness/startup probe에 사용하며 인증이 필요하지 않습니다.
+         */
+        get: operations["getLiveness"];
         put?: never;
         post?: never;
         delete?: never;
@@ -105,29 +148,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description 소문자 영문으로 시작하는 프로필 키. 영문 소문자·숫자와 구분자 점/밑줄/하이픈을 사용하며 최대 100자입니다.
+         * @example temperature-sensor
+         */
         ProfileKey: string;
+        /**
+         * @description MAJOR.MINOR.PATCH 형태의 숫자 버전. 01처럼 앞에 0을 붙이거나 prerelease 문자를 붙일 수 없습니다.
+         * @example 1.0.0
+         */
         Version: string;
         PublishProfile: {
             key: components["schemas"]["ProfileKey"];
             version: components["schemas"]["Version"];
-            /** @description JSON document; execution-specific schema validation belongs to later consuming milestones. */
+            /** @description 비어 있지 않은 JSON 규격 문서입니다. 현재 종류별 실행 스키마·외부 참조의 호환성은 검증하지 않습니다. */
             spec: {
                 [key: string]: unknown;
             };
         };
         ProfileVersion: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description 이 발행 버전의 서버 생성 UUID입니다.
+             */
             id: string;
-            /** @enum {string} */
+            /**
+             * @description 프로필 종류입니다. 종류마다 키·버전 공간이 구분됩니다.
+             * @enum {string}
+             */
             kind: "DEVICE" | "SERVICE" | "VD";
             key: components["schemas"]["ProfileKey"];
             version: components["schemas"]["Version"];
+            /** @description 발행 시 저장된 JSON 규격입니다. */
             spec: {
                 [key: string]: unknown;
             };
-            /** @description SHA-256 of edgeai-profile-v1 newline KIND newline canonical spec; see ADR 0002. */
+            /** @description 종류와 정규화된 spec의 SHA-256 식별값. JSON 키 순서나 동등한 숫자 표기는 같은 값이며, spec 또는 종류가 바뀌면 달라집니다. 상세 규칙은 ADR 0002를 따릅니다. */
             digest: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description 최초 발행 시각입니다. 동일 내용 재등록 시 유지됩니다.
+             */
             createdAt: string;
         };
         ApiError: {
@@ -135,6 +196,16 @@ export interface components {
             code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE";
             message: string;
         };
+        /**
+         * @example {
+         *       "name": "edgeai",
+         *       "version": "0.1.0",
+         *       "milestone": "M1",
+         *       "capabilities": [
+         *         "profiles"
+         *       ]
+         *     }
+         */
         PlatformInfo: {
             /** @constant */
             name: "edgeai";
@@ -143,50 +214,80 @@ export interface components {
             milestone: "M1";
             capabilities: string[];
         };
+        /**
+         * @example {
+         *       "status": "UP"
+         *     }
+         */
         Health: {
             /** @enum {string} */
             status: "UP" | "DOWN" | "OUT_OF_SERVICE" | "UNKNOWN";
         };
     };
     responses: {
-        /** @description Invalid request */
+        /** @description 종류·키·버전·페이지·JSON 형식이 잘못되었습니다. */
         Invalid: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "code": "INVALID_PROFILE",
+                 *       "message": "종류, 키, 버전과 JSON 규격을 확인하세요. 규격은 비어 있지 않은 객체여야 합니다."
+                 *     }
+                 */
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Key and version already exist with different content; publish a new version */
+        /** @description 같은 종류·키·버전에 다른 내용이 이미 발행되었습니다. 새 버전을 사용하세요. */
         Conflict: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "code": "PROFILE_CONFLICT",
+                 *       "message": "이미 발행한 버전입니다. 내용을 바꾸려면 새 버전을 등록하세요."
+                 *     }
+                 */
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Version does not exist */
+        /** @description 해당 발행 버전이 없습니다. */
         NotFound: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "code": "PROFILE_NOT_FOUND",
+                 *       "message": "해당 Profile 버전을 찾을 수 없습니다."
+                 *     }
+                 */
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Profile store temporarily unavailable */
+        /** @description DB 연결 등 저장소 문제로 요청을 처리할 수 없습니다. 복구 후 재시도하세요. */
         Unavailable: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "code": "PROFILE_STORE_UNAVAILABLE",
+                 *       "message": "Profile 저장소에 연결할 수 없습니다. 잠시 후 다시 시도하세요."
+                 *     }
+                 */
                 "application/json": components["schemas"]["ApiError"];
             };
         };
     };
     parameters: {
+        /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
         Kind: "DEVICE" | "SERVICE" | "VD";
     };
     requestBodies: never;
@@ -283,20 +384,23 @@ export interface operations {
     listProfiles: {
         parameters: {
             query?: {
-                /** @description Exact key filter */
+                /** @description 프로필 키 정확 일치 필터. 생략하면 선택한 종류의 전체 키를 조회합니다. */
                 key?: components["schemas"]["ProfileKey"];
+                /** @description 한 페이지의 최대 항목 수. 1~100, 기본 20입니다. */
                 limit?: number;
+                /** @description 건너뛸 항목 수. 이전 응답의 nextOffset을 넣으면 다음 페이지입니다. */
                 offset?: number;
             };
             header?: never;
             path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Page of versions; nextOffset is null at the end. Ordering is lexical, not semantic version precedence. */
+            /** @description 발행 버전 목록. items가 빈 배열이면 결과가 없으며 nextOffset이 null이면 마지막 페이지입니다. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -324,6 +428,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
@@ -344,7 +449,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Identical version already published (idempotent replay) */
+            /** @description 동일 내용의 기존 버전입니다. 중복 생성하지 않고 기존 결과를 반환합니다. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -353,7 +458,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProfileVersion"];
                 };
             };
-            /** @description New version published */
+            /** @description 새 버전을 발행했습니다. Location 헤더로 상세 조회할 수 있습니다. */
             201: {
                 headers: {
                     /** @description Version lookup path */
@@ -380,7 +485,7 @@ export interface operations {
                 content?: never;
             };
             409: components["responses"]["Conflict"];
-            /** @description Request exceeds 64 KiB */
+            /** @description 요청 또는 정규화된 규격이 UTF-8 64 KiB를 초과했습니다. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -395,8 +500,11 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
+                /** @description 조회할 프로필의 고유 키입니다. */
                 key: components["schemas"]["ProfileKey"];
+                /** @description 조회할 정확한 발행 버전입니다. 예: 1.0.0 */
                 version: components["schemas"]["Version"];
             };
             cookie?: never;
@@ -422,6 +530,38 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    getLiveness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버 프로세스 정상 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "UP"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Health"];
+                };
+            };
+            /** @description 서버 프로세스가 정상 상태가 아님 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }

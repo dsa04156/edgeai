@@ -1,10 +1,9 @@
 import type { components } from "./api-schema";
+import { controlPlaneOrigin } from "./control-plane";
 
 export async function getControlPlaneHealth(): Promise<components["schemas"]["Health"]> {
-  const port = process.env.EDGEAI_API_PORT ?? "18080";
-  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) return { status: "DOWN" };
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/actuator/health/readiness`, {
+    const response = await fetch(`${controlPlaneOrigin()}/actuator/health/readiness`, {
       cache: "no-store",
       signal: AbortSignal.timeout(2000),
     });

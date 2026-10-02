@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: edgeai
+  annotations:
+    argocd.argoproj.io/sync-wave: '3'
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: edgeai.192.168.0.56.sslip.io
+      http: &routes
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend: {service: {name: edgeai-api, port: {number: 18080}}}
+          - path: /actuator/health
+            pathType: Prefix
+            backend: {service: {name: edgeai-api, port: {number: 18080}}}
+          - path: /swagger-ui
+            pathType: Prefix
+            backend: {service: {name: edgeai-api, port: {number: 18080}}}
+          - path: /swagger-ui.html
+            pathType: Exact
+            backend: {service: {name: edgeai-api, port: {number: 18080}}}
+          - path: /openapi.yaml
+            pathType: Exact
+            backend: {service: {name: edgeai-api, port: {number: 18080}}}
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: edgeai-dashboard, port: {number: 13080}}}
+    - host: edgeai.10.254.192.217.nip.io
+      http: *routes

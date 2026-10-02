@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: edgeai
+      POSTGRES_USER: edgeai
+      POSTGRES_PASSWORD: ${EDGEAI_DB_PASSWORD:?Missing test database password}
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U edgeai -d edgeai']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  api:
+    image: ${EDGEAI_API_IMAGE:?Missing API image}
+    environment:
+      EDGEAI_DB_HOST: postgres
+      EDGEAI_DB_PORT: '5432'
+      EDGEAI_DB_NAME: edgeai
+      EDGEAI_DB_USER: edgeai
+      EDGEAI_DB_PASSWORD: ${EDGEAI_DB_PASSWORD}
+      EDGEAI_API_USER: ${EDGEAI_API_USER}
+      EDGEAI_API_PASSWORD: ${EDGEAI_API_PASSWORD}
+    ports: ['127.0.0.1:18080:18080']
+    depends_on:
+      postgres: {condition: service_healthy}
+  dashboard:
+    image: ${EDGEAI_DASHBOARD_IMAGE:?Missing dashboard image}
+    environment:
+      EDGEAI_API_BASE_URL: http://api:18080
+    ports: ['127.0.0.1:13080:13080']

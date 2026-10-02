@@ -14,8 +14,8 @@ Swagger 브라우저 인증 영속 저장과 온라인 validator를 끄고 모�
 
 GitHub Actions CI는 연결되어 있다. push/PR 이벤트에서 scaffold와 storage job이 동작하며,
 Swagger 실브라우저 시험도 기존 Profile 통합 브라우저 경로에 포함된다.
-현재 저장소에 ArgoCD Application, 배포용 manifests, 이미지 publish 또는 CD workflow는 없다.
-ArgoCD/배포 대상 정보는 아직 제공되지 않았으며 임의의 클러스터 연결이나 배포를 수행하지 않았다.
+최초 Swagger 추가 시점에는 CD가 없었다. 이후 GitHub Actions/GHCR/ArgoCD 구성을 추가했으며,
+현재 배포 연결·검증 결과는 [PROGRESS](../PROGRESS.md)와 [CI/CD 문서](cicd.md)를 따른다.
 
 
 ## 검증 (2026-10-02)
@@ -31,5 +31,12 @@ ArgoCD/배포 대상 정보는 아직 제공되지 않았으며 임의의 클러
 
 코드 fd729ca의 [GitHub Actions 36952012074](https://github.com/dsa04156/edgeai/actions/runs/36952012074)
 scaffold/storage 모두 success다. 내려받은 결과 JSON 8개 모두 PASS/0을 확인했다.
-테스트용 API/UI/DB 프로세스는 종료했다. CD를 구성하거나 배포하지 않았다.
+위 검증 당시 테스트용 API/UI/DB 프로세스는 종료했고 CD 배포는 수행하지 않았다.
+
+## API별 역할 설명
+
+각 operation에 한국어 역할·사용 순서·입력 제약·응답/오류 설명을 추가했다.
+플랫폼·상태 확인·인증·Profile 태그로 구분하며, 목록의 문자열 정렬·버전 불변성·201/200/409의
+차이·CSRF 사용법·spec 실행 검증 범위를 명시한다. readiness와 구분되는 liveness도 문서화했다.
+생성 타입과 패키징 계약을 갱신했고 실제 PC/모바일 Swagger에서 한국어 설명과 등록을 확인한다.
 후속 완료 기록은 문서만 변경하므로 이 코드의 검증을 재사용한다.

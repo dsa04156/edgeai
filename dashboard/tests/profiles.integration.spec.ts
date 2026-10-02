@@ -41,7 +41,11 @@ test("real Profile publication, replay, conflict, version lookup and kind isolat
     await page.getByRole("button", { name: "버전 발행" }).click();
     await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("새 버전을 등록");
     await page.getByLabel("버전", { exact: true }).fill("1.1.0");
+    const nextVersion = page.waitForResponse(response => response.request().method() === "POST" &&
+      response.url().endsWith(`/api/control-plane/profiles/${kind}`) &&
+      response.request().postData()?.includes('"version":"1.1.0"') === true);
     await page.getByRole("button", { name: "버전 발행" }).click();
+    expect((await nextVersion).status()).toBe(201);
     await expect(page.getByText("새 버전을 발행했습니다.")).toBeVisible();
     await page.getByRole("button", { name: `${key} 1.0.0`, exact: true }).click();
     await expect(page.getByLabel("발행된 JSON 규격", { exact: true })).toContainText('"mqtt"');
