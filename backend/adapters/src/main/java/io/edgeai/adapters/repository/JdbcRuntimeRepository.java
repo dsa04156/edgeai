@@ -93,6 +93,11 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         jdbc.update("UPDATE edgeai.task SET state='FAILED',updated_at=? WHERE id=(SELECT task_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),id);
         stop(id,reason,now);
     }
+    public void offload(UUID runtimeId,Instant now) {
+        jdbc.update("UPDATE edgeai.task_attempt SET state='OFFLOADED',updated_at=? WHERE id=(SELECT attempt_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),runtimeId);
+        jdbc.update("UPDATE edgeai.task SET state='OFFLOADING',updated_at=? WHERE id=(SELECT task_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),runtimeId);
+        stop(runtimeId,"OFFLOADED",now);
+    }
     public boolean retryReady(UUID taskId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
             SELECT NOT EXISTS(SELECT 1 FROM edgeai.runtime_instance r WHERE r.task_id=?
@@ -136,7 +141,7 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
                     OR NOT EXISTS(SELECT 1 FROM edgeai.task_result result WHERE result.task_id=parent.id AND result.committed)))
             RETURNING t.id
             """,(r,n)->r.getObject(1,UUID.class),Timestamp.from(now),runId);
-        for(UUID id:ids) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,created_at,updated_at) VALUES (?,?,1,1,'QUEUED',?,?)",UUID.randomUUID(),id,Timestamp.from(now),Timestamp.from(now));
+        for(UUID id:ids) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) SELECT ?,?,1,1,'QUEUED',w.mode,w.node_id,'INITIAL',?,? FROM edgeai.workflow_run w WHERE w.id=?",UUID.randomUUID(),id,Timestamp.from(now),Timestamp.from(now),runId);
     }
     public Optional<RuntimeCommand> leaseCommand(String namespace,UUID owner,Instant now,Duration duration) {
         RuntimeNames.dns(namespace,63);

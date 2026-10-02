@@ -25,7 +25,10 @@ V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·�
 로컬 실행 기본값은 비활성이며 배포는 저장소·키·이미지를 연결하고 활성화했다. 실제 root Result까지
 확인했고 전체 BATCH 실행·실패/취소와 실제 kind 게이트도 통과했다. M4 완료 증거를 따른다.
 M5는 Run별 RetryPolicy·V6 task_retry 예약과 RETRY_WAIT를 추가한다. 기존 Run 잠금으로 재시도·취소·commit을
-직렬화하고 실제 이전 Runtime 종료 후 새 Attempt/epoch를 만든다. running offload·Remote는 후속 구현이다.
+직렬화하고 실제 이전 Runtime 종료 후 새 Attempt/epoch를 만든다. V7 task_offload와 OffloadService는
+명시적인 실행 중 NODE 전환을 같은 잠금으로 처리한다. 이전 producer 차단→물리 종료→새 Attempt 및
+target claim 확인 순서이며 Operation 성공과 Task 결과 성공을 구분한다. 실제 배치는 scheduler가 담당한다.
+자동 전환 정책·Remote·상태형 checkpoint·STREAM route는 남은 범위다.
 
 | 경로 | 책임 |
 |---|---|

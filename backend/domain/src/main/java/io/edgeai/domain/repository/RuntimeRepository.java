@@ -15,6 +15,7 @@ public interface RuntimeRepository {
     void stop(UUID runtimeId,String reason,Instant now);
     void terminated(UUID runtimeId,Instant now);
     void fail(UUID runtimeId,String reason,Instant now);
+    void offload(UUID runtimeId,Instant now);
     boolean retryReady(UUID taskId);
     Optional<TaskResult> result(UUID taskId);
     void commit(TaskResult result,Instant now);

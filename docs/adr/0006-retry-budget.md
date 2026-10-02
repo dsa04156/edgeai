@@ -1,16 +1,16 @@
 # ADR 0006: Task를 유지하는 제한된 자동 재시도
 
-상태: 채택, 로컬 검증 완료 후 실제 kind 검증 진행. M5의 재시도 계약이며 실행 중 offload·Remote 계약은 후속 구현이다.
+상태: 채택, 로컬·실제 kind·CI·배포 검증 완료. M5의 재시도 계약이다. 명시적 offload는 ADR0007을 따른다.
 
 ## 근거와 범위
 
 Notion API/ERD/실행 지침은 Task ID를 유지하고 재시도마다 새 Attempt를 만들도록 한다.
 Run 생성에 선택적인 `retry` 정책을 받으며 공개 Attempt 생성 API는 추가하지 않는다.
-AUTO/NODE 정책과 입력·Profile 버전은 재시도 중 유지한다. 실행 위치 전환은 별도 offload다.
+마지막 Attempt의 AUTO/NODE 정책과 입력·Profile 버전은 재시도 중 유지한다. 실행 위치 전환은 별도 offload다.
 
 ## 계약
 
-- `maxAttempts`: 최초 실행을 포함한 Task별 최대 1–8회.
+- `maxAttempts`: INITIAL+RETRY를 포함한 Task별 최대 1–8회. ADR0007의 OFFLOAD는 별도8회 한도다.
 - `backoffSeconds`: 실패 후 다음 시도까지 최소 1–300초의 고정 대기 시간.
 - `maxElapsedSeconds`: 첫 Attempt 생성부터 새 Attempt를 시작할 수 있는 1–86400초의 창.
   실행 중인 Attempt의 timeout은 SERVICE 규격을 따른다. 창 만료는 실행 중 작업을 중단하지 않는다.

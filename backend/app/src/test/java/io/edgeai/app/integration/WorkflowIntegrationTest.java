@@ -129,7 +129,7 @@ class WorkflowIntegrationTest {
             assertThatThrownBy(()->jdbc.update(sql,version.id())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("immutable");
         assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.task_definition(id,workflow_version_id,task_key,service_profile_version_id,parameters) VALUES (?,?,?,?, '{}'::jsonb)",UUID.randomUUID(),version.id(),"late",profile()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("immutable");
-        assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,created_at,updated_at) VALUES (?,?,2,2,'QUEUED',now(),now())",UUID.randomUUID(),root.id()))
+        assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,cause,created_at,updated_at) VALUES (?,?,2,2,'QUEUED','AUTO','RETRY',now(),now())",UUID.randomUUID(),root.id()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         var other=version();var otherRun=executions.create(UUID.randomUUID().toString(),runInput(other.id())).value();
         assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.task(id,run_id,workflow_version_id,definition_id,state,created_at,updated_at) VALUES (?,?,?,?,'READY',now(),now())",UUID.randomUUID(),run.id(),version.id(),named(otherRun,"root").definitionId()))

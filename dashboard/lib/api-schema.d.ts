@@ -507,6 +507,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{taskId}/offload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 실행 중인 작업을 다른 노드로 전환
+         * @description 실제 producer가 claim한 현재 Attempt만 전환합니다. SERVICE에 recovery.mode=RESTART 선언이 필요합니다. 이전 producer를 즉시 차단하고 실제 종료를 확인한 뒤 같은 Task에서 새 Attempt/epoch를 만듭니다. targetNodeId는 현재 노드와 다르고 Profile 요구조건에 맞는 최근 READY 노드여야 합니다. 같은 키·내용은 같은 Operation을 반환하며, 다른 입력은409입니다. 작업별 최대8회, 동시에1개입니다. Operation의 성공은 새 노드에서 실행을 시작했다는 뜻이며 Task 결과 성공과 구분합니다.
+         */
+        post: operations["offloadTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 비동기 실행 전환 상태 조회
+         * @description 현재 TASK_OFFLOAD Operation의 이전/새 Attempt, 대상 노드, drain/start 마감과 실패 코드를 조회합니다. DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다. FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
+         */
+        get: operations["getOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -795,7 +835,7 @@ export interface components {
          *     }
          */
         RetryPolicy: {
-            /** @description 최초 실행을 포함한 최대 시도 횟수. 2 이상이면 retryOn을 한 개 이상 지정합니다. */
+            /** @description 최초 실행과 RETRY를 포함한 최대 시도 횟수. OFFLOAD는 별도 한도이며 이 예산을 소비하지 않습니다. 2 이상이면 retryOn을 한 개 이상 지정합니다. */
             maxAttempts: number;
             /** @description 실패 후 다음 Attempt까지 최소 대기 시간(초). */
             backoffSeconds: number;
@@ -841,7 +881,7 @@ export interface components {
             definitionId: string;
             key: components["schemas"]["ProfileKey"];
             /** @enum {string} */
-            state: "WAITING" | "READY" | "RUNNING" | "RETRY_WAIT" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
+            state: "WAITING" | "READY" | "RUNNING" | "RETRY_WAIT" | "OFFLOADING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
             cancellationReason: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -855,6 +895,15 @@ export interface components {
             taskId: string;
             number: number;
             epoch: number;
+            /**
+             * @description 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.
+             * @enum {string}
+             */
+            mode: "AUTO" | "NODE";
+            /** Format: uuid */
+            nodeId: string | null;
+            /** @enum {string} */
+            cause: "INITIAL" | "RETRY" | "OFFLOAD";
             /** @enum {string} */
             state: "QUEUED" | "DISPATCHING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "OFFLOADED";
             /** Format: date-time */
@@ -867,6 +916,7 @@ export interface components {
             tasks: components["schemas"]["Task"][];
         };
         TaskDetail: {
+            offloads: components["schemas"]["OffloadOperation"][];
             task: components["schemas"]["Task"];
             attempts: components["schemas"]["TaskAttempt"][];
         };
@@ -902,6 +952,55 @@ export interface components {
             /** Format: int64 */
             bytes: number;
             mediaType: string;
+        };
+        /**
+         * @example {
+         *       "sourceAttemptId": "11111111-1111-4111-8111-111111111111",
+         *       "targetNodeId": "22222222-2222-4222-8222-222222222222",
+         *       "drainTimeoutSeconds": 60,
+         *       "startTimeoutSeconds": 120
+         *     }
+         */
+        OffloadCreate: {
+            /**
+             * Format: uuid
+             * @description 현재 RUNNING Attempt ID. 오래된 화면에서 전환하는 것을 방지합니다.
+             */
+            sourceAttemptId: string;
+            /**
+             * Format: uuid
+             * @description 다른 READY 노드 UUID. scheduler가 hard affinity를 적용합니다.
+             */
+            targetNodeId: string;
+            /** @description 이전 Runtime 종료 확인 제한 시간 */
+            drainTimeoutSeconds: number;
+            /** @description 새 Attempt 생성부터 producer claim까지 제한 시간 */
+            startTimeoutSeconds: number;
+        };
+        OffloadOperation: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "TASK_OFFLOAD";
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            sourceAttemptId: string;
+            /** Format: uuid */
+            targetAttemptId: string | null;
+            /** Format: uuid */
+            targetNodeId: string;
+            /** @enum {string} */
+            state: "DRAINING" | "STARTING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED";
+            failureReason: string | null;
+            /** Format: date-time */
+            drainDeadline: string;
+            /** Format: date-time */
+            startDeadline: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         EmptyCommand: Record<string, never>;
         WorkflowPage: {
@@ -2814,6 +2913,142 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
+            };
+        };
+    };
+    offloadTask: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 동일 전환 요청을 재전송할 때 유지하는 UUID */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description ID를 유지하며 실행 위치를 바꿀 Task */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OffloadCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 전환 요청의 재전송 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadOperation"];
+                };
+            };
+            /** @description 전환 접수. Location의 Operation을 조회하여 종료와 새 실행 시작을 확인하세요. */
+            202: {
+                headers: {
+                    /** @description /api/v1/operations/{operationId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadOperation"];
+                };
+            };
+            /** @description UUID·필드·시간 범위가 잘못되었습니다. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 세션/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Task 또는 대상 Node가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description source 변경·미지원 복원 방식·부적합 target·전환 한도·키 충돌 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소 연결 실패. 동일 키로 재전송하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 전환 응답의 Operation UUID */
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 비동기 전환 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadOperation"];
+                };
+            };
+            /** @description UUID 형식 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Operation이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 저장소 연결 실패 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -15,6 +15,8 @@ metadata:
     argocd.argoproj.io/sync-wave: '1'
 spec:
   replicas: 1
+  # V7 changes required Attempt fields; do not overlap incompatible API writers.
+  strategy: {type: Recreate}
   revisionHistoryLimit: 3
   selector:
     matchLabels: {app: edgeai-api}

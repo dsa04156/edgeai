@@ -22,11 +22,12 @@ public class RuntimeLifecycleService {
     private final WorkflowRepository workflows;
     private final ProfileRepository profiles;
     private final NodeRepository nodes;
+    private final OffloadRepository offloads;
     private final Clock clock;
     private final boolean autoDispatch;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch) {
-        this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.autoDispatch=autoDispatch;
+            ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch) {
+        this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.clock=clock;this.autoDispatch=autoDispatch;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
@@ -49,8 +50,8 @@ public class RuntimeLifecycleService {
     @Transactional
     public Dispatch dispatch(UUID attemptId) {
         var c=lock(attemptId);var r=runtime(attemptId);
-        String name=c.run().nodeId()==null?null:nodes.find(c.run().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
-        return new Dispatch(r,spec(c),c.run().nodeId(),name);
+        String name=c.attempt().nodeId()==null?null:nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
+        return new Dispatch(r,spec(c),c.attempt().nodeId(),name);
     }
 
     @Transactional
@@ -98,13 +99,13 @@ public class RuntimeLifecycleService {
     public Assignment claim(UUID attemptId,long epoch,RuntimePod pod) {
         var c=lock(attemptId);var r=runtime(attemptId);active(c,r,epoch);
         if(!pod.jobUid().equals(r.jobUid()) || (r.producerPodUid()!=null && !r.producerPodUid().equals(pod.podUid())))throw fenced();
-        if(c.run().nodeId()!=null) {
-            var expected=nodes.find(c.run().nodeId()).orElseThrow(RuntimeLifecycleService::fenced);
+        if(c.attempt().nodeId()!=null) {
+            var expected=nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced);
             if(!expected.id().equals(pod.nodeUid()) || !expected.name().equals(pod.nodeName()))throw fenced();
         }
         if(r.producerPodUid()!=null && (!r.nodeUid().equals(pod.nodeUid()) || !r.nodeName().equals(pod.nodeName())))throw fenced();
         var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
-        runtimes.claimed(r.id(),pod,clock.instant());return new Assignment(runtime(attemptId),spec,parameters,inputs);
+        runtimes.claimed(r.id(),pod,clock.instant());offloads.completedByClaim(attemptId,clock.instant());return new Assignment(runtime(attemptId),spec,parameters,inputs);
     }
     @Transactional
     public Assignment authorize(UUID attemptId,long epoch,UUID podUid) {
@@ -163,12 +164,12 @@ public class RuntimeLifecycleService {
         recordFailure(c,r,reason);
     }
     private void recordFailure(Context c,RuntimeInstance r,String reason) {
-        var now=clock.instant();runtimes.fail(r.id(),reason,now);
+        var now=clock.instant();runtimes.fail(r.id(),reason,now);offloads.failedAttempt(c.attempt().id(),now);
         var policy=c.run().retry();
         var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
         var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
         var availableAt=now.plusSeconds(policy.backoffSeconds());
-        if(policy.retryOn().contains(reason) && c.attempt().number()<policy.maxAttempts() && availableAt.isBefore(deadline))
+        if(policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
             executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
         else failDescendants(c.run(),c.task(),now);
         runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
@@ -189,12 +190,13 @@ public class RuntimeLifecycleService {
         }
         if(now.isBefore(retry.availableAt()) || !runtimes.retryReady(taskId))return false;
         var previous=executions.attempt(retry.failedAttemptId()).orElseThrow();
-        if(!previous.state().equals("FAILED") || previous.number()>=run.retry().maxAttempts())throw new IllegalStateException("Invalid pending retry");
+        if(!previous.state().equals("FAILED") || retryAttempts(taskId)>=run.retry().maxAttempts())throw new IllegalStateException("Invalid pending retry");
         var next=executions.startRetry(taskId,now);plan(next.id(),retry.namespace());return true;
     }
+    private long retryAttempts(UUID taskId){return executions.attempts(taskId).stream().filter(a->!a.cause().equals("OFFLOAD")).count();}
     private void failDescendants(WorkflowRun run,Task task,Instant now) {
         var descendants=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson()).descendants(task.key());
-        for(var child:executions.tasks(run.id()))if(descendants.contains(child.key()))executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);
+        for(var child:executions.tasks(run.id()))if(descendants.contains(child.key())){executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);offloads.cancelForTask(child.id(),now);}
     }
     private TaskResult replay(RuntimeInstance runtime,long epoch,UUID pod,String digest) {
         var result=runtimes.result(runtime.taskId()).orElse(null);if(result==null)return null;
@@ -209,7 +211,7 @@ public class RuntimeLifecycleService {
     }
     private RuntimeInstance runtime(UUID attemptId) { return runtimes.byAttempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced); }
     private void active(Context c,RuntimeInstance r,long epoch) {
-        if(r.epoch()!=epoch || !r.desiredState().equals("RUNNING") || !Set.of("SUBMITTED","RUNNING").contains(r.observedState()) ||
+        if(!offloads.canStart(c.attempt().id(),clock.instant()) || r.epoch()!=epoch || !r.desiredState().equals("RUNNING") || !Set.of("SUBMITTED","RUNNING").contains(r.observedState()) ||
                 !Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING") || !c.run().state().equals("RUNNING") ||
                 r.expiresAt()==null || !clock.instant().isBefore(r.expiresAt()))throw fenced();
     }

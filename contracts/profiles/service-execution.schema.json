@@ -221,6 +221,23 @@
         "Guaranteed",
         "Burstable"
       ]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "RESTART"
+          ],
+          "description": "NONE by default. RESTART explicitly declares that this workload may be stopped and restarted from its immutable inputs on a different node without checkpoint restoration."
+        }
+      }
     }
   },
   "required": [

@@ -7,7 +7,8 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 **M0–M4 구현·검증을 완료**했습니다. Profile·장치/노드·Workflow 관리부터
 실제 Kubernetes Runner 실행, MinIO 파일 검증과 결과 저장까지 연결했습니다.
 로컬 실행은 기본 비활성이고 전용 클러스터 배포는 활성화되어 있습니다.
-현재 M5 재시도 정책·새 Attempt 구현을 검증 중이며, 실행 중 오프로딩·Remote는 후속 작업입니다.
+M5 재시도는 실제 kind·CI·배포 검증을 통과했습니다. 실행 중 노드 전환은 구현 후 검증 중이며,
+자동 전환 정책·Remote 연동은 남아 있습니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
@@ -146,6 +147,10 @@ API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 �
 활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.
 Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허용 기간·오류를 지정합니다.
 재시도는 같은 Task에서 새 Attempt/epoch를 만들며 상세 계약은 Swagger RetryPolicy를 따릅니다.
+실행 중인 작업을 선택하면 **다른 노드로 전환**을 요청할 수 있습니다. SERVICE에
+`recovery.mode=RESTART`가 선언되어야 하며, 이전 실행을 종료한 뒤 고정 입력으로 다시 시작합니다.
+전환 상태는 Task 상세와 `GET /api/v1/operations/{operationId}`에서 확인합니다.
+전환 성공은 새 실행 시작을 의미하며 결과 성공은 별도로 확인합니다([ADR 0007](docs/adr/0007-running-offload.md)).
 STREAM 실행은 M7이며 현재 요청은 501입니다.
 상세 계약은 [ADR 0004](docs/adr/0004-workflow-run-task.md)와 Swagger의 Workflow/실행/작업 태그를 따릅니다.
 

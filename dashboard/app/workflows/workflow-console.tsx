@@ -5,7 +5,7 @@ import type { components, operations } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
 
 type Schema = components["schemas"];
-const stateNames: Record<string, string> = { PENDING: "실행 대기", WAITING: "입력 대기", READY: "실행 준비", RETRY_WAIT: "재시도 대기", QUEUED: "접수됨", DISPATCHING: "배치 중", RUNNING: "실행 중", SUCCEEDED: "성공", FAILED: "실패", CANCELLING: "종료 확인 중", CANCELLED: "취소됨", SKIPPED: "건너뜀", OFFLOADED: "전환됨" };
+const stateNames: Record<string, string> = { PENDING: "실행 대기", WAITING: "입력 대기", READY: "실행 준비", RETRY_WAIT: "재시도 대기", OFFLOADING: "실행 위치 전환 중", DRAINING: "이전 실행 종료 중", STARTING: "새 실행 확인 중", QUEUED: "접수됨", DISPATCHING: "배치 중", RUNNING: "실행 중", SUCCEEDED: "성공", FAILED: "실패", CANCELLING: "종료 확인 중", CANCELLED: "취소됨", SKIPPED: "건너뜀", OFFLOADED: "전환됨" };
 const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"]);
 function requestKey() {
   // getRandomValues also works on the existing private HTTP development ingress.
@@ -41,6 +41,7 @@ export function WorkflowConsole() {
     ["RUNTIME_LOST", "실행 자원 유실"], ["JOB_FAILED", "Kubernetes Job 실패"],
   ] as const;
   const [retryOn, setRetryOn] = useState<string[]>(["STORAGE_FAILED", "RUNTIME_LOST"]);
+  const [offload, setOffload] = useState<{ sourceAttemptId: string; key: string } | null>(null);
   const [cancel, setCancel] = useState<{ kind: "run" | "task"; id: string } | null>(null);
 
   async function api(path: string, init?: RequestInit, authorization = auth) {
@@ -69,10 +70,10 @@ export function WorkflowConsole() {
     setKey(requestKey()); setCancel(null);
   }
   async function showRun(id: string) {
-    const text = await (await api(`workflow-runs/${id}`)).text(); setRun(JSON.parse(text)); setRunJson(stringify(parse(text), null, 2) || ""); setTask(null); setResults(null); setCancel(null);
+    const text = await (await api(`workflow-runs/${id}`)).text(); setRun(JSON.parse(text)); setRunJson(stringify(parse(text), null, 2) || ""); setTask(null); setResults(null); setOffload(null); setCancel(null);
   }
   async function showTask(id: string) {
-    setTask(null); setResults(null);
+    setTask(null); setResults(null); setOffload(null);
     const [detail, result] = await Promise.all([api(`tasks/${id}`), api(`tasks/${id}/results`)]);
     setTask(await detail.json()); setResults(await result.json());
   }
@@ -90,7 +91,7 @@ export function WorkflowConsole() {
   }
   function disconnect() {
     setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
-    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
+    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setOffload(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
   }
   async function confirmCancellation() {
     if (!cancel) return;
@@ -158,7 +159,26 @@ export function WorkflowConsole() {
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
-        {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
+        {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
+        {task && <div role="region" aria-label="실행 위치 전환">
+          <h3>실행 위치 전환</h3>
+          <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 다른 노드에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>
+          {task.task.state === "RUNNING" && task.attempts.some(a => a.state === "RUNNING") && !offload && <button disabled={busy} onClick={() => setOffload({ sourceAttemptId: task.attempts.find(a => a.state === "RUNNING")!.id, key: requestKey() })}>다른 노드로 전환</button>}
+          {offload && <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); const taskId = task.task.id; void action(async () => {
+            await post(`tasks/${taskId}/offload`, { sourceAttemptId: offload.sourceAttemptId, targetNodeId: String(data.get("targetNodeId")), drainTimeoutSeconds: Number(data.get("drainTimeoutSeconds")), startTimeoutSeconds: Number(data.get("startTimeoutSeconds")) }, offload.key);
+            await showRun(run.run.id); await showTask(taskId); await loadRuns(); setNotice("전환 요청을 접수했습니다. 이전 실행 종료와 새 실행 시작 상태를 확인하세요.");
+          }); }}><fieldset disabled={busy} className="publish-fields">
+            <label>전환할 노드<input name="targetNodeId" list="offload-target-nodes" required maxLength={36} placeholder="다른 READY 노드 UUID" /></label>
+            <datalist id="offload-target-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.status}</option>)}</datalist>
+            <div className="form-row"><label>이전 실행 종료 제한(초)<input name="drainTimeoutSeconds" type="number" min={1} max={600} defaultValue={60} required /></label><label>새 실행 시작 제한(초)<input name="startTimeoutSeconds" type="number" min={1} max={600} defaultValue={120} required /></label></div>
+            <div className="toolbar"><button className="primary">전환 요청</button><button type="button" onClick={() => setOffload(null)}>전환 닫기</button></div>
+          </fieldset></form>}
+          {task.offloads?.length ? <ul className="history-list">{task.offloads.map(o => <li key={o.id}>
+            <strong>{o.state === "SUCCEEDED" ? "전환 성공 · 새 실행 시작됨" : stateNames[o.state]}</strong> · {nodes.find(n => n.id === o.targetNodeId)?.name || o.targetNodeId}
+            {o.failureReason && <span className="block muted">실패 코드: {o.failureReason}</span>}
+            <details><summary>전환 이력 ID</summary><p className="digest mono">Operation {o.id}</p><p className="digest mono">이전 Attempt {o.sourceAttemptId}</p><p className="digest mono">새 Attempt {o.targetAttemptId || "아직 생성되지 않음"}</p></details>
+          </li>)}</ul> : <p className="muted">실행 위치 전환 이력이 없습니다.</p>}
+        </div>}
         {task && results && <div role="region" aria-label={`검증된 결과 · ${task.task.key}`}>
           <div className="toolbar"><h3>검증된 결과 · {task.task.key}</h3><button disabled={busy} onClick={() => void action(() => showTask(task.task.id))}>결과 새로고침</button></div>
           {results.items.length === 0 ? <p className="muted">아직 확정된 결과가 없습니다.</p> : results.items.map(result => <div key={result.id}>

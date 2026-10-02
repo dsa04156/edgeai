@@ -14,7 +14,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
     public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
     private static final RowMapper<WorkflowRun> RUN=(r,n)->new WorkflowRun(r.getObject("id",UUID.class),r.getObject("workflow_version_id",UUID.class),r.getObject("idempotency_key",UUID.class),r.getString("request_digest"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("parameters"),new RetryPolicy(r.getInt("retry_max_attempts"),r.getInt("retry_backoff_seconds"),r.getInt("retry_max_elapsed_seconds"),Set.of((String[])r.getArray("retry_on").getArray())),r.getString("state"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant());
     private static final RowMapper<Task> TASK=(r,n)->new Task(r.getObject("id",UUID.class),r.getObject("run_id",UUID.class),r.getObject("definition_id",UUID.class),r.getString("task_key"),r.getString("state"),r.getString("cancellation_reason"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant());
-    private static final RowMapper<TaskAttempt> ATTEMPT=(r,n)->new TaskAttempt(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getInt("number"),r.getLong("epoch"),r.getString("state"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant());
+    private static final RowMapper<TaskAttempt> ATTEMPT=(r,n)->new TaskAttempt(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getInt("number"),r.getLong("epoch"),r.getString("state"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("cause"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant());
     private static final String TASK_QUERY="SELECT t.*,d.task_key FROM edgeai.task t JOIN edgeai.task_definition d ON t.definition_id=d.id";
     public boolean create(WorkflowRun r) {
         return jdbc.update("""
@@ -26,7 +26,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
         for(var d:definitions) {
             UUID id=UUID.randomUUID();boolean root=roots.contains(d.key());Timestamp now=Timestamp.from(run.createdAt());
             jdbc.update("INSERT INTO edgeai.task(id,run_id,workflow_version_id,definition_id,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",id,run.id(),run.workflowVersionId(),d.id(),root?"READY":"WAITING",now,now);
-            if(root) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,created_at,updated_at) VALUES (?,?,1,1,'QUEUED',?,?)",UUID.randomUUID(),id,now,now);
+            if(root) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) VALUES (?,?,1,1,'QUEUED',?,?,'INITIAL',?,?)",UUID.randomUUID(),id,run.mode(),run.nodeId(),now,now);
         }
     }
     public Optional<WorkflowRun> run(UUID id,boolean lock) { return jdbc.query("SELECT * FROM edgeai.workflow_run WHERE id=?"+(lock?" FOR UPDATE":""),RUN,id).stream().findFirst(); }
@@ -51,10 +51,15 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
     }
     public void clearRetry(UUID taskId){jdbc.update("DELETE FROM edgeai.task_retry WHERE task_id=?",taskId);}
     public TaskAttempt startRetry(UUID taskId,Instant now) {
+        var previous=attempts(taskId).getFirst();
+        return startAttempt(taskId,previous.mode(),previous.nodeId(),"RETRY",now);
+    }
+    public TaskAttempt startOffload(UUID taskId,UUID nodeId,Instant now) { return startAttempt(taskId,"NODE",nodeId,"OFFLOAD",now); }
+    private TaskAttempt startAttempt(UUID taskId,String mode,UUID nodeId,String cause,Instant now) {
         var attempt=jdbc.query("""
-            INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,created_at,updated_at)
-            SELECT ?,?,max(number)+1,max(epoch)+1,'QUEUED',?,? FROM edgeai.task_attempt WHERE task_id=? RETURNING *
-            """,ATTEMPT,UUID.randomUUID(),taskId,Timestamp.from(now),Timestamp.from(now),taskId).getFirst();
+            INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at)
+            SELECT ?,?,max(number)+1,max(epoch)+1,'QUEUED',?,?,?, ?,? FROM edgeai.task_attempt WHERE task_id=? RETURNING *
+            """,ATTEMPT,UUID.randomUUID(),taskId,mode,nodeId,cause,Timestamp.from(now),Timestamp.from(now),taskId).getFirst();
         jdbc.update("UPDATE edgeai.task SET state='READY',updated_at=? WHERE id=?",Timestamp.from(now),taskId);
         clearRetry(taskId);return attempt;
     }
@@ -63,15 +68,15 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
         Timestamp time=Timestamp.from(now);
         jdbc.update("DELETE FROM edgeai.task_retry WHERE task_id=?",id);
         jdbc.update("UPDATE edgeai.task_attempt SET state=CASE WHEN state='QUEUED' THEN 'CANCELLED' ELSE 'CANCELLING' END,updated_at=? WHERE task_id=? AND state IN ('QUEUED','DISPATCHING','RUNNING')",time,id);
-        jdbc.update("UPDATE edgeai.task SET state=CASE WHEN state IN ('WAITING','READY','RETRY_WAIT') AND NOT EXISTS (SELECT 1 FROM edgeai.task_attempt a WHERE a.task_id=? AND a.state='CANCELLING') AND NOT EXISTS (SELECT 1 FROM edgeai.runtime_instance r WHERE r.task_id=edgeai.task.id AND r.observed_state<>'TERMINATED') THEN ? ELSE 'CANCELLING' END,cancellation_reason=?,updated_at=? WHERE id=? AND state IN ('WAITING','READY','RUNNING','RETRY_WAIT')",id,terminal,reason,time,id);
+        jdbc.update("UPDATE edgeai.task SET state=CASE WHEN state IN ('WAITING','READY','RETRY_WAIT','OFFLOADING') AND NOT EXISTS (SELECT 1 FROM edgeai.task_attempt a WHERE a.task_id=? AND a.state='CANCELLING') AND NOT EXISTS (SELECT 1 FROM edgeai.runtime_instance r WHERE r.task_id=edgeai.task.id AND r.observed_state<>'TERMINATED') THEN ? ELSE 'CANCELLING' END,cancellation_reason=?,updated_at=? WHERE id=? AND state IN ('WAITING','READY','RUNNING','RETRY_WAIT','OFFLOADING')",id,terminal,reason,time,id);
     }
     public void reconcileRunState(UUID id,Instant now) {
         var states=tasks(id).stream().map(Task::state).toList();
-        boolean active=states.stream().anyMatch(s->Set.of("WAITING","READY","RUNNING","RETRY_WAIT","CANCELLING").contains(s));
+        boolean active=states.stream().anyMatch(s->Set.of("WAITING","READY","RUNNING","RETRY_WAIT","OFFLOADING","CANCELLING").contains(s));
         if(!active) {
             String state=states.contains("FAILED")?"FAILED":states.stream().anyMatch(s->Set.of("CANCELLED","SKIPPED").contains(s))?"CANCELLED":"SUCCEEDED";
             jdbc.update("UPDATE edgeai.workflow_run SET state=?,updated_at=? WHERE id=?",state,Timestamp.from(now),id);
-        } else if(states.contains("CANCELLING") && states.stream().noneMatch(s->Set.of("WAITING","READY","RUNNING","RETRY_WAIT").contains(s)))
+        } else if(states.contains("CANCELLING") && states.stream().noneMatch(s->Set.of("WAITING","READY","RUNNING","RETRY_WAIT","OFFLOADING").contains(s)))
             jdbc.update("UPDATE edgeai.workflow_run SET state='CANCELLING',updated_at=? WHERE id=?",Timestamp.from(now),id);
     }
 }

@@ -12,7 +12,7 @@ public final class ServiceExecutionInput {
     public static ServiceExecutionSpec parseSpec(String document) {
         var root = fields(JSON.parse(document, 65536),
             Set.of("apiVersion", "image", "command", "args", "resources", "platform", "inputs", "outputs", "timeoutSeconds"),
-            Set.of("nodeSelector", "tolerations", "runtimeClassName", "qos"));
+            Set.of("nodeSelector", "tolerations", "runtimeClassName", "qos", "recovery"));
         JSON.boundedCanonical(root, 65536);
         if (!"edgeai/v1".equals(root.get("apiVersion"))) throw new IllegalArgumentException("SERVICE execution apiVersion must be edgeai/v1");
         var resources = object(root.get("resources"), "requests", "limits");
@@ -46,7 +46,8 @@ public final class ServiceExecutionInput {
         return new ServiceExecutionSpec(text(root.get("image"), 512), array(root.get("command")), array(root.get("args")), requirements,
             array(platform.get("architectures")), inputs, outputs, (int) timeout,
             root.containsKey("nodeSelector") ? strings(root.get("nodeSelector")) : Map.of(), tolerations,
-            root.containsKey("runtimeClassName") ? text(root.get("runtimeClassName"), 253) : null);
+            root.containsKey("runtimeClassName") ? text(root.get("runtimeClassName"), 253) : null,
+            root.containsKey("recovery") ? text(object(root.get("recovery"),"mode").get("mode"),8) : "NONE");
     }
     private static Map<?, ?> fields(Object value, Set<String> required, Set<String> optional) {
         var map = parameters(value); var allowed = new HashSet<>(required); allowed.addAll(optional);

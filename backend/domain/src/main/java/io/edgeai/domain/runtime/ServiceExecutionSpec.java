@@ -7,7 +7,7 @@ import java.util.Set;
 public record ServiceExecutionSpec(String image, List<String> command, List<String> args,
         ResourceRequirements resources, List<String> architectures,
         Map<String, InputPort> inputs, Map<String, OutputPort> outputs, int timeoutSeconds,
-        Map<String, String> nodeSelector, List<Toleration> tolerations, String runtimeClassName) {
+        Map<String, String> nodeSelector, List<Toleration> tolerations, String runtimeClassName,String recoveryMode) {
     public static final long MAX_FILE_BYTES = 268435456L;
     public static final long MAX_WORK_BYTES = 1073741824L;
     public ServiceExecutionSpec {
@@ -39,6 +39,7 @@ public record ServiceExecutionSpec(String image, List<String> command, List<Stri
         tolerations = List.copyOf(tolerations);
         if (tolerations.size() > 16) throw new IllegalArgumentException("Too many tolerations");
         if (runtimeClassName != null) RuntimeNames.dns(runtimeClassName, 253);
+        if(!Set.of("NONE","RESTART").contains(recoveryMode))throw new IllegalArgumentException("Unknown recovery mode");
     }
     private static List<String> arguments(List<String> values, int maximum) {
         var result = List.copyOf(values);

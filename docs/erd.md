@@ -11,13 +11,13 @@
 - TaskAttempt → RuntimeInstance, TaskResult → Artifact
 - VirtualDevice → VDRuntimeBinding → RuntimeInstance
 
-RuntimeInstance 독립 테이블, VD source 수,
+RuntimeInstance는 V5 독립 테이블로 구현했다. VD source 수와
 VD당 active RuntimeBinding 1개 제약은 후속 확정 항목이다.
 Task당 활성 Attempt 하나는 V4 partial UNIQUE로 구현했다.
 초안의 최소 1개 카디널리티가 생성 직후·Pending 상태에도 성립하는지는 M3/M6에서 검토한다.
 
-Operation, ProducerClaim, VDSlot, RemoteAllocation, DataRoute, Checkpoint,
-Outbox/Inbox, ApiIdempotency, AuditEvent는 관련 기능을 구현할 때 추가한다.
+Operation은 V7 task_offload, producer claim/명령 outbox는 V5 Runtime 경로로 구체화했다.
+VDSlot, RemoteAllocation, DataRoute, Checkpoint, 범용 Inbox/ApiIdempotency/AuditEvent는 후속 기능에서 추가한다.
 M0 Flyway는 `edgeai` schema만 초기화하며 이 초안을 확정된 테이블로 변환하지 않는다.
 
 
@@ -52,4 +52,14 @@ TaskDefinition은 SERVICE ProfileVersion만 참조하고 입력 포트당 produc
 Run의 Idempotency-Key UUID는 UNIQUE다. Run·Task·root Attempt 생성은 원자적이며
 대기 중인 하위 Task는 Attempt 없이 존재한다. task별 활성 Attempt는 partial UNIQUE,
 number/epoch는 각각 task와 UNIQUE다. 취소는 Run 행 잠금으로 직렬화하고 이력을 보존한다.
-TaskResult/Artifact/RuntimeInstance는 M4에서 추가한다.
+TaskResult/Artifact/RuntimeInstance는 M4의 V5에서 추가했다.
+
+## 구현된 M4–M5 테이블
+
+V5 runtime_instance·runtime_command는 Attempt별 실행/producer 신원·epoch와 CREATE/DELETE lease를 저장한다.
+task_result·result_artifact는 검증된 고정 object version을 원자적으로 봉인한다.
+V6 workflow_run 재시도 정책과 task_retry는 동일 Task의 새 Attempt 예약·마감을 보존한다.
+V7 task_attempt의 mode/node_id/cause는 각 Attempt의 실제 대상과 INITIAL/RETRY/OFFLOAD를 구분한다.
+task_offload는 Task/Run/이전·새 Attempt FK, target Node, idempotency UNIQUE, drain/start 마감,
+상태/실패 코드를 저장한다. Task당 진행 중 Operation 하나를 partial UNIQUE로 제한한다.
+V1–V7은 로컬 적용된 migration이며 수정하지 않는다.

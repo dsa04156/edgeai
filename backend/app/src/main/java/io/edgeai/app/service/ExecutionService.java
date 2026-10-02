@@ -18,12 +18,13 @@ public class ExecutionService {
     private final NodeRepository nodes;
     private final RuntimeRepository runtimes;
     private final Clock clock;
+    private final OffloadRepository offloads;
     private final RuntimeLifecycleService lifecycle;
     private final boolean runtimeEnabled;
     private final String runtimeNamespace;
-    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,Clock clock,
+    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,Clock clock,
             RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace) {
-        this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.clock=clock;
+        this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
     }
     @Transactional
@@ -62,14 +63,14 @@ public class ExecutionService {
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public RunSnapshot detail(UUID id) { return new RunSnapshot(run(id,false),repository.tasks(id)); }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-    public TaskSnapshot taskDetail(UUID id) { return new TaskSnapshot(task(id),repository.attempts(id)); }
+    public TaskSnapshot taskDetail(UUID id) { return new TaskSnapshot(task(id),repository.attempts(id),offloads.forTask(id)); }
     @Transactional
     public WorkflowRun cancelRun(UUID id,String body) {
         parse(body);var run=run(id,true);
         if(Set.of("SUCCEEDED","FAILED").contains(run.state())) throw error(409,"CANNOT_CANCEL","완료된 실행 결과는 취소로 덮어쓸 수 없습니다.");
         if(run.state().equals("CANCELLED")) return run;
         var now=clock.instant();
-        for(var task:repository.tasks(id)) repository.cancelTask(task.id(),"CANCELLED","RUN_CANCELLED",now);
+        for(var task:repository.tasks(id)) {repository.cancelTask(task.id(),"CANCELLED","RUN_CANCELLED",now);offloads.cancelForTask(task.id(),now);}
         runtimes.stopForRun(id,now);
         repository.reconcileRunState(id,now);return run(id,false);
     }
@@ -77,12 +78,12 @@ public class ExecutionService {
     public TaskSnapshot cancelTask(UUID id,String body) {
         parse(body);var initial=task(id);var run=run(initial.runId(),true);var task=task(id);
         if(Set.of("SUCCEEDED","FAILED").contains(task.state())) throw error(409,"CANNOT_CANCEL","완료된 작업 결과는 취소로 덮어쓸 수 없습니다.");
-        if(Set.of("CANCELLED","SKIPPED").contains(task.state())) return new TaskSnapshot(task,repository.attempts(id));
+        if(Set.of("CANCELLED","SKIPPED").contains(task.state())) return new TaskSnapshot(task,repository.attempts(id),offloads.forTask(id));
         var dag=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson());var descendants=dag.descendants(task.key());
-        var now=clock.instant();repository.cancelTask(id,"CANCELLED","TASK_CANCELLED",now);
-        for(var child:repository.tasks(run.id())) if(descendants.contains(child.key())) repository.cancelTask(child.id(),"SKIPPED","UPSTREAM_CANCELLED",now);
+        var now=clock.instant();repository.cancelTask(id,"CANCELLED","TASK_CANCELLED",now);offloads.cancelForTask(id,now);
+        for(var child:repository.tasks(run.id())) if(descendants.contains(child.key())) {repository.cancelTask(child.id(),"SKIPPED","UPSTREAM_CANCELLED",now);offloads.cancelForTask(child.id(),now);}
         runtimes.stopForRun(run.id(),now);
-        repository.reconcileRunState(run.id(),now);return new TaskSnapshot(task(id),repository.attempts(id));
+        repository.reconcileRunState(run.id(),now);return new TaskSnapshot(task(id),repository.attempts(id),offloads.forTask(id));
     }
     private WorkflowRun run(UUID id,boolean lock) { return repository.run(id,lock).orElseThrow(()->error(404,"RUN_NOT_FOUND","실행 요청을 찾을 수 없습니다.")); }
     private Task task(UUID id) { return repository.task(id).orElseThrow(()->error(404,"TASK_NOT_FOUND","작업을 찾을 수 없습니다.")); }

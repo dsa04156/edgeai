@@ -32,6 +32,9 @@ class RuntimeConfiguration {
     @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock){return new RunnerApiService(lifecycle,runtimes,store,commit,clock);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
+    OffloadWorker offloadWorker(OffloadService service,RuntimeSettings settings){return new OffloadWorker(service,settings);}
+    @Bean
+    @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     RuntimeWorker runtimeWorker(RuntimeRepository runtimes,RuntimeLifecycleService lifecycle,RuntimeGateway gateway,RunnerTokenService tokens,RuntimeSettings settings,Clock clock){
         return new RuntimeWorker(runtimes,lifecycle,gateway,tokens,settings,clock);
     }

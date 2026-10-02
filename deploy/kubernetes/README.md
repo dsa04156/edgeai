@@ -16,6 +16,9 @@ Application은 Actions가 최초 이미지를 발행하고 `bootstrap` 태그를
 `.tools/kubernetes/edgeai-runtime.env`에 mode 600으로 보관한다. 기존 Secret과 DB 비밀번호는 유지한다.
 
 현재 개발 배포는 amd64 서버 노드에 단일 API·Dashboard·PostgreSQL을 배치한다.
+API upgrade는 Recreate로 이전 API 종료 후 새 버전을 시작한다. V7의 새 필수 Attempt 필드와
+OFFLOADING 상태를 모르는 구버전 writer가 겹치지 않도록 하며, 새 API 준비 전까지 접속 중단이 있다.
+V7 적용 후에는 V7 미지원 이미지로 단순 롤백하지 않는다. 무중단/다중 replica는 M9 검증 범위다.
 PVC 5 GiB는 기본 StorageClass를 사용한다. 자동 prune과 cascade deletion은 사용하지 않는다.
 MinIO는 M4 결과 파일 저장에 사용한다. MQTT/STREAM 데이터 경로는 후속 M7 범위다.
 

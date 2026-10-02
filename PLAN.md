@@ -17,7 +17,7 @@
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-M4까지 구현·검증을 완료했으며 현재 M5 재시도부터 구현한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
+M4까지 구현·검증을 완료했으며 현재 M5를 진행한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
 BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생성/관측 worker·내부 인증/API를
 연결했고 실제 클러스터의 scheduler·Pod TokenReview·UID 삭제를 대기 컨테이너로 검증했다.
@@ -25,8 +25,9 @@ BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생�
 재시도 수정 뒤 실제 kind의 AUTO/NODE BATCH·재시작·artifact/producer fault와 기존 클러스터 종단
 실행을 통과했다. CPU 부족·출력 누락·프로세스 실패의 추가 조건도 기존 클러스터에서 통과했고,
 동일 조건의 CI36986090769도 통과하여 M4 완료를 판정했다.
-M5는 ADR0006·V6로 동일 Task의 재시도 예약/예산과 새 Attempt/epoch를 구현 중이다.
-실행 중 offload·Remote 계약/연동은 여전히 M5의 필수 범위다.
+M5는 ADR0006·V6의 재시도 예약/예산·새 Attempt/epoch를 실제 kind·CI·배포까지 검증했다.
+ADR0007·V7의 실행 중 NODE 전환은 API/UI·실DB 검증을 진행했고 실제 kind 게이트를 추가했다.
+자동 전환 정책·Remote 계약/연동은 여전히 M5의 필수 범위다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

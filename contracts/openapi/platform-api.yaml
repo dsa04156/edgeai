@@ -1434,6 +1434,82 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/tasks/{taskId}/offload:
+    post:
+      tags: [Task]
+      operationId: offloadTask
+      summary: 실행 중인 작업을 다른 노드로 전환
+      description: >-
+        실제 producer가 claim한 현재 Attempt만 전환합니다. SERVICE에 recovery.mode=RESTART 선언이 필요합니다.
+        이전 producer를 즉시 차단하고 실제 종료를 확인한 뒤 같은 Task에서 새 Attempt/epoch를 만듭니다.
+        targetNodeId는 현재 노드와 다르고 Profile 요구조건에 맞는 최근 READY 노드여야 합니다.
+        같은 키·내용은 같은 Operation을 반환하며, 다른 입력은409입니다. 작업별 최대8회, 동시에1개입니다.
+        Operation의 성공은 새 노드에서 실행을 시작했다는 뜻이며 Task 결과 성공과 구분합니다.
+      security: [{localBasic: [], csrfToken: []}]
+      parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+        description: ID를 유지하며 실행 위치를 바꿀 Task
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: {type: string, format: uuid}
+        description: 동일 전환 요청을 재전송할 때 유지하는 UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OffloadCreate'}
+      responses:
+        '202':
+          description: 전환 접수. Location의 Operation을 조회하여 종료와 새 실행 시작을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/operations/{operationId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OffloadOperation'}
+        '200':
+          description: 같은 전환 요청의 재전송 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OffloadOperation'}
+        '400': {description: UUID·필드·시간 범위가 잘못되었습니다.}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 세션/토큰 필요}
+        '404': {description: Task 또는 대상 Node가 없습니다.}
+        '409':
+          description: source 변경·미지원 복원 방식·부적합 target·전환 한도·키 충돌
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503': {description: 저장소 연결 실패. 동일 키로 재전송하세요.}
+  /api/v1/operations/{operationId}:
+    get:
+      tags: [Operation]
+      operationId: getOperation
+      summary: 비동기 실행 전환 상태 조회
+      description: >-
+        현재 TASK_OFFLOAD Operation의 이전/새 Attempt, 대상 노드, drain/start 마감과 실패 코드를 조회합니다.
+        DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다.
+        FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
+      parameters:
+      - name: operationId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+        description: 전환 응답의 Operation UUID
+      responses:
+        '200':
+          description: 비동기 전환 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OffloadOperation'}
+        '400': {description: UUID 형식 오류}
+        '401': {description: Basic 인증 필요}
+        '404': {description: Operation이 없습니다.}
+        '503': {description: 저장소 연결 실패}
 components:
   securitySchemes:
     csrfToken:
@@ -2183,7 +2259,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8
-          description: 최초 실행을 포함한 최대 시도 횟수. 2 이상이면 retryOn을 한 개 이상 지정합니다.
+          description: 최초 실행과 RETRY를 포함한 최대 시도 횟수. OFFLOAD는 별도 한도이며 이 예산을 소비하지 않습니다. 2 이상이면 retryOn을 한 개 이상 지정합니다.
         backoffSeconds:
           type: integer
           minimum: 1
@@ -2314,6 +2390,7 @@ components:
           - READY
           - RUNNING
           - RETRY_WAIT
+          - OFFLOADING
           - SUCCEEDED
           - FAILED
           - CANCELLING
@@ -2338,6 +2415,9 @@ components:
       - number
       - epoch
       - state
+      - mode
+      - nodeId
+      - cause
       - createdAt
       - updatedAt
       properties:
@@ -2353,6 +2433,9 @@ components:
         epoch:
           type: integer
           minimum: 1
+        mode: {type: string, enum: [AUTO, NODE], description: 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.}
+        nodeId: {type: [string, 'null'], format: uuid}
+        cause: {type: string, enum: [INITIAL, RETRY, OFFLOAD]}
         state:
           type: string
           enum:
@@ -2389,7 +2472,12 @@ components:
       required:
       - task
       - attempts
+      - offloads
       properties:
+        offloads:
+          type: array
+          maxItems: 8
+          items: {$ref: '#/components/schemas/OffloadOperation'}
         task:
           $ref: '#/components/schemas/Task'
         attempts:
@@ -2436,6 +2524,37 @@ components:
         sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
         bytes: {type: integer, format: int64, minimum: 0, maximum: 268435456}
         mediaType: {type: string}
+    OffloadCreate:
+      type: object
+      additionalProperties: false
+      required: [sourceAttemptId, targetNodeId, drainTimeoutSeconds, startTimeoutSeconds]
+      properties:
+        sourceAttemptId: {type: string, format: uuid, description: 현재 RUNNING Attempt ID. 오래된 화면에서 전환하는 것을 방지합니다.}
+        targetNodeId: {type: string, format: uuid, description: 다른 READY 노드 UUID. scheduler가 hard affinity를 적용합니다.}
+        drainTimeoutSeconds: {type: integer, minimum: 1, maximum: 600, description: 이전 Runtime 종료 확인 제한 시간}
+        startTimeoutSeconds: {type: integer, minimum: 1, maximum: 600, description: 새 Attempt 생성부터 producer claim까지 제한 시간}
+      example:
+        sourceAttemptId: 11111111-1111-4111-8111-111111111111
+        targetNodeId: 22222222-2222-4222-8222-222222222222
+        drainTimeoutSeconds: 60
+        startTimeoutSeconds: 120
+    OffloadOperation:
+      type: object
+      additionalProperties: false
+      required: [id, kind, taskId, sourceAttemptId, targetAttemptId, targetNodeId, state, failureReason, drainDeadline, startDeadline, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, const: TASK_OFFLOAD}
+        taskId: {type: string, format: uuid}
+        sourceAttemptId: {type: string, format: uuid}
+        targetAttemptId: {type: [string, 'null'], format: uuid}
+        targetNodeId: {type: string, format: uuid}
+        state: {type: string, enum: [DRAINING, STARTING, SUCCEEDED, FAILED, CANCELLING, CANCELLED]}
+        failureReason: {type: [string, 'null']}
+        drainDeadline: {type: string, format: date-time}
+        startDeadline: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     EmptyCommand:
       type: object
       additionalProperties: false
@@ -2492,3 +2611,6 @@ tags:
   description: 논리 작업 및 Attempt 이력
 - name: Result
   description: 검증·확정된 작업 결과와 고정 object version 메타데이터
+
+- name: Operation
+  description: 비동기 전환·종료·새 실행 확인 상태

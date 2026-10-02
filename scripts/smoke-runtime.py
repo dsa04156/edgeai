@@ -401,6 +401,115 @@ os.kill(matches[0],signal.SIGKILL)
         finally:
             if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
 
+if args.faults:
+    # Cordon/restart is restricted by the owned disposable-cluster check above.
+    candidates=[n for n in kube(['get','nodes','-o','json'])['items']
+        if n['metadata']['labels'].get('kubernetes.io/arch')=='amd64' and not n['spec'].get('unschedulable')
+        and not any(t.get('effect') in ('NoSchedule','NoExecute') for t in n['spec'].get('taints',[]))
+        and any(c['type']=='Ready' and c['status']=='True' for c in n['status']['conditions'])]
+    assert len(candidates)>=2,'Running offload acceptance requires two schedulable nodes'
+    source_node,target_node=candidates[:2]
+    for n in [source_node,target_node]:
+        assert n['metadata']['name'].startswith(cluster+'-')
+        request('nodes/'+n['metadata']['uid'])
+    def scheduling(enabled):
+        action='uncordon' if enabled else 'cordon'
+        result=subprocess.run(kubectl+[action,target_node['metadata']['name']],capture_output=True,text=True,timeout=20)
+        assert result.returncode==0,'Owned target scheduling change failed; output suppressed'
+
+    offload_spec=copy.deepcopy(base);offload_spec['recovery']={'mode':'RESTART'}
+    offload_spec['command']=['python3','-c',"import time,runpy; time.sleep(45); runpy.run_path('/opt/edgeai/examples/linear.py',run_name='__main__')"]
+    offload_child=copy.deepcopy(offload_spec);offload_child['inputs']=child_spec['inputs']
+    offload_version=workflow('offload-batch',profile('offload-root',offload_spec),profile('offload-child',offload_child))
+    run_id=create(offload_version,{'mode':'NODE','nodeId':source_node['metadata']['uid']})['id']
+    proofs=[]
+    try:
+        # Root proves pending-operation recovery; child proves reuse of sealed BATCH inputs.
+        for task_key in ['root','child']:
+            task=next(t for t in request('workflow-runs/'+run_id)['tasks'] if t['key']==task_key);task_id=task['id']
+            def running_source():
+                detail=request('tasks/'+task_id)
+                assert detail['task']['state'] not in ('FAILED','CANCELLED','SKIPPED')
+                if not detail['attempts'] or detail['attempts'][0]['state']!='RUNNING':return None
+                attempt=detail['attempts'][0]
+                return next((p for p in resources(run_id) if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==attempt['id'] and p['status'].get('phase')=='Running'),None)
+            old_pod=wait(running_source,150,'Offload source did not claim')
+            assert old_pod['spec']['nodeName']==source_node['metadata']['name']
+            captured=producer_credentials(old_pod);first=request('tasks/'+task_id)['attempts'][0]
+            if task_key=='root':scheduling(False)
+            body={'sourceAttemptId':first['id'],'targetNodeId':target_node['metadata']['uid'],'drainTimeoutSeconds':60,'startTimeoutSeconds':180}
+            key=str(uuid.uuid4());operation=request('tasks/'+task_id+'/offload','POST',body,key=key,expected=202)
+            assert operation['state']=='DRAINING'
+            assert request('tasks/'+task_id+'/offload','POST',body,key=key)['id']==operation['id']
+            assert request('tasks/'+task_id)['attempts'][-1]['state']=='OFFLOADED'
+            def phase(allowed):
+                value=request('operations/'+operation['id'])
+                assert value['state'] not in ('FAILED','CANCELLED','CANCELLING'),'Running transfer failed'
+                return value if value['state'] in allowed else None
+            if task_key=='root':
+                started=wait(lambda:phase({'STARTING'}),90,'Offload did not drain the source')
+                assert not any(p['metadata']['uid']==old_pod['metadata']['uid'] for p in resources(run_id))
+                restart_api()
+                recovered=phase({'STARTING'})
+                assert recovered and recovered['targetAttemptId']==started['targetAttemptId'],'Restart lost/duplicated pending offload'
+                assert len(request('tasks/'+task_id)['attempts'])==2
+                scheduling(True)
+            transferred=wait(lambda:phase({'SUCCEEDED'}),120,'Target producer did not claim')
+            current=request('tasks/'+task_id);history=current['attempts']
+            assert current['task']['id']==task_id and current['task']['state']=='RUNNING'
+            assert len(history)==2 and history[1]['id']==first['id'] and history[1]['state']=='OFFLOADED'
+            assert history[0]['id']==transferred['targetAttemptId'] and history[0]['number']==2 and history[0]['epoch']==2
+            assert history[0]['cause']=='OFFLOAD' and history[0]['mode']=='NODE' and history[0]['nodeId']==target_node['metadata']['uid']
+            live=resources(run_id)
+            assert not any(p['metadata']['uid']==old_pod['metadata']['uid'] for p in live),'Source still exists after target claim'
+            target_pod=next(p for p in live if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==history[0]['id'])
+            assert target_pod['spec']['nodeName']==target_node['metadata']['name'] and target_pod['metadata']['uid']!=old_pod['metadata']['uid']
+            assert request('tasks/'+task_id+'/results')['items']==[],'Transfer success incorrectly completed the Task'
+            late=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]});del captured
+            proofs.append({'taskId':task_id,'taskKey':task_key,'operationId':operation['id'],'attempts':history,
+                'sourcePodUid':old_pod['metadata']['uid'],'targetPodUid':target_pod['metadata']['uid'],'targetNode':target_pod['spec']['nodeName'],
+                'lateCommitStatus':late,'pendingOperationRecovered':task_key=='root'})
+        detail=wait(lambda:(d if (d:=request('workflow-runs/'+run_id))['run']['state']=='SUCCEEDED' else None),150,'Transferred BATCH did not finish')
+        results=[]
+        for task in detail['tasks']:
+            proof=next(p for p in proofs if p['taskId']==task['id']);items=request('tasks/'+task['id']+'/results')['items']
+            assert task['state']=='SUCCEEDED' and len(items)==1 and len(request('tasks/'+task['id'])['attempts'])==2
+            assert items[0]['attemptId']==proof['attempts'][0]['id'] and items[0]['producerPodUid']==proof['targetPodUid']
+            artifacts.append({'artifact':items[0]['artifacts'][0],'expected':{'sourceMode':'SYNTHETIC','features':[2,1],'score':0.25 if task['key']=='root' else 8.0,'prediction':1}})
+            results.extend(items)
+        cleaned(run_id)
+        report['runs'].append({'id':run_id,'case':'running-offload-restart-and-batch-input','transfers':proofs,'results':results,'resourcesRemaining':0})
+        print('PASS: running NODE transfers retain Task, recover pending Operation, fence old producer, preserve BATCH inputs, seal one Result each and clean resources',flush=True)
+    finally:
+        scheduling(True)
+        if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+    for case in ['cancel-offload-starting','offload-start-timeout']:
+        run_id=create(offload_version,{'mode':'NODE','nodeId':source_node['metadata']['uid']})['id']
+        try:
+            task_id=next(t for t in request('workflow-runs/'+run_id)['tasks'] if t['key']=='root')['id']
+            first=wait(lambda:(a if (a:=request('tasks/'+task_id)['attempts'][0])['state']=='RUNNING' else None),90,'Transfer fault source not claimed')
+            scheduling(False)
+            body={'sourceAttemptId':first['id'],'targetNodeId':target_node['metadata']['uid'],'drainTimeoutSeconds':60,'startTimeoutSeconds':120 if case=='cancel-offload-starting' else 3}
+            operation=request('tasks/'+task_id+'/offload','POST',body,key=str(uuid.uuid4()),expected=202)
+            if case=='cancel-offload-starting':
+                wait(lambda:request('operations/'+operation['id'])['state']=='STARTING',90,'Transfer did not start')
+                cancel(run_id);terminal='CANCELLED'
+            else:terminal='FAILED'
+            end=wait(lambda:(o if (o:=request('operations/'+operation['id']))['state']==terminal else None),90,'Transfer fault did not reach terminal state')
+            if terminal=='FAILED':assert end['failureReason']=='TARGET_START_TIMEOUT'
+            detail=request('workflow-runs/'+run_id);assert detail['run']['state']==terminal
+            history=request('tasks/'+task_id)['attempts'];assert len(history)==2 and history[0]['state']==terminal and history[1]['state']=='OFFLOADED'
+            for task in detail['tasks']:
+                assert request('tasks/'+task['id']+'/results')['items']==[]
+                if task['key']=='child':assert request('tasks/'+task['id'])['attempts']==[]
+            cleaned(run_id)
+            report['runs'].append({'id':run_id,'case':case,'operation':end,'attempts':history,'state':terminal,'resourcesRemaining':0})
+            print('PASS: real '+case+'; no Result, no downstream execution and no remaining resources',flush=True)
+        finally:
+            scheduling(True)
+            if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
 verification=subprocess.run(['node','scripts/verify-runtime-artifacts.mjs'],input=json.dumps(artifacts),text=True,capture_output=True,timeout=90)
 if verification.returncode:raise AssertionError('Actual S3 output verification failed; response suppressed')
 print(verification.stdout.strip(),flush=True)
