@@ -1,11 +1,11 @@
-name: M0 verification
+name: Platform verification
 on:
   push:
   pull_request:
 permissions:
   contents: read
 concurrency:
-  group: m0-${{ github.ref }}
+  group: platform-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   scaffold:
@@ -33,14 +33,14 @@ jobs:
       - run: bash scripts/verify-all.sh scaffold
       - run: bash scripts/collect-evidence.sh postgres bash scripts/test-integration.sh
       - name: Verify PostgreSQL → Spring → Next.js
-        run: bash scripts/collect-evidence.sh health bash scripts/test-health-stack.sh compose
+        run: bash scripts/collect-evidence.sh health bash scripts/test-profiles-stack.sh compose
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: m0-verification-${{ github.run_id }}
+          name: platform-verification-${{ github.run_id }}
           path: |
             docs/evidence/runs/
             backend/app/build/test-results/

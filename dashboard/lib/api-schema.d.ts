@@ -38,16 +38,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtain a CSRF token and session cookie before a write */
+        get: operations["getCsrfToken"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profiles/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["Kind"];
+            };
+            cookie?: never;
+        };
+        /** List published versions in ascending key and version text order */
+        get: operations["listProfiles"];
+        put?: never;
+        /**
+         * Publish an immutable version, or return an identical existing version
+         * @description Requires Basic authentication, the session cookie from getCsrfToken and
+         *     X-CSRF-TOKEN. Body limit 64 KiB UTF-8; nested JSON depth limit 32.
+         *     Unknown envelope fields and duplicate JSON properties are rejected.
+         */
+        post: operations["publishProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profiles/{kind}/{key}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["Kind"];
+                key: components["schemas"]["ProfileKey"];
+                version: components["schemas"]["Version"];
+            };
+            cookie?: never;
+        };
+        /** Get an exact immutable version */
+        get: operations["getProfileVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ProfileKey: string;
+        Version: string;
+        PublishProfile: {
+            key: components["schemas"]["ProfileKey"];
+            version: components["schemas"]["Version"];
+            /** @description JSON document; execution-specific schema validation belongs to later consuming milestones. */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        ProfileVersion: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "DEVICE" | "SERVICE" | "VD";
+            key: components["schemas"]["ProfileKey"];
+            version: components["schemas"]["Version"];
+            spec: {
+                [key: string]: unknown;
+            };
+            /** @description SHA-256 of edgeai-profile-v1 newline KIND newline canonical spec; see ADR 0002. */
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ApiError: {
+            /** @enum {string} */
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE";
+            message: string;
+        };
         PlatformInfo: {
             /** @constant */
             name: "edgeai";
             version: string;
             /** @constant */
-            milestone: "M0";
+            milestone: "M1";
             capabilities: string[];
         };
         Health: {
@@ -55,8 +148,47 @@ export interface components {
             status: "UP" | "DOWN" | "OUT_OF_SERVICE" | "UNKNOWN";
         };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Invalid request */
+        Invalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+        /** @description Key and version already exist with different content; publish a new version */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+        /** @description Version does not exist */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+        /** @description Profile store temporarily unavailable */
+        Unavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+    };
+    parameters: {
+        Kind: "DEVICE" | "SERVICE" | "VD";
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -72,7 +204,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Platform metadata; an empty capabilities list means no domain features yet. */
+            /** @description Implemented platform capabilities. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -117,6 +249,171 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    getCsrfToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Send token as X-CSRF-TOKEN with the session cookie and Basic credentials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        token: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listProfiles: {
+        parameters: {
+            query?: {
+                /** @description Exact key filter */
+                key?: components["schemas"]["ProfileKey"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                kind: components["parameters"]["Kind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of versions; nextOffset is null at the end. Ordering is lexical, not semantic version precedence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ProfileVersion"][];
+                        nextOffset: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["Invalid"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    publishProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-TOKEN": string;
+            };
+            path: {
+                kind: components["parameters"]["Kind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishProfile"];
+            };
+        };
+        responses: {
+            /** @description Identical version already published (idempotent replay) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileVersion"];
+                };
+            };
+            /** @description New version published */
+            201: {
+                headers: {
+                    /** @description Version lookup path */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileVersion"];
+                };
+            };
+            400: components["responses"]["Invalid"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Conflict"];
+            /** @description Request exceeds 64 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getProfileVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["Kind"];
+                key: components["schemas"]["ProfileKey"];
+                version: components["schemas"]["Version"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Published version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileVersion"];
+                };
+            };
+            400: components["responses"]["Invalid"];
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
         };
     };
 }

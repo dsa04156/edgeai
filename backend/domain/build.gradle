@@ -1,1 +1,1 @@
-// Pure domain module. Add domain types as M1+ contracts are settled.
+// Pure Profile types and persistence port; no framework dependencies.

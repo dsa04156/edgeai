@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: EdgeAI Control Plane — M0
+  title: EdgeAI Control Plane — M1
   version: 0.1.0
   description: |
-    Implemented bootstrap contract only. Domain APIs from the Notion draft are
-    tracked in docs/api-scope.md and must be specified before M1+ implementation.
+    Profile registry contract. Published versions are immutable. Specs are JSON
+    documents, not yet validated for execution by a device adapter or runtime.
 servers:
   - url: http://127.0.0.1:18080
 security:
@@ -16,7 +16,7 @@ paths:
       summary: Read implemented platform capabilities
       responses:
         '200':
-          description: Platform metadata; an empty capabilities list means no domain features yet.
+          description: Implemented platform capabilities.
           content:
             application/json:
               schema:
@@ -41,20 +41,197 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
+  /api/v1/csrf:
+    get:
+      operationId: getCsrfToken
+      summary: Obtain a CSRF token and session cookie before a write
+      responses:
+        '200':
+          description: Send token as X-CSRF-TOKEN with the session cookie and Basic credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token: {type: string}
+        '401': {description: Authentication required}
+  /api/v1/profiles/{kind}:
+    parameters:
+      - $ref: '#/components/parameters/Kind'
+    post:
+      operationId: publishProfile
+      summary: Publish an immutable version, or return an identical existing version
+      description: |
+        Requires Basic authentication, the session cookie from getCsrfToken and
+        X-CSRF-TOKEN. Body limit 64 KiB UTF-8; nested JSON depth limit 32.
+        Unknown envelope fields and duplicate JSON properties are rejected.
+      parameters:
+        - in: header
+          name: X-CSRF-TOKEN
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishProfile'}
+      responses:
+        '201':
+          description: New version published
+          headers:
+            Location:
+              schema: {type: string}
+              description: Version lookup path
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileVersion'}
+        '200':
+          description: Identical version already published (idempotent replay)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileVersion'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {description: Authentication required}
+        '403': {description: Missing or invalid CSRF token}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {description: Request exceeds 64 KiB}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    get:
+      operationId: listProfiles
+      summary: List published versions in ascending key and version text order
+      parameters:
+        - in: query
+          name: key
+          description: Exact key filter
+          schema: {$ref: '#/components/schemas/ProfileKey'}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - in: query
+          name: offset
+          schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+      responses:
+        '200':
+          description: Page of versions; nextOffset is null at the end. Ordering is lexical, not semantic version precedence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextOffset]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/ProfileVersion'}
+                  nextOffset: {type: [integer, 'null']}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {description: Authentication required}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/profiles/{kind}/{key}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/Kind'
+      - in: path
+        name: key
+        required: true
+        schema: {$ref: '#/components/schemas/ProfileKey'}
+      - in: path
+        name: version
+        required: true
+        schema: {$ref: '#/components/schemas/Version'}
+    get:
+      operationId: getProfileVersion
+      summary: Get an exact immutable version
+      responses:
+        '200':
+          description: Published version
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileVersion'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {description: Authentication required}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
     localBasic:
       type: http
       scheme: basic
       description: Localhost development only; production identity and roles are not implemented.
+  parameters:
+    Kind:
+      in: path
+      name: kind
+      required: true
+      schema: {type: string, enum: [DEVICE, SERVICE, VD]}
+  responses:
+    Invalid:
+      description: Invalid request
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Conflict:
+      description: Key and version already exist with different content; publish a new version
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    NotFound:
+      description: Version does not exist
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Unavailable:
+      description: Profile store temporarily unavailable
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
   schemas:
+    ProfileKey:
+      type: string
+      maxLength: 100
+      pattern: '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+    Version:
+      type: string
+      maxLength: 32
+      pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+    PublishProfile:
+      type: object
+      additionalProperties: false
+      required: [key, version, spec]
+      properties:
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        version: {$ref: '#/components/schemas/Version'}
+        spec:
+          type: object
+          minProperties: 1
+          additionalProperties: true
+          description: JSON document; execution-specific schema validation belongs to later consuming milestones.
+    ProfileVersion:
+      type: object
+      required: [id, kind, key, version, spec, digest, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [DEVICE, SERVICE, VD]}
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        version: {$ref: '#/components/schemas/Version'}
+        spec: {type: object, additionalProperties: true}
+        digest:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+          description: SHA-256 of edgeai-profile-v1 newline KIND newline canonical spec; see ADR 0002.
+        createdAt: {type: string, format: date-time}
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string, enum: [INVALID_PROFILE, PROFILE_CONFLICT, PROFILE_NOT_FOUND, PROFILE_STORE_UNAVAILABLE, PAYLOAD_TOO_LARGE]}
+        message: {type: string}
     PlatformInfo:
       type: object
       required: [name, version, milestone, capabilities]
       properties:
         name: {type: string, const: edgeai}
         version: {type: string}
-        milestone: {type: string, const: M0}
+        milestone: {type: string, const: M1}
         capabilities:
           type: array
           items: {type: string}

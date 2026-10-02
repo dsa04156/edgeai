@@ -4,7 +4,7 @@
 Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 최종 Kubernetes 노드 선택은 kube-scheduler가 담당합니다.
 
-현재 범위는 **M0 개발 환경**입니다. Profile·Device·Workflow·Runner 등 도메인 기능은 아직 구현하지 않았습니다.
+현재 범위는 **M1 Profile 등록·목록·버전 조회**입니다. Device·Workflow·Runner는 후속 단계입니다.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
 ## 빠른 시작
@@ -31,6 +31,7 @@ bash scripts/dev-dashboard.sh
 ```
 
 - Dashboard: <http://127.0.0.1:13080>
+- Profile 관리: <http://127.0.0.1:13080/profiles> (`.env` 개발 계정으로 연결)
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
 - API readiness: <http://127.0.0.1:18080/actuator/health/readiness>
 - API metadata: `GET /api/v1/platform` (로컬 Basic 인증 필요)
@@ -55,13 +56,29 @@ bash scripts/verify-all.sh scaffold
 bash scripts/test-integration.sh  # 실제 PostgreSQL 필요
 bash scripts/test-infra.sh        # Compose의 PostgreSQL·MQTT 필요
 bash scripts/test-health.sh       # DB + API + Dashboard 실행 필요
-bash scripts/test-health-stack.sh compose # 앱을 테스트 전용으로 띄우고 프로젝트 DB 장애·복구까지 확인
+bash scripts/test-profiles-stack.sh compose # 실제 Profile UI + DB 장애·복구; 로컬 PG는 local
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 ```
 
 `verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
-GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0를 검증합니다.
+GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0 기반과 M1 Profile을 검증합니다.
+
+## Profile 사용
+
+`/profiles`에서 DEVICE / SERVICE / VD를 선택하고 키, `1.0.0` 형태의 버전,
+비어 있지 않은 JSON 규격을 입력합니다. 같은 내용의 재등록은 기존 버전을 반환하고,
+같은 버전의 다른 내용은 409로 거절합니다. 변경은 새 버전으로 발행합니다.
+목록에서 버전을 누르면 저장된 내용과 digest를 조회할 수 있습니다.
+
+규격은 현재 JSON 문서로 보관합니다. 장치 프로토콜·이미지·서비스 참조의 실행 호환성은
+각 소비 기능을 구현할 때 검증합니다. 비밀번호·토큰은 규격에 넣지 않습니다.
+직접 API를 호출할 때는 Basic 인증으로 `GET /api/v1/csrf`를 먼저 호출하고,
+응답의 `EDGEAI_SESSION` 쿠키와 토큰(`X-CSRF-TOKEN`)을 POST에 함께 보냅니다.
+상세 계약: [OpenAPI](contracts/openapi/platform-api.yaml), [M1 결정](docs/adr/0002-profile-registry.md).
+
+Profile 통합 시험은 고유 `test-*`/`browser*` 키를 사용합니다. 발행 불변성 때문에
+시험 행도 개발 DB에 보존합니다. 반복 시험에는 전용 개발 DB를 사용하세요.
 
 ## 개발 기준
 

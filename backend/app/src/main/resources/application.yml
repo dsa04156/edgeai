@@ -16,6 +16,11 @@ spring:
       name: ${EDGEAI_API_USER:edgeai}
       password: ${EDGEAI_API_PASSWORD}
 server:
+  servlet:
+    session:
+      cookie:
+        name: EDGEAI_SESSION
+        same-site: strict
   address: 127.0.0.1
   port: ${EDGEAI_API_PORT:18080}
   error:

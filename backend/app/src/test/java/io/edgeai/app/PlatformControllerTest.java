@@ -21,11 +21,11 @@ class PlatformControllerTest {
 
     @Test
     @WithMockUser
-    void scaffoldDoesNotClaimUnimplementedCapabilities() throws Exception {
+    void reportsOnlyImplementedCapabilities() throws Exception {
         mvc.perform(get("/api/v1/platform"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("edgeai"))
-            .andExpect(jsonPath("$.milestone").value("M0"))
-            .andExpect(jsonPath("$.capabilities").isEmpty());
+            .andExpect(jsonPath("$.milestone").value("M1"))
+            .andExpect(jsonPath("$.capabilities[0]").value("profiles"));
     }
 }

@@ -11,6 +11,10 @@
 | M0-HEALTH-RECOVERY | scripts/test-health-stack.sh compose (로컬 PG 대안: local) | DB 중지 시 API/UI 503, DB 재시작 시 같은 앱 프로세스 UP | 프로젝트 전용 DB |
 | M0-INFRA | scripts/test-infra.sh | PG ready, MQTT 실제 pub/sub | Docker 필요 |
 | M0-STORAGE | scripts/dev-storage.sh + scripts/test-storage.sh | 공식 MinIO source build, 실제 S3 PUT/stat/GET byte 일치·SHA-256 metadata·비인증 403 | storage profile |
+| M1-UNIT | scripts/test-unit.sh | JSON 정규화·숫자 정밀도·중복 필드·크기/깊이/Unicode·인증/CSRF | local |
+| M1-CONTRACT | scripts/test-contract.sh | 생성 타입 일치, HTTP 오류/인증 계약 | local |
+| M1-DB | scripts/test-integration.sh | 3종 CRUD 중 생성/조회, 동시 재등록/충돌, 불변 trigger·UNIQUE, paging/filter | 실제 PostgreSQL |
+| M1-UI | scripts/test-profiles-stack.sh local 또는 compose | 실제 DB/API와 desktop/mobile 등록·재등록·409·새 버전·상세·인증·정밀도 | 프로젝트 전용 DB, 빌드된 UI |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |

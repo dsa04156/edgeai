@@ -73,3 +73,9 @@ Artifact `m0-verification-36832834758`의 결과 JSON도 내려받아 확인했�
 | 20261001T080939Z-0098619b | DB→API→UI 정상/DB 중지 503/DB 재시작 복구 | 0 | PASS |
 
 [완료 감사](m0-completion-audit.md)는 원래 요청의 각 항목과 증거를 연결한다.
+
+
+## M1 Profile (2026-10-02)
+
+[상세 결과](m1-profile.md): Profile 등록·목록·버전 조회, digest·동시 등록·불변성,
+실제 PostgreSQL/API/desktop·mobile UI 검증. M0 완료 기록은 이전 상태의 역사적 증거다.

@@ -15,3 +15,14 @@ test("shows the real implementation scope without horizontal overflow", async ({
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("scaffold.png"), fullPage: true });
 });
+
+
+test("Profile connection fails visibly when the API is offline", async ({ page }) => {
+  await page.goto("/profiles");
+  await page.getByLabel("사용자 이름", { exact: true }).fill("offline-test");
+  await page.getByLabel("비밀번호", { exact: true }).fill("offline-test-only");
+  await page.getByRole("button", { name: "연결", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("Control Plane에 연결할 수 없습니다");
+  await expect(page.getByRole("button", { name: "버전 발행" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

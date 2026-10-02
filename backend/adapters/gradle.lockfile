@@ -1,0 +1,11 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+# To regenerate this file, run: ./gradlew :adapters:dependencies --write-locks
+commons-logging:commons-logging:1.3.6=compileClasspath
+org.jspecify:jspecify:1.0.1=compileClasspath
+org.springframework:spring-beans:7.0.9=compileClasspath
+org.springframework:spring-core:7.0.9=compileClasspath
+org.springframework:spring-jdbc:7.0.9=compileClasspath
+org.springframework:spring-tx:7.0.9=compileClasspath
+empty=annotationProcessor

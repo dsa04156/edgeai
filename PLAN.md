@@ -10,6 +10,12 @@
 위 항목과 DB 장애·복구 및 실제 MinIO S3 검증을 완료했다. 코드 b469f62의 CI 36834353000은 두 job 모두 success다.
 요구사항별 증거는 `docs/evidence/m0-completion-audit.md`에서 확인한다.
 
+## M1 Profile
+
+계약·Flyway V2·순수 도메인/저장 adapter·HTTP·Dashboard 수직 슬라이스를 구현했다.
+구체적 결정은 ADR 0002에 기록한다. 검증 결과는 PROGRESS와 M1 evidence를 따른다.
+다음 수직 슬라이스는 ProfileVersion을 참조하는 M2 Device/Node/Observation이다.
+
 ## 후속 순서
 
 M1 Profile → M2 Device/Node → M3 Workflow/Run/Task/Attempt → M4 PodSpec/Kubernetes/Runner/Result →
@@ -21,6 +27,6 @@ M1부터 각 기능은 설계 → OpenAPI → Flyway → 구현 → unit/integra
 ## 위험과 재개
 
 - Docker 접근: `bash scripts/preflight.sh compose`. 현재 권한 차단; 권한 있는 개발 환경에서 `dev-up.sh` 재실행.
-- 외부 상세 계약: 원문 확보 후 M1+에 필요한 범위를 ADR에 정합화.
+- 외부 상세 계약: M1 registry 계약은 ADR 0002로 정합화. M2+ 상태 전이·외부 계약은 해당 단계에서 확정.
 - MinIO: source build/live health/실제 S3 검증 완료. `bash scripts/dev-storage.sh`와 `bash scripts/test-storage.sh`로 재현한다.
 - kind/실장비: 전용 context·namespace·소유 label을 준비한 뒤 해당 단계에서 구현. 기존 context를 변경하지 않는다.

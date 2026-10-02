@@ -37,6 +37,9 @@ for attempt in {1..60}; do
   sleep 1
 done
 bash scripts/test-health.sh
+if [[ "${EDGEAI_PROFILE_E2E:-0}" == 1 ]]; then
+  pnpm_cmd --filter @edgeai/dashboard exec playwright test --config playwright.profiles.config.ts
+fi
 if [[ "$restart_mode" != none ]]; then
   # Only restart the project-owned DB after the baseline path has passed.
   db_stopped=true

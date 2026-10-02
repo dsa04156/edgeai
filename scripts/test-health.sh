@@ -13,18 +13,21 @@ def get(url,headers=None):
     except urllib.error.HTTPError as e:
         if e.code==401: return e.code,None
         return e.code,json.load(e)
+credentials=base64.b64encode((os.environ['EDGEAI_API_USER']+':'+os.environ['EDGEAI_API_PASSWORD']).encode()).decode()
 expected=sys.argv[1]
 assert expected in ('UP','DOWN'), 'Expected health must be UP or DOWN'
 if expected=='DOWN':
     assert get(api+'/actuator/health/readiness')==(503,{'status':'DOWN'})
     assert get(ui+'/api/health')==(503,{'status':'DOWN'})
+    status,body=get(api+'/api/v1/profiles/DEVICE',{'Authorization':'Basic '+credentials})
+    assert status==503 and body['code']=='PROFILE_STORE_UNAVAILABLE'
+    print('PASS: Profile reads return 503/PROFILE_STORE_UNAVAILABLE during a real database outage')
     print('PASS: PostgreSQL outage → Spring readiness 503/DOWN → Next.js health 503/DOWN')
     raise SystemExit(0)
 assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
 assert get(ui+'/api/health')==(200,{'status':'UP'})
 assert get(api+'/api/v1/platform')==(401,None)
-credentials=base64.b64encode((os.environ['EDGEAI_API_USER']+':'+os.environ['EDGEAI_API_PASSWORD']).encode()).decode()
 _,body=get(api+'/api/v1/platform',{'Authorization':'Basic '+credentials})
-assert body=={'name':'edgeai','version':'0.1.0','milestone':'M0','capabilities':[]}
+assert body=={'name':'edgeai','version':'0.1.0','milestone':'M1','capabilities':['profiles']}
 print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
 PY

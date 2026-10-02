@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlatformController {
     @GetMapping("/api/v1/platform")
     public PlatformInfo platform() {
-        return new PlatformInfo("edgeai", "0.1.0", "M0", List.of());
+        return new PlatformInfo("edgeai", "0.1.0", "M1", List.of("profiles"));
     }
 
     public record PlatformInfo(String name, String version, String milestone,
