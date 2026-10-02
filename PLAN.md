@@ -163,6 +163,7 @@ MQTT5 adapter를 구현했다. 같은 볼륨의 프로세스 강제 종료 복�
 상세 상태는 `docs/evidence/m7-stream-transport.md`를 따른다.
 ADR0023/V19 DataRoute 영속 세대·내부 제어 상태는 실제 PostgreSQL12개/전체148개 검증을 통과했다.
 상세는 `docs/evidence/m7-stream-routes.md`다.
-다음은 인증된 제어 서버 배정·broker 계정/권한 수명·Runner/SERVICE 스트림 인터페이스,
+ADR0024 broker 권한 발급/회수 adapter는 실제 TLS broker·DB 세대 전환8개를 통과했다.
+다음은 DB 권한 worker·인증된 제어 서버 배정·운영 broker 연결·Runner/SERVICE 스트림 인터페이스,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

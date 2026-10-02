@@ -68,5 +68,6 @@ checkpoint/재전송/중복 제거 경계를 정의해야 한다.
 현재 Compose MQTT는 loopback 공개 개발용 익명 broker이며 런타임별 권한 격리를 구현하지
 않았다. 별도 통합 시험은 private 계정/정확한 topic ACL·TLS를 사용하지만 운영 계정 발급/해제와
 실행 배정 연결 완료를 뜻하지 않는다. 실제 실행 전달 경로는 Compose 설정을 그대로 운영 계약으로 사용하지 않는다. Mosquitto
-Dynamic Security의 client/role/topic 제어는 검토 후보이며, 아직 플랫폼 adapter로 채택·구현·
-검증하지 않았다. [공식 설명](https://mosquitto.org/documentation/dynamic-security/).
+Dynamic Security의 client/role/topic 제어는 [ADR0024](adr/0024-stream-broker-authority.md)에서 채택해
+실제 TLS broker adapter로 검증했다. 서버 worker·운영 broker·인증 배정 연결은 남아 있다.
+[공식 설명](https://mosquitto.org/documentation/dynamic-security/).

@@ -28,6 +28,11 @@ jobs:
       - run: bash scripts/bootstrap.sh
       - run: bash scripts/preflight.sh local
       - run: bash scripts/dev-up.sh
+      - name: Verify real TLS broker authority and revocation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mosquitto
+          bash scripts/collect-evidence.sh stream-broker bash scripts/test-stream-broker.sh
       - run: bash scripts/collect-evidence.sh infra bash scripts/test-infra.sh
       - run: pnpm --filter @edgeai/dashboard exec playwright install --with-deps chromium
       - run: bash scripts/verify-all.sh scaffold

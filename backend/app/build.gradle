@@ -16,6 +16,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'io.minio:minio:9.0.3'
+    testImplementation 'org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5'
 }
 
 tasks.named('bootJar') { archiveFileName = 'edgeai-control-plane.jar' }
@@ -32,6 +33,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/KubernetesVDIntegrationTest.class'
     exclude '**/RemoteGatewayIntegrationTest.class'
     exclude '**/RemoteWorkerIntegrationTest.class'
+    exclude '**/StreamBrokerIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -66,6 +68,13 @@ tasks.register('remoteIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/RemoteGatewayIntegrationTest.class'
+}
+
+tasks.register('streamBrokerIntegrationTest', Test) {
+    description = 'Requires real isolated Mosquitto dynamic security; never substitutes an ACL fixture.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/StreamBrokerIntegrationTest.class'
 }
 
 // Serve the exact reviewed contract; do not infer a competing schema from controllers.

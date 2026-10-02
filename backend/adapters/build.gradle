@@ -3,4 +3,5 @@ dependencies {
     implementation 'org.springframework:spring-jdbc'
     implementation 'tools.jackson.core:jackson-databind'
     implementation 'io.minio:minio:9.0.3'
+    implementation 'org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5'
 }

@@ -142,3 +142,6 @@ MQTT 두 입력/계산/결과·backpressure·broker 재시작·ACL/TLS를 검증
 [DataRoute 제어 상태](m7-stream-routes.md): V19·동시 요청·재접속/재시도·취소/lease·세대 회수·잠금 순서를
 실제 PostgreSQL에서 검증했다. 실제 broker 권한·인증 배정·Runner 스트림 workload·S3 checkpoint/
 새 Pod 복원·공개 실행 연결은 남는다.
+
+[실제 broker 권한](m7-stream-broker.md): 전용 Mosquitto의 동적 ACL·반복/경합·회수 이력·SIGKILL 복구·
+TLS/timeout/소켓 정리를 실제 연결로 검증했다. DB worker와 공개 STREAM 실행 연결은 남는다.

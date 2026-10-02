@@ -14,7 +14,9 @@ worker와 실제 kind Kubernetes↔Remote 전환·API 재시작/취소까지 CI�
 외부 실제 시스템 수용과 상태형 복원은 남아 있습니다. M6 VD 등록·원본 연결·실행 관리와
 VD Task 배정·Runner·결과 API/화면을 연결했습니다. 실제 Kubernetes의 Task·결과·API 재시작·
 활성 작업 중 교체·취소·재시도와 새 이미지의 CI·배포·실제 PC/모바일 결과 화면까지 통과했습니다.
-[M6 완료 범위와 근거](docs/evidence/m6-completion-audit.md)를 확인하세요. 다음 구현 단계는 M7 다중 장치·스트리밍입니다.
+[M6 완료 범위와 근거](docs/evidence/m6-completion-audit.md)를 확인하세요. 현재 M7 다중 장치·스트리밍을 구현 중입니다.
+MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/회수](docs/evidence/m7-stream-broker.md)를
+구성 요소별로 검증했습니다. 실행 worker·인증된 배정·Runner 연결 전이므로 공개 STREAM은 아직501입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -80,6 +82,8 @@ bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 
 bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
 bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 결과·취소 경합·공개 Remote BATCH/worker/장애
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
+bash scripts/test-stream.sh       # 고정 Paho Python 의존성 + 실제 Mosquitto: 다중 입력·복구·ACL·TLS
+bash scripts/test-stream-broker.sh # 실제 PostgreSQL + Mosquitto dynamic security: 권한 수명·세대 전환
 bash scripts/test-remote.sh       # 실제 Remote 참조 프로세스/HTTP/SQLite·파일·장애 시험
 ```
 

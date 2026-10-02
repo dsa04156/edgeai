@@ -51,7 +51,21 @@ V1–V18 원본 SHA-256 일치도 확인했다. 전체 PG148개는 기존136개�
 새12개 및 전체148개가 통과했다. V19 SQL이나 기존 SERVICE 계약을 완화하지 않았다.
 
 재현: `bash scripts/test-integration.sh`. 전체 CI에는 같은 통합시험이 자동 포함된다.
-새 변경의 CI·이미지·실제 배포 검증은 후속 확인 대상이다. 공개 API/화면에는 이번 변경이 없다.
+공개 API/화면에는 이번 변경이 없다.
+
+## CI·배포 확인
+
+소스224befe의 [CI37071378244](https://github.com/dsa04156/edgeai/actions/runs/37071378244)는
+runner/scaffold/storage/images/gitops5개 모두 success다. 내려받은4개 artifact의 result.json16개를
+직접 확인했으며 모두 PASS/0이다. 실제 kind `20261002T222435Z-e88e0394` 로그에서
+Kubernetes BATCH·재시도/전환·Remote·API 재시작/취소·S3 결과20개와 VD 수명·Task 실행·S3 결과5개,
+자원 정리와 최종 API/UI/DB/MinIO/Remote Ready를 확인했다.
+
+Actions의 GitOps pin b742894를 반영한 기존 클러스터도
+`20261002T224649Z-9f80f766`에서 PASS/0이다. 소스224befe의 API/Dashboard/MinIO imageID 일치,
+Ready·PVC Bound·정확한 Argo revision/Synced와 VD 실행 활성화를 확인했다.
+기존 공유 Ingress 상태 때문에 aggregate health는 Progressing이며 Healthy라고 판정하지 않는다.
+이 배포는 DataRoute 내부 제어 상태까지 포함하며 이후 broker adapter/worker 배포 증거는 아니다.
 
 ## 후속 연결
 
