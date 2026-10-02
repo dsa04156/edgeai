@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * 플랫폼 정보와 구현된 기능 조회
-         * @description 서버 이름·버전·현재 개발 단계와 실제 구현된 profiles/devices/nodes 기능을 반환합니다. 인증이 필요합니다.
+         * @description 서버 이름·버전·현재 개발 단계와 구현된 Profile/Device/Node/Workflow/Run/Task 관리 기능을 반환합니다. 실제 실행 성공 여부는 이 metadata로 판단하지 않습니다.
          */
         get: operations["getPlatform"];
         put?: never;
@@ -307,6 +307,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 워크플로 목록 조회
+         * @description 등록된 Workflow를 key 순서로 조회합니다. 실행 상태는 Run API에서 확인합니다.
+         */
+        get: operations["listWorkflows"];
+        put?: never;
+        /**
+         * 워크플로 생성
+         * @description 논리 Workflow 식별자를 생성합니다. 같은 key와 생성 입력은 기존 ID를 반환하고, 다른 입력은 409입니다. DAG는 생성 후 별도 불변 버전으로 발행합니다.
+         */
+        post: operations["createWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflows/{workflowId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflowId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 워크플로와 발행 DAG 버전 조회
+         * @description Workflow와 불변 DAG 버전 페이지를 반환합니다. version을 지정하면 해당 버전만 조회하며 없는 버전은 404입니다. 버전 페이지는 발행 시각 역순입니다.
+         */
+        get: operations["getWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflows/{workflowId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflowId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 검증된 DAG 버전 발행
+         * @description SERVICE Profile 버전을 참조하는 1–128개 task와 최대 512개 dependency를 발행합니다. 순환·없는 task·중복 입력 포트·잘못된 Profile 종류는 거절합니다. 배열 순서가 다른 같은 내용은 재발행으로 처리합니다. 발행 후 DAG와 자식 정의는 수정·삭제할 수 없습니다. 포트 타입·이미지 실행 호환성은 실행 계층에서 검증합니다. STREAM 정의는 보관할 수 있으나 STREAM 실행은 M7 후속 범위입니다.
+         */
+        post: operations["publishWorkflowVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 워크플로 실행 목록 조회
+         * @description 실행 요청을 생성 시각 역순으로 조회합니다. PENDING은 실행 요청이 저장된 상태이며 실제 실행 성공을 의미하지 않습니다.
+         */
+        get: operations["listWorkflowRuns"];
+        put?: never;
+        /**
+         * 워크플로 실행 요청 생성
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. root task는 READY/QUEUED Attempt, 나머지는 WAITING입니다. M3는 영속 실행 대기열이며 실제 Pod 실행·결과는 M4에서 구현합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용하며 VD는 M6 후속입니다. STREAM 실행은 아직 501입니다.
+         */
+        post: operations["createWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 실행과 Task 상태 조회
+         * @description 고정된 WorkflowVersion과 실행 정책, Run 안의 모든 Task 상태를 일관된 DB snapshot으로 조회합니다.
+         */
+        get: operations["getWorkflowRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 워크플로 실행 취소
+         * @description 대기 중 Task/Attempt를 취소합니다. 실행 중 상태는 CANCELLING으로 남겨 실제 종료 확인을 기다립니다. 반복 취소는 멱등이며 SUCCEEDED/FAILED를 취소로 덮어쓰지 않습니다. 빈 JSON 객체를 보냅니다.
+         */
+        post: operations["cancelWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 작업과 실행 시도 이력 조회
+         * @description Run 안의 논리 작업과 Attempt 이력을 조회합니다. 재시도·오프로딩에서도 Task ID를 유지하고 새 Attempt를 사용합니다. Attempt 생성 API는 공개하지 않습니다.
+         */
+        get: operations["getTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 작업과 하위 의존 작업 취소
+         * @description 해당 작업을 취소하고 아직 실행 전인 하위 작업은 SKIPPED로 닫습니다. 독립 branch가 남으면 Run은 계속 대기/실행 상태를 유지합니다. 반복 취소는 멱등이며 완료 결과를 덮어쓰지 않습니다. 빈 JSON 객체를 보냅니다.
+         */
+        post: operations["cancelTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -356,18 +536,21 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE";
             message: string;
         };
         /**
          * @example {
          *       "name": "edgeai",
          *       "version": "0.1.0",
-         *       "milestone": "M2",
+         *       "milestone": "M3",
          *       "capabilities": [
          *         "profiles",
          *         "devices",
-         *         "nodes"
+         *         "nodes",
+         *         "workflows",
+         *         "runs",
+         *         "tasks"
          *       ]
          *     }
          */
@@ -376,7 +559,7 @@ export interface components {
             name: "edgeai";
             version: string;
             /** @constant */
-            milestone: "M2";
+            milestone: "M3";
             capabilities: string[];
         };
         /**
@@ -514,6 +697,142 @@ export interface components {
         };
         NodePage: {
             items: components["schemas"]["ExecutionNode"][];
+            nextOffset: number | null;
+        };
+        WorkflowCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+        };
+        DagTask: {
+            key: components["schemas"]["ProfileKey"];
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
+        DagDependency: {
+            fromTask: components["schemas"]["ProfileKey"];
+            toTask: components["schemas"]["ProfileKey"];
+            fromPort: components["schemas"]["ProfileKey"];
+            toPort: components["schemas"]["ProfileKey"];
+            /** @enum {string} */
+            mode: "BATCH" | "STREAM";
+        };
+        WorkflowDag: {
+            tasks: components["schemas"]["DagTask"][];
+            dependencies: components["schemas"]["DagDependency"][];
+        };
+        WorkflowPublish: {
+            version: components["schemas"]["Version"];
+            tasks: components["schemas"]["DagTask"][];
+            dependencies: components["schemas"]["DagDependency"][];
+        };
+        Workflow: {
+            /** Format: uuid */
+            id: string;
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WorkflowVersion: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workflowId: string;
+            version: components["schemas"]["Version"];
+            dag: components["schemas"]["WorkflowDag"];
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WorkflowDetail: {
+            workflow: components["schemas"]["Workflow"];
+            versions: components["schemas"]["WorkflowVersion"][];
+            nextOffset: number | null;
+        };
+        ExecutionPolicy: {
+            /** @enum {string} */
+            mode: "AUTO";
+        } | {
+            /** @enum {string} */
+            mode: "NODE";
+            /** Format: uuid */
+            nodeId: string;
+        };
+        RunCreate: {
+            /** Format: uuid */
+            workflowVersionId: string;
+            execution: components["schemas"]["ExecutionPolicy"];
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
+        WorkflowRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workflowVersionId: string;
+            /** @enum {string} */
+            mode: "AUTO" | "NODE";
+            /** Format: uuid */
+            nodeId: string | null;
+            parameters: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            state: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Task: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            definitionId: string;
+            key: components["schemas"]["ProfileKey"];
+            /** @enum {string} */
+            state: "WAITING" | "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
+            cancellationReason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TaskAttempt: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            taskId: string;
+            number: number;
+            epoch: number;
+            /** @enum {string} */
+            state: "QUEUED" | "DISPATCHING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "OFFLOADED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        RunDetail: {
+            run: components["schemas"]["WorkflowRun"];
+            tasks: components["schemas"]["Task"][];
+        };
+        TaskDetail: {
+            task: components["schemas"]["Task"];
+            attempts: components["schemas"]["TaskAttempt"][];
+        };
+        EmptyCommand: Record<string, never>;
+        WorkflowPage: {
+            items: components["schemas"]["Workflow"][];
+            nextOffset: number | null;
+        };
+        RunPage: {
+            items: components["schemas"]["WorkflowRun"][];
             nextOffset: number | null;
         };
     };
@@ -1609,6 +1928,751 @@ export interface operations {
                 };
             };
             /** @description DB 연결 장애. 복구 후 재시도하세요. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorkflows: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowPage"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowCreate"];
+            };
+        };
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            /** @description 리소스와 관련 상태가 한 트랜잭션에서 생성되었습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 중복 키의 내용 충돌 또는 허용되지 않는 상태 전이 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWorkflow: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                version?: components["schemas"]["Version"];
+            };
+            header?: never;
+            path: {
+                workflowId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDetail"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    publishWorkflowVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflowId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowPublish"];
+            };
+        };
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowVersion"];
+                };
+            };
+            /** @description 리소스와 관련 상태가 한 트랜잭션에서 생성되었습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowVersion"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 중복 키의 내용 충돌 또는 허용되지 않는 상태 전이 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorkflowRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunPage"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createWorkflowRun: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCreate"];
+            };
+        };
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description 리소스와 관련 상태가 한 트랜잭션에서 생성되었습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 중복 키의 내용 충돌 또는 허용되지 않는 상태 전이 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description STREAM 실행은 M7에서 구현합니다. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetail"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    cancelWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyCommand"];
+            };
+        };
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRun"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 중복 키의 내용 충돌 또는 허용되지 않는 상태 전이 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    cancelTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyCommand"];
+            };
+        };
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 중복 키의 내용 충돌 또는 허용되지 않는 상태 전이 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
             503: {
                 headers: {
                     [name: string]: unknown;

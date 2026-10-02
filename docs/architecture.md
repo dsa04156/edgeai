@@ -16,8 +16,9 @@ flowchart LR
   R --> API
 ```
 
-위 그림은 목표 구조다. 현재 M2에서는 Next.js → Spring Boot → PostgreSQL의 Profile·Device
-관리, 세션·관측·연결 이력과 Kubernetes Node 읽기 adapter를 구현했다. Workflow·작업 실행은 후속 범위다.
+위 그림은 목표 구조다. 현재 M3에서는 Next.js → Spring Boot → PostgreSQL의 Profile·Device
+관리, 세션·관측·연결 이력과 Kubernetes Node 읽기 adapter, 불변 Workflow DAG와
+Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes 작업 실행과 결과는 M4 범위다.
 
 | 경로 | 책임 |
 |---|---|
@@ -43,20 +44,22 @@ Gradle의 세 모듈은 하나의 Spring Boot 서버로 조립된다.
 backend/
 ├── app/src/main/java/io/edgeai/app/
 │   ├── EdgeAiApplication.java
-│   ├── controller/   # HTTP 엔드포인트: Profile, Device, Node, Platform, CSRF
-│   ├── service/      # Profile/Device 관리, Node 관측 조정, 트랜잭션
+│   ├── controller/   # HTTP 엔드포인트: Profile, Device, Node, Workflow, WorkflowRun, Task, Platform, CSRF
+│   ├── service/      # Profile/Device/Workflow/Execution, Node 관측, 트랜잭션
 │   ├── dto/          # API 응답·페이지·오류 DTO
 │   ├── config/       # Security, Swagger UI, 저장소 빈 조립
 │   ├── exception/    # 예외 타입 및 HTTP 오류 응답 변환
-│   └── support/      # Profile JSON 파싱·정규화 보조 코드
+│   └── support/      # JSON 파싱·정규화, DAG 입력 검증
 ├── domain/src/main/java/io/edgeai/domain/
 │   ├── profile/      # ProfileIdentity, ProfileVersion
 │   ├── device/       # Device, Attachment, Session, Observation
 │   ├── node/         # ExecutionNode, NodeInventory port
+│   ├── workflow/     # Dag, WorkflowVersion, TaskDefinition
+│   ├── execution/    # WorkflowRun, Task, TaskAttempt
 │   └── repository/   # 저장소 인터페이스
 └── adapters/src/main/java/io/edgeai/adapters/
     ├── kubernetes/   # 실제 Node API, CA/token/pagination
-    └── repository/   # Profile/Device/Node JDBC 구현
+    └── repository/   # Profile/Device/Node/Workflow/Execution JDBC 구현
 ```
 
 요청 처리는 `controller → service → ProfileRepository → JdbcProfileRepository` 순서다.

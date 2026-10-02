@@ -94,3 +94,8 @@ Swagger 렌더와 자동 CSRF Profile 등록을 통과했다. GitHub CI에 같�
 
 [검증 결과](m2-device-node.md): 장치 lifecycle·동시성·세션 fence·관측·이력,
 실제 PostgreSQL·PC/모바일 UI 및 Kubernetes Node 10개 대조. CI와 배포 검증 상태를 구분한다.
+
+## M3 Workflow / Run / Task (2026-10-02)
+
+[검증 결과](m3-workflow.md): 불변 DAG·동시 발행/실행·중복 방지·취소 전파,
+실제 PostgreSQL·PC/모바일 UI·DB 장애 복구. 실제 Kubernetes 작업 실행은 M4다.

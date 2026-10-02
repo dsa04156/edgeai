@@ -7,7 +7,7 @@ export default async function Home() {
   const health = await getControlPlaneHealth();
   return (
     <main>
-      <header><span className="brand">EdgeAI</span><span className="stage">M2 · Device / Node</span></header>
+      <header><span className="brand">EdgeAI</span><span className="stage">M3 · Workflow / Run</span></header>
       <section aria-labelledby="title">
         <p className="eyebrow">EDGE AI CONTROL PLANE</p>
         <h1 id="title">실행의 시작점을 준비합니다.</h1>
@@ -22,7 +22,7 @@ export default async function Home() {
           <div><dt>Dashboard</dt><dd>초기 화면</dd></div>
           <div><dt>Control Plane · PostgreSQL</dt><dd>{health.status === "UP" ? "연결 확인됨" : "연결 대기 중"}</dd></div>
           <div><dt>Profile</dt><dd><Link href="/profiles">Profile 관리 →</Link></dd></div>
-          <div><dt>Device · Node</dt><dd><Link href="/devices">장치·노드 관리 →</Link></dd></div><div><dt>Workflow</dt><dd className="muted">구현 예정</dd></div>
+          <div><dt>Device · Node</dt><dd><Link href="/devices">장치·노드 관리 →</Link></dd></div><div><dt>Workflow · Run</dt><dd><Link href="/workflows">워크플로·실행 관리 →</Link></dd></div>
           <div><dt>실장비 실행</dt><dd className="muted">아직 검증하지 않음</dd></div>
         </dl>
       </section>

@@ -17,10 +17,12 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.getByRole("heading", { name: /EdgeAI Control Plane/ })).toBeVisible();
   const contract = await page.request.get(`${api}/openapi.yaml`);
   expect(await contract.text()).toBe(await readFile("../contracts/openapi/platform-api.yaml", "utf8"));
-  await expect(page.locator(".opblock")).toHaveCount(17);
+  await expect(page.locator(".opblock")).toHaveCount(27);
   await expect(page.locator("#operations-Device-registerDevice .opblock-summary-description")).toHaveText("물리 장치 등록");
   await expect(page.locator("#operations-Device-reportDeviceObservation .opblock-summary-description")).toHaveText("장치 상태·작은 관측 데이터 보고");
   await expect(page.locator("#operations-Node-listNodes .opblock-summary-description")).toHaveText("관측된 Kubernetes 실행 노드 목록");
+  await expect(page.locator("#operations-Workflow-publishWorkflowVersion .opblock-summary-description")).toHaveText("검증된 DAG 버전 발행");
+  await expect(page.locator("#operations-Run-createWorkflowRun .opblock-summary-description")).toHaveText("워크플로 실행 요청 생성");
   await page.screenshot({ path: testInfo.outputPath("swagger-ui.png"), fullPage: true });
 
   const operation = page.locator("#operations-Profile-publishProfile");

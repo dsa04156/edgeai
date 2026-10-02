@@ -10,7 +10,8 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const allowed = request.method === "GET" ? target === "csrf"
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^(devices|nodes)(/${uuid})?$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || target === "devices" || new RegExp(`^devices/${uuid}/(sessions|observations)$`).test(target)
+    || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^devices/${uuid}$`).test(target);
   if (!allowed)
@@ -23,6 +24,8 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   if (session) headers.set("Cookie", `EDGEAI_SESSION=${session}`);
   const csrf = request.headers.get("x-csrf-token");
   if (csrf) headers.set("X-CSRF-TOKEN", csrf);
+  const idempotency = request.headers.get("idempotency-key");
+  if (idempotency) headers.set("Idempotency-Key", idempotency);
   let body: string | undefined;
   if (["POST", "PATCH", "PUT"].includes(request.method)) {
     if (!request.headers.get("content-type")?.startsWith("application/json"))

@@ -1,6 +1,6 @@
-# 구현 계약 — M0–M2 작업 기준
+# 구현 계약 — M0–M3 작업 기준
 
-상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node 구현 범위. 별도 전체 계약 원문은 아직 확인되지 않았다.
+상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행 요청 구현 범위. 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
 
@@ -8,7 +8,7 @@
 2. Flyway가 실제 PostgreSQL에서 schema를 초기화한다.
 3. `GET /actuator/health/readiness`는 DB 연결을 포함하며 장애 시 503을 반환한다.
 4. Next.js `GET /api/health`는 Spring readiness 결과를 전달하며 연결 실패를 UP으로 표시하지 않는다.
-5. `GET /api/v1/platform`은 인증을 요구하고 milestone=M2, capabilities=[profiles,devices,nodes]를 반환한다.
+5. `GET /api/v1/platform`은 인증을 요구하고 milestone=M3, capabilities=[profiles,devices,nodes,workflows,runs,tasks]를 반환한다.
 6. 개발 서비스는 loopback에만 publish한다. 비밀번호는 무작위 local `.env`로 관리한다.
 7. 미구현 시험은 exit 2/BLOCKED를 반환한다. scaffold 성공을 전체 플랫폼 완료로 표시하지 않는다.
 
@@ -37,6 +37,18 @@
 - Kubernetes는 HTTPS/CA 검증 및 전용 get/list nodes 권한을 사용한다. 로컬 kubectl proxy는 loopback만 허용한다.
 - API/DB의 합성 장치 시험은 물리 센서·스트림·작업 실행 검증을 의미하지 않는다. 상세는 ADR 0003을 따른다.
 
+## M3 Workflow/Run/Task 수용 범위
+
+- Workflow와 불변 DAG 버전을 등록·조회한다. SERVICE 참조·순환·중복 입력 포트를 검증한다.
+- 동일 버전/내용은 200, 다른 내용은 409. 발행 트랜잭션과 DB seal trigger로 하위 정의까지 고정한다.
+- UUID Idempotency-Key와 AUTO/NODE 정책으로 Run/Task/root Attempt를 원자적으로 생성한다.
+- 재전송은 취소 후에도 같은 Run이며 입력이 다르면 409다. 공개 Attempt 생성 API는 없다.
+- root READY/QUEUED, 하위 WAITING을 조회하며 Run 취소와 Task 취소의 의존성 전파를 지원한다.
+- 독립 분기가 남으면 Run을 완료로 표시하지 않으며 성공·실패를 취소로 덮어쓰지 않는다.
+- 실제 DB 동시성·불변성·FK·활성 Attempt 제약과 PC/모바일 UI·Swagger·DB 장애 복구를 검증한다.
+- M3는 실행 요청 관리다. 실제 Pod/Runner/Result는 M4, STREAM 실행은 M7(현재 501)이다.
+- 상세한 한도·상태·정규화 규칙은 ADR 0004를 따른다.
+
 ## 후속 구현에서 유지할 불변 조건
 
 - 발행 ProfileVersion·WorkflowVersion 불변.
@@ -50,5 +62,5 @@
 
 ## 미확정
 
-상세 lifecycle·오류·DDL·생성/실행/result commit API, production identity/RBAC,
+M4 이후 상세 lifecycle·오류·DDL·실행/result commit API, production identity/RBAC,
 2세부 실제 API, 실장비 inventory, GPU/NPU 공유 방식, 성능 수용 수치.

@@ -21,7 +21,11 @@
 | M2-DB | scripts/test-integration.sh | 재등록/충돌, 동시 생성·재접속·보고, session fence, FK·활성 UNIQUE·attachment 이력 | 실제 PostgreSQL |
 | M2-UI | scripts/test-profiles-stack.sh local 또는 compose | PC·모바일 등록/수정/보고/재접속/해제, 이전 session 409, 큰 숫자 보존, DB 장애·복구 | 실제 DB/API/browser |
 | M2-NODE | scripts/test-node-inventory.sh <명시적-context> | 실제 Node UID·메타데이터 대조 및 Ready Node에 합성 장치 연결/중복/해제 | 읽기 가능한 실제 Kubernetes, 로컬 DB, 빌드된 UI |
-| M2-DEPLOY | scripts/smoke-deployment.py | 배포 HTTP 경유 장치 lifecycle, CSRF, 201/200/409, Node 조회 | 실행 중인 API/UI·환경 변수 인증 |
+| M2-DEPLOY | scripts/smoke-deployment.py --through device | 배포 HTTP 경유 장치 lifecycle, CSRF, 201/200/409, Node 조회 | 실행 중인 API/UI·환경 변수 인증 |
+| M3-UNIT | scripts/test-unit.sh | DAG cycle/self/reference/port 검증, JSON 정밀도, 인증·CSRF·Idempotency-Key 필수 | local |
+| M3-DB | scripts/test-integration.sh | seal·FK·활성 Attempt UNIQUE, 동시 발행/실행 1개, Run/Task 취소 경쟁·독립 분기·재전송 | 실제 PostgreSQL |
+| M3-UI | scripts/test-profiles-stack.sh local 또는 compose | DAG 발행/재발행/409, Run 생성/재전송/새 키, Attempt·취소 전파, PC·모바일·DB 장애 복구 | 실제 DB/API/browser |
+| M3-DEPLOY | scripts/smoke-deployment.py | 이미지 경유 불변 DAG·Run/Task/Attempt·취소·재전송, 큰 숫자·인증/CSRF | 실행 중인 API/UI |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |

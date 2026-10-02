@@ -40,7 +40,18 @@ test("Device connection fails visibly without presenting invented node data", as
 test("Control Plane proxy rejects unlisted routes and write methods before forwarding", async ({ request }) => {
   const id = "00000000-0000-0000-0000-000000000000";
   for (const [method, path] of [["POST", "nodes"], ["DELETE", `nodes/${id}`], ["PATCH", "devices"],
-    ["GET", `devices/${id}/sessions`], ["PUT", `devices/${id}/attachments/not-a-uuid`], ["GET", "actuator/env"]]) {
+    ["GET", `devices/${id}/sessions`], ["PUT", `devices/${id}/attachments/not-a-uuid`], ["GET", "actuator/env"],
+    ["POST", `tasks/${id}/attempts`], ["DELETE", `workflows/${id}`], ["PATCH", `workflow-runs/${id}`], ["GET", "tasks"]]) {
     expect((await request.fetch(`/api/control-plane/${path}`, { method })).status()).toBe(404);
   }
+});
+
+test("Workflow connection failure does not display invented runs", async ({ page }) => {
+  await page.goto("/workflows");
+  await page.getByLabel("사용자 이름", { exact: true }).fill("offline-test");
+  await page.getByLabel("비밀번호", { exact: true }).fill("offline-test-only");
+  await page.getByRole("button", { name: "연결", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("Control Plane에 연결할 수 없습니다");
+  await expect(page.getByRole("heading", { name: "실행 이력" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

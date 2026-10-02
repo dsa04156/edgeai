@@ -1,0 +1,60 @@
+package io.edgeai.app.support;
+
+import io.edgeai.domain.workflow.Dag;
+import java.util.*;
+
+public final class WorkflowInput {
+    public static final JsonDocuments JSON = new JsonDocuments();
+    private WorkflowInput() {}
+    public static Map<?, ?> parse(String body, String... fields) {
+        var value = object(JSON.parse(body, 65536), fields);
+        JSON.boundedCanonical(value, 65536); return value;
+    }
+    public static Map<?, ?> object(Object value, String... fields) {
+        if (!(value instanceof Map<?, ?> map) || !map.keySet().equals(Set.of(fields)))
+            throw new IllegalArgumentException("Unexpected object fields");
+        return map;
+    }
+    public static Map<?, ?> parameters(Object value) {
+        if (!(value instanceof Map<?, ?> map)) throw new IllegalArgumentException("parameters must be an object");
+        return map;
+    }
+    public static String text(Object value, int max) {
+        if (!(value instanceof String s) || s.isBlank() || s.length()>max || s.chars().anyMatch(Character::isISOControl))
+            throw new IllegalArgumentException("Invalid text");
+        return s;
+    }
+    public static UUID uuid(Object value) {
+        String s=text(value,36); UUID id=UUID.fromString(s);
+        if (!id.toString().equalsIgnoreCase(s)) throw new IllegalArgumentException("Canonical UUID required");
+        return id;
+    }
+    public static String version(Object value) {
+        String version=text(value,32);
+        if (!version.matches("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)"))
+            throw new IllegalArgumentException("Version must be MAJOR.MINOR.PATCH");
+        return version;
+    }
+    public static Dag dag(Map<?, ?> input) {
+        if (!(input.get("tasks") instanceof List<?> tasks) || !(input.get("dependencies") instanceof List<?> edges))
+            throw new IllegalArgumentException("DAG arrays required");
+        var nodes=new ArrayList<Dag.Node>(); var dependencies=new ArrayList<Dag.Edge>();
+        for (var value:tasks) {
+            var task=object(value,"key","serviceProfileVersionId","parameters");
+            nodes.add(new Dag.Node(text(task.get("key"),100),uuid(task.get("serviceProfileVersionId")),JSON.canonical(parameters(task.get("parameters")))));
+        }
+        for (var value:edges) {
+            var edge=object(value,"fromTask","toTask","fromPort","toPort","mode");
+            dependencies.add(new Dag.Edge(text(edge.get("fromTask"),100),text(edge.get("toTask"),100),
+                text(edge.get("fromPort"),100),text(edge.get("toPort"),100),Dag.Mode.valueOf(text(edge.get("mode"),8))));
+        }
+        nodes.sort(Comparator.comparing(Dag.Node::key));
+        dependencies.sort(Comparator.comparing(Dag.Edge::toTask).thenComparing(Dag.Edge::toPort));
+        return new Dag(nodes,dependencies);
+    }
+    public static Dag storedDag(String json) { return dag(object(JSON.decode(json),"tasks","dependencies")); }
+    public static Map<String,Object> document(Dag dag) {
+        return Map.of("tasks",dag.tasks().stream().map(n->Map.of("key",n.key(),"serviceProfileVersionId",n.serviceProfileVersionId().toString(),"parameters",JSON.decode(n.parametersJson()))).toList(),
+            "dependencies",dag.dependencies().stream().map(e->Map.of("fromTask",e.fromTask(),"toTask",e.toTask(),"fromPort",e.fromPort(),"toPort",e.toPort(),"mode",e.mode().name())).toList());
+    }
+}

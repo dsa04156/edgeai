@@ -1,8 +1,8 @@
 # 진행 상태
 
 [STATUS]
-M2 Device/Node 구현·로컬·CI·실제 배포 검증 완료. M3 구현 중이며 전체 플랫폼은 PARTIAL.
-M0/M1 및 초기 CI/CD 완료 기록은 아래에 보존한다. 현재 상세는 docs/evidence/m2-device-node.md.
+M2 완료. M3 Workflow/Run/Task 구현·로컬 검증 완료, 신규 CI·배포 검증 대기. 전체 플랫폼은 PARTIAL.
+M0/M1 및 초기 CI/CD 완료 기록은 아래에 보존한다. 현재 상세는 docs/evidence/m3-workflow.md.
 공개 저장소: https://github.com/dsa04156/edgeai
 코드 20a8d6c의 CI 36950519908: scaffold/storage 모두 success, 결과 JSON 8개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36950519908
@@ -31,7 +31,7 @@ M1 로컬 범위의 차단 없음. 로컬 Docker 소켓 권한 제한은 portabl
 별도 전체 구현 계약·실장비·2세부 API·성능 기준은 필요한 단계에서 확인한다.
 
 [NEXT]
-M3 Workflow/Run/Task/Attempt와 Dashboard를 구현·검증한다.
+M3 신규 CI·이미지·ArgoCD·Ingress를 검증한 뒤 M4 PodSpec/Kubernetes/Runner/Result를 구현한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh
 Profile UI: http://127.0.0.1:13080/profiles
@@ -142,3 +142,12 @@ Ingress에서 Device 관리·CSRF·session fence·관측 정밀도·해제 및 �
 전용 ServiceAccount/CA/HTTPS의 실제 cluster 내 노드 읽기 경로도 확인했다.
 근거: m2-kubernetes-http 20261002T051528Z-b69dcf3d,
 m2-kubernetes-nodes 20261002T051546Z-5657d8c7, m2-gitops-state 20261002T051753Z-35363223.
+
+[M3 WORKFLOW/RUN/TASK — 2026-10-02 로컬 검증]
+Workflow4/Run4/Task2 API, Flyway V4, 불변 DAG 봉인·SERVICE FK·동일 버전 FK·활성 Attempt UNIQUE,
+Idempotency-Key 기반 원자적 실행 요청과 Run 행 잠금 취소·하위 전파·독립 분기 보존을 구현했다.
+/workflows와 Swagger27개 operation, 큰 숫자·PC/모바일·인증/CSRF를 검증했다.
+단위/MVC25, 실제 PostgreSQL 통합19, UI 오프라인14/실DB8, 계약 및 DB 장애·복구 모두 통과했다.
+상세 실행 ID·실패 원인과 수정·한계는 docs/evidence/m3-workflow.md에 기록했다.
+현재 root READY/QUEUED와 하위 WAITING은 요청 저장 상태이며 실제 작업 실행은 M4다.
+M3 코드의 신규 CI·이미지·클러스터 배포 검증은 다음 확인 대상이다.

@@ -1,4 +1,5 @@
 """Exercise the deployed HTTP path without printing credentials or session tokens."""
+import argparse
 import base64
 import http.cookiejar
 import json
@@ -10,6 +11,10 @@ import urllib.request
 import uuid
 from datetime import datetime, timezone
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--through", choices=["device", "workflow"], default="workflow", help="Last milestone exercised; workflow is the complete current smoke")
+args = parser.parse_args()
+
 ui = os.environ.get("EDGEAI_SMOKE_UI_URL", "http://127.0.0.1:13080").rstrip("/")
 api = os.environ.get("EDGEAI_SMOKE_API_URL", "http://127.0.0.1:18080").rstrip("/")
 auth = "Basic " + base64.b64encode(
@@ -17,12 +22,14 @@ auth = "Basic " + base64.b64encode(
 ).decode()
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-def request(url, method="GET", data=None, authenticated=False, csrf=None):
+def request(url, method="GET", data=None, authenticated=False, csrf=None, idempotency=None):
     headers = {}
     if authenticated:
         headers["Authorization"] = auth
     if csrf:
         headers["X-CSRF-TOKEN"] = csrf
+    if idempotency:
+        headers["Idempotency-Key"] = idempotency
     if data is not None:
         headers["Content-Type"] = "application/json"
         data = json.dumps(data).encode()
@@ -116,3 +123,63 @@ status, body = request(device_url, authenticated=True)
 assert status == 200 and json.loads(body)["device"]["connectionStatus"] == "RELEASED"
 assert request(device_url + "/sessions", "POST", {"bootId": str(uuid.uuid4())}, authenticated=True, csrf=csrf)[0] == 409
 print("PASS: deployed Device lifecycle, CSRF on every mutation, revision conflicts, session fencing, lossless observations and Node reads")
+
+if args.through == "device":
+    raise SystemExit(0)
+
+assert request(ui + "/workflows")[0] == 200
+workflow_url = ui + "/api/control-plane/workflows"
+runs_url = ui + "/api/control-plane/workflow-runs"
+assert request(workflow_url)[0] == 401
+service_body = {"key": "workflow-probe-" + uuid.uuid4().hex, "version": "1.0.0", "spec": {"source": "synthetic-deployment-test"}}
+status, body = request(ui + "/api/control-plane/profiles/SERVICE", "POST", service_body, authenticated=True, csrf=csrf)
+assert status == 201
+service = json.loads(body)
+workflow_body = {"key": service_body["key"], "displayName": "Synthetic DAG deployment probe"}
+assert request(workflow_url, "POST", workflow_body, authenticated=True)[0] == 403
+status, body = request(workflow_url, "POST", workflow_body, authenticated=True, csrf=csrf)
+assert status == 201
+workflow = json.loads(body)
+assert request(workflow_url, "POST", workflow_body, authenticated=True, csrf=csrf)[0] == 200
+version_url = workflow_url + "/" + workflow["id"] + "/versions"
+dag = {"version": "1.0.0", "tasks": [
+    {"key": key, "serviceProfileVersionId": service["id"], "parameters": {"serial": 9007199254740993}}
+    for key in ["root", "child", "independent"]],
+    "dependencies": [{"fromTask": "root", "toTask": "child", "fromPort": "output", "toPort": "input", "mode": "BATCH"}]}
+assert request(version_url, "POST", dag, authenticated=True)[0] == 403
+status, body = request(version_url, "POST", dag, authenticated=True, csrf=csrf)
+assert status == 201
+version = json.loads(body)
+assert request(version_url, "POST", {**dag, "tasks": list(reversed(dag["tasks"]))}, authenticated=True, csrf=csrf)[0] == 200
+assert request(version_url, "POST", {**dag, "dependencies": []}, authenticated=True, csrf=csrf)[0] == 409
+run_key = str(uuid.uuid4())
+run_body = {"workflowVersionId": version["id"], "execution": {"mode": "AUTO"}, "parameters": {"serial": 9007199254740993}}
+assert request(runs_url, "POST", run_body, authenticated=True)[0] == 403
+assert request(runs_url, "POST", run_body, authenticated=True, csrf=csrf)[0] == 400
+status, body = request(runs_url, "POST", run_body, authenticated=True, csrf=csrf, idempotency=run_key)
+assert status == 201
+run = json.loads(body)
+run_url = runs_url + "/" + run["id"]
+try:
+    assert run["state"] == "PENDING" and run["parameters"]["serial"] == 9007199254740993
+    assert request(runs_url, "POST", run_body, authenticated=True, csrf=csrf, idempotency=run_key)[0] == 200
+    assert request(runs_url, "POST", {**run_body, "parameters": {}}, authenticated=True, csrf=csrf, idempotency=run_key)[0] == 409
+    status, body = request(run_url, authenticated=True)
+    tasks = {task["key"]: task for task in json.loads(body)["tasks"]}
+    assert status == 200 and len(tasks) == 3
+    assert tasks["root"]["state"] == "READY" and tasks["child"]["state"] == "WAITING"
+    task_url = ui + "/api/control-plane/tasks/" + tasks["root"]["id"]
+    status, body = request(task_url, authenticated=True)
+    assert status == 200 and json.loads(body)["attempts"][0]["state"] == "QUEUED"
+    assert request(task_url + "/cancel", "POST", {}, authenticated=True)[0] == 403
+    assert request(task_url + "/cancel", "POST", {}, authenticated=True, csrf=csrf)[0] == 200
+    status, body = request(run_url, authenticated=True)
+    state = json.loads(body)
+    assert status == 200 and state["run"]["state"] == "PENDING"
+    assert {task["key"]: task["state"] for task in state["tasks"]} == {"root": "CANCELLED", "child": "SKIPPED", "independent": "READY"}
+    assert request(run_url + "/cancel", "POST", {}, authenticated=True)[0] == 403
+finally:
+    assert request(run_url + "/cancel", "POST", {}, authenticated=True, csrf=csrf)[0] == 200
+status, body = request(runs_url, "POST", run_body, authenticated=True, csrf=csrf, idempotency=run_key)
+assert status == 200 and json.loads(body)["id"] == run["id"] and json.loads(body)["state"] == "CANCELLED"
+print("PASS: deployed immutable DAG, idempotent Run/Task/Attempt initialization, branch cancellation and replay after cancellation; no runtime execution is claimed")
