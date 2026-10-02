@@ -10,4 +10,4 @@ images:
   - name: ghcr.io/dsa04156/edgeai-dashboard
     digest: sha256:c0ef0d9c15ca07506f224c55ae7ca296ababacdbeb0c3552e1f70d994be303af
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:44bd68155a915a86c9553f0a8aaa59aa8e3ec255263a851c35824db4c2631373
+    digest: sha256:3a0d860f29e18f34f3dbceb54fa13d68c239358e5655b039eed8ef92d968a17a
