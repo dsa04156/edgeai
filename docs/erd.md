@@ -71,7 +71,7 @@ Runtime과 Result는 Kubernetes Pod 또는 RemoteAllocation 중 하나의 produc
 V11은 PostgreSQL BEFORE trigger 시점의 생성 컬럼 비교를 제외하고 결과의 원본 컬럼 봉인을 유지한다.
 V12는 workflow_run/task_attempt/task_offload에 Remote 제공자 binding을 추가하고 실행 대상 변경을 차단한다.
 새 allocation은 Attempt의 고정 제공자와 일치해야 하며 수동 offload는 Node/Remote 중 정확히 하나를 갖는다.
-V1–V14는 로컬 적용된 migration이며 수정하지 않는다.
+V1–V15는 로컬 적용된 migration이며 수정하지 않는다.
 
 ## 구현된 M6 등록·실행 수명 테이블
 
@@ -89,3 +89,8 @@ Device는 실행 종료 확인 전까지 해제할 수 없다.
 `vd_runtime_command`는 실제 CREATE/DELETE의 lease/owner/시도/완료를 따로 저장한다. 실행 요청,
 source/runtime 이력과 Operation은 VD 행 잠금 아래 원자적으로 변경한다.
 현재 TaskAttempt의 RuntimeInstance를 이 지속 VD의 Task slot에 연결하는 관계는 후속 구현이다.
+
+V15 `vd_runtime_poll`은 runtime/session 복합 FK로 같은 실행 세대의 마지막 sequence·정확한
+요청 bytes digest·RUN/DRAIN/STOP 명령을 보존한다. runtime당 하나이며 첫0·순차 증가·동일 순번
+해시 불변·명령 역행 금지와 삭제/절단 금지를 적용한다. lease/readiness/Operation과 같은 VD 잠금·
+트랜잭션에서 갱신하며 본문·토큰·Task claim 자격은 저장하지 않는다. 실제 Task 배정 receipt는 후속이다.

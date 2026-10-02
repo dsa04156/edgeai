@@ -131,4 +131,7 @@ ADR0016의 실제 Pod gateway/worker·VD HMAC 자격을 추가했다. Pod-bound 
 scheduler·Ready 관측·소유 관계·UID 삭제를 실제 Kubernetes에서 검증하며, 영속 명령 재시도와
 종료 이력의 늦은 Pod 정리를 연결한다. 상세는 `docs/evidence/m6-vd-gateway.md`다.
 VD 실행은 기본 비활성이며 공개 등록은 아직 runtime을 자동 기동하지 않는다.
-다음은 poll 서버와 sequence 재전송 상태·공개 Operation/UI·VD Run 배정·Task claim/Result의 연결이다.
+ADR0017/V15는 인증된 poll 서버와 session/sequence 재전송 상태·lease/Ready·idle drain 및 감독
+프로세스의 자체 교체 요청을 연결한다. 실제 Spring HTTP·PostgreSQL·Python 감독 프로세스의
+준비/종료·503/lease 만료를 검증한다. Kubernetes 관측은 이 통합시험에서 fixture다.
+다음은 공개 provision/Operation/상태 API·UI와 실제 VD Run 배정·Task claim/Result의 연결이다.

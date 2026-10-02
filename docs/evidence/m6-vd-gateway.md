@@ -64,10 +64,15 @@ rtk proxy bash scripts/test-runtime-kubernetes.sh kubernetes-admin@kubernetes
 Argo Synced도 `20261002T163724Z-f4de6ab6`에서 확인했다. 공유 Ingress status 때문에 aggregate
 health는 Progressing이다. 상세는 [V14 기록](m6-vd-lifecycle.md)에 있다.
 
-신규 gateway 코드의 CI·배포는 push 후 별도로 확인한다. 현재 VD 기능은 기본 비활성으로 배포되며
-이전 V14 배포 성공이 신규 gateway 활성화/실제 VD 실행을 증명하지 않는다.
+gateway 코드 `cf499be2d4b9e70627ae179a5f9e29c4144cd08e`의
+[CI37036686347](https://github.com/dsa04156/edgeai/actions/runs/37036686347)은5 jobs와 artifact 결과
+JSON15개 모두 PASS/0이다. 실제 Runner 컨테이너27개·기존kind22Run/S3결과20개·kind 삭제를 확인했다.
+pin `86ff9bd`와 실제 API/UI/MinIO imageID·Ready·PVC Bound·Argo Synced는
+`20261002T172048Z-00d56a91`에서 PASS/0이다. 공유 Ingress status로 aggregate health는 Progressing이다.
+현재 VD 기능은 기본 비활성으로 배포되며 이 CI/배포가 실제 VD 전체 실행을 증명하지 않는다.
 
 다음은 HMAC과 실제 Pod identity를 함께 확인하는 poll 서버, sequence 재전송 영속 처리,
 Run VD 배정·Task claim/Result·취소, 공개 provision/교체/Operation/상태 화면 및 demo-vd다.
 실제 API 프로세스 재시작·실제 감독 프로세스·실제 작업/결과의 전체 연결 수용을 남겨 둔다.
 M5 상태형 복원·외부 실제 계약과 M7–M10도 남으며 전체 플랫폼은 PARTIAL이다.
+후속 서버 통신 연결은 [인증된 poll 기록](m6-vd-poll.md)을 따른다.

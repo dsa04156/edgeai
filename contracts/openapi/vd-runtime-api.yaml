@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: EdgeAI persistent VD supervisor internal contract
-  version: 0.1.0
+  version: 0.2.0
   description: >-
-    M6 지속 VD의 내부 프로토콜입니다. Supervisor 구성 요소를 구현했으며 서버의 영속
-    runtime/Operation/poll 및 실제 VD Task 연결은 구현 중입니다. 공개 API가 아닙니다.
+    M6 지속 VD의 내부 프로토콜입니다. Supervisor와 서버 인증·영속 sequence·readiness·idle drain을
+    연결했습니다. 현재 assignments는 비어 있으며 배정되지 않은 active/completed는409입니다.
+    실제 VD Task 배정·claim/Result 연결은 구현 중입니다. 공개 API가 아닙니다.
     모든 JSON은 256KiB 이하이고 중복 필드·알 수 없는 필드를 거절합니다.
     인증 토큰과 assignment의 claimToken은 로그·공개 응답·영속 metadata에 저장하지 않습니다.
-x-implementation-status: supervisor-component-only
+x-implementation-status: authenticated-idle-lifecycle
 servers:
   - url: /
 security:
@@ -26,11 +27,16 @@ paths:
         요청이나 session 충돌은409입니다. 응답의 runtimeId/generation/podUid/sessionId/sequence는
         요청과 정확히 일치해야 합니다. 재전송 허용 중에도 현재 runtime의 유효성과 서버 lease를
         다시 확인해야 하며 폐기된 runtime에 과거 응답을 재생하지 않습니다.
+        재전송은 순번·요청 내용을 한번 반영하지만 현재 상태에 따라 응답 명령이 RUN에서
+        DRAIN/STOP으로 진행할 수 있습니다. 공백을 포함해 요청 bytes가 달라지면409입니다.
         RUN은 수용 여유 내 작업을 배정하고 DRAIN은 신규 배정 없이 완료 보고가 확인될 때까지
         기다립니다. STOP은 즉시 종료합니다. 한번 DRAIN이면 RUN으로 돌아갈 수 없습니다.
         lease가 만료되면 작업을 종료하며 취소 처리 후 신규 작업 시작 전에도 만료를 확인합니다.
         일시 장애도 readiness를 제거합니다. 실제 Ready 판단은 poll·Pod 관측을 함께 사용합니다.
         완료 보고의 exitCode는 프로세스 종료 코드일 뿐 Result의 성공을 증명하지 않습니다.
+        현재 idle runtime은 미배정 작업이 없고 active/completed도 비어 있을 때 drain을
+        DB에STOPPED로 저장한 뒤STOP을 반환합니다. supervisor가 자체DRAINING을 보고하면
+        추적 가능한REPLACE를 저장하며 이전 Pod 종료 확인 전에는 다음 세대를 만들지 않습니다.
       parameters:
         - name: runtimeId
           in: path
@@ -51,6 +57,7 @@ paths:
         '401': {description: Runtime 또는 projected Pod 토큰 인증 실패. 즉시 종료}
         '403': {description: 실제 Pod 신원·권한 거절. 즉시 종료}
         '409': {description: 세대·session·sequence 충돌 또는 폐기된 runtime. 즉시 종료}
+        '413': {description: 256KiB를 초과한 요청 본문}
         '429': {description: 같은 요청으로 lease 안에서 제한된 재시도}
         '503': {description: DB·Kubernetes 일시 장애. readiness 제거 후 lease 안에서 재시도}
 components:

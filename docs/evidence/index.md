@@ -126,3 +126,5 @@ Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/
 검증한다. Kubernetes 관측은 fixture이며 실제 gateway·VD Task 실행 수용은 후속이다.
 [실제 Pod gateway와 worker](m6-vd-gateway.md)는 실제 Kubernetes 신원·배치·UID 삭제와
 HTTP 장애/영속 DB 명령 복구를 구분해 검증한다. 감독 프로세스의 poll 서버·VD Task 연결은 남는다.
+[인증된 poll과 영속 순번](m6-vd-poll.md)은 실제 서버/DB/감독 프로세스의 idle lifecycle 연결을
+검증한다. 실제 Kubernetes Pod와의 전체 연결 및 VD Task 배정·Result는 후속이다.

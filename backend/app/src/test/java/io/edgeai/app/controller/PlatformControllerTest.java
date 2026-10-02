@@ -30,4 +30,9 @@ class PlatformControllerTest {
             .andExpect(jsonPath("$.capabilities[0]").value("profiles"))
             .andExpect(jsonPath("$.capabilities[7]").value("virtual-devices"));
     }
+    @Test @WithMockUser
+    void disabledVdInternalEndpointsRemainDeniedToBasicUsers()throws Exception {
+        mvc.perform(get("/internal/v1/vd-runtimes/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/poll"))
+            .andExpect(status().isForbidden());
+    }
 }

@@ -125,5 +125,7 @@ ADR0015/V14는 실행 세대·설정 스냅샷·runtime binding 이력·Operatio
 만든다. ADR0016의 `KubernetesVDGateway`/`VDWorker`는 실제 Pod 생성·신원·목록/감시·UID 삭제를
 명령 lease와 연결한다. Secret UID 소유 관계와 종료 이력으로 늦은 Pod를 정리하며 관측만으로
 Ready를 부여하지 않는다. `EDGEAI_VD_ENABLED=false`가 기본값이다.
-poll 서버·공개 Operation/UI·VD Run 배정은 아직 연결하지 않았다.
+ADR0017/V15는 HMAC/Pod 신원 인증·순번 receipt·lease/Ready·idle drain과 supervisor 자체 교체 요청을
+서버 poll에 연결한다. 현재 배정은 비어 있으며 미배정 완료 보고를 수용하지 않는다.
+공개 Operation/UI·VD Run 배정과 실제 Task/Result는 아직 연결하지 않았다.
 공개 등록만으로 VD를 Ready 또는 실행 가능으로 표시하지 않는다.

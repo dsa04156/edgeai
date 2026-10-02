@@ -128,6 +128,17 @@ public class VDLifecycleService {
         if(!r.desiredState().equals("DRAINING") || !Objects.equals(r.sessionId(),sessionId))throw fenced();
         runtimes.stop(runtimeId,null,now(r));
     }
+    /** The supervisor retires before its bounded execution history is exhausted. */
+    @Transactional
+    public VDRuntime retire(UUID runtimeId,UUID sessionId) {
+        var r=lockedRuntime(runtimeId);var vd=lock(r.vdId());
+        if(r.terminal() || r.desiredState().equals("STOPPED") || !Objects.equals(r.sessionId(),sessionId))throw fenced();
+        if(r.desiredState().equals("RUNNING")) {
+            var settings=VDRuntimeDocuments.settings(r.configurationJson());
+            begin(vd,"supervisor:"+runtimeId,requestDigest("SUPERVISOR_DRAIN",vd.revision(),settings),configuration(vd,settings),true,false);
+        }
+        return get(runtimeId);
+    }
     @Transactional
     public void fail(UUID runtimeId,String reason) {
         if(!Set.of("STARTUP_TIMEOUT","LEASE_EXPIRED","POD_FAILED","RUNTIME_LOST","OWNERSHIP_CONFLICT").contains(reason))throw new IllegalArgumentException("Unknown VD failure");
