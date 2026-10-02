@@ -10,14 +10,16 @@
 | M2 | 완료 — Device/Node/Observation, UI·실DB·CI·실 Kubernetes 읽기·배포 검증 |
 | M3 | 완료 — DAG/Run/Task/Attempt·로컬·CI·이미지·ArgoCD·실제 Ingress 검증 |
 | M4 | 완료 — 실제 kind·기존 클러스터 Runner/MinIO/Result·실패/취소·CI/배포 검증 |
-| M5 | 동일 Task 새 Attempt, retry budget, 실행 중 offload/fence/drain/route 전환, remote adapter 계약·장애·늦은 결과 차단 |
-| M6 | 영속 VD, source/runtime binding 분리, provision/readiness/replacement/drain 및 Operation 상태, Run의 VD 정책으로 활성 Runtime 실행, UI |
+| M5 | 재시도·전환·참조 Remote 검증 완료. 상태형 checkpoint 복원과 실제 외부 시스템 계약 수용은 남음 |
+| M6 | 완료 — 영속 VD·원본/실행 이력·Operation·실제 자식 Task/Result·교체/취소/재시도·CI·배포·UI 검증 |
 | M7 | 다중 장치 BATCH/STREAM DAG, 데이터 route/generation, backpressure·재연결·실제 데이터 흐름 |
 | M8 | 100→300→1,000 장치 부하, 측정 환경·지연·오류·자원 증거 및 병목 개선 |
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-M4까지 구현·검증을 완료했으며 현재 M5 잔여 검증과 M6 구현을 진행한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
+M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+M6 최종 판정과 한계는 [완료 감사](docs/evidence/m6-completion-audit.md)를 따른다.
+아래는 단계별 검증 이력이다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
 BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생성/관측 worker·내부 인증/API를
 연결했고 실제 클러스터의 scheduler·Pod TokenReview·UID 삭제를 대기 컨테이너로 검증했다.
@@ -110,7 +112,10 @@ S3 [무결성 계약](https://docs.aws.amazon.com/AmazonS3/latest/userguide/chec
 ETag 또는 사용자 제공 SHA metadata만을 실제 내용 검증으로 사용하지 않는다.
 
 
-## M6 진행: VD 등록·원본 연결
+## M6 완료: VD 등록·원본 연결·실제 실행
+
+2026-10-03 KST 최종 CI·배포·화면 검증을 통과했다. 아래 구성 요소별 기록의 후속 게이트는
+ADR0020에서 연결하고 검증했다. [완료 감사](docs/evidence/m6-completion-audit.md).
 
 ADR0013/V13의 영속 VD·불변 Profile 참조·원본 호환성·연결 이력·revision 수정·논리 해제와
 장치 해제 보호를 구현했다. 공개5 API, 한국어 Swagger35개, `/virtual-devices` 관리 화면을 연결한다.
@@ -118,8 +123,8 @@ ADR0013/V13의 영속 VD·불변 Profile 참조·원본 호환성·연결 이력
 상세 결과는 `docs/evidence/m6-vd-registry.md`다. CI37022079299의5 jobs/JSON15개 및
 source0b4693c 실제 이미지·Ready/PVC/ArgoSynced까지 확인했다. 이 단계는 M6 전체 완료가 아니다.
 
-다음 M6 구현은 지속 runtime·source/runtime binding 분리, provision/readiness·교체/drain Operation,
-Run VD 정책의 실제 활성 runtime Task 실행과 demo-vd다. 등록 상태 REGISTERED를 Ready로 바꾸거나
+이후 지속 runtime·source/runtime binding 분리, provision/readiness·교체/drain Operation,
+Run VD 정책의 실제 활성 runtime Task 실행과 demo-vd를 구현했다. 등록 상태 REGISTERED를 Ready로 바꾸거나
 Node ID만 복사한 별도 Job으로 실제 VD 실행 수용 게이트를 대신하지 않는다.
 
 ADR0014의 지속 supervisor·순수 Pod compiler와 내부 poll 계약을 구성 요소로 추가했다.
@@ -139,12 +144,13 @@ ADR0018은 공개 provision/replace/drain·Operation/실행 상태 API와 UI를 
 실제 Kubernetes Pod→supervisor→poll→Ready/교체/drain과 API Pod 재시작·시작 실패 정리는
 20261002T182533Z-cfdb17d2에서 통과했다. docs/evidence/m6-vd-kubernetes.md에 범위·실패 근거를 기록한다.
 새 demo-vd/kind 검사를 연결했고 CI37048443291의 실제 VD3개·기존 실행/S3 경로와 배포 검증도 통과했다.
-다음은 VD Run 배정·Task claim/Result·취소/실패와 전체 M6 수용이다.
+이후 VD Run 배정·Task claim/Result·취소/실패와 M6 수용을 연결했다.
 ADR0019/V16의 VD 대상·작업 배정·공급자/결과 FK와 domain/repository를 추가하고
 실제 PostgreSQL의 용량·이력·신원·잠금 순서를 검증했다. 상세는 docs/evidence/m6-vd-task-persistence.md다.
 후속 ADR0020/V17–V18에서 공개 VD Run·poll 배정·Runner 인증/Result 서비스를 연결했다.
 배정·취소·완료 확인을 같은 VD→Run 잠금으로 처리하고 미시작 종료는 후속 순번의 증명을 요구한다.
 실제 PG136개·단위82개·Runner28개·실제 S3/DB16개·실API/DB 브라우저10개 및 VD UI2개를 통과했다.
 실제 Kubernetes의 VD 수명3개와 Task/DAG·API 재생성·활성 교체·개별 취소·재시도·S3 파일5개도
-20261002T195417Z-ea2a6d9b에서 통과했다. 새 이미지의 CI kind·배포 검증은 남았다.
+20261002T195417Z-ea2a6d9b에서 통과했다. 후속 CI37059110890의5 jobs/실제kind와
+c2862a7 배포·실제 VD 데모·PC/모바일 결과 화면도 모두 통과했다.
 상세와 fixture/실제 경계는 `docs/evidence/m6-vd-task-execution.md`를 따른다.

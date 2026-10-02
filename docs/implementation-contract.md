@@ -1,8 +1,9 @@
-# 구현 계약 — M0–M5 작업 기준
+# 구현 계약 — M0–M6 작업 기준
 
-상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result 구현 범위.
+상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result·VD 구현 범위.
 M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증을 통과했다.
-실행 측정은 실제 컨테이너/kind·CI·배포 검증을 통과했고 ADR0009 자동 전환 정책을 구현·검증 중이다.
+실행 측정·ADR0009 자동 전환·참조 Remote는 실제 kind·CI·배포 검증을 통과했다.
+VD의 현재 수용 범위는 `docs/evidence/m6-vd-task-execution.md`를 따른다.
 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
@@ -78,8 +79,9 @@ M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·
 
 ## 미확정
 
-M5 자동 전환 정책/Remote 및 M6 이후 VD/STREAM 상세 계약, 운영 사용자 identity/RBAC,
+상태형 checkpoint/복원·M7 STREAM 상세 계약, 운영 사용자 identity/RBAC,
 2세부 실제 API, 실장비 inventory, GPU/NPU 공유 방식, 성능 수용 수치.
+참조 Remote 및 VD의 정합화된 계약을 외부 실제 시스템 계약으로 간주하지 않는다.
 
 
 ## M5 재시도 계약
@@ -115,3 +117,26 @@ RunCreate.offload는 생략/null이면 비활성인 불변 정책이다. 재시�
 Operation.trigger/decision은 판단 당시 정책·표본을 보존한다. 자동 targetNodeId는 null이며
 Attempt.excludedNodeNames를 PodSpec의 노드별 NotIn 조건으로 AND 결합한다. claim과 RETRY도
 제외 목록을 지킨다. 상세 범위·단위·경계는 ADR0009와 OpenAPI를 따른다.
+
+## M5 Remote 계약
+
+ADR0010–0012와 V10–V12의 참조 제공자 경계를 따른다. 불변 provider binding과 별도
+RemoteAllocation을 사용하며 Kubernetes Job/Pod 신원을 만들지 않는다. 공개 REMOTE
+Run/명시적 offload, worker의 제출·조회·취소·종료 확인, 실제 고정 S3 입력/출력과 producer
+검사를 연결한다. 외부 실제 2세부 API 및 상태형 복원 수용은 별도로 남아 있다.
+
+## M6 VD 계약
+
+ADR0013–0020와 V13–V18을 따른다. 영속 VD, source binding과 runtime binding을 분리하고
+revision·세대·session·lease를 보존한다. 공개 생성/조회/수정/해제와 기동/교체/drain Operation을
+제공하며 Ready는 실제 Pod 관측과 인증된 supervisor poll을 함께 요구한다.
+
+공개 VD Run은 같은 namespace의 Ready VD와 같은 SERVICE 버전을 요구한다. 실제 Task는
+해당 지속 Pod의 별도 자식 Runner로 실행한다. 배정·poll receipt·완료는 VD→Run 잠금 아래
+원자적이며 재전송은 중복 실행을 만들지 않는다. slot은 실제 종료 보고·증명된 미시작 또는
+supervisor Pod의 실제 종료 뒤에 반환한다. 취소 하나가 공유 Pod를 삭제하지 않는다.
+
+Task HMAC과 Pod-bound 신원, 현재 배정/세대/session/lease로 claim·결과를 검증한다.
+고정 버전 S3 내용 검증과 producer 재검사 뒤에만 Result를 확정하고 실제 vdRuntimeId/Pod를
+저장한다. 교체는 기존 작업 drain·물리 종료 뒤 새 세대를 만든다. VD CPU/메모리는 공유
+컨테이너 값이므로 작업별 자동 offload는 거절한다. 기본 로컬 VD 실행은 명시적 활성화가 필요하다.

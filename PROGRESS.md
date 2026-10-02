@@ -1,6 +1,9 @@
 # 진행 상태
 
 [STATUS]
+M6 VD는 실제 자식 Task/Result·수명·CI·배포·PC/모바일 결과 화면까지 검증 완료했다.
+현재는 M7 다중 장치·스트리밍의 첫 구성 요소 작업 중이며 공개 STREAM 실행은 아직501이다.
+최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.
 M5 Remote 자동 worker·공개 실행/전환 API·고정 제공자 binding은 로컬 및 CI37013658656을 통과했다. 후속 CI37016556197의 실제 kind22Run·결과20개도 통과했다. 외부 수용·상태형 복원은 남았다. 상세: docs/evidence/m5-remote-kind.md.
@@ -57,7 +60,10 @@ Runner28(193208Z-5ed6569a), 계약4/MVC25(194047Z-64c4bfc6), 실제 Python/HTTP/
 DB503/동일프로세스복구(195553Z-5fe1b1f1) PASS/0. 날짜는 모두20261002 UTC다.
 실제Kubernetes 격리API/DB/MinIO·V1–V18·VD 수명/Task4개·고정S3파일5개·API Pod 재생성·
 활성 교체·개별 취소·재시도·물리종료195417Z-ea2a6d9b PASS/0. 시험소유자원0개 별도확인.
-새 코드 CI kind·새 이미지 배포는 남았고 전체 M6 완료를 판정하지 않는다.
+후속 CI37059110890은5jobs/JSON15개·실제kind VD4조건/Task Run4개/S3결과5개를 통과했다.
+배포204538Z-b137ac0f·기존 클러스터 VD 데모204808Z-37ef820e·실제 PC/모바일 결과 화면
+205319Z-ea6cf390도 모두PASS/0이다. c2862a7 배포의 실제 imageID·Ready·VD 활성화를 확인했다.
+M6의 STATELESS 실행 범위는 완료하며 상태형 복원·실제 센서 스트림·실장비 수용은 별도다.
 상세: docs/evidence/m6-vd-task-execution.md. M5 잔여·M7–M10과 전체목표 active를 유지한다.
 M6 등록 로컬: 단위/MVC66·실제PostgreSQL89(VD9)·계약/MVC22·UI28·실DB/브라우저10 모두 PASS.
 VD 포함 DB 장애503와 같은 프로세스 복구도 PASS(20261002T144123Z-bf144394).
@@ -131,11 +137,14 @@ docs/evidence/m4-runtime.md, docs/evidence/m3-workflow.md와 docs/evidence/runs/
 M0–M2: docs/evidence/index.md 및 개별 milestone 문서.
 
 [BLOCKED]
-M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아니다.
+M4·M6 범위의 차단 없음. M5 잔여와 M7–M10은 미완료이며 전체 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아니다.
 로컬 Docker 권한 제한은 유지한다. 실제 kind 검증은 권한 있는 GitHub runner에서 수행한다.
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
+현재 다음 구현은 M7 다중 장치 BATCH/STREAM·DataRoute·전달/복구·실제 데이터 흐름이다.
+M5 상태형 복원·외부 실제 계약 수용, M8 부하·M9 운영/복구/보안·M10 실장비가 남는다.
+아래는 이전 단계의 후속 작업 기록이며 최신 상태는 위 STATUS/VERIFIED를 따른다.
 M5 실제 NODE↔REMOTE·API 재시작/취소 kind 게이트4개 Run은 CI37016556197에서 통과했다.
 기존18개 포함22Run/실제S3결과20개/원시JSON15개 PASS,861663f GitOps와 실제 imageID/Ready/ArgoSynced도 확인했다.
 M6 등록·원본 연결 API/UI를 검증하며 다음은 지속 VD runtime·Operation·실제 Run VD 실행이다.

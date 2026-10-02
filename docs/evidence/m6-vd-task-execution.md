@@ -92,11 +92,10 @@ sequence CHECK를 `vd_task_allocation_check`, 기존 closure를 `_check1`로 생
 
 ## 수용 게이트
 
-현재 코드의 실제 Kubernetes Task 수용과 실제 API/DB 화면 검증은 위 범위에서 통과했다.
-새 CI kind에는 기존 Run/Remote 회귀 뒤 VD Task 수용을 연결했다. 새 이미지 CI·실제 배포
-검증은 남아 있으며 이 파일의 로컬 PASS만으로 전체 M6 완료를 판정하지 않는다.
+실제 Kubernetes Task 수용과 실제 API/DB 화면 검증에 이어 아래 새 이미지 CI·실제 배포
+검증도 통과했다. M6 요구사항별 판정은 [완료 감사](m6-completion-audit.md)를 따른다.
 
-## 소스 push와 CI 진행
+## 소스 push와 CI 완료
 
 구현 소스 `2ec9462052c3e9fbdd043cf3c29a05f3a63668ed`를 main에 push했다.
 [CI37059110890](https://github.com/dsa04156/edgeai/actions/runs/37059110890)의5개 job은 모두
@@ -105,6 +104,29 @@ UI34개, 실제 API/DB 브라우저10개와 Swagger도 로그에서 확인했다
 새 이미지의 실제 kind는 기존 Run22개/S3결과20개와 VD4개 수명/작업 시나리오를 통과했다.
 `kind-vd.json`의 taskExecution=true, VD 작업 Run4개와 고정 S3결과5개, 각 시험 자원0개를
 확인했다. API Pod 재생성은 idle11.102초/작업 중9.945초이며 같은 VD 세대·작업을 유지했다.
-GitOps pin6ee527d가 위 소스의 검증된 digest를 기록했다. 신규 실제 배포는 최종 확인 대상이다.
-개발 overlay의 명시적 VD 활성화 patch는 서버 dry-run `20261002T201750Z-6b2923b7` PASS이며
-CI 전체 통과 후 해당 검증 이미지로 적용한다. 로컬 실행 기본값은 계속 비활성이다.
+GitOps pin6ee527d가 위 소스의 검증된 digest를 기록했다. 개발 overlay의 명시적 VD 활성화
+patch는 서버 dry-run `20261002T201750Z-6b2923b7` 및 최종 pin의
+`20261002T204447Z-177cbc5c` PASS 후 c2862a7로 push했다. 로컬 기본값은 계속 비활성이다.
+
+## 실제 GitOps 배포와 결과 화면
+
+| 검사 | 실행 ID | 결과 |
+|---|---|---|
+| c2862a7 Argo revision·실제 imageID·Ready·VD 활성화 | 20261002T204538Z-b137ac0f | PASS/0 |
+| 배포 API/Runner·VD4조건·S3 결과5개·물리 정리 | 20261002T204808Z-37ef820e | PASS/0 |
+| 배포된 실제 VD Run/Result PC·모바일 화면 | 20261002T205319Z-ea6cf390 | PASS/0 |
+
+API/dashboard/MinIO의 실제 imageID와 source2ec9462의 pin이 일치하고 Pod Ready/PVC Bound,
+Argo Synced 및 실제 Ready API Pod의 VD 활성화를 확인했다. 기존 공유 Ingress status로
+Argo aggregate health는 Progressing이다. Healthy 또는 전체 운영 수용으로 판정하지 않는다.
+
+기존 클러스터의 VD 데모는 공개 화면 프록시를 통해 Run을 실행했다. 내부 producer 차단 검사는
+별도 API 포트포워딩을 사용했다. 새 Runner digest는 CI와 동일하며 AUTO/NODE·교체·drain·
+시작 실패와 실제 DAG/Result·개별 취소·실패/재시도·고정 S3 파일5개를 확인했다.
+네 시나리오의 소유 Pod/Secret/Job 잔여0개를 별도 조회했고 시험용 포트포워딩도 종료했다.
+이 배포 데모에는 API 재시작 callback을 제공하지 않아 보고서 restart는 null이다.
+기존 로그 한 줄의 무조건적인 API restart 표시는 후속 수정했다. 재시작 증거는 위 격리 시험과 CI kind다.
+
+실제 성공 Run의 VD·Result·runtime·Pod·파일 크기/SHA/version 및 공유 측정 설명이 PC/모바일에
+일치했다. 가로 overflow와 브라우저 저장소의 인증정보 저장이 없음을 확인하고 두 스크린샷을
+직접 검토했다. vd-deployed.json과 actual-result.json, PC/모바일 PNG는 각 실행 evidence에 보존한다.

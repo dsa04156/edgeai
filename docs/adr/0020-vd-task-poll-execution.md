@@ -1,7 +1,7 @@
 # ADR0020 — VD poll 배정·자식 Runner·종료 확인
 
-상태: 구현·로컬 수용 검증 완료, 새 이미지 CI·배포 검증 중. ADR0019의 실행 연결이며
-검증 범위는 `docs/evidence/m6-vd-task-execution.md`를 따른다.
+상태: 구현·로컬·새 이미지 CI·실제 배포·PC/모바일 결과 화면 검증 완료. ADR0019의 실행 연결이며
+검증 범위는 [M6 완료 감사](../evidence/m6-completion-audit.md)를 따른다.
 
 VD 행 → Run 행 잠금을 유지하며 poll receipt, 배정과 종료 보고를 같은 트랜잭션에서 처리한다.
 같은 요청 순번의 재전송에는 최초 배정만 재구성한다. 신규 배정은 Ready·RUNNING 세대와

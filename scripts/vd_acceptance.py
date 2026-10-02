@@ -286,7 +286,7 @@ class VDScenario:
         wait(lambda: self.request('operations/' + drain['id'])['state'] == 'SUCCEEDED' and self.execution(identity)['current'] is None and not self.resources(identity), 90, 'VD Task drain did not physically finish')
         self.report['cases'].append({'case': 'task-execution', 'vdId': identity, 'sourceMode': 'SYNTHETIC', 'runs': runs, 'restart': restart_proof, 'generations': self.execution(identity)['runtimeHistory'], 'verifiedArtifacts': len(artifacts), 'resourcesRemaining': 0})
         self.report.update(taskExecution=True, scope='real-kubernetes-vd-task-and-lifecycle')
-        print('PASS: actual VD child DAG/Result, API restart, live replacement, isolated cancellation, failure/retry and physical drain', flush=True)
+        print('PASS: actual VD child DAG/Result, ' + ('API restart, ' if restart else '') + 'live replacement, isolated cancellation, failure/retry and physical drain', flush=True)
 
     def cleanup(self):
         self.csrf = self.request('csrf')['token']

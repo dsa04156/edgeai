@@ -13,7 +13,8 @@ Remote 자동 worker·공개 실행/전환·제공자 설정 고정은 실제 Po
 worker와 실제 kind Kubernetes↔Remote 전환·API 재시작/취소까지 CI·배포 검증을 통과했습니다.
 외부 실제 시스템 수용과 상태형 복원은 남아 있습니다. M6 VD 등록·원본 연결·실행 관리와
 VD Task 배정·Runner·결과 API/화면을 연결했습니다. 실제 Kubernetes의 Task·결과·API 재시작·
-활성 작업 중 교체·취소·재시도는 통과했으며 새 이미지의 CI·배포 검증은 진행 중입니다.
+활성 작업 중 교체·취소·재시도와 새 이미지의 CI·배포·실제 PC/모바일 결과 화면까지 통과했습니다.
+[M6 완료 범위와 근거](docs/evidence/m6-completion-audit.md)를 확인하세요. 다음 구현 단계는 M7 다중 장치·스트리밍입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -184,7 +185,7 @@ Kubernetes가 새 위치를 선택합니다. 작업 상세에서 결정에 쓴 �
 미수집·오래된·누락 표본은 판단에 쓰지 않습니다. [ADR0009](docs/adr/0009-automatic-offload-policy.md).
 
 
-## 가상 장치 등록·원본 연결 (M6 진행 중)
+## 가상 장치 등록·원본 연결·실행 (M6)
 
 `/virtual-devices`에서 VD Profile 버전과 원본 Device를 연결합니다.
 Profile 형식은 [VD 규격](contracts/profiles/vd-profile.schema.json)과

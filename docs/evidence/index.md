@@ -116,7 +116,10 @@ DB 실행 상태·Kubernetes 생성/관측·내부 API·Result·실제 kind 및 
 외부 수용·상태형 복원은 남는다.
 
 
-## M6 VD 등록·원본 연결 (진행 중)
+## M6 VD 등록·원본 연결·실행 (2026-10-03, 완료)
+
+[완료 감사](m6-completion-audit.md)는 실제 VD Task·S3 결과·CI·배포·PC/모바일 화면까지
+요구사항과 증거를 연결한다. 아래는 구성 요소별 검증 이력이며 후속 게이트는 최종 감사에서 확인한다.
 
 [등록 검증 기록](m6-vd-registry.md): V13·공개5 API·원본 호환성/교체 이력·revision·논리 해제,
 Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/Task 실행은 후속 게이트다.
