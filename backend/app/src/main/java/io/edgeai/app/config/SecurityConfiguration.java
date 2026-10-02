@@ -1,5 +1,6 @@
 package io.edgeai.app.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -15,6 +16,9 @@ public class SecurityConfiguration {
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .anyRequest().authenticated())
             .httpBasic(Customizer.withDefaults())
+            // Keep CSRF denial as 403; sendError would redispatch through authenticated /error.
+            .exceptionHandling(errors -> errors.accessDeniedHandler((request, response, denied) ->
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN)))
             .build();
     }
 }

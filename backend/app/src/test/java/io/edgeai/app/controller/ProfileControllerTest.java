@@ -23,7 +23,7 @@ class ProfileControllerTest {
     @MockitoBean ProfileService service;
     @Test void protectsReadsAndWrites() throws Exception {
         mvc.perform(get("/api/v1/profiles/DEVICE")).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/v1/profiles/DEVICE").with(user("test")).contentType("application/json").content("{}"))
+        mvc.perform(post("/api/v1/profiles/DEVICE").with(httpBasic("user", "test-only-unused")).contentType("application/json").content("{}"))
             .andExpect(status().isForbidden());
         verifyNoInteractions(service);
     }

@@ -9,6 +9,7 @@ python3 - <<'PY'
 import socket,os
 for key in ['EDGEAI_API_PORT','EDGEAI_DASHBOARD_PORT']:
     with socket.socket() as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try: s.bind(('127.0.0.1',int(os.environ[key])))
         except OSError: print(f'BLOCKED: {key} occupied; stop this project\'s dev process before testing.');raise SystemExit(2)
 PY
@@ -37,6 +38,9 @@ for attempt in {1..60}; do
   sleep 1
 done
 bash scripts/test-health.sh
+if [[ "${EDGEAI_DEPLOYMENT_SMOKE:-0}" == 1 ]]; then
+  python3 scripts/smoke-deployment.py
+fi
 if [[ "${EDGEAI_PROFILE_E2E:-0}" == 1 ]]; then
   pnpm_cmd --filter @edgeai/dashboard exec playwright test --config playwright.profiles.config.ts
 fi

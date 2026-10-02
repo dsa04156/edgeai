@@ -60,7 +60,10 @@ status, body = request(ui + "/api/control-plane/csrf", authenticated=True)
 assert status == 200
 csrf = json.loads(body)["token"]
 payload = {"key": "deploy-" + uuid.uuid4().hex, "version": "1.0.0", "spec": {"protocol": "mqtt"}}
-assert request(url, "POST", payload, authenticated=True)[0] == 403
+missing_csrf_status = request(url, "POST", payload, authenticated=True)[0]
+assert missing_csrf_status == 403, f"Expected CSRF denial 403, got {missing_csrf_status}"
+invalid_csrf_status = request(url, "POST", payload, authenticated=True, csrf="invalid-token")[0]
+assert invalid_csrf_status == 403, f"Expected invalid CSRF denial 403, got {invalid_csrf_status}"
 status, body = request(url, "POST", payload, authenticated=True, csrf=csrf)
 assert status == 201
 version = json.loads(body)
