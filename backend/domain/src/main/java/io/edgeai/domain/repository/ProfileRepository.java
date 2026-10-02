@@ -1,5 +1,7 @@
-package io.edgeai.domain.profile;
+package io.edgeai.domain.repository;
 
+import io.edgeai.domain.profile.ProfileIdentity;
+import io.edgeai.domain.profile.ProfileVersion;
 import java.util.List;
 import java.util.Optional;
 

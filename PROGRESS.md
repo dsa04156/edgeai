@@ -48,3 +48,21 @@ ArgoCD/CD는 아직 연결하지 않았으며 배포 대상 클러스터·namesp
 
 Swagger 포함 코드 fd729ca의 CI 36952012074: scaffold/storage success, 결과 JSON 8개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36952012074
+
+[BACKEND PACKAGE LAYOUT — 2026-10-02]
+사용자 요청에 따라 Java 소스를 역할별 계층형 패키지로 재배치했다.
+app: controller/service/dto/config/exception/support, domain: profile/repository,
+adapters: repository. 응답 DTO와 예외 타입을 독립 파일로 분리하고 테스트 선택 경로를 갱신했다.
+상세 경로와 책임은 docs/architecture.md, 후속 구현 규칙은 backend/AGENTS.md에 반영했다.
+Gradle 모듈 의존성, API·OpenAPI·DB 스키마·JSON 처리 규칙은 유지한다.
+
+로컬 검증: clean 후 단위·MVC 11개, 계약 MVC 7개 및 생성 타입/패키징 YAML 일치,
+실제 PostgreSQL 통합 6개, 실행 JAR + Profile/Swagger desktop·mobile 브라우저 4개,
+DB 중단 시 503와 동일 API/UI 프로세스의 복구까지 모두 통과했다.
+기존 Dashboard 빌드를 사용했으며 프런트엔드 소스는 변경하지 않았다.
+원시 근거: docs/evidence/runs/ 아래 다음 실행 결과(JSON exit code 0/PASS).
+
+- unit: 20261002T015706Z-2211bc1b
+- contract: 20261002T015811Z-9c7e25cf
+- integration: 20261002T015818Z-9cb09f25
+- health/Profile/Swagger: 20261002T015826Z-4e61b9e7

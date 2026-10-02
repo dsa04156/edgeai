@@ -1,6 +1,9 @@
-package io.edgeai.app.profile;
+package io.edgeai.app.controller;
 
-import io.edgeai.app.SecurityConfiguration;
+import io.edgeai.app.config.SecurityConfiguration;
+import io.edgeai.app.exception.ProfileConflictException;
+import io.edgeai.app.service.ProfileService;
+import io.edgeai.app.support.ProfileJson;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -29,7 +32,7 @@ class ProfileControllerTest {
         mvc.perform(get("/api/v1/profiles/DEVICE?limit=abc").with(user("test"))).andExpect(status().isBadRequest());
     }
     @Test void exposesStableErrorsWithoutStorageDetails() throws Exception {
-        when(service.publish(any(), anyString())).thenThrow(new ProfileService.Conflict());
+        when(service.publish(any(), anyString())).thenThrow(new ProfileConflictException());
         mvc.perform(post("/api/v1/profiles/DEVICE").with(user("test")).with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PROFILE_CONFLICT"));
         when(service.list(any(), any(), anyInt(), anyInt())).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("secret connection details"));

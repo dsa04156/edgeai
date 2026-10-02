@@ -1,5 +1,6 @@
-package io.edgeai.app.profile;
+package io.edgeai.app.support;
 
+import io.edgeai.app.exception.ProfilePayloadTooLargeException;
 import io.edgeai.domain.profile.ProfileIdentity.Kind;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
@@ -27,6 +28,6 @@ class ProfileJsonTest {
     }
     @Test void rejectsOversizedDocuments() {
         assertThatThrownBy(() -> json.parse(Kind.DEVICE, body("{\"a\":\"" + "한".repeat(22000) + "\"}")))
-            .isInstanceOf(ProfileJson.PayloadTooLarge.class);
+            .isInstanceOf(ProfilePayloadTooLargeException.class);
     }
 }

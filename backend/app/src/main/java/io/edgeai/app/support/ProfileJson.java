@@ -1,5 +1,6 @@
-package io.edgeai.app.profile;
+package io.edgeai.app.support;
 
+import io.edgeai.app.exception.ProfilePayloadTooLargeException;
 import io.edgeai.domain.profile.ProfileIdentity;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -21,7 +22,7 @@ public final class ProfileJson {
         .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
 
     public Parsed parse(ProfileIdentity.Kind kind, String body) {
-        if (body.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new PayloadTooLarge();
+        if (body.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new ProfilePayloadTooLargeException();
         Object value;
         try { value = mapper.readValue(body, Object.class); }
         catch (RuntimeException e) { throw new IllegalArgumentException("body must be valid JSON without duplicate properties"); }
@@ -33,7 +34,7 @@ public final class ProfileJson {
         if (!(map.get("spec") instanceof Map<?, ?> spec) || spec.isEmpty())
             throw new IllegalArgumentException("spec must be a nonempty JSON object");
         String canonical = canonical(spec, 0);
-        if (canonical.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new PayloadTooLarge();
+        if (canonical.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new ProfilePayloadTooLargeException();
         return new Parsed(identity, canonical, digest(kind, canonical));
     }
 
@@ -82,5 +83,4 @@ public final class ProfileJson {
         } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     public record Parsed(ProfileIdentity identity, String spec, String digest) {}
-    public static final class PayloadTooLarge extends RuntimeException {}
 }

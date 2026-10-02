@@ -1,5 +1,6 @@
-package io.edgeai.app;
+package io.edgeai.app.controller;
 
+import io.edgeai.app.dto.CsrfTokenResponse;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -7,6 +8,5 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class CsrfController {
     @GetMapping("/api/v1/csrf")
-    public Token token(CsrfToken token) { return new Token(token.getToken()); }
-    public record Token(String token) {}
+    public CsrfTokenResponse token(CsrfToken token) { return new CsrfTokenResponse(token.getToken()); }
 }

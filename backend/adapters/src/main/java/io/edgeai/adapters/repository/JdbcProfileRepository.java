@@ -1,6 +1,8 @@
-package io.edgeai.adapters.profile;
+package io.edgeai.adapters.repository;
 
-import io.edgeai.domain.profile.*;
+import io.edgeai.domain.profile.ProfileIdentity;
+import io.edgeai.domain.profile.ProfileVersion;
+import io.edgeai.domain.repository.ProfileRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

@@ -1,7 +1,7 @@
-package io.edgeai.app.profile;
+package io.edgeai.app.config;
 
-import io.edgeai.adapters.profile.JdbcProfileRepository;
-import io.edgeai.domain.profile.ProfileRepository;
+import io.edgeai.adapters.repository.JdbcProfileRepository;
+import io.edgeai.domain.repository.ProfileRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;

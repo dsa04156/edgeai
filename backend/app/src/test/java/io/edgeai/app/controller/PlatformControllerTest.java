@@ -1,5 +1,6 @@
-package io.edgeai.app;
+package io.edgeai.app.controller;
 
+import io.edgeai.app.config.SecurityConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;

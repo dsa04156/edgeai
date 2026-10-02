@@ -16,6 +16,9 @@
 
 ## 경계
 
+- 백엔드는 역할별 계층형 Java 패키지를 사용한다: `controller` → `service` → `repository`.
+- HTTP DTO는 `dto`, Spring 설정은 `config`, 예외·HTTP 오류 변환은 `exception`, JSON 처리 보조 코드는 `support`에 둔다.
+- `domain`의 모델·저장소 인터페이스와 `adapters`의 DB 구현은 기존 Gradle 모듈 경계를 따른다. 실제 경로는 [아키텍처의 패키지 구조](docs/architecture.md#백엔드-패키지-구조)를 참고한다.
 - Physical Device / ExecutionNode / VirtualDevice / RuntimeInstance를 분리한다.
 - ProfileVersion·WorkflowVersion은 발행 후 불변이다.
 - retry/offload는 같은 Task의 새 Attempt다.

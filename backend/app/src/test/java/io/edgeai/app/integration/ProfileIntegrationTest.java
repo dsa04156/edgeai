@@ -1,6 +1,9 @@
-package io.edgeai.app.profile;
+package io.edgeai.app.integration;
 
-import io.edgeai.domain.profile.*;
+import io.edgeai.app.exception.ProfileConflictException;
+import io.edgeai.app.service.ProfileService;
+import io.edgeai.domain.profile.ProfileIdentity;
+import io.edgeai.domain.repository.ProfileRepository;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
@@ -99,7 +102,7 @@ class ProfileIntegrationTest {
                 calls.add(pool.submit(() -> {
                     gate.await();
                     try { return service.publish(ProfileIdentity.Kind.SERVICE, body(key, "1.0.0", "{\"n\":" + value + "}")).created(); }
-                    catch (ProfileService.Conflict e) { return false; }
+                    catch (ProfileConflictException e) { return false; }
                 }));
             }
             gate.countDown();
