@@ -127,5 +127,8 @@ ADR0014의 지속 supervisor·순수 Pod compiler와 내부 poll 계약을 구�
 V14/ADR0015의 영속 VDRuntime/Operation·runtime binding·명령 lease와 registry 수정/해제 hook을
 추가했다. 실제 DB 동시성·서비스 객체 재생성·생성 응답 지연·종료/lease/세대 fence를 검증한다.
 증거는 `docs/evidence/m6-vd-runtime.md`, `docs/evidence/m6-vd-lifecycle.md`다.
-다음은 실제 Pod gateway/worker·poll 서버와 sequence 재전송 상태·공개 Operation/UI,
-VD Run 배정·Task claim/Result의 연결이다. 공개 등록은 아직 runtime을 자동 기동하지 않는다.
+ADR0016의 실제 Pod gateway/worker·VD HMAC 자격을 추가했다. Pod-bound TokenReview·AUTO/NODE
+scheduler·Ready 관측·소유 관계·UID 삭제를 실제 Kubernetes에서 검증하며, 영속 명령 재시도와
+종료 이력의 늦은 Pod 정리를 연결한다. 상세는 `docs/evidence/m6-vd-gateway.md`다.
+VD 실행은 기본 비활성이며 공개 등록은 아직 runtime을 자동 기동하지 않는다.
+다음은 poll 서버와 sequence 재전송 상태·공개 Operation/UI·VD Run 배정·Task claim/Result의 연결이다.

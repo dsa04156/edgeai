@@ -24,6 +24,7 @@ public final class JdbcVDRuntimeRepository implements VDRuntimeRepository {
     private static final RowMapper<VDCommand> COMMAND=(r,n)->new VDCommand(id(r,"id"),id(r,"runtime_id"),r.getString("kind"),r.getInt("attempts"),id(r,"lease_owner"),time(r,"lease_until"));
     public Optional<VDRuntime> runtime(UUID id) { return jdbc.query("SELECT * FROM edgeai.vd_runtime WHERE id=?",RUNTIME,id).stream().findFirst(); }
     public Optional<VDRuntime> current(UUID vdId) { return jdbc.query("SELECT * FROM edgeai.vd_runtime WHERE vd_id=? AND observed_state<>'TERMINATED'",RUNTIME,vdId).stream().findFirst(); }
+    public List<VDRuntime> active(String namespace,int limit) { return jdbc.query("SELECT * FROM edgeai.vd_runtime WHERE namespace=? AND observed_state<>'TERMINATED' ORDER BY created_at,id LIMIT ?",RUNTIME,namespace,limit); }
     public long nextGeneration(UUID vdId) { return jdbc.queryForObject("SELECT coalesce(max(generation),0)+1 FROM edgeai.vd_runtime WHERE vd_id=?",Long.class,vdId); }
     public List<VDRuntime> history(UUID vdId,int limit) { return jdbc.query("SELECT * FROM edgeai.vd_runtime WHERE vd_id=? ORDER BY generation DESC LIMIT ?",RUNTIME,vdId,limit); }
     public List<VDRuntimeBinding> bindings(UUID vdId,int limit) {

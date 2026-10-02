@@ -61,7 +61,17 @@ V1–V13도 변경하지 않았다. 재현은 `test-unit.sh`, `test-integration.
 watch/relist·늦은 생성의 실제 정리, poll sequence 멱등 저장·lease 발급, 공개 Operation/상태 조회와 UI,
 VD 정책을 통한 활성 runtime의 Task/Result 및 demo-vd는 이어서 구현한다.
 
-이 신규 lifecycle 코드의 CI·배포도 확인 대상이다. 이전 감독 프로세스e442a5c는 CI37027216582의
+이전 감독 프로세스e442a5c는 CI37027216582의
 5 jobs/JSON15개·실제 컨테이너27개·기존 kind22Run/S3결과20개와 배포까지 확인했다.
 상세는 [감독 프로세스 기록](m6-vd-runtime.md)을 따른다. 이를 신규 V14나 실제 VD 전체 실행의
 수용 증거로 사용하지 않는다. M5의 상태형 복원·외부 실제 계약과 M7–M10도 남는다.
+
+## V14 CI·배포 후속 확인
+
+코드 `b69d8052de5a676be4cf968439093db7a7d9c99e`의 [CI37031788410](https://github.com/dsa04156/edgeai/actions/runs/37031788410)은
+scaffold/storage/runner/images/gitops 5 jobs 모두 success다. 선택한 검증 artifact의 결과 JSON15개는
+모두 PASS/0이다. 실제 Runner 컨테이너27개, 기존 실제 kind22Run·S3결과20개, 생성한 kind의 삭제를
+확인했다. 이 kind 시험은 기존 Job/Remote 경로이며 VD 지속 실행 수용시험이 아니다.
+GitOps pin `b1e458c`와 실제 API/Dashboard/MinIO imageID 일치·Ready·PVC Bound·Argo Synced는
+`20261002T163724Z-f4de6ab6`에서 PASS/0이다. 공유 Ingress status 제한으로 aggregate health는 Progressing이다.
+후속 실제 Pod 경계 검증은 [gateway 기록](m6-vd-gateway.md)에 별도로 기록한다.

@@ -33,7 +33,9 @@ Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파
 Flyway V1–V14, 계층형 Spring 패키지, 한국어 Swagger35개, GitHub Actions/GHCR/ArgoCD 연결.
 M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
 V14는 내부 runtime/Operation·명령 lease·교체/drain 상태와 registry hook을 추가한다.
-실제 Pod gateway·poll·공개 Operation과 Run VD 실행은 남았다. 상세: docs/evidence/m6-vd-lifecycle.md.
+ADR0016의 실제 Pod gateway/worker·HMAC 자격, Pod-bound TokenReview·UID 소유/삭제·watch/relist를
+추가했다. VD는 기본 비활성이다. poll·공개 Operation과 Run VD 실행은 남았다.
+상세: docs/evidence/m6-vd-lifecycle.md 및 docs/evidence/m6-vd-gateway.md.
 M3는 실행 요청 저장이며 실제 Runner 실행·검증된 Result는 M4다.
 M4 실행 규격·Job compiler·S3 artifact adapter·독립 Runner를 추가했다.
 V5의 RuntimeInstance·CREATE/DELETE 명령 lease·봉인된 Result/Artifact와 실행 상태 전이를 추가했다.
@@ -55,7 +57,11 @@ ADR0015/V14의 실제 PostgreSQL lifecycle·경합·세대/원본 보호·명령
 docs/evidence/m6-vd-lifecycle.md를 따른다. 실제 gateway 관측과 API 프로세스 재시작 수용은 남는다.
 로컬 최종: 단위68·PostgreSQL98(lifecycle9)·계약/MVC22·실DB PC/모바일10 및 DB503/복구 PASS.
 이전e442a5c CI37027216582 5jobs/JSON15개·Runner 실제컨테이너27개·기존kind22Run/S3결과20 PASS.
-28a6b42 pin의 실제imageID·Ready/PVCBound/ArgoSynced155929Z-50929ad5도 PASS. V14 신규 CI/배포는 다음 확인 대상이다.
+28a6b42 pin의 실제imageID·Ready/PVCBound/ArgoSynced155929Z-50929ad5도 PASS.
+V14 b69d805 CI37031788410 5jobs/JSON15개·실제 Runner27·기존kind22Run/S3결과20 PASS.
+b1e458c pin의 실제imageID·Ready/PVCBound/ArgoSynced163724Z-f4de6ab6 PASS.
+ADR0016 실제 Kubernetes gateway5개(VD3+기존Job2), 단위HTTP경계 및 PostgreSQL worker 시험은
+docs/evidence/m6-vd-gateway.md를 따른다. 대기 workload를 사용하므로 실제 감독/poll/Task 종단과 구분한다.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
 실제 Spring 스케줄러의 공개 Remote BATCH, 실제 제공자 SIGKILL/재시도, 취소와 출력 변조 차단,
 설정 변경 시 전송 차단·재전송, 동시 worker의 단일 실행/결과를 검증했다. NODE 전환 부분은 fixture다.

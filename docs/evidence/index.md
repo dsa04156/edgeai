@@ -124,3 +124,5 @@ Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/
 시험을 다룬다. 등록 코드0b4693c는 CI37022079299와 실제 이미지/Ready/ArgoSynced까지 확인했다.
 [영속 lifecycle](m6-vd-lifecycle.md)은 V14의 실행 세대·명령 lease·Operation·교체/종료·실제 DB 경합을
 검증한다. Kubernetes 관측은 fixture이며 실제 gateway·VD Task 실행 수용은 후속이다.
+[실제 Pod gateway와 worker](m6-vd-gateway.md)는 실제 Kubernetes 신원·배치·UID 삭제와
+HTTP 장애/영속 DB 명령 복구를 구분해 검증한다. 감독 프로세스의 poll 서버·VD Task 연결은 남는다.

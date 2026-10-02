@@ -122,5 +122,8 @@ ADR0014의 순수 `KubernetesVDPodCompiler`는 고정 SERVICE 이미지의 지�
 별도 session에서 실행한다. Pod 자체는 Task·Job과 독립이며 자원은 동시 작업이 공유한다.
 ADR0015/V14는 실행 세대·설정 스냅샷·runtime binding 이력·Operation과 CREATE/DELETE lease를
 저장한다. VD 행 잠금 아래 원본 교체/해제와 drain 요청을 연결하고 이전 세대 종료 확인 후 새 세대를
-만든다. 실제 Pod gateway·poll 서버·VD Run 배정은 아직 연결하지 않았다.
+만든다. ADR0016의 `KubernetesVDGateway`/`VDWorker`는 실제 Pod 생성·신원·목록/감시·UID 삭제를
+명령 lease와 연결한다. Secret UID 소유 관계와 종료 이력으로 늦은 Pod를 정리하며 관측만으로
+Ready를 부여하지 않는다. `EDGEAI_VD_ENABLED=false`가 기본값이다.
+poll 서버·공개 Operation/UI·VD Run 배정은 아직 연결하지 않았다.
 공개 등록만으로 VD를 Ready 또는 실행 가능으로 표시하지 않는다.

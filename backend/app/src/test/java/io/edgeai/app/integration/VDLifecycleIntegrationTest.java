@@ -24,6 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import io.edgeai.domain.runtime.RuntimeGatewayException;
 
 /** Real PostgreSQL lifecycle/races. Pod observations are fixtures, not Kubernetes acceptance. */
 @SpringBootTest
@@ -49,6 +51,7 @@ class VDLifecycleIntegrationTest {
     @Autowired NodeRepository nodes;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
+    @org.junit.jupiter.api.io.TempDir Path tokenDirectory;
     private final JsonDocuments json=new JsonDocuments();
     private String encode(Object value){return json.canonical(value);}
     private String key(){return "vd-test-"+UUID.randomUUID();}
@@ -219,6 +222,60 @@ class VDLifecycleIntegrationTest {
         assertThat(lifecycle.get(next.targetRuntimeId()).generation()).isEqualTo(2);
         assertThat(lifecycle.get(r.id()).failureReason()).isEqualTo("POD_FAILED");
         assertThat(runtimes.operation(op.id()).orElseThrow().state()).isEqualTo("SUCCEEDED"); // Historical readiness is retained.
+    }
+    private VDWorker worker(Fixture f,VDGateway gateway)throws Exception {
+        Path key=tokenDirectory.resolve("signing-key");
+        if(!Files.exists(key))Files.writeString(key,UUID.randomUUID().toString().replace("-","")+UUID.randomUUID().toString().replace("-",""));
+        return new VDWorker(runtimes,profileRepository,lifecycle,gateway,new VDTokenService(key.toString()),f.settings(),clock);
+    }
+    @Test void workerRecoversAmbiguousCreateAndWaitsForPhysicalDeletionBeforeClosingBinding()throws Exception {
+        var f=fixture();var op=provision(f);var initial=lifecycle.get(op.targetRuntimeId());var gateway=mock(VDGateway.class);UUID pod=UUID.randomUUID();
+        when(gateway.ensurePod(any(),anyMap(),anyString())).thenThrow(new RuntimeGatewayException(RuntimeGatewayException.Reason.UNAVAILABLE)).thenReturn(pod);
+        var worker=worker(f,gateway);assertThat(worker.dispatchOne()).isTrue();assertThat(runtimes.createCommandComplete(initial.id())).isFalse();
+        clock.advance(2);assertThat(worker(f,gateway).dispatchOne()).isTrue(); // Fresh worker, persisted lease and configuration.
+        var r=lifecycle.get(initial.id());assertThat(r.podUid()).isEqualTo(pod);assertThat(runtimes.createCommandComplete(r.id())).isTrue();
+        var calls=org.mockito.ArgumentCaptor.forClass(String.class);verify(gateway,times(2)).ensurePod(any(),anyMap(),calls.capture());
+        // Both retries must carry the same restart-stable credential; only compare equality, never render credentials.
+        assertThat(calls.getAllValues().getFirst().equals(calls.getAllValues().getLast())).isTrue();
+        lifecycle.attest(r.id(),pod,UUID.randomUUID(),"worker-a",UUID.randomUUID(),true,20);
+        vds.release(f.vd().id());r=lifecycle.get(r.id());lifecycle.drained(r.id(),r.sessionId());
+        when(gateway.stop(any())).thenReturn(false,true);
+        assertThat(worker.dispatchOne()).isTrue();assertThat(lifecycle.get(r.id()).terminal()).isFalse();
+        assertThat(runtimes.bindings(f.vd().id(),10)).singleElement().satisfies(b->assertThat(b.closedAt()).isNull());
+        clock.advance(2);assertThat(worker.dispatchOne()).isTrue();assertThat(lifecycle.get(r.id()).terminal()).isTrue();
+        assertThat(runtimes.bindings(f.vd().id(),10)).singleElement().satisfies(b->assertThat(b.closedAt()).isNotNull());
+    }
+    @Test void workerExpiresAuthorityEvenDuringKubernetesOutageAndNeverCreatesExpiredRuntime()throws Exception {
+        var f=fixture();var op=provision(f);var gateway=mock(VDGateway.class);var worker=worker(f,gateway);
+        when(gateway.listPods()).thenThrow(new RuntimeGatewayException(RuntimeGatewayException.Reason.UNAVAILABLE));
+        clock.advance(61);worker.reconcile();
+        assertThat(lifecycle.get(op.targetRuntimeId()).failureReason()).isEqualTo("STARTUP_TIMEOUT");
+        assertThat(runtimes.operation(op.id()).orElseThrow().state()).isEqualTo("FAILED");
+        when(gateway.stop(any())).thenReturn(true);
+        for(int i=0;i<4 && !lifecycle.get(op.targetRuntimeId()).terminal();i++){worker.dispatchOne();clock.advance(6);}
+        assertThat(lifecycle.get(op.targetRuntimeId()).terminal()).isTrue();verify(gateway,never()).ensurePod(any(),anyMap(),anyString());
+    }
+    @Test void responseAfterCommandLeaseExpiryIsRecoveredByAnotherWorkerWithoutAnotherRuntime()throws Exception {
+        var f=fixture();var op=provision(f);var gateway=mock(VDGateway.class);UUID pod=UUID.randomUUID();
+        when(gateway.ensurePod(any(),anyMap(),anyString())).thenAnswer(invocation->{clock.advance(46);return pod;}).thenReturn(pod);
+        assertThat(worker(f,gateway).dispatchOne()).isTrue();assertThat(runtimes.createCommandComplete(op.targetRuntimeId())).isFalse();
+        assertThat(lifecycle.get(op.targetRuntimeId()).podUid()).isEqualTo(pod);
+        assertThat(worker(f,gateway).dispatchOne()).isTrue();assertThat(runtimes.createCommandComplete(op.targetRuntimeId())).isTrue();
+        assertThat(runtimes.history(f.vd().id(),10)).hasSize(1);verify(gateway,times(2)).ensurePod(any(),anyMap(),anyString());
+    }
+    @Test void observationRemovesReadinessAndReopensLateCleanupWithoutRewritingHistoricalPod()throws Exception {
+        var f=fixture();var r=ready(provision(f));
+        lifecycle.observed(new VDGateway.Observation(r.id(),r.vdId(),r.generation(),r.podName(),r.podUid(),"Running",false,false));
+        assertThat(lifecycle.get(r.id()).observedState()).isEqualTo("UNREADY");assertThat(lifecycle.get(r.id()).readyAt()).isEqualTo(r.readyAt());
+        lifecycle.observed(new VDGateway.Observation(r.id(),r.vdId(),r.generation(),r.podName(),r.podUid(),"Running",false,true));
+        assertThat(lifecycle.get(r.id()).observedState()).isEqualTo("UNREADY"); // Only an authenticated poll can restore Ready.
+        lifecycle.fail(r.id(),"POD_FAILED");var gateway=mock(VDGateway.class);when(gateway.stop(any())).thenReturn(true);var worker=worker(f,gateway);
+        assertThat(worker.dispatchOne()).isTrue();assertThat(lifecycle.get(r.id()).terminal()).isTrue();
+        UUID late=UUID.randomUUID();
+        when(gateway.listPods()).thenReturn(new VDGateway.Snapshot(Map.of(r.id(),new VDGateway.Observation(r.id(),r.vdId(),r.generation(),r.podName(),late,"Running",false,true)),"123"));
+        worker.reconcile();assertThat(worker.dispatchOne()).isTrue();verify(gateway,times(2)).stop(any());
+        assertThat(lifecycle.get(r.id()).podUid()).isEqualTo(r.podUid());assertThat(lifecycle.get(r.id()).terminal()).isTrue();
+        assertThat(runtimes.history(f.vd().id(),10)).hasSize(1);assertThat(runtimes.current(f.vd().id())).isEmpty();
     }
     private <T> List<T> parallel(Supplier<T> call) throws Exception {
         try(var executor=Executors.newFixedThreadPool(8)) {

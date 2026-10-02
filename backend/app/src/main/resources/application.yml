@@ -28,6 +28,8 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  vd:
+    enabled: ${EDGEAI_VD_ENABLED:false}
   remote:
     enabled: ${EDGEAI_REMOTE_ENABLED:false}
     provider-key: ${EDGEAI_REMOTE_PROVIDER_KEY:reference}

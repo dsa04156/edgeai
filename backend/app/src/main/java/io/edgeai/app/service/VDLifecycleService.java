@@ -90,6 +90,21 @@ public class VDLifecycleService {
         if(r.desiredState().equals("STOPPED"))runtimes.command(runtimeId,"DELETE",now);
         return get(runtimeId);
     }
+    /** A list observation may remove readiness or request cleanup, but cannot grant execution authority. */
+    @Transactional
+    public void observed(io.edgeai.domain.vd.VDGateway.Observation observation) {
+        var r=lockedRuntime(observation.runtimeId());
+        if(!r.vdId().equals(observation.vdId()) || r.generation()!=observation.generation() || !r.podName().equals(observation.name()))throw fenced();
+        var now=now(r);
+        if(r.desiredState().equals("STOPPED")) {
+            // Do not overwrite the historical Pod UID when an old generation is recreated late.
+            runtimes.command(r.id(),"DELETE",now);return;
+        }
+        if(r.podUid()!=null && !r.podUid().equals(observation.podUid())) { failure(r,"OWNERSHIP_CONFLICT",now);return; }
+        if(r.podUid()==null)runtimes.submitted(r.id(),observation.podUid(),now);
+        if(observation.terminating() || Set.of("Failed","Succeeded").contains(observation.phase()))failure(r,"POD_FAILED",now);
+        else if(!observation.ready())runtimes.unready(r.id(),now);
+    }
     @Transactional
     public VDRuntime attest(UUID runtimeId,UUID podUid,UUID nodeUid,String nodeName,UUID sessionId,boolean podReady,int leaseSeconds) {
         Objects.requireNonNull(podUid);Objects.requireNonNull(nodeUid);Objects.requireNonNull(sessionId);

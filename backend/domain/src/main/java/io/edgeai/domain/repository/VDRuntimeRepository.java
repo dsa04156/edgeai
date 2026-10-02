@@ -8,6 +8,7 @@ import java.util.*;
 public interface VDRuntimeRepository {
     Optional<VDRuntime> runtime(UUID id);
     Optional<VDRuntime> current(UUID vdId);
+    List<VDRuntime> active(String namespace,int limit);
     long nextGeneration(UUID vdId);
     List<VDRuntime> history(UUID vdId,int limit);
     List<VDRuntimeBinding> bindings(UUID vdId,int limit);
