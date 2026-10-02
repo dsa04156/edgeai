@@ -146,10 +146,7 @@ public class RuntimeLifecycleService {
             throw new IllegalArgumentException("Unknown Runner failure code");
         var c=lock(attemptId);var r=runtime(attemptId);
         if(c.attempt().state().equals("FAILED") && r.epoch()==epoch && Objects.equals(r.producerPodUid(),podUid) && Objects.equals(r.failureReason(),reason))return;
-        producer(c,r,epoch,podUid);var now=clock.instant();runtimes.fail(r.id(),reason,now);
-        var descendants=storedDag(workflows.version(c.run().workflowVersionId()).orElseThrow().dagJson()).descendants(c.task().key());
-        for(var child:executions.tasks(r.runId()))if(descendants.contains(child.key()))executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);
-        runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
+        producer(c,r,epoch,podUid);recordFailure(c,r,reason);
     }
     @Transactional
     public void confirmStopped(UUID attemptId) {
@@ -163,10 +160,41 @@ public class RuntimeLifecycleService {
             throw new IllegalArgumentException("Unknown runtime observation failure");
         var c=lock(attemptId);var r=runtime(attemptId);
         if(!r.desiredState().equals("RUNNING") || !Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING"))return;
+        recordFailure(c,r,reason);
+    }
+    private void recordFailure(Context c,RuntimeInstance r,String reason) {
         var now=clock.instant();runtimes.fail(r.id(),reason,now);
-        var descendants=storedDag(workflows.version(c.run().workflowVersionId()).orElseThrow().dagJson()).descendants(c.task().key());
-        for(var child:executions.tasks(r.runId()))if(descendants.contains(child.key()))executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);
+        var policy=c.run().retry();
+        var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
+        var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
+        var availableAt=now.plusSeconds(policy.backoffSeconds());
+        if(policy.retryOn().contains(reason) && c.attempt().number()<policy.maxAttempts() && availableAt.isBefore(deadline))
+            executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
+        else failDescendants(c.run(),c.task(),now);
         runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
+    }
+    @Transactional(readOnly=true)
+    public List<UUID> dueRetries(String namespace) { return executions.dueRetries(namespace,clock.instant(),1000); }
+    @Transactional
+    public boolean retryTask(UUID taskId) {
+        var initial=executions.task(taskId).orElseThrow();
+        var run=executions.run(initial.runId(),true).orElseThrow();
+        var task=executions.task(taskId).orElseThrow();var retry=executions.retry(taskId).orElse(null);
+        if(retry==null)return false;
+        if(!task.state().equals("RETRY_WAIT") || !run.state().equals("RUNNING")){executions.clearRetry(taskId);return false;}
+        var now=clock.instant();
+        if(!now.isBefore(retry.deadline())) {
+            executions.failTask(taskId,now);failDescendants(run,task,now);
+            runtimes.stopForRun(run.id(),now);executions.reconcileRunState(run.id(),now);return true;
+        }
+        if(now.isBefore(retry.availableAt()) || !runtimes.retryReady(taskId))return false;
+        var previous=executions.attempt(retry.failedAttemptId()).orElseThrow();
+        if(!previous.state().equals("FAILED") || previous.number()>=run.retry().maxAttempts())throw new IllegalStateException("Invalid pending retry");
+        var next=executions.startRetry(taskId,now);plan(next.id(),retry.namespace());return true;
+    }
+    private void failDescendants(WorkflowRun run,Task task,Instant now) {
+        var descendants=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson()).descendants(task.key());
+        for(var child:executions.tasks(run.id()))if(descendants.contains(child.key()))executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);
     }
     private TaskResult replay(RuntimeInstance runtime,long epoch,UUID pod,String digest) {
         var result=runtimes.result(runtime.taskId()).orElse(null);if(result==null)return null;

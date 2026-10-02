@@ -1,6 +1,8 @@
 package io.edgeai.app.support;
 
 import io.edgeai.domain.workflow.Dag;
+import io.edgeai.domain.execution.RetryPolicy;
+import java.math.BigDecimal;
 import java.util.*;
 
 public final class WorkflowInput {
@@ -14,6 +16,29 @@ public final class WorkflowInput {
         if (!(value instanceof Map<?, ?> map) || !map.keySet().equals(Set.of(fields)))
             throw new IllegalArgumentException("Unexpected object fields");
         return map;
+    }
+    public static Map<?, ?> runRequest(String body) {
+        var map=parameters(JSON.parse(body,65536));
+        if(!map.keySet().containsAll(Set.of("workflowVersionId","execution","parameters")) ||
+                !Set.of("workflowVersionId","execution","parameters","retry").containsAll(map.keySet()))
+            throw new IllegalArgumentException("Unexpected Run fields");
+        JSON.boundedCanonical(map,65536);return map;
+    }
+    public static RetryPolicy retryPolicy(Object value) {
+        var map=object(value,"maxAttempts","backoffSeconds","maxElapsedSeconds","retryOn");
+        if(!(map.get("retryOn") instanceof List<?> list) || list.size()>RetryPolicy.ALLOWED.size())throw new IllegalArgumentException("Retry codes required");
+        var codes=new HashSet<String>();
+        for(var code:list)if(!codes.add(text(code,32)))throw new IllegalArgumentException("Duplicate retry code");
+        return new RetryPolicy(integer(map.get("maxAttempts")),integer(map.get("backoffSeconds")),integer(map.get("maxElapsedSeconds")),codes);
+    }
+    public static Map<String,Object> document(RetryPolicy policy) {
+        return Map.of("maxAttempts",policy.maxAttempts(),"backoffSeconds",policy.backoffSeconds(),
+            "maxElapsedSeconds",policy.maxElapsedSeconds(),"retryOn",policy.retryOn().stream().sorted().toList());
+    }
+    private static int integer(Object value) {
+        if(!(value instanceof Number))throw new IllegalArgumentException("Integer required");
+        try{return new BigDecimal(value.toString()).intValueExact();}
+        catch(ArithmeticException e){throw new IllegalArgumentException("Integer out of range");}
     }
     public static Map<?, ?> parameters(Object value) {
         if (!(value instanceof Map<?, ?> map)) throw new IllegalArgumentException("parameters must be an object");

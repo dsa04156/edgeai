@@ -1,7 +1,7 @@
-# 구현 계약 — M0–M4 작업 기준
+# 구현 계약 — M0–M5 작업 기준
 
 상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result 구현 범위.
-M4 구현·검증은 진행 중이다. 별도 전체 계약 원문은 아직 확인되지 않았다.
+M4 구현·검증 완료, M5 재시도 구현·검증 진행 중이다. 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
 
@@ -9,7 +9,7 @@ M4 구현·검증은 진행 중이다. 별도 전체 계약 원문은 아직 확
 2. Flyway가 실제 PostgreSQL에서 schema를 초기화한다.
 3. `GET /actuator/health/readiness`는 DB 연결을 포함하며 장애 시 503을 반환한다.
 4. Next.js `GET /api/health`는 Spring readiness 결과를 전달하며 연결 실패를 UP으로 표시하지 않는다.
-5. `GET /api/v1/platform`은 인증을 요구하고 마지막 완료 milestone=M3, capabilities=[profiles,devices,nodes,workflows,runs,tasks,results]를 반환한다. Result 조회 추가만으로 M4 전체 수용 완료를 의미하지 않는다.
+5. `GET /api/v1/platform`은 인증을 요구하고 마지막 완료 milestone=M4, capabilities=[profiles,devices,nodes,workflows,runs,tasks,results]를 반환한다. M4 완료 증거는 docs/evidence/m4-runtime.md를 따른다.
 6. 개발 서비스는 loopback에만 publish한다. 비밀번호는 무작위 local `.env`로 관리한다.
 7. 미구현 시험은 exit 2/BLOCKED를 반환한다. scaffold 성공을 전체 플랫폼 완료로 표시하지 않는다.
 
@@ -76,5 +76,14 @@ M4 구현·검증은 진행 중이다. 별도 전체 계약 원문은 아직 확
 
 ## 미확정
 
-M5 이후 상세 retry/offload/VD/STREAM 계약, 운영 사용자 identity/RBAC,
+M5 offload/Remote 및 M6 이후 VD/STREAM 상세 계약, 운영 사용자 identity/RBAC,
 2세부 실제 API, 실장비 inventory, GPU/NPU 공유 방식, 성능 수용 수치.
+
+
+## M5 재시도 계약
+
+ADR0006·OpenAPI RetryPolicy와 Flyway V6를 따른다. Run의 retry는 선택 입력이며 기본 최초1회다.
+같은 Task의 number/epoch를 증가시킨 새 Attempt를 만든다. 정책은 최대횟수·고정 backoff·첫 Attempt부터의
+재시도 창·허용 오류를 갖는다. RETRY_WAIT/예약은 DB에 남고 이전 Runtime 종료 및 미완료 CREATE 부재를
+확인한 뒤 재실행한다. 취소·commit·retry는 같은 Run 잠금으로 직렬화하며 하위 해제는 성공한 Result만 허용한다.
+실행 중 offload·Remote·route 전환은 별도 후속 구현이며 재시도가 이를 대신하지 않는다.

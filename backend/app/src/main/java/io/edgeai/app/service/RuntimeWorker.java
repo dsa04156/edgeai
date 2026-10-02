@@ -56,6 +56,11 @@ public final class RuntimeWorker {
         }
         return true;
     }
+    @Scheduled(fixedDelayString="${edgeai.runtime.retry-poll-ms:1000}")
+    public void retries() {
+        try { for(var task:lifecycle.dueRetries(settings.namespace()))lifecycle.retryTask(task); }
+        catch(RuntimeException error){log("Retry polling failed; durable state retained",error);}
+    }
     @Scheduled(fixedDelayString="${edgeai.runtime.reconcile-ms:1000}")
     public void reconcile() {
         try {

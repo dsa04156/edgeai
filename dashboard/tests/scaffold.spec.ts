@@ -4,7 +4,7 @@ test("shows the real implementation scope without horizontal overflow", async ({
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("실행의 시작점을 준비합니다.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("실행부터 결과까지 확인합니다.");
   await expect(page.getByText("아직 검증하지 않음")).toBeVisible();
   await expect(page.getByText("연결 대기 중")).toBeVisible();
   const health = await page.request.get("/api/health");

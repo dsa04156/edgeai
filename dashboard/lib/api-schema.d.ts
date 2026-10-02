@@ -563,7 +563,7 @@ export interface components {
          * @example {
          *       "name": "edgeai",
          *       "version": "0.1.0",
-         *       "milestone": "M3",
+         *       "milestone": "M4",
          *       "capabilities": [
          *         "profiles",
          *         "devices",
@@ -580,7 +580,7 @@ export interface components {
             name: "edgeai";
             version: string;
             /** @constant */
-            milestone: "M3";
+            milestone: "M4";
             capabilities: string[];
         };
         /**
@@ -782,10 +782,32 @@ export interface components {
             /** Format: uuid */
             nodeId: string;
         };
+        /**
+         * @description Task별 자동 재시도 정책. 생략하면 최초 1회만 실행합니다. 같은 Task ID에서 새 Attempt/epoch를 만들며 이전 실행의 종료와 대기 시간을 확인합니다. 입력·출력 오류, 결과 누락, 소유권 충돌과 취소는 재시도하지 않습니다.
+         * @example {
+         *       "maxAttempts": 3,
+         *       "backoffSeconds": 5,
+         *       "maxElapsedSeconds": 600,
+         *       "retryOn": [
+         *         "STORAGE_FAILED",
+         *         "RUNTIME_LOST"
+         *       ]
+         *     }
+         */
+        RetryPolicy: {
+            /** @description 최초 실행을 포함한 최대 시도 횟수. 2 이상이면 retryOn을 한 개 이상 지정합니다. */
+            maxAttempts: number;
+            /** @description 실패 후 다음 Attempt까지 최소 대기 시간(초). */
+            backoffSeconds: number;
+            /** @description Task의 최초 Attempt 생성부터 새 Attempt를 시작할 수 있는 시간(초). 실행 중 Attempt의 timeout은 SERVICE 규격을 따릅니다. */
+            maxElapsedSeconds: number;
+            retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
+        } & unknown;
         RunCreate: {
             /** Format: uuid */
             workflowVersionId: string;
             execution: components["schemas"]["ExecutionPolicy"];
+            retry?: components["schemas"]["RetryPolicy"];
             parameters: {
                 [key: string]: unknown;
             };
@@ -799,6 +821,7 @@ export interface components {
             mode: "AUTO" | "NODE";
             /** Format: uuid */
             nodeId: string | null;
+            retry: components["schemas"]["RetryPolicy"];
             parameters: {
                 [key: string]: unknown;
             };
@@ -818,7 +841,7 @@ export interface components {
             definitionId: string;
             key: components["schemas"]["ProfileKey"];
             /** @enum {string} */
-            state: "WAITING" | "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
+            state: "WAITING" | "READY" | "RUNNING" | "RETRY_WAIT" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
             cancellationReason: string | null;
             /** Format: date-time */
             createdAt: string;

@@ -9,7 +9,7 @@
 |---|---|
 | M2 | 완료 — Device/Node/Observation, UI·실DB·CI·실 Kubernetes 읽기·배포 검증 |
 | M3 | 완료 — DAG/Run/Task/Attempt·로컬·CI·이미지·ArgoCD·실제 Ingress 검증 |
-| M4 | PodSpec 요구사항, AUTO/NODE scheduler bind, Job watch/reconciliation, Runner, S3 artifact 검증 후 Result commit, 실제 kind E2E |
+| M4 | 완료 — 실제 kind·기존 클러스터 Runner/MinIO/Result·실패/취소·CI/배포 검증 |
 | M5 | 동일 Task 새 Attempt, retry budget, 실행 중 offload/fence/drain/route 전환, remote adapter 계약·장애·늦은 결과 차단 |
 | M6 | 영속 VD, source/runtime binding 분리, provision/readiness/replacement/drain 및 Operation 상태, UI |
 | M7 | 다중 장치 BATCH/STREAM DAG, 데이터 route/generation, backpressure·재연결·실제 데이터 흐름 |
@@ -17,14 +17,16 @@
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-M3의 CI·배포 검증을 완료했으며 현재 M4 실제 실행 경로를 구현한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
+M4까지 구현·검증을 완료했으며 현재 M5 재시도부터 구현한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
 BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생성/관측 worker·내부 인증/API를
 연결했고 실제 클러스터의 scheduler·Pod TokenReview·UID 삭제를 대기 컨테이너로 검증했다.
 로컬 실행은 기본 비활성이고 실제 배포는 실행 활성화·Result API/UI를 반영했다. Pending Pod 관측 지연
 재시도 수정 뒤 실제 kind의 AUTO/NODE BATCH·재시작·artifact/producer fault와 기존 클러스터 종단
 실행을 통과했다. CPU 부족·출력 누락·프로세스 실패의 추가 조건도 기존 클러스터에서 통과했고,
-동일 조건의 다음 kind CI 확인 후 M4 완료를 판정한다.
+동일 조건의 CI36986090769도 통과하여 M4 완료를 판정했다.
+M5는 ADR0006·V6로 동일 Task의 재시도 예약/예산과 새 Attempt/epoch를 구현 중이다.
+실행 중 offload·Remote 계약/연동은 여전히 M5의 필수 범위다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

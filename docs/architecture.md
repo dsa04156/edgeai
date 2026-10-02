@@ -23,7 +23,9 @@ Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes �
 V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·검증된 결과 확정·BATCH 해제·취소를
 같은 Run 행 잠금 아래 연결한다. Kubernetes worker와 내부 Runner HTTP 인증/API는 구현했다.
 로컬 실행 기본값은 비활성이며 배포는 저장소·키·이미지를 연결하고 활성화했다. 실제 root Result까지
-확인했으나 전체 BATCH 실행과 kind 게이트는 검증 중이다. 현재 제한은 M4 evidence를 따른다.
+확인했고 전체 BATCH 실행·실패/취소와 실제 kind 게이트도 통과했다. M4 완료 증거를 따른다.
+M5는 Run별 RetryPolicy·V6 task_retry 예약과 RETRY_WAIT를 추가한다. 기존 Run 잠금으로 재시도·취소·commit을
+직렬화하고 실제 이전 Runtime 종료 후 새 Attempt/epoch를 만든다. running offload·Remote는 후속 구현이다.
 
 | 경로 | 책임 |
 |---|---|
@@ -31,7 +33,7 @@ V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·�
 | backend/domain | 외부 SDK에 의존하지 않는 도메인 모델과 저장소 인터페이스 |
 | backend/adapters | PostgreSQL 저장소·Kubernetes Node/Job/Pod/신원 adapter·Job compiler·S3 artifact 구현, 추후 KubeEdge·MQTT·remote 경계 |
 | dashboard | 사용자 UI, 계약에서 생성한 API 타입 |
-| runner | M4 Python workload 실행·artifact 전송·commit 요청; 내부 API 구현, 배포 전체 경로 검증 전 |
+| runner | M4 Python workload 실행·artifact 전송·commit 요청; 내부 API·배포 전체 경로 검증 완료 |
 | simulator | 장치·Remote·장애 재현; 실장비 증거와 분리 |
 | contracts | 구현 전에 확정하는 OpenAPI |
 | deploy | 개발 Compose, GitOps 배포 manifests, 추후 격리 kind 시험 |

@@ -28,15 +28,17 @@ public class ExecutionService {
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
-        UUID idempotency=uuid(key);var input=parse(body,"workflowVersionId","execution","parameters");
+        UUID idempotency=uuid(key);var input=runRequest(body);
+        var retry=input.containsKey("retry")?retryPolicy(input.get("retry")):RetryPolicy.disabled();
         UUID versionId=uuid(input.get("workflowVersionId"));var parameters=parameters(input.get("parameters"));
         if(!(input.get("execution") instanceof Map<?,?> policy)) throw new IllegalArgumentException("Execution policy required");
         String mode=text(policy.get("mode"),8);UUID nodeId;
         if(mode.equals("AUTO")) { object(policy,"mode");nodeId=null; }
         else if(mode.equals("NODE")) { object(policy,"mode","nodeId");nodeId=uuid(policy.get("nodeId")); }
         else throw new IllegalArgumentException("Execution mode must be AUTO or NODE");
-        var normalized=Map.of("workflowVersionId",versionId.toString(),"parameters",parameters,
-            "execution",nodeId==null?Map.of("mode",mode):Map.of("mode",mode,"nodeId",nodeId.toString()));
+        var normalized=new TreeMap<String,Object>(Map.of("workflowVersionId",versionId.toString(),"parameters",parameters,
+            "execution",nodeId==null?Map.of("mode",mode):Map.of("mode",mode,"nodeId",nodeId.toString())));
+        if(!retry.equals(RetryPolicy.disabled()))normalized.put("retry",document(retry));
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
@@ -46,7 +48,7 @@ public class ExecutionService {
             throw error(501,"STREAM_NOT_IMPLEMENTED","STREAM 실행은 M7에서 구현합니다. 현재는 BATCH DAG 실행 요청을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters));
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),"PENDING",now,now);
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,"PENDING",now,now);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,workflows.definitions(versionId),dag.roots());
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);

@@ -4,9 +4,11 @@
 Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 최종 Kubernetes 노드 선택은 kube-scheduler가 담당합니다.
 
-현재 구현 범위는 **M3 Profile·장치/노드·Workflow DAG·실행 요청 관리**입니다. 실제 Runner 실행과 결과 저장은 M4입니다.
-M4의 실행 규격·Job worker·Runner 내부 API·결과 확정 서비스를 구현·검증 중입니다.
-실행 연결은 기본 비활성이며 실제 배포의 전체 실행 경로 검증이 남아 있습니다. [M4 진행 기록](docs/evidence/m4-runtime.md)을 참고하세요.
+**M0–M4 구현·검증을 완료**했습니다. Profile·장치/노드·Workflow 관리부터
+실제 Kubernetes Runner 실행, MinIO 파일 검증과 결과 저장까지 연결했습니다.
+로컬 실행은 기본 비활성이고 전용 클러스터 배포는 활성화되어 있습니다.
+현재 M5 재시도 정책·새 Attempt 구현을 검증 중이며, 실행 중 오프로딩·Remote는 후속 작업입니다.
+[M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
 ## 빠른 시작
@@ -45,7 +47,8 @@ bash scripts/dev-dashboard.sh
 
 `.env`의 API 계정·비밀번호로 개발용 인증을 사용합니다. `.env`와 `.tools`는 커밋하지 않습니다.
 사용 중인 포트가 있으면 `.env`에서 변경한 뒤 앱을 재시작합니다.
-MinIO는 M4 결과 저장을 위한 선택적 구성입니다: `bash scripts/dev-storage.sh`.
+Profile·장치 등 관리 API만 사용할 때 MinIO는 선택 사항입니다. 실제 Runner 결과 저장에는 필요합니다.
+로컬 실행: `bash scripts/dev-storage.sh`.
 공식 커뮤니티 소스를 빌드하므로 첫 실행은 오래 걸릴 수 있습니다.
 기동 후 `bash scripts/test-storage.sh`로 실제 S3 업로드·다운로드·metadata·비인증 차단을 확인합니다.
 
@@ -70,10 +73,10 @@ bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 실제 결과 확정�
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
 ```
 
-`verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
+`verify-all.sh local|full`은 미구현 fault/load/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
-GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M3를 검증합니다.
-M4 저장소 검증과 Runner 컨테이너 시험도 CI에 추가했으며, 해당 실행 결과는 진행 기록에서 확인합니다.
+GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.
+저장소·Runner 컨테이너와 실제3노드 kind 종단 시험이 이미지 발행 게이트에 포함됩니다.
 실제 Kubernetes 노드 관측은 별도 클러스터 검증이며 CI fixture 시험과 구분합니다.
 
 ## Swagger UI
@@ -139,8 +142,11 @@ API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 �
 **새 실행 키 만들기**를 누릅니다. 작업별 Attempt와 상태를 조회하고 작업 또는 실행을 취소할 수 있습니다.
 작업 취소는 그 결과를 기다리는 하위 작업을 건너뛰고 별도 분기는 유지합니다.
 
-M3에서는 요청을 영속화하며 root 작업은 READY/QUEUED, 나머지는 WAITING입니다.
-실제 Kubernetes 작업 실행·결과 검증은 M4, STREAM 실행은 M7입니다. STREAM 실행 요청은 현재 501입니다.
+실행 기능이 비활성이면 root 작업은 READY/QUEUED, 나머지는 WAITING으로 요청을 보관합니다.
+활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.
+Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허용 기간·오류를 지정합니다.
+재시도는 같은 Task에서 새 Attempt/epoch를 만들며 상세 계약은 Swagger RetryPolicy를 따릅니다.
+STREAM 실행은 M7이며 현재 요청은 501입니다.
 상세 계약은 [ADR 0004](docs/adr/0004-workflow-run-task.md)와 Swagger의 Workflow/실행/작업 태그를 따릅니다.
 
 ## 개발 기준

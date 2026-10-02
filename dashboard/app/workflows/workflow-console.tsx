@@ -5,7 +5,7 @@ import type { components, operations } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
 
 type Schema = components["schemas"];
-const stateNames: Record<string, string> = { PENDING: "실행 대기", WAITING: "입력 대기", READY: "실행 준비", QUEUED: "접수됨", DISPATCHING: "배치 중", RUNNING: "실행 중", SUCCEEDED: "성공", FAILED: "실패", CANCELLING: "종료 확인 중", CANCELLED: "취소됨", SKIPPED: "건너뜀", OFFLOADED: "전환됨" };
+const stateNames: Record<string, string> = { PENDING: "실행 대기", WAITING: "입력 대기", READY: "실행 준비", RETRY_WAIT: "재시도 대기", QUEUED: "접수됨", DISPATCHING: "배치 중", RUNNING: "실행 중", SUCCEEDED: "성공", FAILED: "실패", CANCELLING: "종료 확인 중", CANCELLED: "취소됨", SKIPPED: "건너뜀", OFFLOADED: "전환됨" };
 const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"]);
 function requestKey() {
   // getRandomValues also works on the existing private HTTP development ingress.
@@ -33,6 +33,14 @@ export function WorkflowConsole() {
   const [task, setTask] = useState<Schema["TaskDetail"] | null>(null); const [key, setKey] = useState("");
   const [results, setResults] = useState<Schema["TaskResults"] | null>(null);
   const [mode, setMode] = useState("AUTO"); const [parameters, setParameters] = useState("{}");
+  const [retryAttempts, setRetryAttempts] = useState(1);
+  const [retryBackoff, setRetryBackoff] = useState(5); const [retryWindow, setRetryWindow] = useState(600);
+  const retryChoices = [
+    ["WORKLOAD_FAILED", "작업 프로세스 실패"], ["TIMEOUT", "작업 시간 초과"], ["STORAGE_FAILED", "파일 저장소 오류"],
+    ["RUNNER_FAILED", "실행기 오류"], ["DISPATCH_TIMEOUT", "배치 시간 초과"], ["RUNTIME_TIMEOUT", "실행 시간 초과"],
+    ["RUNTIME_LOST", "실행 자원 유실"], ["JOB_FAILED", "Kubernetes Job 실패"],
+  ] as const;
+  const [retryOn, setRetryOn] = useState<string[]>(["STORAGE_FAILED", "RUNTIME_LOST"]);
   const [cancel, setCancel] = useState<{ kind: "run" | "task"; id: string } | null>(null);
 
   async function api(path: string, init?: RequestInit, authorization = auth) {
@@ -82,7 +90,7 @@ export function WorkflowConsole() {
   }
   function disconnect() {
     setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
-    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}");
+    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
   }
   async function confirmCancellation() {
     if (!cancel) return;
@@ -123,13 +131,22 @@ export function WorkflowConsole() {
       </section>}
       {version && <section className="panel" aria-labelledby="selected-version-title"><h2 id="selected-version-title">선택한 DAG · {version.version}</h2><p className="digest mono">버전 ID {version.id}</p><p className="digest mono">{version.digest}</p><pre aria-label="발행된 DAG JSON">{versionJson}</pre>
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
-          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : { mode, nodeId }, parameters: objectJson(parameters) }, key);
+          if (retryAttempts > 1 && retryOn.length === 0) throw new Error("재시도할 오류를 한 개 이상 선택하세요.");
+          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : { mode, nodeId }, parameters: objectJson(parameters),
+            ...(retryAttempts > 1 ? { retry: { maxAttempts: retryAttempts, backoffSeconds: retryBackoff, maxElapsedSeconds: retryWindow, retryOn } } : {}) }, key);
           const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
           <label>실행 위치 정책<select value={mode} onChange={e => setMode(e.target.value)}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option></select></label>
           {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
+          <label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>
+          <p className="hint">최초 실행을 포함합니다. 1회이면 자동 재시도하지 않습니다.</p>
+          {retryAttempts > 1 && <>
+            <div className="form-row"><label>재시도 대기 시간(초)<input type="number" min={1} max={300} required value={retryBackoff} onChange={e => setRetryBackoff(Number(e.target.value))} /></label><label>재시도 허용 기간(초)<input type="number" min={1} max={86400} required value={retryWindow} onChange={e => setRetryWindow(Number(e.target.value))} /></label></div>
+            <fieldset className="retry-errors"><legend>재시도할 오류</legend>{retryChoices.map(([code, label]) => <label key={code}><input type="checkbox" checked={retryOn.includes(code)} onChange={e => setRetryOn(e.target.checked ? [...retryOn, code] : retryOn.filter(item => item !== code))} />{label}</label>)}</fieldset>
+            <p className="hint">각 작업의 최초 실행 시도부터 허용 기간을 계산합니다. 이전 실행의 종료를 확인한 뒤 다시 실행하며, 입력·출력 오류와 취소는 재시도하지 않습니다.</p>
+          </>}
           <label>실행 요청 키<input value={key} readOnly className="mono" /></label><p className="hint">같은 키·내용을 다시 보내면 기존 실행을 반환합니다. 다른 실행을 만들 때 새 키를 발급하세요.</p>
           <div className="toolbar"><button type="button" onClick={() => setKey(requestKey())}>새 실행 키 만들기</button><button className="primary">실행 요청 저장</button></div>
         </fieldset></form>
@@ -139,6 +156,7 @@ export function WorkflowConsole() {
         <div className="pagination"><button disabled={busy || runOffset === 0} onClick={() => void action(() => loadRuns(runOffset - 20))}>이전 실행</button><span>{runOffset / 20 + 1} 페이지</span><button disabled={busy || runs?.nextOffset == null} onClick={() => void action(() => loadRuns(runs!.nextOffset!))}>다음 실행</button></div>
       </section>
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
+        <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
         {task && results && <div role="region" aria-label={`검증된 결과 · ${task.task.key}`}>

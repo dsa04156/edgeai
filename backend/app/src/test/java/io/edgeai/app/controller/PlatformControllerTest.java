@@ -26,7 +26,7 @@ class PlatformControllerTest {
         mvc.perform(get("/api/v1/platform"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("edgeai"))
-            .andExpect(jsonPath("$.milestone").value("M3"))
+            .andExpect(jsonPath("$.milestone").value("M4"))
             .andExpect(jsonPath("$.capabilities[0]").value("profiles"));
     }
 }

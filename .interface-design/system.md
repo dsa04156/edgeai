@@ -43,3 +43,9 @@ Task/Attempt 상태는 실제 응답을 표시하고 하위 대기·건너뜀·�
 작업 상세의 Attempt 아래에 검증된 결과를 배치한다. 빈 결과·저장소 오류·확정 결과를 구분한다.
 출력 포트/크기/형식을 기존 semantic table로 표시하고 긴 결과 ID·체크섬·고정 버전은 접힌 details에 둔다.
 기존 색·간격·digest 줄바꿈을 재사용하며 파일 URL이나 임의 다운로드 동작을 만들지 않는다.
+
+## M5 재시도 정책
+
+기존 실행 요청 form에 최초 포함 최대 횟수를 두고, 2회 이상이면 대기 시간·허용 기간·오류 선택을 펼친다.
+오류는 기존 native checkbox/fieldset과 44px label을 사용한다. Run 상세는 저장된 정책과 RETRY_WAIT,
+불변 Attempt 이력을 함께 보여 준다. 기존 spacing/color/table을 재사용하며 새로운 시각 체계는 만들지 않는다.

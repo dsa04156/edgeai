@@ -1,8 +1,7 @@
-# M4 실행 구성 요소 — 진행 중
+# M4 Kubernetes 실행·검증된 결과 — 완료
 
-2026-10-02. M0–M3는 구현·검증 완료이며 M4는 아직 미완료다.
-이 기록은 실행 규격·Job compiler·S3 adapter·독립 Runner와 실행 상태/결과 확정 서비스의 시험에 한정한다.
-배포의 실행 활성화와 실제 Runner 전체 경로 검증 상태는 아래 최신 기록을 따른다.
+2026-10-02. M0–M4 구현·검증 완료. 전체 M0–M10 목표는 계속 진행 중이다.
+아래는 구성 요소부터 실제 종단 실행까지의 기록이며 최신 완료 판정은 마지막 절을 따른다.
 
 ## 구현
 
@@ -243,3 +242,29 @@ BATCH와 artifact4개 내용 검증·실행 취소·affinity 및 CPU 부족·출
 Profile/Device/Node·불변 DAG·Run 재전송·분기 및 전체취소 회귀 PASS/0이다. 해당CRUD probe는
 의도적으로 스케줄되지 않는 작업으로 관리 동작을 시험하며 실제 계산 증거는 위 종단 시험이 담당한다.
 추가3개 실패조건의 다음 CI kind 결과를 확인한 뒤 M4 완료를 판정한다.
+
+
+## M4 완료 판정 — e4be5ff
+
+[CI36986090769](https://github.com/dsa04156/edgeai/actions/runs/36986090769)의
+scaffold/storage/runner/images/gitops 5개 job 모두 success. 내려받은 검증 결과 JSON14개 모두 PASS/0.
+실제3노드 kind `20261002T085328Z-3c737299`의 9개 Run 보고서를 확인했다. 기존 종단 실행·재시작·
+producer/artifact fault에 CPU 부족·출력 누락·프로세스 실패까지 통과했다. 후자의 두 실패는
+root FAILED/child SKIPPED, 하위 Attempt와 Result 없음, 잔여 Job/Pod/Secret 0을 확인한다.
+
+Actions pin `aecd457`을 반영하고 실제 API/UI/MinIO imageID가 source e4be5ff의 digest와 일치하며
+Ready, 두 PVC Bound, Argo Synced인 것을 확인했다. Argo aggregate health는 공유 Ingress status
+제한으로 Progressing이다. 이는 종단 HTTP/Runner 결과 증거와 구분하며 공유 설정은 변경하지 않았다.
+
+| M4 요구사항 | 직접 증거 |
+|---|---|
+| PodSpec 요구조건·AUTO/NODE scheduler bind | 실행 규격/Job compiler 단위 + kind AUTO/NODE 실제 Pod/Node UID |
+| Job watch/relist·명령 복구 | gateway 통합2 + worker PostgreSQL + kind API 교체 시 같은 Job UID |
+| Runner 실제 프로세스·입출력 | 호스트/컨테이너8 + kind BATCH 두 단계 계산 |
+| S3 검증 후 원자적 Result·단일 producer | 실제 MinIO/DB + kind version/size/hash 거절·동시 commit201/200 단1개 |
+| 선행 결과에 따른 하위 해제 | kind 입력 artifact의 features/score 대조·실패 시 하위 Attempt 없음 |
+| 취소·늦은 producer·리소스 정리 | kind 다른 Pod claim409·종료 뒤commit401·취소/실패 후 잔여0 |
+| 공개 API/Swagger/UI | 한국어28개 + 실제 배포 CRUD + PC/모바일 Result ID/S3 대조 |
+
+M4의 각 범위를 위 직접 증거로 확인했다. 재시도/실행 중 오프로딩/Remote(M5), VD/STREAM,
+부하·운영 복구/보안·실장비 수용시험은 이 완료 판정에 포함하지 않으며 여전히 전체 목표에 남아 있다.

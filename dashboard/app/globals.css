@@ -86,3 +86,8 @@ h1 { word-break: keep-all; }
 summary { cursor: pointer; min-height: 44px; padding: 8px 0; }
 select { min-width: 0; max-width: 100%; }
 .form-row > label { min-width: 0; }
+
+.retry-errors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 20px; padding: 16px; border: 1px solid var(--line); }
+.retry-errors legend { padding: 0 4px; }
+.retry-errors label { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; }
+.retry-errors input[type="checkbox"] { width: 20px; height: 20px; min-height: 20px; flex: 0 0 auto; accent-color: var(--signal); }

@@ -1613,7 +1613,7 @@ components:
           type: string
         milestone:
           type: string
-          const: M3
+          const: M4
         capabilities:
           type: array
           items:
@@ -1621,7 +1621,7 @@ components:
       example:
         name: edgeai
         version: 0.1.0
-        milestone: M3
+        milestone: M4
         capabilities:
         - profiles
         - devices
@@ -2173,6 +2173,48 @@ components:
           nodeId:
             type: string
             format: uuid
+    RetryPolicy:
+      type: object
+      additionalProperties: false
+      description: Task별 자동 재시도 정책. 생략하면 최초 1회만 실행합니다. 같은 Task ID에서 새 Attempt/epoch를 만들며 이전 실행의 종료와 대기 시간을 확인합니다. 입력·출력 오류, 결과 누락, 소유권 충돌과 취소는 재시도하지 않습니다.
+      required: [maxAttempts, backoffSeconds, maxElapsedSeconds, retryOn]
+      properties:
+        maxAttempts:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: 최초 실행을 포함한 최대 시도 횟수. 2 이상이면 retryOn을 한 개 이상 지정합니다.
+        backoffSeconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+          description: 실패 후 다음 Attempt까지 최소 대기 시간(초).
+        maxElapsedSeconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Task의 최초 Attempt 생성부터 새 Attempt를 시작할 수 있는 시간(초). 실행 중 Attempt의 timeout은 SERVICE 규격을 따릅니다.
+        retryOn:
+          type: array
+          uniqueItems: true
+          maxItems: 8
+          items:
+            type: string
+            enum: [WORKLOAD_FAILED, TIMEOUT, STORAGE_FAILED, RUNNER_FAILED, DISPATCH_TIMEOUT, RUNTIME_TIMEOUT, RUNTIME_LOST, JOB_FAILED]
+      allOf:
+      - if:
+          properties:
+            maxAttempts:
+              minimum: 2
+        then:
+          properties:
+            retryOn:
+              minItems: 1
+      example:
+        maxAttempts: 3
+        backoffSeconds: 5
+        maxElapsedSeconds: 600
+        retryOn: [STORAGE_FAILED, RUNTIME_LOST]
     RunCreate:
       type: object
       additionalProperties: false
@@ -2186,6 +2228,8 @@ components:
           format: uuid
         execution:
           $ref: '#/components/schemas/ExecutionPolicy'
+        retry:
+          $ref: '#/components/schemas/RetryPolicy'
         parameters:
           type: object
           additionalProperties: true
@@ -2197,6 +2241,7 @@ components:
       - workflowVersionId
       - mode
       - nodeId
+      - retry
       - parameters
       - state
       - createdAt
@@ -2218,6 +2263,8 @@ components:
           - string
           - 'null'
           format: uuid
+        retry:
+          $ref: '#/components/schemas/RetryPolicy'
         parameters:
           type: object
           additionalProperties: true
@@ -2266,6 +2313,7 @@ components:
           - WAITING
           - READY
           - RUNNING
+          - RETRY_WAIT
           - SUCCEEDED
           - FAILED
           - CANCELLING

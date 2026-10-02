@@ -39,6 +39,6 @@ assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
 assert get(ui+'/api/health')==(200,{'status':'UP'})
 assert get(api+'/api/v1/platform')==(401,None)
 _,body=get(api+'/api/v1/platform',{'Authorization':'Basic '+credentials})
-assert body=={'name':'edgeai','version':'0.1.0','milestone':'M3','capabilities':['profiles','devices','nodes','workflows','runs','tasks','results']}
+assert body=={'name':'edgeai','version':'0.1.0','milestone':'M4','capabilities':['profiles','devices','nodes','workflows','runs','tasks','results']}
 print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
 PY

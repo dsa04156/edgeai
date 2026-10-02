@@ -95,8 +95,9 @@ def wait(check,seconds,description):
         time.sleep(0.4)
     raise AssertionError(description)
 
-def create(version,policy):
+def create(version,policy,retry=None):
     key=str(uuid.uuid4());body={'workflowVersionId':version,'parameters':{'serial':9007199254740993},'execution':policy}
+    if retry is not None:body['retry']=retry
     run=request('workflow-runs','POST',body,key=key,expected=201)
     assert run['state']=='RUNNING','Runtime execution must be enabled'
     assert request('workflow-runs','POST',body,key=key)['id']==run['id']
@@ -295,6 +296,96 @@ for case,command in [('missing-output','pass'),('workload-failure','raise System
         print('PASS: real '+case+'; no Result, downstream skipped, no remaining resources',flush=True)
     finally:
         if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+if args.faults:
+    # Real workload process failure -> persisted retry -> API replacement -> new producer -> one sealed Result.
+    retry_spec=copy.deepcopy(base)
+    retry_spec['command']=['python3','-c',"import time,runpy; time.sleep(30); runpy.run_path('/opt/edgeai/examples/linear.py',run_name='__main__')"]
+    retry_version=workflow('retry-recovery',profile('retry-recovery',retry_spec),child)
+    retry_policy={'maxAttempts':2,'backoffSeconds':30,'maxElapsedSeconds':600,'retryOn':['WORKLOAD_FAILED','JOB_FAILED']}
+    run_id=create(retry_version,{'mode':'AUTO'},retry_policy)['id'];seen={}
+    try:
+        task=next(t for t in request('workflow-runs/'+run_id)['tasks'] if t['key']=='root');task_id=task['id']
+        first=request('tasks/'+task_id)['attempts'][0]
+        def first_claimed():
+            if request('tasks/'+task_id)['attempts'][0]['state']!='RUNNING':return None
+            return next((p for p in resources(run_id) if p['kind']=='Pod' and p['status'].get('phase')=='Running'),None)
+        old_pod=wait(first_claimed,90,'Retry source did not claim');captured=producer_credentials(old_pod)
+        # Kill only the owned fixture's workload child. Runner stays alive to report the real nonzero exit.
+        fault_code="""import os,signal,time
+from pathlib import Path
+for _ in range(50):
+    matches=[]
+    for path in Path('/proc').iterdir():
+        if not path.name.isdigit() or int(path.name)==os.getpid():continue
+        try:cmd=(path/'cmdline').read_bytes()
+        except OSError:continue
+        if b"runpy.run_path('/opt/edgeai/examples/linear.py'" in cmd:matches.append(int(path.name))
+    if matches:break
+    time.sleep(.1)
+assert len(matches)==1
+os.kill(matches[0],signal.SIGKILL)
+"""
+        killed=subprocess.run(kubectl+['-n',namespace,'exec','-i',old_pod['metadata']['name'],'--','python3','-'],input=fault_code,capture_output=True,text=True,timeout=20)
+        assert killed.returncode==0,'Owned retry workload fault failed; response suppressed'
+        wait(lambda:request('tasks/'+task_id)['task']['state']=='RETRY_WAIT',30,'Real workload failure did not schedule retry')
+        pending=request('workflow-runs/'+run_id)
+        assert next(t for t in pending['tasks'] if t['key']=='child')['state']=='WAITING'
+        assert request('tasks/'+task_id+'/results')['items']==[]
+        for command in [['rollout','restart','deployment/edgeai-api'],['rollout','status','deployment/edgeai-api','--timeout=180s']]:
+            restarted=subprocess.run(kubectl+['-n','edgeai']+command,capture_output=True,text=True,timeout=190)
+            assert restarted.returncode==0,'Retry recovery API restart failed; details suppressed'
+        csrf=request('csrf')['token']
+        def retried():
+            for resource in resources(run_id):
+                if resource['kind']=='Pod' and resource['spec'].get('nodeName'):
+                    seen[resource['metadata']['uid']]={'attemptId':resource['metadata']['labels']['edgeai.io/attempt-id'],'nodeName':resource['spec']['nodeName']}
+            detail=request('workflow-runs/'+run_id)
+            assert detail['run']['state'] not in ('FAILED','CANCELLED'),'Retried real execution failed'
+            return detail if detail['run']['state']=='SUCCEEDED' else None
+        detail=wait(retried,240,'Persisted retry did not recover after API restart')
+        history=request('tasks/'+task_id)['attempts']
+        assert len(history)==2 and history[1]['id']==first['id'] and history[1]['state']=='FAILED'
+        assert history[0]['state']=='SUCCEEDED' and history[0]['number']==2 and history[0]['epoch']==2
+        results=[]
+        for task in detail['tasks']:
+            assert task['state']=='SUCCEEDED'
+            items=request('tasks/'+task['id']+'/results')['items'];assert len(items)==1
+            result=items[0];assert result['producerPodUid'] in seen and result['producerPodUid']!=old_pod['metadata']['uid']
+            assert seen[result['producerPodUid']]['attemptId']==result['attemptId']
+            if task['key']=='root':assert task['id']==task_id and result['attemptId']==history[0]['id']
+            else:assert len(request('tasks/'+task['id'])['attempts'])==1
+            artifacts.append({'artifact':result['artifacts'][0],'expected':{'sourceMode':'SYNTHETIC','features':[2,1],'score':0.25 if task['key']=='root' else 8.0,'prediction':1}})
+            results.append(result)
+        cleaned(run_id)
+        late=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]});del captured
+        report['runs'].append({'id':run_id,'case':'retry-restart-recovery','taskId':task_id,'attempts':history,'results':results,'observedPods':seen,'oldPodUid':old_pod['metadata']['uid'],'lateCommitStatus':late,'resourcesRemaining':0})
+        print('PASS: real workload failure and API restart retained Task, created Attempt/epoch 2, fenced old producer, sealed one Result and released child',flush=True)
+    finally:
+        if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+    for case in ['retry-exhaustion','cancel-retry-wait']:
+        spec=copy.deepcopy(base);spec['command']=['python3','-c','raise SystemExit(7)']
+        policy={'maxAttempts':2,'backoffSeconds':2 if case=='retry-exhaustion' else 30,'maxElapsedSeconds':600,'retryOn':['WORKLOAD_FAILED','JOB_FAILED']}
+        run_id=create(workflow(case,profile(case,spec),child),{'mode':'AUTO'},policy)['id']
+        try:
+            def retry_terminal():
+                detail=request('workflow-runs/'+run_id);root=next(t for t in detail['tasks'] if t['key']=='root')
+                target='FAILED' if case=='retry-exhaustion' else 'RETRY_WAIT'
+                return detail if root['state']==target else None
+            detail=wait(retry_terminal,120,'Retry exhaustion/wait was not observed')
+            root=next(t for t in detail['tasks'] if t['key']=='root')
+            if case=='cancel-retry-wait':cancel(run_id)
+            else:cleaned(run_id)
+            detail=request('workflow-runs/'+run_id);history=request('tasks/'+root['id'])['attempts']
+            assert len(history)==(2 if case=='retry-exhaustion' else 1) and all(a['state']=='FAILED' for a in history)
+            assert detail['run']['state']==('FAILED' if case=='retry-exhaustion' else 'CANCELLED')
+            for task in detail['tasks']:
+                assert request('tasks/'+task['id']+'/results')['items']==[]
+                if task['key']=='child':assert request('tasks/'+task['id'])['attempts']==[]
+            report['runs'].append({'id':run_id,'case':case,'attempts':history,'state':detail['run']['state'],'resourcesRemaining':0})
+            print('PASS: real '+case+'; bounded attempts, no child execution or results, resources cleaned',flush=True)
+        finally:
+            if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
 
 verification=subprocess.run(['node','scripts/verify-runtime-artifacts.mjs'],input=json.dumps(artifacts),text=True,capture_output=True,timeout=90)
 if verification.returncode:raise AssertionError('Actual S3 output verification failed; response suppressed')

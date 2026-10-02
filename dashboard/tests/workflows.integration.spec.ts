@@ -39,12 +39,19 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("새 버전으로 발행");
 
   await page.getByRole("textbox", { name: "실행 매개변수 JSON", exact: true }).fill('{"serial":9007199254740993}');
+  await page.getByLabel("최대 실행 횟수", { exact: true }).fill("3");
+  await page.getByLabel("재시도 대기 시간(초)", { exact: true }).fill("7");
+  await page.getByLabel("재시도 허용 기간(초)", { exact: true }).fill("300");
+  await page.getByRole("region", { name: "선택한 DAG · 1.0.0", exact: true }).screenshot({ path: testInfo.outputPath("retry-policy.png") });
   const requestKey = await page.getByLabel("실행 요청 키", { exact: true }).inputValue();
   const created = page.waitForResponse(r => r.request().method() === "POST" && r.url().endsWith("/api/control-plane/workflow-runs"));
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
   const response = await created; expect(response.status()).toBe(201);
   expect(response.request().headers()["idempotency-key"]).toBe(requestKey);
   const run = await response.json();
+  expect(run.retry.maxAttempts).toBe(3); expect(run.retry.backoffSeconds).toBe(7); expect(run.retry.maxElapsedSeconds).toBe(300);
+  expect([...run.retry.retryOn].sort()).toEqual(["RUNTIME_LOST", "STORAGE_FAILED"]);
+  await expect(page.getByText("작업별 최대 3회 · 실패 후 7초 대기 · 최초 시도부터 300초 동안 재시도 가능", { exact: true })).toBeVisible();
   await expect(page.getByText("실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
   await expect(page.getByText("동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.", { exact: true })).toBeVisible();

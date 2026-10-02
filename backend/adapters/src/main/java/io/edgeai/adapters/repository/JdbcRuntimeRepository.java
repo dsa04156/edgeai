@@ -85,12 +85,20 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         jdbc.update("""
             UPDATE edgeai.task SET state=CASE WHEN cancellation_reason LIKE 'UPSTREAM_%' THEN 'SKIPPED' ELSE 'CANCELLED' END,
                 updated_at=? WHERE state='CANCELLING' AND id=(SELECT task_id FROM edgeai.runtime_instance WHERE id=?)
+                AND NOT EXISTS(SELECT 1 FROM edgeai.runtime_instance remaining WHERE remaining.task_id=edgeai.task.id AND remaining.observed_state<>'TERMINATED')
             """,time,id);
     }
     public void fail(UUID id,String reason,Instant now) {
         jdbc.update("UPDATE edgeai.task_attempt SET state='FAILED',updated_at=? WHERE id=(SELECT attempt_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),id);
         jdbc.update("UPDATE edgeai.task SET state='FAILED',updated_at=? WHERE id=(SELECT task_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),id);
         stop(id,reason,now);
+    }
+    public boolean retryReady(UUID taskId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+            SELECT NOT EXISTS(SELECT 1 FROM edgeai.runtime_instance r WHERE r.task_id=?
+                AND (r.desired_state<>'STOPPED' OR r.observed_state<>'TERMINATED'
+                    OR EXISTS(SELECT 1 FROM edgeai.runtime_command c WHERE c.runtime_id=r.id AND c.kind='CREATE' AND NOT c.completed)))
+            """,Boolean.class,taskId));
     }
     public Optional<TaskResult> result(UUID taskId) {
         var values=jdbc.query("SELECT * FROM edgeai.task_result WHERE task_id=? AND committed",(r,n)->new TaskResult(

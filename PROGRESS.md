@@ -1,14 +1,16 @@
 # 진행 상태
 
 [STATUS]
-M0–M3 구현·검증 완료. M4 실행 구성 요소를 개발·시험 중이며 전체 플랫폼은 PARTIAL이다.
-현재 상세: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
+M0–M4 구현·검증 완료. M5 재시도를 구현·시험 중이며 전체 플랫폼은 PARTIAL이다.
+현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36975219681
 V5 코드5992cdc의 CI36978182298 5 jobs와 결과JSON13개도 통과했다. bc061e7 pin과 실제 imageID를 확인했다.
 
 [IMPLEMENTED]
+M5 재시도: V6 정책/예약, RETRY_WAIT, 동일 Task의 새 Attempt/epoch, 이전 종료 확인·취소·예산 소진과 UI.
+M5 실제kind 재시도 신규 게이트는 CI 검증 전이며 offload·Remote는 후속 구현이다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V5, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
@@ -23,6 +25,7 @@ Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전�
 새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
 
 [VERIFIED]
+M5 로컬: 단위39·실제PostgreSQL50·계약/MVC15·UI16·실DB PC/모바일8·DB 장애/복구 PASS.
 단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
 UI lint/types/build·오프라인14·실DB PC/모바일8 및 DB 장애/복구 통과.
 신규 CI와 실제 이미지 시험 통과. Kubernetes API/UI/DB Ready, PVC5Gi Bound,
@@ -43,11 +46,14 @@ docs/evidence/m4-runtime.md, docs/evidence/m3-workflow.md와 docs/evidence/runs/
 M0–M2: docs/evidence/index.md 및 개별 milestone 문서.
 
 [BLOCKED]
-M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아니다.
-로컬 Docker 권한 제한은 유지한다. M4 실제 kind 검증은 권한 있는 GitHub runner를 준비한다.
+M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FULL_ACCEPTANCE는 아니다.
+로컬 Docker 권한 제한은 유지한다. 실제 kind 검증은 권한 있는 GitHub runner에서 수행한다.
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
+M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
+M5 ADR0006·V6 재시도 구현의 API/UI/실DB/실제kind 검증을 진행한다. 이후 실행 중 offload와 Remote 연동을 구현한다.
+아래는 M4 연결 단계의 이전 진행 기록이다.
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.
 9d15fb1 CI36981974775 5jobs/JSON13개 통과, 배포 imageID·Ingress 회귀까지 확인했다.
 Result/API 코드2cbaf36 CI36983413818 5jobs/JSON13개 통과, eb33bfd pin과 실제 API/UI/MinIO imageID 일치.
