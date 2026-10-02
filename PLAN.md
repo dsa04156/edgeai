@@ -17,7 +17,9 @@
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-M3의 CI·배포 검증을 완료했으며 현재 M4 실제 실행 경로를 구현한다. 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
+M3의 CI·배포 검증을 완료했으며 현재 M4 실제 실행 경로를 구현한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
+구성 요소 구현과 로컬 시험을 진행했으며 DB 실행 상태·Kubernetes 생성/관측·내부 API 연결·kind 수용시험이 남았다.
+외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.
 
@@ -55,6 +57,7 @@ M1부터 각 기능은 설계 → OpenAPI → Flyway → 구현 → unit/integra
 ## M4 실행 경로 구현 순서
 
 M3가 저장한 요청을 실제 작업으로 연결한다. 아래는 구현 계획이며 검증 완료 기록이 아니다.
+구성 요소별 확인 결과와 남은 연결 작업은 `docs/evidence/m4-runtime.md`를 따른다.
 
 1. **실행 계약**: SERVICE spec의 digest 고정 이미지·entrypoint·입출력 포트·자원·arch/OS·timeout을
    정의하고, 기존 임의 JSON Profile은 변경하지 않은 채 소비 시 실행 가능성을 검증한다.

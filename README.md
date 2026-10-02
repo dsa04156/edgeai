@@ -5,6 +5,8 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 최종 Kubernetes 노드 선택은 kube-scheduler가 담당합니다.
 
 현재 구현 범위는 **M3 Profile·장치/노드·Workflow DAG·실행 요청 관리**입니다. 실제 Runner 실행과 결과 저장은 M4입니다.
+M4의 실행 규격·Kubernetes Job compiler·S3 artifact adapter·독립 Runner를 개발 중이며,
+아직 실행 요청과 연결되지 않았습니다. [M4 진행 기록](docs/evidence/m4-runtime.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
 ## 빠른 시작
@@ -63,11 +65,14 @@ bash scripts/test-health.sh       # DB + API + Dashboard 실행 필요
 bash scripts/test-profiles-stack.sh compose # 실제 Profile/Device/Workflow/Swagger UI + DB 장애·복구; 로컬 PG는 local
 bash scripts/test-node-inventory.sh <context> # 기존 context는 변경하지 않고 실제 Node 목록만 읽음
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
+bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
+bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
 ```
 
 `verify-all.sh local|full`은 미구현 kind/fault/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M3를 검증합니다.
+M4 저장소 검증과 Runner 컨테이너 시험도 CI에 추가했으며, 해당 실행 결과는 진행 기록에서 확인합니다.
 실제 Kubernetes 노드 관측은 별도 클러스터 검증이며 CI fixture 시험과 구분합니다.
 
 ## Swagger UI

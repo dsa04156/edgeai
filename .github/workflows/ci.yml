@@ -65,6 +65,8 @@ jobs:
         run: bash scripts/collect-evidence.sh storage-start bash scripts/dev-storage.sh
       - name: Verify authenticated artifact roundtrip
         run: bash scripts/collect-evidence.sh storage bash scripts/test-storage.sh
+      - name: Verify immutable artifact versions and content checksums
+        run: bash scripts/collect-evidence.sh runtime-storage bash scripts/test-runtime-storage.sh
       - name: Stop project storage
         if: always()
         run: bash scripts/dev-down.sh
@@ -74,8 +76,25 @@ jobs:
           name: m0-storage-${{ github.run_id }}
           path: docs/evidence/runs/
           retention-days: 14
+  runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the reference Runner image
+        run: docker build -f runner/Dockerfile -t edgeai-runner:verify .
+      - name: Verify actual container execution and protocol failures
+        env:
+          EDGEAI_RUNNER_IMAGE: edgeai-runner:verify
+        run: bash scripts/collect-evidence.sh runner-container bash scripts/test-runner.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: runner-verification-${{ github.run_id }}
+          path: docs/evidence/runs/
+          retention-days: 14
   images:
-    needs: [scaffold, storage]
+    needs: [scaffold, storage, runner]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25

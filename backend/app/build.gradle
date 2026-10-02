@@ -15,6 +15,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'io.minio:minio:9.0.3'
 }
 
 tasks.named('bootJar') { archiveFileName = 'edgeai-control-plane.jar' }
@@ -24,6 +25,15 @@ tasks.register('integrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/*IntegrationTest.class'
+    exclude '**/ArtifactStorageIntegrationTest.class'
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.register('storageIntegrationTest', Test) {
+    description = 'Requires real versioned S3 storage; never substitutes an in-memory store.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/ArtifactStorageIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 

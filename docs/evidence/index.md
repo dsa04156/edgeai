@@ -99,3 +99,8 @@ Swagger 렌더와 자동 CSRF Profile 등록을 통과했다. GitHub CI에 같�
 
 [검증 결과](m3-workflow.md): 불변 DAG·동시 발행/실행·중복 방지·취소 전파,
 실제 PostgreSQL·PC/모바일 UI·DB 장애 복구. 실제 Kubernetes 작업 실행은 M4다.
+
+## M4 실행 구성 요소 (2026-10-02, 진행 중)
+
+[구성 요소 검증](m4-runtime.md): 실행 규격·Job compiler·실제 MinIO byte/version 검증·독립 Runner.
+DB 실행 상태·Kubernetes 생성/관측·내부 API·Result 연결과 실제 kind 수용시험이 남아 있다.

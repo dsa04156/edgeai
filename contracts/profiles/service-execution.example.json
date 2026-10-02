@@ -1,0 +1,35 @@
+{
+  "apiVersion": "edgeai/v1",
+  "image": "ghcr.io/dsa04156/edgeai-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "command": [
+    "python3",
+    "/opt/edgeai/examples/linear.py"
+  ],
+  "args": [],
+  "resources": {
+    "requests": {
+      "cpu": "100m",
+      "memory": "64Mi"
+    },
+    "limits": {
+      "cpu": "1",
+      "memory": "256Mi"
+    }
+  },
+  "platform": {
+    "os": "linux",
+    "architectures": [
+      "amd64",
+      "arm64"
+    ]
+  },
+  "inputs": {},
+  "outputs": {
+    "output": {
+      "mediaType": "application/json",
+      "maxBytes": 1048576
+    }
+  },
+  "timeoutSeconds": 120,
+  "qos": "Burstable"
+}

@@ -1,8 +1,8 @@
 # 진행 상태
 
 [STATUS]
-M0–M3 구현·검증 완료. 전체 플랫폼은 PARTIAL이며 다음은 M4 실제 작업 실행이다.
-현재 상세: docs/evidence/m3-workflow.md. 이전 단계 완료 기록은 아래와 개별 evidence에 보존한다.
+M0–M3 구현·검증 완료. M4 실행 구성 요소를 개발·시험 중이며 전체 플랫폼은 PARTIAL이다.
+현재 상세: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 코드 8d1ae08의 CI 36970385137: scaffold/storage/images/gitops 모두 success, 결과 JSON9개 PASS/0.
 https://github.com/dsa04156/edgeai/actions/runs/36970385137
@@ -12,6 +12,8 @@ Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V4, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
 M3는 실행 요청 저장이며 실제 Runner 실행·검증된 Result는 M4다.
+M4 실행 규격·Job compiler·S3 artifact adapter·독립 Runner를 추가했다.
+DB 실행 상태·Kubernetes 작업 생성/관측·내부 claim/commit API 연결은 아직 남아 있다.
 
 [VERIFIED]
 단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
@@ -20,6 +22,9 @@ UI lint/types/build·오프라인14·실DB PC/모바일8 및 DB 장애/복구 �
 Pod imageID와 CI digest 일치, Argo Synced, 실제 Ingress HTTP·Workflow PC/모바일2개 통과.
 새 API의 실제 Node10개 UID/metadata 대조와 합성 장치 연결/해제 통과.
 기존 Traefik/Ingress status 문제로 Argo aggregate health는 Progressing이며 공유 설정은 변경하지 않았다.
+M4 구성 요소의 단위30·계약·호스트 Runner7·실제 MinIO4·Kubernetes server dry-run과
+기존 PostgreSQL·실제 PC/모바일8·DB 장애 복구 회귀를 확인했다.
+새 CI·Runner 컨테이너·실제 kind 실행은 아직 미확인이다.
 
 [EVIDENCE]
 docs/evidence/m3-workflow.md와 docs/evidence/runs/<testRunId>.
@@ -31,7 +36,7 @@ M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
-M4 SERVICE 실행 계약·PodSpec compiler·Job/watch/reconciliation·Runner·S3 artifact 검증·Result.
+M4 구성 요소 CI 확인 후 RuntimeInstance/claim/outbox·Job/watch/reconciliation·Result 연결.
 상세 구현 순서: PLAN.md. 기존 demo-workflow/test-kind의 실제 실행 기준을 유지한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh

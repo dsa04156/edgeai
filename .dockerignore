@@ -13,6 +13,7 @@
 **/playwright-report
 **/*.log
 **/*.tsbuildinfo
+**/__pycache__
 docs
 deploy
 .idea

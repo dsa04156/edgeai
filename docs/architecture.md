@@ -19,14 +19,16 @@ flowchart LR
 위 그림은 목표 구조다. 현재 M3에서는 Next.js → Spring Boot → PostgreSQL의 Profile·Device
 관리, 세션·관측·연결 이력과 Kubernetes Node 읽기 adapter, 불변 Workflow DAG와
 Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes 작업 실행과 결과는 M4 범위다.
+현재 M4에는 실행 규격 검증·Job compiler·S3 artifact adapter·독립 Python Runner가 추가됐다.
+이 구성 요소와 DB 실행 상태·Kubernetes 생성/관측·내부 claim/commit API의 연결은 아직 남아 있다.
 
 | 경로 | 책임 |
 |---|---|
 | backend/app | 실행 진입점, controller, service, DTO, 인증·설정·예외 처리 |
 | backend/domain | 외부 SDK에 의존하지 않는 도메인 모델과 저장소 인터페이스 |
-| backend/adapters | PostgreSQL 저장소·Kubernetes Node 읽기 구현, 추후 실행·KubeEdge·storage·MQTT·remote 경계 |
+| backend/adapters | PostgreSQL 저장소·Kubernetes Node 읽기·Job compiler·S3 artifact 구현, 추후 KubeEdge·MQTT·remote 경계 |
 | dashboard | 사용자 UI, 계약에서 생성한 API 타입 |
-| runner | 후속 M4 실행·결과 커밋 프로세스 |
+| runner | M4 Python workload 실행·artifact 전송·commit 요청; 현재 내부 API 연결 전 |
 | simulator | 장치·Remote·장애 재현; 실장비 증거와 분리 |
 | contracts | 구현 전에 확정하는 OpenAPI |
 | deploy | 개발 Compose, GitOps 배포 manifests, 추후 격리 kind 시험 |
@@ -56,9 +58,12 @@ backend/
 │   ├── node/         # ExecutionNode, NodeInventory port
 │   ├── workflow/     # Dag, WorkflowVersion, TaskDefinition
 │   ├── execution/    # WorkflowRun, Task, TaskAttempt
+│   ├── runtime/      # 실행 규격·자원·배치 입력
+│   ├── storage/      # Artifact 계약·검증 결과·저장소 port
 │   └── repository/   # 저장소 인터페이스
 └── adapters/src/main/java/io/edgeai/adapters/
-    ├── kubernetes/   # 실제 Node API, CA/token/pagination
+    ├── kubernetes/   # 실제 Node API, CA/token/pagination, 순수 Job compiler
+    ├── storage/      # 고정 bucket·object version·내용 검증
     └── repository/   # Profile/Device/Node/Workflow/Execution JDBC 구현
 ```
 

@@ -26,6 +26,10 @@
 | M3-DB | scripts/test-integration.sh | seal·FK·활성 Attempt UNIQUE, 동시 발행/실행 1개, Run/Task 취소 경쟁·독립 분기·재전송 | 실제 PostgreSQL |
 | M3-UI | scripts/test-profiles-stack.sh local 또는 compose | DAG 발행/재발행/409, Run 생성/재전송/새 키, Attempt·취소 전파, PC·모바일·DB 장애 복구 | 실제 DB/API/browser |
 | M3-DEPLOY | scripts/smoke-deployment.py | 이미지 경유 불변 DAG·Run/Task/Attempt·취소·재전송, 큰 숫자·인증/CSRF | 실행 중인 API/UI |
+| M4-SPEC | scripts/test-unit.sh | 실행 규격·자원·QoS·AUTO/NODE affinity·Pod 보안 설정 | 외부 서비스 없는 compiler 시험 |
+| M4-STORAGE | scripts/test-runtime-storage.sh | 실제 byte SHA-256·길이·형식·version 검증, 변조 업로드 거절, 고정 버전 다운로드 | 실제 MinIO |
+| M4-RUNNER | scripts/test-runner.sh | 실제 workload, 입력/출력 검증, commit 재전송, timeout·취소·claim 거절 | Python + HTTP fixture; Control Plane 미연결 |
+| M4-RUNNER-IMAGE | EDGEAI_RUNNER_IMAGE=<image> scripts/test-runner.sh | 같은 프로토콜 시험을 비루트·읽기 전용 컨테이너로 수행 | Linux Docker; CI runner job |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
