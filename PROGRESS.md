@@ -73,7 +73,12 @@ poll d89d2bb CI37040484693 5jobs/JSON15개·실제Runner27·기존kind22Run PASS
 6d46ec4 pin 실제imageID/Ready/PVCBound/ArgoSynced175035Z-94ede97d PASS.
 공개 실행 ADR0018 로컬: 단위81·실제PG116(신규5)·계약4/MVC25·UI32 PASS.
 실제API/DB PC모바일10·Swagger39·VD execution503/동일프로세스복구175257Z-32f133c1 PASS.
-실제 Pod/poll 전체 수용·VD Task 연결과 새 코드 CI/배포는 남는다. docs/evidence/m6-vd-public-execution.md.
+공개 실행 근거는 docs/evidence/m6-vd-public-execution.md다.
+실제 Kubernetes VD 수명3개(AUTO+API Pod 재시작, NODE, Unschedulable 시작 실패)는
+20261002T182533Z-cfdb17d2 PASS/0. 같은VD의 교체·이전poll차단·drain·자원0개를 확인했다.
+docs/evidence/m6-vd-kubernetes.md. 새 kind CI·VD Task 연결·새 코드 CI/배포는 별도이며 미완료다.
+공개 실행8981a94 CI37044509505 5jobs/결과JSON15 PASS. pin f6a996e 실제imageID·Ready/PVCBound/ArgoSynced
+183056Z-6979449b PASS. 신규 VD kind 게이트와 Task 연결 완료를 뜻하지 않는다.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
 실제 Spring 스케줄러의 공개 Remote BATCH, 실제 제공자 SIGKILL/재시도, 취소와 출력 변조 차단,
 설정 변경 시 전송 차단·재전송, 동시 worker의 단일 실행/결과를 검증했다. NODE 전환 부분은 fixture다.

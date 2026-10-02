@@ -136,4 +136,7 @@ ADR0017/V15는 인증된 poll 서버와 session/sequence 재전송 상태·lease
 준비/종료·503/lease 만료를 검증한다. Kubernetes 관측은 이 통합시험에서 fixture다.
 ADR0018은 공개 provision/replace/drain·Operation/실행 상태 API와 UI를 연결했다. 실제 DB의
 동시 요청·멱등성·준비/종료 이력과 UI 상태/재전송을 검증한다. 상세는 docs/evidence/m6-vd-public-execution.md다.
-다음은 실제 Pod→poll 전체 수용과 VD Run 배정·Task claim/Result 및 demo-vd다.
+실제 Kubernetes Pod→supervisor→poll→Ready/교체/drain과 API Pod 재시작·시작 실패 정리는
+20261002T182533Z-cfdb17d2에서 통과했다. docs/evidence/m6-vd-kubernetes.md에 범위·실패 근거를 기록한다.
+새 demo-vd/kind 검사를 연결했으며 새 kind CI는 아직 미검증이다.
+다음은 VD Run 배정·Task claim/Result·취소/실패와 전체 M6 수용이다.

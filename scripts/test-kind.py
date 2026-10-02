@@ -17,6 +17,7 @@ import tempfile
 import time
 import urllib.request
 import uuid
+from vd_acceptance import VDScenario, wait as vd_wait
 
 ROOT = Path(__file__).resolve().parent.parent
 KIND_VERSION = 'v0.33.0'
@@ -86,6 +87,7 @@ def remote_fixture(state,runner_image,cluster):
 def remote_api_patch():
     return {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'edgeai-api'},
     'spec': {'template': {'spec': {'containers': [{'name': 'api', 'env': [
+        {'name': 'EDGEAI_VD_ENABLED', 'value': 'true'}, {'name': 'EDGEAI_VD_LEASE_SECONDS', 'value': '60'},
         {'name': 'EDGEAI_REMOTE_ENABLED', 'value': 'true'}, {'name': 'EDGEAI_REMOTE_URL', 'value': 'https://edgeai-remote.edgeai.svc:8443'},
         {'name': 'EDGEAI_REMOTE_TOKEN_FILE', 'value': '/var/run/edgeai-remote/token'}, {'name': 'EDGEAI_REMOTE_CA_FILE', 'value': '/var/run/edgeai-remote/ca.crt'}],
         'volumeMounts': [{'name': 'remote-client', 'mountPath': '/var/run/edgeai-remote', 'readOnly': True}]}],
@@ -206,7 +208,19 @@ def main():
             result = subprocess.run(['python3', 'scripts/smoke-runtime.py', '--context', context, '--faults', '--remote', '--report', '.tools/kind-runtime.json'], env=env, timeout=1500)
             if result.returncode:
                 raise RuntimeError('kind runtime acceptance failed')
-            print('PASS: isolated kind runtime acceptance', flush=True)
+            scenario = VDScenario(context, '.tools/kind-vd.json', env)
+            def restart_vd_api():
+                meta = json.loads(kcall(['get', 'namespace', 'edgeai', '-o', 'json']))['metadata']
+                assert meta['labels'].get('edgeai.io/test-cluster') == name and context == 'kind-' + name
+                before = {p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}
+                started = time.monotonic()
+                kcall(['-n', 'edgeai', 'rollout', 'restart', 'deployment/edgeai-api'])
+                kcall(['-n', 'edgeai', 'rollout', 'status', 'deployment/edgeai-api', '--timeout=180s'], timeout=190)
+                vd_wait(lambda: before.isdisjoint({p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}), 60, 'Old API Pod did not terminate')
+                scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
+                return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
+            scenario.run(restart_vd_api)
+            print('PASS: isolated kind runtime and VD lifecycle acceptance', flush=True)
             return 0
         finally:
             for process in forwards:

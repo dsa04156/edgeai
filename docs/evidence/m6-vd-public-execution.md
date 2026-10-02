@@ -44,6 +44,14 @@ getRandomValues UUID 생성 방식을 재사용하여 위 최종 UI32개를 통�
 
 ## 남은 수용
 
-VD는 기본 비활성이다. 실제 Pod→감독→poll→Ready/교체/종료와 API 프로세스 재시작, VD Run의
-Task 배정·claim·Result·취소/실패와 demo-vd는 후속이다. M5 상태형 복원·외부 실제 계약 수용,
-M7–M10도 남는다. 신규 코드의 CI·배포는 push 이후 별도로 확인한다.
+VD는 기본 비활성이다. 실제 Pod→감독→poll→Ready/교체/종료와 API Pod 재시작은
+[후속 Kubernetes 시험](m6-vd-kubernetes.md)에서 확인했다. VD Run의 Task 배정·claim·Result·취소/실패,
+M5 상태형 복원·외부 실제 계약 수용과 M7–M10은 남는다.
+
+## CI와 배포
+
+공개 실행 코드 `8981a9485ac635bd4bb2d8c473cfb18199533f08`의 CI `37044509505`는
+storage/runner/scaffold/images/gitops 5개 작업이 모두 성공했다. 내려받은 검증 artifact의
+`result.json` 15개도 모두 PASS/0이다. 이 CI는 기존 kind 경로이며 신규 VD kind 게이트는 포함하지 않는다.
+GitOps pin `f6a996e`와 실제 API/Dashboard/MinIO imageID 일치, Ready·PVC Bound·Argo Synced를
+`20261002T183056Z-6979449b`에서 확인했다. 공유 Ingress status에 따른 aggregate health Progressing은 유지된다.

@@ -222,6 +222,7 @@ jobs:
           path: |
             docs/evidence/runs/
             .tools/kind-runtime.json
+            .tools/kind-vd.json
           include-hidden-files: true
           retention-days: 14
   gitops:
