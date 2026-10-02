@@ -103,9 +103,10 @@ def wait(check,seconds,description):
         time.sleep(0.4)
     raise AssertionError(description)
 
-def create(version,policy,retry=None):
+def create(version,policy,retry=None,offload=None):
     key=str(uuid.uuid4());body={'workflowVersionId':version,'parameters':{'serial':9007199254740993},'execution':policy}
     if retry is not None:body['retry']=retry
+    if offload is not None:body['offload']=offload
     run=request('workflow-runs','POST',body,key=key,expected=201)
     assert run['state']=='RUNNING','Runtime execution must be enabled'
     assert request('workflow-runs','POST',body,key=key)['id']==run['id']
@@ -523,6 +524,69 @@ runpy.run_path('/opt/edgeai/examples/linear.py',run_name='__main__')
             cleaned(run_id)
             report['runs'].append({'id':run_id,'case':case,'operation':end,'attempts':history,'state':terminal,'resourcesRemaining':0})
             print('PASS: real '+case+'; no Result, no downstream execution and no remaining resources',flush=True)
+        finally:
+            scheduling(True)
+            if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)
+
+if args.faults:
+    # Thresholds deliberately exercise control flow with actual synthetic-workload measurements.
+    # They are test configuration, not recommended production tuning or performance acceptance.
+    automatic_version=workflow('automatic',profile('automatic',offload_spec))
+    cpu_spec=copy.deepcopy(offload_spec)
+    cpu_spec['command'][2]=cpu_spec['command'][2].replace('for sequence in range(1,91):','until=time.monotonic()+45;sequence=0\nwhile time.monotonic()<until:\n    sequence+=1').replace('range(5000)','range(500000)').replace('time.sleep(.5)','time.sleep(.1)')
+    cpu_version=workflow('automatic-cpu',profile('automatic-cpu',cpu_spec))
+    for metric in ['MEMORY','LATENCY','CPU']:
+        policy={'cpuPercent':1 if metric=='CPU' else None,'memoryPercent':1 if metric=='MEMORY' else None,'latencyMicros':1 if metric=='LATENCY' else None,
+            'consecutiveSamples':2,'maxSampleAgeSeconds':30,'maxGapSeconds':10,'minRunningSeconds':10,'cooldownSeconds':20,
+            'maxTransfers':1,'drainTimeoutSeconds':60,'startTimeoutSeconds':180}
+        run_id=create(cpu_version if metric=='CPU' else automatic_version,{'mode':'NODE','nodeId':source_node['metadata']['uid']},offload=policy)['id']
+        try:
+            task_id=request('workflow-runs/'+run_id)['tasks'][0]['id']
+            first=wait(lambda:(a if (a:=request('tasks/'+task_id)['attempts'][0])['state']=='RUNNING' else None),90,'Automatic source not claimed')
+            old_pod=next(p for p in resources(run_id) if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==first['id'])
+            captured=producer_credentials(old_pod)
+            if metric=='MEMORY':scheduling(False)
+            def decided():
+                d=request('tasks/'+task_id)
+                assert d['task']['state'] not in ('FAILED','CANCELLED','SUCCEEDED'),'Automatic decision missed its live workload'
+                return d['offloads'][0] if d['offloads'] else None
+            operation=wait(decided,35,'Fresh measured thresholds did not trigger automatic transfer')
+            assert operation['trigger']==metric and operation['targetNodeId'] is None
+            assert operation['excludedNodeNames']==[source_node['metadata']['name']]
+            evidence=operation['decision'];assert evidence['policy']==policy and len(evidence['samples'])==2
+            samples=evidence['samples'];assert samples[0]['sequence']==samples[1]['sequence']+1
+            assert all(v['attemptId']==first['id'] and v['resourceSource']=='CGROUP_V2' for v in samples)
+            if metric=='MEMORY':assert all(v['memoryBytes']*100>=v['memoryLimitBytes'] for v in samples)
+            elif metric=='LATENCY':assert all(v['latencySource']=='WORKLOAD' and v['latencyMicros']>=1 for v in samples)
+            else:assert all(v['cpuUsageMicros']*100>=v['intervalMillis']*v['cpuLimitMillicores'] for v in samples)
+            if metric=='MEMORY':
+                wait(lambda:request('operations/'+operation['id'])['state']=='STARTING',90,'Automatic drain did not complete')
+                target_attempt=request('operations/'+operation['id'])['targetAttemptId'];restart_api()
+                recovered=request('operations/'+operation['id'])
+                assert recovered['targetAttemptId']==target_attempt and recovered['decision']==evidence,'Restart changed persisted automatic evidence/identity'
+                scheduling(True)
+            end=wait(lambda:(o if (o:=request('operations/'+operation['id']))['state']=='SUCCEEDED' else None),120,'Automatic target did not claim')
+            detail=request('tasks/'+task_id);attempts=detail['attempts'];assert len(attempts)==2 and attempts[0]['epoch']==2 and attempts[0]['mode']=='AUTO'
+            assert attempts[0]['nodeId'] is None and attempts[0]['excludedNodeNames']==[source_node['metadata']['name']]
+            live=resources(run_id);assert not any(p['metadata']['uid']==old_pod['metadata']['uid'] for p in live)
+            pod=next(p for p in live if p['kind']=='Pod' and p['metadata']['labels']['edgeai.io/attempt-id']==end['targetAttemptId'])
+            job=next(p for p in live if p['kind']=='Job' and p['metadata']['labels']['edgeai.io/attempt-id']==end['targetAttemptId'])
+            pod_spec=job['spec']['template']['spec'];assert 'nodeName' not in pod_spec
+            terms=pod_spec['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+            assert len(terms)==1 and terms[0]['matchFields']==[{'key':'metadata.name','operator':'NotIn','values':[source_node['metadata']['name']]}]
+            assert pod['spec']['nodeName']!=old_pod['spec']['nodeName'] and pod['metadata']['uid']!=old_pod['metadata']['uid']
+            late=fenced_request(captured,'commit',{'epoch':captured['epoch'],'podUid':captured['podUid'],'outputs':[]});del captured
+            wait(lambda:request('workflow-runs/'+run_id)['run']['state']=='SUCCEEDED',100,'Automatic target did not finish')
+            final=request('tasks/'+task_id);items=request('tasks/'+task_id+'/results')['items']
+            assert len(final['attempts'])==2 and len(final['offloads'])==1,'Automatic transfer budget failed'
+            assert len(items)==1 and items[0]['attemptId']==end['targetAttemptId'] and items[0]['producerPodUid']==pod['metadata']['uid']
+            assert final['offloads'][0]['decision']==evidence
+            artifacts.append({'artifact':items[0]['artifacts'][0],'expected':{'sourceMode':'SYNTHETIC','features':[2,1],'score':0.25,'prediction':1}})
+            cleaned(run_id)
+            report['runs'].append({'id':run_id,'case':'automatic-'+metric.lower(),'operation':final['offloads'][0],'attempts':final['attempts'],
+                'sourcePodUid':old_pod['metadata']['uid'],'targetPodUid':pod['metadata']['uid'],'targetNode':pod['spec']['nodeName'],
+                'lateCommitStatus':late,'result':items[0],'pendingOperationRecovered':metric=='MEMORY','resourcesRemaining':0})
+            print('PASS: automatic '+metric+' from actual measurements, scheduler exclusion, immutable decision, one Result and bounded transfer',flush=True)
         finally:
             scheduling(True)
             if request('workflow-runs/'+run_id)['run']['state'] not in ('SUCCEEDED','FAILED','CANCELLED'):cancel(run_id)

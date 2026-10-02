@@ -97,5 +97,16 @@ class ExecutionSpecTest {
             assertThrows(IllegalArgumentException.class, () -> new RuntimeLaunch(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1,
                 "edgeai-runtimes", "edgeai-runner", "claim", URI.create(origin), null, null));
     }
+    @Test void automaticTransferExcludesOldNodesWithoutBypassingTheScheduler() throws Exception {
+        var original=launch(false);var launch=new RuntimeLaunch(original.runId(),original.taskId(),original.attemptId(),1,original.namespace(),
+            original.serviceAccount(),original.claimSecret(),original.controlPlane(),null,null,List.of("old-worker-1","old-worker-2"));
+        var job=new KubernetesJobCompiler().compile(ServiceExecutionInput.parseSpec(example()),launch);
+        var pod=map(map(map(job.get("spec")).get("template")).get("spec"));assertFalse(pod.containsKey("nodeName"));
+        var required=map(map(map(pod.get("affinity")).get("nodeAffinity")).get("requiredDuringSchedulingIgnoredDuringExecution"));
+        var terms=(List<?>)required.get("nodeSelectorTerms");assertEquals(1,terms.size());var term=map(terms.getFirst());
+        assertEquals(List.of(Map.of("key","metadata.name","operator","NotIn","values",List.of("old-worker-1")),Map.of("key","metadata.name","operator","NotIn","values",List.of("old-worker-2"))),term.get("matchFields"));
+        assertEquals(2,((List<?>)term.get("matchExpressions")).size());
+        Files.createDirectories(Path.of("build/runtime-fixtures"));Files.writeString(Path.of("build/runtime-fixtures/offload-auto-job.json"),JSON.canonical(job));
+    }
     private Map<?, ?> map(Object value) { return (Map<?, ?>) value; }
 }

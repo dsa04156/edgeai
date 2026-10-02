@@ -2,7 +2,7 @@
 
 상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result 구현 범위.
 M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증을 통과했다.
-자동 판단을 위한 실행 측정 수집은 로컬 검증 후 컨테이너/kind 검증 중이다.
+실행 측정은 실제 컨테이너/kind·CI·배포 검증을 통과했고 ADR0009 자동 전환 정책을 구현·검증 중이다.
 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
@@ -106,3 +106,12 @@ ADR0008·Runner 내부 telemetry API·TaskDetail.telemetry·V8을 따른다. 현
 cgroup CPU/메모리와 서비스 개별 지연을 단위와 출처를 유지해 저장하며, 미수집은 null이다.
 Run 잠금 아래 인증/epoch/시각/순번을 확인하고 동일 재전송을 멱등 처리한다. 종료/전환 뒤 거절한다.
 최신64개 보관, 최신 Attempt 분리와 UI 만료 표시는 자동 판단의 입력 기반이며 자동 정책 자체는 아니다.
+
+## M5 자동 전환 계약
+
+RunCreate.offload는 생략/null이면 비활성인 불변 정책이다. 재시작 가능한 모든 SERVICE에만 허용한다.
+최초 NODE 지정도 자동 전환 시 AUTO로 바뀔 수 있음을 API/화면에 명시한다. 같은 지표의 연속 유효
+표본, minRunning/cooldown 이후 새 표본, 전환 예산과 호환 대체 노드 관측을 요구한다.
+Operation.trigger/decision은 판단 당시 정책·표본을 보존한다. 자동 targetNodeId는 null이며
+Attempt.excludedNodeNames를 PodSpec의 노드별 NotIn 조건으로 AND 결합한다. claim과 RETRY도
+제외 목록을 지킨다. 상세 범위·단위·경계는 ADR0009와 OpenAPI를 따른다.

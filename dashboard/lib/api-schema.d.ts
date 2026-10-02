@@ -843,11 +843,57 @@ export interface components {
             maxElapsedSeconds: number;
             retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
         } & unknown;
+        /**
+         * @description 명시적으로 활성화하는 작업별 자동 재시작 전환. 생략/null이면 비활성입니다. 모든 SERVICE는 recovery.mode=RESTART여야 합니다. 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있습니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 기존 실행 노드는 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+         * @example {
+         *       "cpuPercent": 90,
+         *       "memoryPercent": 90,
+         *       "latencyMicros": null,
+         *       "consecutiveSamples": 3,
+         *       "maxSampleAgeSeconds": 30,
+         *       "maxGapSeconds": 10,
+         *       "minRunningSeconds": 30,
+         *       "cooldownSeconds": 120,
+         *       "maxTransfers": 1,
+         *       "drainTimeoutSeconds": 60,
+         *       "startTimeoutSeconds": 120
+         *     }
+         */
+        OffloadPolicy: {
+            /** @description cgroup CPU 제한 대비 사용률. 제한 미수집/무제한은 판단하지 않음 */
+            cpuPercent: number | null;
+            /** @description cgroup 메모리 제한 대비 사용률 */
+            memoryPercent: number | null;
+            /** @description 서비스 개별 지연의 마이크로초 임계값. p95/p99가 아님 */
+            latencyMicros: number | null;
+            consecutiveSamples: number;
+            maxSampleAgeSeconds: number;
+            /** @description 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음 */
+            maxGapSeconds: number;
+            /** @description 현재 Attempt 시작 후 대기. 이 시각 이후 표본만 사용 */
+            minRunningSeconds: number;
+            /** @description 이전 수동/자동 전환 완료 후 대기. 이후 새 표본만 사용 */
+            cooldownSeconds: number;
+            /** @description 작업별 자동 전환 횟수. 수동과 합친 전체 8회 제한도 적용 */
+            maxTransfers: number;
+            drainTimeoutSeconds: number;
+            startTimeoutSeconds: number;
+        } | null;
+        /** @description 자동 판단 시 복사한 정책과 원시 측정. 최신 측정 보관 만료 후에도 남는 결정 근거. 수동 요청이면 null. */
+        OffloadDecision: {
+            policy: components["schemas"]["OffloadPolicy"];
+            /** Format: date-time */
+            evaluatedAt: string;
+            /** Format: date-time */
+            eligibleSince: string;
+            samples: components["schemas"]["RuntimeTelemetry"][];
+        } | null;
         RunCreate: {
             /** Format: uuid */
             workflowVersionId: string;
             execution: components["schemas"]["ExecutionPolicy"];
             retry?: components["schemas"]["RetryPolicy"];
+            offload?: components["schemas"]["OffloadPolicy"];
             parameters: {
                 [key: string]: unknown;
             };
@@ -862,6 +908,7 @@ export interface components {
             /** Format: uuid */
             nodeId: string | null;
             retry: components["schemas"]["RetryPolicy"];
+            offload: components["schemas"]["OffloadPolicy"];
             parameters: {
                 [key: string]: unknown;
             };
@@ -904,6 +951,8 @@ export interface components {
             nodeId: string | null;
             /** @enum {string} */
             cause: "INITIAL" | "RETRY" | "OFFLOAD";
+            /** @description AUTO에서 제외할 이전 실행 노드. 재시도도 동일 제약을 유지합니다. */
+            excludedNodeNames: string[];
             /** @enum {string} */
             state: "QUEUED" | "DISPATCHING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "OFFLOADED";
             /** Format: date-time */
@@ -990,8 +1039,15 @@ export interface components {
             sourceAttemptId: string;
             /** Format: uuid */
             targetAttemptId: string | null;
-            /** Format: uuid */
-            targetNodeId: string;
+            /**
+             * Format: uuid
+             * @description 수동 전환의 지정 노드. 자동 전환은 null이며 scheduler가 선택합니다.
+             */
+            targetNodeId: string | null;
+            /** @enum {string} */
+            trigger: "MANUAL" | "CPU" | "MEMORY" | "LATENCY";
+            excludedNodeNames: string[];
+            decision: components["schemas"]["OffloadDecision"];
             /** @enum {string} */
             state: "DRAINING" | "STARTING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED";
             failureReason: string | null;

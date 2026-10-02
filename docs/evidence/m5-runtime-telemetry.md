@@ -1,4 +1,4 @@
-# M5 실행 측정 — 로컬 검증, 실제 컨테이너/kind 검증 전
+# M5 실행 측정 — 로컬·실제 컨테이너/kind·배포 검증
 
 자동 오프로딩 정책의 입력 경로다. 측정 수집만으로 자동 전환 구현이나 M5 완료를 판정하지 않는다.
 계약은 ADR0008·Runner OpenAPI·TaskDetail.telemetry, 저장소는 Flyway V8이다.
@@ -26,9 +26,13 @@ V8은 로컬 PostgreSQL에 적용했으므로 이후 변경은 새 migration으�
 | 20261002T102329Z-6d7a06fc | 실제 DB/API PC·모바일8·Swagger30·DB503/복구 |
 
 호스트 시험의 cgroup 파일 fixtures는 측정 단위/예외 처리의 증거다. 실제 container CPU/memory는
-CI Runner 시험에서 0.5CPU·128MiB 제한과 함께 검증하도록 추가했으며 아직 통과 판정 전이다.
+CI Runner 시험에서 0.5CPU·128MiB 제한과 함께 통과했다.
 기존 kind offload 시나리오에는 source/target의 실제 자원+합성 작업 지연 측정, Attempt별 분리와
-이전 producer의 늦은 telemetry 거절을 추가했다. 해당 새 CI 결과와 실제 배포는 후속 확인 대상이다.
+이전 producer의 늦은 telemetry 거절을 추가했다. CI36996007482의 5 jobs와 내려받은 결과JSON14개 모두 PASS/0이다. 실제 kind15개 Run을 통과했다.
+root/child source/target 모두 실제 CPU/memory와 workload latency를 보고했고, 이전 producer의
+late telemetry/commit은401이었다. 자원은0개로 정리됐다. 코드61b6caa·pin5e9957c의 실제
+API/UI/MinIO imageID·Ready·PVC Bound·Argo Synced를 20261002T105511Z-be6074de에서 확인했다.
+기존 공유 Ingress status로 Argo aggregate health는 Progressing이다.
 
-자동 policy의 임계값·연속 표본·cooldown·이동 예산·판단 근거 저장, failure/Remote 경로는 남아 있다.
+자동 policy의 구현·검증은 ADR0009와 m5-automatic-offload.md에서 별도로 추적한다. Remote 경로는 남아 있다.
 이 표본64개 보관은 영속 감사 로그를 대신하지 않는다. GPU/NPU 지표와 실제 모델/장비 수용은 별도다.

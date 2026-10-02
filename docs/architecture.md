@@ -28,7 +28,7 @@ M5는 Run별 RetryPolicy·V6 task_retry 예약과 RETRY_WAIT를 추가한다. �
 직렬화하고 실제 이전 Runtime 종료 후 새 Attempt/epoch를 만든다. V7 task_offload와 OffloadService는
 명시적인 실행 중 NODE 전환을 같은 잠금으로 처리한다. 이전 producer 차단→물리 종료→새 Attempt 및
 target claim 확인 순서이며 Operation 성공과 Task 결과 성공을 구분한다. 실제 배치는 scheduler가 담당한다.
-자동 전환 정책·Remote·상태형 checkpoint·STREAM route는 남은 범위다.
+Remote·상태형 checkpoint·STREAM route는 남은 범위다.
 V8 runtime_telemetry는 현재 producer가 보고한 cgroup 사용량과 서비스 지연을 Attempt별 최신64개로
 보존한다. Runner 내부 인증과 Run 잠금으로 종료된 producer를 차단하며 Task 상세는 최신 Attempt의
 측정만 제공한다. 측정 수집과 자동 전환의 판단·실행은 별도 단계다(ADR0008).
@@ -86,3 +86,8 @@ backend/
 `src/main/resources`에는 서버 설정·Swagger 자산·Flyway migration을 둔다.
 테스트는 `src/test/java/io/edgeai/app/` 아래 `controller`, `config`, `support`,
 `integration`으로 구분한다. OpenAPI 주소·응답 형식·DB 스키마는 패키지 재배치로 변경하지 않는다.
+
+ADR0009/V9에서 Run의 선택적 offload 정책을 저장하고 OffloadWorker가 실행 중 최신 표본을 평가한다.
+연속된 같은 지표·freshness·warmup/cooldown·한도를 만족하면 Run 잠금에서 판단 근거와 전환을
+원자적으로 저장한다. 자동 위치는 이전 실행 노드를 제외하는 AUTO 제약이며 kube-scheduler가
+선택한다. 이전 노드로 돌아가지 않으며 실패한 producer의 재시도는 기존 retry 경로로 분리한다.

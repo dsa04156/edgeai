@@ -1,6 +1,15 @@
 package io.edgeai.domain.execution;
 import java.time.Instant;
-import java.util.UUID;
+import java.util.*;
 public record OffloadOperation(UUID id,UUID taskId,UUID runId,UUID sourceAttemptId,UUID targetAttemptId,
         UUID targetNodeId,UUID idempotencyKey,String requestDigest,String namespace,String state,String failureReason,
-        Instant drainDeadline,int startTimeoutSeconds,Instant startDeadline,Instant createdAt,Instant updatedAt) {}
+        Instant drainDeadline,int startTimeoutSeconds,Instant startDeadline,Instant createdAt,Instant updatedAt,
+        String trigger,List<String> excludedNodeNames,String decisionJson) {
+    public OffloadOperation { excludedNodeNames=List.copyOf(excludedNodeNames); }
+    public OffloadOperation(UUID id,UUID taskId,UUID runId,UUID sourceAttemptId,UUID targetAttemptId,UUID targetNodeId,UUID idempotencyKey,
+            String requestDigest,String namespace,String state,String failureReason,Instant drainDeadline,int startTimeoutSeconds,
+            Instant startDeadline,Instant createdAt,Instant updatedAt) {
+        this(id,taskId,runId,sourceAttemptId,targetAttemptId,targetNodeId,idempotencyKey,requestDigest,namespace,state,failureReason,
+            drainDeadline,startTimeoutSeconds,startDeadline,createdAt,updatedAt,"MANUAL",List.of(),null);
+    }
+}

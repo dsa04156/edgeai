@@ -2,7 +2,7 @@
 
 [STATUS]
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
-자동 정책의 실행 측정을 구현·검증 중이며 전체 플랫폼은 PARTIAL이다.
+실행 측정도 실제 kind·CI·배포까지 검증했다. 자동 전환 정책을 구현·검증 중이며 전체 플랫폼은 PARTIAL이다.
 현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
@@ -15,7 +15,7 @@ M5 재시도 CI36990194234의 5 jobs·결과JSON14개 PASS 및 e777233 실제 �
 M5 명시적 offload: ADR0007·V7, source fence/drain, 동일 Task 새 Attempt/target claim, Operation API/화면.
 오프로딩 CI36993166041의 5 jobs·결과JSON14개 PASS, kind15개 Run과 f886dd7 실제 배포를 확인했다.
 V8/Runner 내부 telemetry API·cgroup 수집·서비스 지연·현재 Attempt 측정 화면을 추가했다.
-측정 상세 증거는 docs/evidence/m5-runtime-telemetry.md다. 자동 판단·Remote·상태형 복원은 남아 있다.
+측정 상세 증거는 docs/evidence/m5-runtime-telemetry.md다. ADR0009 자동 판단은 구현·검증 중이며 Remote·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V5, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
@@ -34,7 +34,10 @@ M5 명시적 offload 로컬: 실제 PostgreSQL60·단위/MVC42·계약/MVC18·PC
 실DB/API PC·모바일8·한국어 Swagger30·실제 DB 장애/복구도 PASS(20261002T095243Z-b6c8245c).
 실제kind 노드 전환/전환 중 API 재시작/고정 BATCH 입력/취소/시작 제한·cleanup을 통과했다.
 실행 측정 로컬: PostgreSQL63·호스트 Runner12·UI20·실DB브라우저8 및 DB 장애/복구 PASS.
-측정 기능의 신규 컨테이너/kind CI는 아직 통과 판정 전이다.
+측정 CI36996007482 5jobs·artifact14개 PASS, kind15Run source/target 측정·late telemetry401 확인.
+61b6caa 실제 배포(20261002T105511Z-be6074de) Ready/PVCBound/ArgoSynced.
+자동 전환 정책 V9·API/UI·판단 이력·AUTO 제외 조건 구현. PG69·단위47·UI22·실DB브라우저8·DB장애/복구·실K8s server dry-run을 통과했다.
+새 자동 전환의 실제 kind 수용은 CI 확인 대상이다. docs/evidence/m5-automatic-offload.md 참고.
 M5 로컬: 단위39·실제PostgreSQL50·계약/MVC15·UI16·실DB PC/모바일8·DB 장애/복구 PASS.
 단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
 UI lint/types/build·오프라인14·실DB PC/모바일8 및 DB 장애/복구 통과.
@@ -62,7 +65,7 @@ M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 
 [NEXT]
 M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
-M5 ADR0006·V6 재시도 구현의 API/UI/실DB/실제kind 검증을 진행한다. 이후 실행 중 offload와 Remote 연동을 구현한다.
+M5 ADR0009·V9 자동 전환의 UI/실제kind 검증을 마치고 Remote adapter 계약과 장애 경로를 구현한다.
 아래는 M4 연결 단계의 이전 진행 기록이다.
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.
 9d15fb1 CI36981974775 5jobs/JSON13개 통과, 배포 imageID·Ingress 회귀까지 확인했다.

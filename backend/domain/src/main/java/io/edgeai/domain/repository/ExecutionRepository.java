@@ -18,7 +18,7 @@ public interface ExecutionRepository {
     List<UUID> dueRetries(String namespace,Instant now,int limit);
     void clearRetry(UUID taskId);
     TaskAttempt startRetry(UUID taskId,Instant now);
-    TaskAttempt startOffload(UUID taskId,UUID nodeId,Instant now);
+    TaskAttempt startOffload(UUID taskId,UUID nodeId,List<String> excluded,Instant now);
     void failTask(UUID taskId,Instant now);
     void cancelTask(UUID taskId, String terminalState, String reason, Instant now);
     void reconcileRunState(UUID runId, Instant now);

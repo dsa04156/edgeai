@@ -22,9 +22,10 @@ public class OffloadService {
     private final NodeRepository nodes;
     private final RuntimeLifecycleService lifecycle;
     private final Clock clock;
+    private final TelemetryRepository telemetry;
     public OffloadService(OffloadRepository operations,ExecutionRepository executions,RuntimeRepository runtimes,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock) {
-        this.operations=operations;this.executions=executions;this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.lifecycle=lifecycle;this.clock=clock;
+            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry) {
+        this.operations=operations;this.executions=executions;this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.lifecycle=lifecycle;this.clock=clock;this.telemetry=telemetry;
     }
     @Transactional
     public Creation<OffloadOperation> request(UUID taskId,String key,String body) {
@@ -75,9 +76,56 @@ public class OffloadService {
         if(operation.state().equals("DRAINING")) {
             if(!now.isBefore(operation.drainDeadline())){fail(operation,"SOURCE_DRAIN_TIMEOUT",now);return;}
             if(!task.state().equals("OFFLOADING") || !runtimes.retryReady(task.id()))return;
-            var attempt=executions.startOffload(task.id(),operation.targetNodeId(),now);
+            var attempt=executions.startOffload(task.id(),operation.targetNodeId(),operation.excludedNodeNames(),now);
             lifecycle.plan(attempt.id(),operation.namespace());operations.starting(id,attempt.id(),now.plusSeconds(operation.startTimeoutSeconds()),now);
         } else if(operation.state().equals("STARTING") && !now.isBefore(operation.startDeadline()))fail(operation,"TARGET_START_TIMEOUT",now);
+    }
+    @Transactional(readOnly=true)
+    public List<UUID> automaticCandidates(String namespace){return operations.automaticCandidates(namespace,10000);}
+    @Transactional
+    public Optional<OffloadOperation> evaluate(UUID taskId,String namespace) {
+        var initial=executions.task(taskId).orElseThrow();var run=executions.run(initial.runId(),true).orElseThrow();
+        var task=executions.task(taskId).orElseThrow();var now=clock.instant();
+        if(run.offloadPolicyJson()==null || !run.state().equals("RUNNING") || !task.state().equals("RUNNING"))return Optional.empty();
+        var policy=offloadPolicy(JSON.decode(run.offloadPolicyJson()));var attempt=executions.attempts(taskId).getFirst();
+        var runtime=runtimes.byAttempt(attempt.id()).orElse(null);
+        if(!attempt.state().equals("RUNNING") || runtime==null || !runtime.namespace().equals(namespace) || !runtime.desiredState().equals("RUNNING") ||
+            !runtime.observedState().equals("RUNNING") || runtime.producerPodUid()==null || runtime.expiresAt()==null || !now.isBefore(runtime.expiresAt()))return Optional.empty();
+        var history=operations.forTask(taskId);
+        if(history.size()>=8 || history.stream().filter(o->!o.trigger().equals("MANUAL")).count()>=policy.maxTransfers() ||
+            history.stream().anyMatch(o->Set.of("DRAINING","STARTING","CANCELLING").contains(o.state())))return Optional.empty();
+        var eligible=attempt.updatedAt().plusSeconds(policy.minRunningSeconds());
+        for(var operation:history)if(operation.updatedAt().plusSeconds(policy.cooldownSeconds()).isAfter(eligible))eligible=operation.updatedAt().plusSeconds(policy.cooldownSeconds());
+        var samples=telemetry.recent(attempt.id(),policy.consecutiveSamples());var trigger=policy.trigger(samples,now,eligible);
+        if(trigger.isEmpty())return Optional.empty();
+        var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
+        var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
+        if(!spec.recoveryMode().equals("RESTART"))return Optional.empty();
+        var excluded=new TreeSet<String>();
+        for(var previous:executions.attempts(taskId))runtimes.byAttempt(previous.id()).ifPresent(r->{if(r.nodeName()!=null)excluded.add(r.nodeName());});
+        if(excluded.isEmpty() || excluded.size()>16)return Optional.empty();
+        boolean alternative=false;
+        for(int offset=0;!alternative;offset+=1000) {
+            var page=nodes.list(1000,offset);
+            alternative=page.stream().anyMatch(n->!excluded.contains(n.name()) && n.status(now).equals("READY") && n.operatingSystem().equals("linux") &&
+                spec.architectures().contains(n.architecture()) && spec.nodeSelector().entrySet().stream().allMatch(e->e.getValue().equals(parameters(JSON.decode(n.labelsJson())).get(e.getKey()))));
+            if(page.size()<1000)break;
+        }
+        if(!alternative)return Optional.empty();
+        var evidence=new TreeMap<String,Object>();evidence.put("policy",JSON.decode(run.offloadPolicyJson()));evidence.put("evaluatedAt",now.toString());
+        evidence.put("eligibleSince",eligible.toString());evidence.put("samples",samples.stream().map(OffloadService::measurement).toList());
+        var id=UUID.randomUUID();var operation=new OffloadOperation(id,taskId,run.id(),attempt.id(),null,null,id,
+            JSON.digest("edgeai-automatic-offload-v1",Map.of("sourceAttemptId",attempt.id().toString(),"evidence",evidence)),namespace,"DRAINING",null,
+            now.plusSeconds(policy.drainTimeoutSeconds()),policy.startTimeoutSeconds(),null,now,now,trigger.get(),List.copyOf(excluded),JSON.canonical(evidence));
+        if(!operations.create(operation))throw new IllegalStateException("Automatic operation identity collision");
+        runtimes.offload(runtime.id(),now);return Optional.of(operation);
+    }
+    private static Map<String,Object> measurement(io.edgeai.domain.runtime.RuntimeTelemetry s) {
+        var m=new TreeMap<String,Object>();m.put("attemptId",s.attemptId().toString());m.put("sequence",s.sequence());m.put("observedAt",s.observedAt().toString());
+        m.put("receivedAt",s.receivedAt().toString());m.put("intervalMillis",s.intervalMillis());m.put("cpuUsageMicros",s.cpuUsageMicros());m.put("cpuLimitMillicores",s.cpuLimitMillicores());
+        m.put("resourceSource",s.cpuUsageMicros()==null && s.memoryBytes()==null?null:"CGROUP_V2");m.put("latencySource",s.latencyMicros()==null?null:"WORKLOAD");
+        m.put("memoryBytes",s.memoryBytes());m.put("memoryLimitBytes",s.memoryLimitBytes());m.put("latencyMicros",s.latencyMicros());
+        m.put("latencyObservedAt",s.latencyObservedAt()==null?null:s.latencyObservedAt().toString());return m;
     }
     private void fail(OffloadOperation operation,String reason,Instant now) {
         if(operation.targetAttemptId()!=null)runtimes.byAttempt(operation.targetAttemptId()).ifPresent(r->runtimes.fail(r.id(),reason,now));

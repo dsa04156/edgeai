@@ -8,7 +8,7 @@ Spring Boot modular monolith + Next.js + PostgreSQL을 기반으로 하며,
 실제 Kubernetes Runner 실행, MinIO 파일 검증과 결과 저장까지 연결했습니다.
 로컬 실행은 기본 비활성이고 전용 클러스터 배포는 활성화되어 있습니다.
 M5 재시도와 명시적 실행 중 노드 전환은 실제 kind·CI·배포 검증을 통과했습니다.
-자동 전환을 위한 실행 측정 수집을 검증 중이며, 자동 정책·Remote 연동은 남아 있습니다.
+실행 측정도 실제 컨테이너·kind·배포까지 검증했습니다. 자동 전환 정책은 구현·검증 중이며 Remote 연동은 남아 있습니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
 
@@ -167,3 +167,9 @@ STREAM 실행은 M7이며 현재 요청은 501입니다.
 - [초기 개발 환경 완료 감사](docs/evidence/m0-completion-audit.md)
 
 로컬 개발용 인증·MQTT 설정은 운영 배포 구성이 아닙니다. 운영 identity/RBAC/TLS 및 실제 장비 검증은 후속 단계입니다.
+
+자동 전환은 Run 생성의 선택적인 `offload` 정책으로 켭니다. Workflow 화면에서도 CPU/메모리 사용률·
+서비스 지연 기준과 연속 표본·대기 시간·전환 한도를 설정할 수 있습니다. 재시작 가능한 SERVICE만
+허용하며 최초 NODE 지정 이후에도 다른 호환 노드로 이동할 수 있습니다. 이전 노드를 제외하고
+Kubernetes가 새 위치를 선택합니다. 작업 상세에서 결정에 쓴 정책·측정과 전환 이력을 확인합니다.
+미수집·오래된·누락 표본은 판단에 쓰지 않습니다. [ADR0009](docs/adr/0009-automatic-offload-policy.md).

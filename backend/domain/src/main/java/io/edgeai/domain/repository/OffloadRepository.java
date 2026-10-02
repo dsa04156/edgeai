@@ -8,6 +8,7 @@ public interface OffloadRepository {
     Optional<OffloadOperation> byKey(UUID key);
     List<OffloadOperation> forTask(UUID taskId);
     List<UUID> active(String namespace,int limit);
+    List<UUID> automaticCandidates(String namespace,int limit);
     void starting(UUID id,UUID targetAttemptId,Instant deadline,Instant now);
     boolean canStart(UUID attemptId,Instant now);
     void completedByClaim(UUID attemptId,Instant now);

@@ -18,6 +18,9 @@ public final class KubernetesJobCompiler {
         var term = new LinkedHashMap<String, Object>(); term.put("matchExpressions", expressions);
         if (launch.targetNodeName() != null)
             term.put("matchFields", List.of(Map.of("key", "metadata.name", "operator", "In", "values", List.of(launch.targetNodeName()))));
+        else if (!launch.excludedNodeNames().isEmpty())
+            // Kubernetes field selectors allow one value per requirement; requirements in this term are ANDed.
+            term.put("matchFields", launch.excludedNodeNames().stream().map(name -> Map.of("key", "metadata.name", "operator", "NotIn", "values", List.of(name))).toList());
         var pod = new LinkedHashMap<String, Object>();
         pod.put("restartPolicy", "Never"); pod.put("serviceAccountName", launch.serviceAccount()); pod.put("automountServiceAccountToken", false);
         pod.put("enableServiceLinks", false); pod.put("terminationGracePeriodSeconds", 10);

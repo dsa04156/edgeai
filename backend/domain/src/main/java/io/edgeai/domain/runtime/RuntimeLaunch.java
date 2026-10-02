@@ -1,12 +1,19 @@
 package io.edgeai.domain.runtime;
 
 import java.net.URI;
-import java.util.UUID;
+import java.util.*;
 
 public record RuntimeLaunch(UUID runId, UUID taskId, UUID attemptId, long epoch,
         String namespace, String serviceAccount, String claimSecret, URI controlPlane,
-        UUID targetNodeId, String targetNodeName) {
+        UUID targetNodeId, String targetNodeName, List<String> excludedNodeNames) {
+    public RuntimeLaunch(UUID runId,UUID taskId,UUID attemptId,long epoch,String namespace,String serviceAccount,String claimSecret,
+            URI controlPlane,UUID targetNodeId,String targetNodeName) {
+        this(runId,taskId,attemptId,epoch,namespace,serviceAccount,claimSecret,controlPlane,targetNodeId,targetNodeName,List.of());
+    }
     public RuntimeLaunch {
+        excludedNodeNames=List.copyOf(excludedNodeNames);
+        if(excludedNodeNames.size()>16 || targetNodeName!=null && !excludedNodeNames.isEmpty())throw new IllegalArgumentException("Invalid AUTO exclusions");
+        excludedNodeNames.forEach(n->RuntimeNames.dns(n,253));
         if (runId == null || taskId == null || attemptId == null || epoch < 1 || epoch > 9007199254740991L)
             throw new IllegalArgumentException("Run/task/attempt identity and epoch required");
         RuntimeNames.dns(namespace, 63); RuntimeNames.dns(serviceAccount, 253); RuntimeNames.dns(claimSecret, 253);

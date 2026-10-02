@@ -38,7 +38,8 @@ class OffloadIntegrationTest {
     private final JsonDocuments json=new JsonDocuments();
     private record Fixture(WorkflowRun run,UUID root,UUID child,UUID attempt,UUID sourceNode,UUID targetNode,RuntimePod pod,String namespace) {}
     private ExecutionNode node(UUID id,String name,String status){return new ExecutionNode(id,name,"amd64","linux",status,"4","4Gi","{}",clock.instant());}
-    @SuppressWarnings("unchecked") private Fixture fixture(boolean restartable,boolean claim) throws Exception {
+    private Fixture fixture(boolean restartable,boolean claim) throws Exception {return fixture(restartable,claim,null);}
+    @SuppressWarnings("unchecked") private Fixture fixture(boolean restartable,boolean claim,Map<String,Object> automatic) throws Exception {
         UUID source=UUID.randomUUID(),target=UUID.randomUUID();nodes.recordSnapshot(List.of(node(source,"source-"+source,"READY"),node(target,"target-"+target,"READY")),clock.instant());
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));
@@ -47,8 +48,10 @@ class OffloadIntegrationTest {
         var workflow=workflows.create(json.canonical(Map.of("key","offload-"+UUID.randomUUID(),"displayName","Running offload fixture"))).value();
         var definitions=List.of("root","child").stream().map(key->Map.of("key",key,"serviceProfileVersionId",profile.id().toString(),"parameters",Map.of())).toList();
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",definitions,"dependencies",List.of(Map.of("fromTask","root","toTask","child","fromPort","output","toPort","input","mode","BATCH"))))).value();
-        var run=executions.create(UUID.randomUUID().toString(),json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","NODE","nodeId",source.toString()),"parameters",Map.of(),
-            "retry",Map.of("maxAttempts",2,"backoffSeconds",5,"maxElapsedSeconds",600,"retryOn",List.of("WORKLOAD_FAILED"))))).value();
+        var request=new HashMap<String,Object>(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","NODE","nodeId",source.toString()),"parameters",Map.of(),
+            "retry",Map.of("maxAttempts",2,"backoffSeconds",5,"maxElapsedSeconds",600,"retryOn",List.of("WORKLOAD_FAILED"))));
+        if(automatic!=null)request.put("offload",automatic);
+        var run=executions.create(UUID.randomUUID().toString(),json.canonical(request)).value();
         var tasks=executions.detail(run.id()).tasks();UUID root=tasks.stream().filter(t->t.key().equals("root")).findFirst().orElseThrow().id();
         UUID attempt=executions.taskDetail(root).attempts().getFirst().id();String namespace="offload-"+UUID.randomUUID();lifecycle.plan(attempt,namespace);
         var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),source,"source-"+source);
@@ -178,4 +181,91 @@ class OffloadIntegrationTest {
         assertThat(detail.attempts()).hasSize(9);assertThat(detail.task().state()).isEqualTo("RUNNING");
         assertThat(runtimes.byAttempt(current).orElseThrow().desiredState()).isEqualTo("RUNNING");
     }
+    private Map<String,Object> automatic(int limit) {
+        var p=new LinkedHashMap<String,Object>(Map.of("memoryPercent",90,"consecutiveSamples",3,"maxSampleAgeSeconds",30,"maxGapSeconds",10,"minRunningSeconds",10,"cooldownSeconds",20,"maxTransfers",limit,"drainTimeoutSeconds",60,"startTimeoutSeconds",120));
+        p.put("cpuPercent",null);p.put("latencyMicros",null);return p;
+    }
+    private void measurement(UUID attempt,long epoch,RuntimePod pod,long sequence,Long limit) {
+        var m=new LinkedHashMap<String,Object>(Map.of("epoch",epoch,"podUid",pod.podUid().toString(),"sequence",sequence,"observedAt",clock.instant().toString(),"intervalMillis",5000,"memoryBytes",950));
+        for(String key:List.of("cpuUsageMicros","cpuLimitMillicores","latencyMicros","latencyObservedAt"))m.put(key,null);
+        m.put("memoryLimitBytes",limit);telemetry.record(new io.edgeai.app.config.RunnerPrincipal(attempt,epoch,pod),json.canonical(m));
+    }
+    private void hot(Fixture f) {clock.advance(10);for(int i=1;i<=3;i++){measurement(f.attempt(),1,f.pod(),i,1000L);if(i<3)clock.advance(5);}}
+    @Test void automaticPolicyIsImmutableAndRequiresExplicitRestartableServices() throws Exception {
+        assertThatThrownBy(()->fixture(false,false,automatic(1))).isInstanceOf(ControlPlaneException.class);
+        var f=fixture(true,true,automatic(1));
+        var body=new LinkedHashMap<String,Object>(Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","NODE","nodeId",f.sourceNode().toString()),"parameters",Map.of(),
+            "retry",Map.of("maxAttempts",2,"backoffSeconds",5,"maxElapsedSeconds",600,"retryOn",List.of("WORKLOAD_FAILED")),"offload",automatic(1)));
+        assertThat(executions.create(f.run().idempotencyKey().toString(),json.canonical(body)).created()).isFalse();
+        body.put("offload",automatic(2));assertThatThrownBy(()->executions.create(f.run().idempotencyKey().toString(),json.canonical(body))).isInstanceOf(ControlPlaneException.class);
+        assertThat(json.decode(repository.run(f.run().id(),false).orElseThrow().offloadPolicyJson())).isEqualTo(json.decode(json.canonical(automatic(1))));
+    }
+    @Test void concurrentAutomaticDecisionPersistsEvidenceAndSchedulerExclusionAndHonorsBudget() throws Exception {
+        var f=fixture(true,true,automatic(1));hot(f);assertThat(offloads.automaticCandidates(f.namespace())).contains(f.root());
+        assertThat(offloads.evaluate(f.root(),"wrong-namespace")).isEmpty();
+        try(var pool=Executors.newFixedThreadPool(8)) {
+            var futures=new ArrayList<Future<Optional<OffloadOperation>>>();var gate=new CountDownLatch(1);
+            for(int i=0;i<8;i++)futures.add(pool.submit(()->{gate.await();return offloads.evaluate(f.root(),f.namespace());}));gate.countDown();
+            int created=0;for(var future:futures)if(future.get(20,TimeUnit.SECONDS).isPresent())created++;assertThat(created).isEqualTo(1);
+        }
+        var operation=executions.taskDetail(f.root()).offloads().getFirst();assertThat(operation.trigger()).isEqualTo("MEMORY");assertThat(operation.targetNodeId()).isNull();
+        assertThat(operation.excludedNodeNames()).containsExactly(f.pod().nodeName());
+        assertThatThrownBy(()->lifecycle.authorize(f.attempt(),1,f.pod().podUid())).isInstanceOf(ControlPlaneException.class);
+        jdbc.update("DELETE FROM edgeai.runtime_telemetry WHERE attempt_id=?",f.attempt());assertThat(offloads.find(operation.id()).decisionJson()).contains("memoryPercent","950","sequence");
+        var next=start(f,operation);assertThat(next.mode()).isEqualTo("AUTO");assertThat(next.excludedNodeNames()).containsExactly(f.pod().nodeName());
+        var wrong=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),f.sourceNode(),f.pod().nodeName());lifecycle.submitted(next.id(),wrong.jobUid());
+        assertThatThrownBy(()->lifecycle.claim(next.id(),2,wrong)).isInstanceOf(ControlPlaneException.class);
+        var target=new RuntimePod(wrong.jobUid(),UUID.randomUUID(),f.targetNode(),"target-"+f.targetNode());lifecycle.claim(next.id(),2,target);completeCreate(next.id());
+        assertThat(offloads.find(operation.id()).state()).isEqualTo("SUCCEEDED");
+        clock.advance(20);for(int i=1;i<=3;i++){measurement(next.id(),2,target,i,1000L);clock.advance(5);}
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();assertThat(executions.taskDetail(f.root()).offloads()).hasSize(1);
+        lifecycle.fail(next.id(),2,target.podUid(),"WORKLOAD_FAILED");lifecycle.confirmStopped(next.id());clock.advance(5);lifecycle.retryTask(f.root());
+        var retry=executions.taskDetail(f.root()).attempts().getFirst();assertThat(retry.cause()).isEqualTo("RETRY");assertThat(retry.mode()).isEqualTo("AUTO");assertThat(retry.excludedNodeNames()).containsExactly(f.pod().nodeName());
+        assertThat(lifecycle.dispatch(retry.id()).excludedNodeNames()).containsExactly(f.pod().nodeName());
+    }
+    @Test void unknownLimitsMissingSamplesStaleEvidenceAndNoAlternativeNeverFence() throws Exception {
+        var f=fixture(true,true,automatic(2));clock.advance(10);measurement(f.attempt(),1,f.pod(),1,null);clock.advance(5);measurement(f.attempt(),1,f.pod(),2,null);clock.advance(5);measurement(f.attempt(),1,f.pod(),3,null);
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();
+        for(int i:List.of(5,7,9)){clock.advance(5);measurement(f.attempt(),1,f.pod(),i,1000L);}assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();
+        for(int i:List.of(10,11,12)){clock.advance(5);measurement(f.attempt(),1,f.pod(),i,1000L);}clock.advance(31);
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();
+        nodes.recordSnapshot(List.of(node(f.sourceNode(),f.pod().nodeName(),"READY")),clock.instant());
+        for(int i:List.of(13,14,15)){clock.advance(5);measurement(f.attempt(),1,f.pod(),i,1000L);}
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();assertThat(runtimes.byAttempt(f.attempt()).orElseThrow().desiredState()).isEqualTo("RUNNING");
+        nodes.recordSnapshot(List.of(node(f.sourceNode(),f.pod().nodeName(),"READY"),node(f.targetNode(),"target-"+f.targetNode(),"READY")),clock.instant());
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isPresent();
+        var disabled=fixture();hot(disabled);assertThat(offloads.evaluate(disabled.root(),disabled.namespace())).isEmpty();
+    }
+    @Test void automaticDecisionAndCancelShareTheRunLock() throws Exception {
+        var f=fixture(true,true,automatic(1));hot(f);
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            var gate=new CountDownLatch(1);
+            var a=pool.submit(()->{gate.await();offloads.evaluate(f.root(),f.namespace());return true;});
+            var b=pool.submit(()->{gate.await();executions.cancelTask(f.root(),"{}");return true;});gate.countDown();a.get(20,TimeUnit.SECONDS);b.get(20,TimeUnit.SECONDS);
+        }
+        lifecycle.confirmStopped(f.attempt());for(var o:executions.taskDetail(f.root()).offloads())offloads.advance(o.id());
+        assertThat(executions.taskDetail(f.root()).task().state()).isEqualTo("CANCELLED");assertThat(executions.taskDetail(f.root()).attempts()).hasSize(1);
+        assertThat(executions.taskDetail(f.root()).offloads()).allMatch(o->o.state().equals("CANCELLED"));assertThat(runtimes.result(f.root())).isEmpty();
+    }
+
+    @Test void cooldownRequiresNewEvidenceAndAutomaticPlacementNeverReturnsToVisitedNodes() throws Exception {
+        var f=fixture(true,true,automatic(2));hot(f);var first=offloads.evaluate(f.root(),f.namespace()).orElseThrow();
+        var next=start(f,first);var target=claimTarget(next,f.targetNode());
+        clock.advance(10);for(int i=1;i<=3;i++){measurement(next.id(),2,target,i,1000L);if(i<3)clock.advance(5);}
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();
+        clock.advance(5);measurement(next.id(),2,target,4,1000L);assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();
+        clock.advance(5);measurement(next.id(),2,target,5,1000L);
+        nodes.recordSnapshot(List.of(node(f.sourceNode(),f.pod().nodeName(),"READY"),node(f.targetNode(),target.nodeName(),"READY")),clock.instant());
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty(); // Both already visited, despite fresh pressure.
+        UUID third=UUID.randomUUID();nodes.recordSnapshot(List.of(node(f.sourceNode(),f.pod().nodeName(),"READY"),node(f.targetNode(),target.nodeName(),"READY"),node(third,"third-"+third,"READY")),clock.instant());
+        var second=offloads.evaluate(f.root(),f.namespace()).orElseThrow();assertThat(second.excludedNodeNames()).containsExactlyInAnyOrder(f.pod().nodeName(),target.nodeName());
+        assertThat(second.decisionJson()).contains("eligibleSince");assertThat(executions.taskDetail(f.root()).offloads()).hasSize(2);
+    }
+    @Test void committedResultCannotBeReplacedByLateAutomaticDecision() throws Exception {
+        var f=fixture(true,true,automatic(1));hot(f);
+        var permit=lifecycle.prepareCommit(f.attempt(),1,f.pod().podUid(),manifest());lifecycle.commitVerified(permit,receipt(f.root(),f.attempt()));
+        assertThat(offloads.evaluate(f.root(),f.namespace())).isEmpty();assertThat(executions.taskDetail(f.root()).offloads()).isEmpty();
+        assertThat(runtimes.result(f.root()).orElseThrow().attemptId()).isEqualTo(f.attempt());
+    }
+
 }

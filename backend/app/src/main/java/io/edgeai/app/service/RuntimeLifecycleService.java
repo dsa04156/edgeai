@@ -34,7 +34,7 @@ public class RuntimeLifecycleService {
         public Assignment { inputs=List.copyOf(inputs); }
     }
     public record CommitPermit(RuntimeInstance runtime,ResultManifest manifest,String digest,TaskResult replay) {}
-    public record Dispatch(RuntimeInstance runtime,ServiceExecutionSpec spec,UUID nodeId,String nodeName) {}
+    public record Dispatch(RuntimeInstance runtime,ServiceExecutionSpec spec,UUID nodeId,String nodeName,List<String> excludedNodeNames) {}
     private record Context(WorkflowRun run,Task task,TaskAttempt attempt) {}
 
     @Transactional(readOnly=true)
@@ -51,7 +51,15 @@ public class RuntimeLifecycleService {
     public Dispatch dispatch(UUID attemptId) {
         var c=lock(attemptId);var r=runtime(attemptId);
         String name=c.attempt().nodeId()==null?null:nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
-        return new Dispatch(r,spec(c),c.attempt().nodeId(),name);
+        return new Dispatch(r,spec(c),c.attempt().nodeId(),name,c.attempt().excludedNodeNames());
+    }
+
+    @Transactional(readOnly=true)
+    public void validateAutomaticOffload(UUID versionId) {
+        validateDag(versionId);
+        for(var definition:workflows.definitions(versionId))
+            if(!ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson()).recoveryMode().equals("RESTART"))
+                throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","자동 전환은 모든 SERVICE가 recovery.mode=RESTART를 선언해야 합니다.");
     }
 
     @Transactional
@@ -103,6 +111,7 @@ public class RuntimeLifecycleService {
             var expected=nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced);
             if(!expected.id().equals(pod.nodeUid()) || !expected.name().equals(pod.nodeName()))throw fenced();
         }
+        if(c.attempt().excludedNodeNames().contains(pod.nodeName()))throw fenced();
         if(r.producerPodUid()!=null && (!r.nodeUid().equals(pod.nodeUid()) || !r.nodeName().equals(pod.nodeName())))throw fenced();
         var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
         runtimes.claimed(r.id(),pod,clock.instant());offloads.completedByClaim(attemptId,clock.instant());return new Assignment(runtime(attemptId),spec,parameters,inputs);

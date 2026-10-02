@@ -2,6 +2,7 @@ package io.edgeai.app.support;
 
 import io.edgeai.domain.workflow.Dag;
 import io.edgeai.domain.execution.RetryPolicy;
+import io.edgeai.domain.execution.OffloadPolicy;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -20,7 +21,7 @@ public final class WorkflowInput {
     public static Map<?, ?> runRequest(String body) {
         var map=parameters(JSON.parse(body,65536));
         if(!map.keySet().containsAll(Set.of("workflowVersionId","execution","parameters")) ||
-                !Set.of("workflowVersionId","execution","parameters","retry").containsAll(map.keySet()))
+                !Set.of("workflowVersionId","execution","parameters","retry","offload").containsAll(map.keySet()))
             throw new IllegalArgumentException("Unexpected Run fields");
         JSON.boundedCanonical(map,65536);return map;
     }
@@ -34,6 +35,14 @@ public final class WorkflowInput {
     public static Map<String,Object> document(RetryPolicy policy) {
         return Map.of("maxAttempts",policy.maxAttempts(),"backoffSeconds",policy.backoffSeconds(),
             "maxElapsedSeconds",policy.maxElapsedSeconds(),"retryOn",policy.retryOn().stream().sorted().toList());
+    }
+    public static OffloadPolicy offloadPolicy(Object value) {
+        if(value==null)return null;
+        var m=object(value,"cpuPercent","memoryPercent","latencyMicros","consecutiveSamples","maxSampleAgeSeconds","maxGapSeconds",
+            "minRunningSeconds","cooldownSeconds","maxTransfers","drainTimeoutSeconds","startTimeoutSeconds");
+        return new OffloadPolicy(m.get("cpuPercent")==null?null:integer(m.get("cpuPercent")),m.get("memoryPercent")==null?null:integer(m.get("memoryPercent")),
+            m.get("latencyMicros")==null?null:Long.valueOf(integer(m.get("latencyMicros"))),integer(m.get("consecutiveSamples")),integer(m.get("maxSampleAgeSeconds")),integer(m.get("maxGapSeconds")),
+            integer(m.get("minRunningSeconds")),integer(m.get("cooldownSeconds")),integer(m.get("maxTransfers")),integer(m.get("drainTimeoutSeconds")),integer(m.get("startTimeoutSeconds")));
     }
     private static int integer(Object value) {
         if(!(value instanceof Number))throw new IllegalArgumentException("Integer required");
