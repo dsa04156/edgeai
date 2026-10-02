@@ -28,6 +28,8 @@
 | M3-DEPLOY | scripts/smoke-deployment.py | 이미지 경유 불변 DAG·Run/Task/Attempt·취소·재전송, 큰 숫자·인증/CSRF | 실행 중인 API/UI |
 | M4-SPEC | scripts/test-unit.sh | 실행 규격·자원·QoS·AUTO/NODE affinity·Pod 보안 설정 | 외부 서비스 없는 compiler 시험 |
 | M4-STORAGE | scripts/test-runtime-storage.sh | 실제 byte SHA-256·길이·형식·version 검증, 변조 업로드 거절, 고정 버전 다운로드 | 실제 MinIO |
+| M4-STATE | scripts/test-integration.sh | 실행 계획·명령 lease·동시 producer claim·결과 멱등성·취소 경쟁·BATCH 해제·DB rollback | 실제 PostgreSQL; Pod/저장소 응답은 명시적 fixture |
+| M4-RESULT | scripts/test-runtime-results.sh | 실제 S3 byte 검증→봉인된 DB Result→하위 입력, 위조 metadata·취소 중 결과 거절 | 실제 PostgreSQL + MinIO; Pod 신원은 fixture |
 | M4-RUNNER | scripts/test-runner.sh | 실제 workload, 입력/출력 검증, commit 재전송, timeout·취소·claim 거절 | Python + HTTP fixture; Control Plane 미연결 |
 | M4-RUNNER-IMAGE | EDGEAI_RUNNER_IMAGE=<image> scripts/test-runner.sh | 같은 프로토콜 시험을 비루트·읽기 전용 컨테이너로 수행 | Linux Docker; CI runner job |
 | M4-KIND | scripts/test-kind.sh | 실제 scheduler→Job→Result | NOT_IMPLEMENTED |

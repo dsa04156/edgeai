@@ -66,6 +66,7 @@ bash scripts/test-profiles-stack.sh compose # 실제 Profile/Device/Workflow/Swa
 bash scripts/test-node-inventory.sh <context> # 기존 context는 변경하지 않고 실제 Node 목록만 읽음
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
+bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 실제 결과 확정·취소 경쟁
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
 ```
 

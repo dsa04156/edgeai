@@ -7,4 +7,5 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class WorkflowConfiguration {
     @Bean WorkflowRepository workflowRepository(JdbcTemplate jdbc) { return new JdbcWorkflowRepository(jdbc); }
     @Bean ExecutionRepository executionRepository(JdbcTemplate jdbc) { return new JdbcExecutionRepository(jdbc); }
+    @Bean RuntimeRepository runtimeRepository(JdbcTemplate jdbc) { return new JdbcRuntimeRepository(jdbc); }
 }

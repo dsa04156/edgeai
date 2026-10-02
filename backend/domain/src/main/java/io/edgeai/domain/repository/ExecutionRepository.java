@@ -12,6 +12,7 @@ public interface ExecutionRepository {
     List<Task> tasks(UUID runId);
     Optional<Task> task(UUID id);
     List<TaskAttempt> attempts(UUID taskId);
+    Optional<TaskAttempt> attempt(UUID id);
     void cancelTask(UUID taskId, String terminalState, String reason, Instant now);
     void reconcileRunState(UUID runId, Instant now);
 }

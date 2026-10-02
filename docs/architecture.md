@@ -20,7 +20,8 @@ flowchart LR
 관리, 세션·관측·연결 이력과 Kubernetes Node 읽기 adapter, 불변 Workflow DAG와
 Run/Task/Attempt의 생성·조회·취소를 구현했다. 실제 Kubernetes 작업 실행과 결과는 M4 범위다.
 현재 M4에는 실행 규격 검증·Job compiler·S3 artifact adapter·독립 Python Runner가 추가됐다.
-이 구성 요소와 DB 실행 상태·Kubernetes 생성/관측·내부 claim/commit API의 연결은 아직 남아 있다.
+V5와 RuntimeLifecycleService는 실행 상태·producer claim·명령 lease·검증된 결과 확정·BATCH 해제·취소를
+같은 Run 행 잠금 아래 연결한다. 실제 Kubernetes 생성/관측 worker와 내부 Runner HTTP 인증/API 연결은 남아 있다.
 
 | 경로 | 책임 |
 |---|---|
@@ -47,7 +48,7 @@ backend/
 ├── app/src/main/java/io/edgeai/app/
 │   ├── EdgeAiApplication.java
 │   ├── controller/   # HTTP 엔드포인트: Profile, Device, Node, Workflow, WorkflowRun, Task, Platform, CSRF
-│   ├── service/      # Profile/Device/Workflow/Execution, Node 관측, 트랜잭션
+│   ├── service/      # Profile/Device/Workflow/Execution, Runtime lifecycle·결과 확정, 트랜잭션
 │   ├── dto/          # API 응답·페이지·오류 DTO
 │   ├── config/       # Security, Swagger UI, 저장소 빈 조립
 │   ├── exception/    # 예외 타입 및 HTTP 오류 응답 변환
@@ -58,13 +59,13 @@ backend/
 │   ├── node/         # ExecutionNode, NodeInventory port
 │   ├── workflow/     # Dag, WorkflowVersion, TaskDefinition
 │   ├── execution/    # WorkflowRun, Task, TaskAttempt
-│   ├── runtime/      # 실행 규격·자원·배치 입력
-│   ├── storage/      # Artifact 계약·검증 결과·저장소 port
+│   ├── runtime/      # 실행 규격·자원·배치 입력, RuntimeInstance·명령 lease·Pod 신원
+│   ├── storage/      # Artifact 계약·봉인된 TaskResult·저장소 port
 │   └── repository/   # 저장소 인터페이스
 └── adapters/src/main/java/io/edgeai/adapters/
     ├── kubernetes/   # 실제 Node API, CA/token/pagination, 순수 Job compiler
     ├── storage/      # 고정 bucket·object version·내용 검증
-    └── repository/   # Profile/Device/Node/Workflow/Execution JDBC 구현
+    └── repository/   # Profile/Device/Node/Workflow/Execution/Runtime JDBC 구현
 ```
 
 요청 처리는 `controller → service → ProfileRepository → JdbcProfileRepository` 순서다.

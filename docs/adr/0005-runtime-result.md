@@ -29,6 +29,18 @@ Run 행 잠금·현재 Attempt·claim 검사를 모든 실행/취소/결과 전�
 Job의 중복 Pod 가능성에 대비해 실제 Pod UID에 producer claim을 결합하며 다른 Pod의 결과는 거절한다.
 Job/Pod는 list/watch/relist와 주기적 reconciliation으로 관측한다. watch410은 재목록으로 복구한다.
 
+V5는 RuntimeInstance와 CREATE/DELETE 명령을 같은 DB 트랜잭션으로 저장한다. 명령은 namespace
+범위에서 `SKIP LOCKED`로 lease하며 만료 후 다른 worker가 회수할 수 있다. 이전 lease 소유자는
+완료 표시를 할 수 없다. 취소 후 늦은 CREATE 응답은 이미 종료를 관측했더라도 삭제 명령을 다시
+열고 기존 삭제 lease를 무효화한다. 외부 생성/삭제의 멱등성과 UID 검사는 Kubernetes adapter가 담당한다.
+실행·claim·결과·취소는 모두 같은 Run 행 잠금을 사용한다. claim은 Job UID·Pod UID와 epoch를
+고정하며 NODE 정책은 대상 Node UID와 이름도 일치해야 한다.
+
+Runner parameters는 TaskDefinition parameters에 Run parameters를 얕게 덮어쓴 결과다.
+같은 최상위 키는 Run 값이 우선하며 중첩 객체를 재귀 병합하지 않는다. 합친 JSON은 64 KiB로
+제한하고 숫자 정밀도를 보존한다. 필수 입력은 BATCH 선행 포트를 요구하며 포트 형식·최대 크기의
+호환성을 실행 계획 전에 검증한다.
+
 ## Artifact와 Result
 
 Runner는 입력의 고정 object version을 내려받아 size/SHA-256을 확인하고 workload를 실행한다.
@@ -42,6 +54,11 @@ SHA-256과 길이를 검증한다. ETag나 사용자 metadata를 내용 검증�
 Task/Attempt를 원자적으로 확정한다. 같은 commit은 멱등, 다른 내용·과거 producer는409다.
 Job Complete와 ResultCommitted는 서로 다르며 commit 없는 종료를 성공으로 표시하지 않는다.
 BATCH 하위 작업은 검증된 선행 출력만 입력으로 받는다. 취소 시 producer를 먼저 차단하고 실제 종료를 확인한다.
+결과 header와 artifact를 넣은 뒤 같은 트랜잭션에서 결과를 봉인하고 Task/Attempt를 성공으로 바꾼다.
+봉인된 결과·artifact는 UPDATE/DELETE/TRUNCATE 및 뒤늦은 artifact 추가를 거절한다.
+모든 선행 Task의 성공과 봉인된 Result를 함께 확인한 뒤 하위 Task를 READY로 만들고 Attempt를 한 번 생성한다.
+실패한 작업의 하위 분기는 SKIPPED로 전파하며 독립 분기를 유지한다. 취소된 실행은 실제 리소스 종료
+확인 전까지 CANCELLING을 유지한다. 결과 재전송은 같은 producer와 같은 전체 manifest인 경우만 멱등이다.
 
 ## 검증 범위
 

@@ -3,8 +3,8 @@ source "$(dirname "$0")/lib.sh"
 mode="${1:-scaffold}"
 case "$mode" in
   scaffold) checks=(test-unit test-contract test-runner test-ui) ;;
-  local) checks=(test-unit test-contract test-runner test-runtime-storage test-integration test-ui test-health test-kind test-fault) ;;
-  full) checks=(test-unit test-contract test-runner test-runtime-storage test-integration test-ui test-health test-kind test-fault test-load test-hardware) ;;
+  local) checks=(test-unit test-contract test-runner test-runtime-storage test-runtime-results test-integration test-ui test-health test-kind test-fault) ;;
+  full) checks=(test-unit test-contract test-runner test-runtime-storage test-runtime-results test-integration test-ui test-health test-kind test-fault test-load test-hardware) ;;
   *) blocked 'Usage: verify-all.sh scaffold|local|full' ;;
 esac
 result=0

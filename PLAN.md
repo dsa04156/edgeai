@@ -18,7 +18,8 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M3의 CI·배포 검증을 완료했으며 현재 M4 실제 실행 경로를 구현한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
-구성 요소 구현과 로컬 시험을 진행했으며 DB 실행 상태·Kubernetes 생성/관측·내부 API 연결·kind 수용시험이 남았다.
+구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
+BATCH 해제·취소를 구현해 실제 PostgreSQL/MinIO로 시험한다. Kubernetes 생성/관측 worker·내부 API 연결·kind 수용시험이 남았다.
 외부 Remote API·장비/모델·성능 합격 기준은 원문에서 미정이며
 사용자에게 자료 위치를 요청했다. 독립 구현·시뮬레이터 계약 시험은 계속 진행하되 실제 외부
 수용시험과 구분한다. LOCAL_VERIFIED와 FULL_ACCEPTANCE는 각각 전체 필수 증거를 요구한다.

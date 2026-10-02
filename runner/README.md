@@ -2,7 +2,8 @@
 
 Python 표준 라이브러리로 Attempt claim → 입력 다운로드·SHA-256 확인 → 실제 자식 프로세스
 실행 → 출력 업로드 → Result commit 요청을 수행한다. 현재 독립 Runner와 프로토콜 시험을
-구현했으며 Control Plane의 claim/commit API, DB 상태 전이, Kubernetes 실행 연결은 남아 있다.
+구현했다. DB 상태 전이·검증된 결과 확정 서비스는 추가했으며 Control Plane의 claim/commit
+HTTP 인증/API와 Kubernetes 실행 연결은 남아 있다.
 따라서 현재 Dashboard에서 만든 Run이 이 Runner를 실행하지는 않는다.
 
 계약은 [Runner OpenAPI](../contracts/openapi/runner-api.yaml), 실행 규격은

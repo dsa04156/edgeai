@@ -67,6 +67,10 @@ jobs:
         run: bash scripts/collect-evidence.sh storage bash scripts/test-storage.sh
       - name: Verify immutable artifact versions and content checksums
         run: bash scripts/collect-evidence.sh runtime-storage bash scripts/test-runtime-storage.sh
+      - name: Start PostgreSQL for real storage-to-result transactions
+        run: bash scripts/dev-up.sh
+      - name: Verify real S3 content and atomic PostgreSQL Result commit
+        run: bash scripts/collect-evidence.sh runtime-results bash scripts/test-runtime-results.sh
       - name: Stop project storage
         if: always()
         run: bash scripts/dev-down.sh

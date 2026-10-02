@@ -35,6 +35,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
     public List<Task> tasks(UUID id) { return jdbc.query(TASK_QUERY+" WHERE t.run_id=? ORDER BY d.task_key COLLATE \"C\"",TASK,id); }
     public Optional<Task> task(UUID id) { return jdbc.query(TASK_QUERY+" WHERE t.id=?",TASK,id).stream().findFirst(); }
     public List<TaskAttempt> attempts(UUID id) { return jdbc.query("SELECT * FROM edgeai.task_attempt WHERE task_id=? ORDER BY number DESC",ATTEMPT,id); }
+    public Optional<TaskAttempt> attempt(UUID id) { return jdbc.query("SELECT * FROM edgeai.task_attempt WHERE id=?",ATTEMPT,id).stream().findFirst(); }
     public void cancelTask(UUID id,String terminal,String reason,Instant now) {
         Timestamp time=Timestamp.from(now);
         jdbc.update("UPDATE edgeai.task_attempt SET state=CASE WHEN state='QUEUED' THEN 'CANCELLED' ELSE 'CANCELLING' END,updated_at=? WHERE task_id=? AND state IN ('QUEUED','DISPATCHING','RUNNING')",time,id);

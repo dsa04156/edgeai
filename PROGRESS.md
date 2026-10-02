@@ -4,8 +4,9 @@
 M0–M3 구현·검증 완료. M4 실행 구성 요소를 개발·시험 중이며 전체 플랫폼은 PARTIAL이다.
 현재 상세: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
-코드 8d1ae08의 CI 36970385137: scaffold/storage/images/gitops 모두 success, 결과 JSON9개 PASS/0.
-https://github.com/dsa04156/edgeai/actions/runs/36970385137
+M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
+https://github.com/dsa04156/edgeai/actions/runs/36975219681
+이후 추가한 V5 실행 상태·결과 확정 서비스는 로컬 검증을 통과했으며 새 CI·배포 확인은 남아 있다.
 
 [IMPLEMENTED]
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
@@ -13,7 +14,9 @@ Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파
 Flyway V1–V4, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
 M3는 실행 요청 저장이며 실제 Runner 실행·검증된 Result는 M4다.
 M4 실행 규격·Job compiler·S3 artifact adapter·독립 Runner를 추가했다.
-DB 실행 상태·Kubernetes 작업 생성/관측·내부 claim/commit API 연결은 아직 남아 있다.
+V5의 RuntimeInstance·CREATE/DELETE 명령 lease·봉인된 Result/Artifact와 실행 상태 전이를 추가했다.
+Run 잠금으로 claim·결과 확정·BATCH 하위 해제·취소를 직렬화하고 외부 저장소 I/O 후 producer를 다시 검사한다.
+Kubernetes 작업 생성/관측 worker·내부 claim/commit HTTP 인증/API 연결은 아직 남아 있다.
 
 [VERIFIED]
 단위/MVC25, 실제 PostgreSQL 통합19, 계약 생성 타입·YAML 일치,
@@ -24,10 +27,12 @@ Pod imageID와 CI digest 일치, Argo Synced, 실제 Ingress HTTP·Workflow PC/�
 기존 Traefik/Ingress status 문제로 Argo aggregate health는 Progressing이며 공유 설정은 변경하지 않았다.
 M4 구성 요소의 단위30·계약·호스트 Runner7·실제 MinIO4·Kubernetes server dry-run과
 기존 PostgreSQL·실제 PC/모바일8·DB 장애 복구 회귀를 확인했다.
-새 CI·Runner 컨테이너·실제 kind 실행은 아직 미확인이다.
+첫 M4 구성 요소의 CI·Runner 컨테이너·배포 이미지/Ingress를 확인했다.
+V5 상태 서비스의 실제 PostgreSQL31·MinIO+DB2·PC/모바일8·계약·DB 장애 복구를 추가 검증했다.
+실제 kind 실행은 아직 미구현이다.
 
 [EVIDENCE]
-docs/evidence/m3-workflow.md와 docs/evidence/runs/<testRunId>.
+docs/evidence/m4-runtime.md, docs/evidence/m3-workflow.md와 docs/evidence/runs/<testRunId>.
 M0–M2: docs/evidence/index.md 및 개별 milestone 문서.
 
 [BLOCKED]
@@ -36,7 +41,8 @@ M3 범위의 차단 없음. M4–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 외부 Remote API·실장비/모델·성능 수용 기준의 자료 위치를 요청한 상태이며 독립 구현은 계속한다.
 
 [NEXT]
-M4 구성 요소 CI 확인 후 RuntimeInstance/claim/outbox·Job/watch/reconciliation·Result 연결.
+V5 서비스 CI 확인 후 Kubernetes Job/Secret worker·watch/reconciliation·내부 Runner HTTP 인증/API 연결.
+그 뒤 Result 공개 API/UI/Swagger와 실제 kind 수용시험을 완료한다.
 상세 구현 순서: PLAN.md. 기존 demo-workflow/test-kind의 실제 실행 기준을 유지한다.
 개발 재개: bash scripts/dev-up.sh (Docker 대안: bash scripts/dev-postgres-local.sh start)
 별도 터미널: bash scripts/dev-backend.sh / bash scripts/dev-dashboard.sh

@@ -15,9 +15,10 @@ public class ExecutionService {
     private final ExecutionRepository repository;
     private final WorkflowRepository workflows;
     private final NodeRepository nodes;
+    private final RuntimeRepository runtimes;
     private final Clock clock;
-    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,Clock clock) {
-        this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.clock=clock;
+    public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,Clock clock) {
+        this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.clock=clock;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -59,6 +60,7 @@ public class ExecutionService {
         if(run.state().equals("CANCELLED")) return run;
         var now=clock.instant();
         for(var task:repository.tasks(id)) repository.cancelTask(task.id(),"CANCELLED","RUN_CANCELLED",now);
+        runtimes.stopForRun(id,now);
         repository.reconcileRunState(id,now);return run(id,false);
     }
     @Transactional
@@ -69,6 +71,7 @@ public class ExecutionService {
         var dag=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson());var descendants=dag.descendants(task.key());
         var now=clock.instant();repository.cancelTask(id,"CANCELLED","TASK_CANCELLED",now);
         for(var child:repository.tasks(run.id())) if(descendants.contains(child.key())) repository.cancelTask(child.id(),"SKIPPED","UPSTREAM_CANCELLED",now);
+        runtimes.stopForRun(run.id(),now);
         repository.reconcileRunState(run.id(),now);return new TaskSnapshot(task(id),repository.attempts(id));
     }
     private WorkflowRun run(UUID id,boolean lock) { return repository.run(id,lock).orElseThrow(()->error(404,"RUN_NOT_FOUND","실행 요청을 찾을 수 없습니다.")); }

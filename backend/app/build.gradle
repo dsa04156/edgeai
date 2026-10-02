@@ -26,6 +26,7 @@ tasks.register('integrationTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     include '**/*IntegrationTest.class'
     exclude '**/ArtifactStorageIntegrationTest.class'
+    exclude '**/RuntimeArtifactIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -34,6 +35,14 @@ tasks.register('storageIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/ArtifactStorageIntegrationTest.class'
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.register('runtimeArtifactIntegrationTest', Test) {
+    description = 'Requires both real PostgreSQL and versioned S3; verifies atomic Result commits across the storage boundary.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/RuntimeArtifactIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
