@@ -19,7 +19,7 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         r.getObject("id",UUID.class),r.getObject("attempt_id",UUID.class),r.getObject("task_id",UUID.class),r.getObject("run_id",UUID.class),r.getLong("epoch"),
         r.getString("namespace"),r.getString("job_name"),r.getObject("claim_nonce",UUID.class),r.getString("desired_state"),r.getString("observed_state"),
         r.getObject("job_uid",UUID.class),r.getObject("producer_pod_uid",UUID.class),r.getObject("node_uid",UUID.class),r.getString("node_name"),
-        instant(r,"expires_at"),r.getString("failure_reason"),instant(r,"created_at"),instant(r,"updated_at"));
+        instant(r,"expires_at"),r.getString("failure_reason"),instant(r,"created_at"),instant(r,"updated_at"),r.getObject("remote_allocation_id",UUID.class));
     public Optional<RuntimeInstance> runtime(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE id=?",RUNTIME,id).stream().findFirst(); }
     public Optional<RuntimeInstance> byAttempt(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE attempt_id=?",RUNTIME,id).stream().findFirst(); }
     public List<UUID> readyAttempts(UUID runId,int limit) {
@@ -31,15 +31,18 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
             """,(r,n)->r.getObject(1,UUID.class),runId,limit);
     }
     public List<RuntimeInstance> active(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND remote_allocation_id IS NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+    }
+    public List<RuntimeInstance> activeRemote(String namespace,int limit) {
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public void create(RuntimeInstance r) {
         Timestamp now=Timestamp.from(r.createdAt());
         jdbc.update("""
             INSERT INTO edgeai.runtime_instance(id,attempt_id,task_id,run_id,epoch,namespace,job_name,claim_nonce,
-                desired_state,observed_state,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,'RUNNING','PENDING',?,?)
-            """,r.id(),r.attemptId(),r.taskId(),r.runId(),r.epoch(),r.namespace(),r.jobName(),r.claimNonce(),now,now);
+                desired_state,observed_state,created_at,updated_at,remote_allocation_id,expires_at)
+            VALUES (?,?,?,?,?,?,?,?,'RUNNING','PENDING',?,?,?,?)
+            """,r.id(),r.attemptId(),r.taskId(),r.runId(),r.epoch(),r.namespace(),r.jobName(),r.claimNonce(),now,now,r.remoteAllocationId(),r.expiresAt()==null?null:Timestamp.from(r.expiresAt()));
         jdbc.update("UPDATE edgeai.task_attempt SET state='DISPATCHING',updated_at=? WHERE id=?",now,r.attemptId());
         jdbc.update("UPDATE edgeai.task SET state='RUNNING',updated_at=? WHERE id=?",now,r.taskId());
         jdbc.update("UPDATE edgeai.workflow_run SET state='RUNNING',updated_at=? WHERE id=?",now,r.runId());
@@ -56,6 +59,10 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
             UPDATE edgeai.runtime_instance SET producer_pod_uid=?,node_uid=?,node_name=?,observed_state='RUNNING',updated_at=? WHERE id=?
             """,pod.podUid(),pod.nodeUid(),pod.nodeName(),Timestamp.from(now),id);
         jdbc.update("UPDATE edgeai.task_attempt SET state='RUNNING',updated_at=? WHERE id=(SELECT attempt_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),id);
+    }
+    public void remoteObserved(UUID id,boolean running,Instant now) {
+        jdbc.update("UPDATE edgeai.runtime_instance SET observed_state=?,updated_at=? WHERE id=? AND remote_allocation_id IS NOT NULL",running?"RUNNING":"SUBMITTED",Timestamp.from(now),id);
+        if(running)jdbc.update("UPDATE edgeai.task_attempt SET state='RUNNING',updated_at=? WHERE state='DISPATCHING' AND id=(SELECT attempt_id FROM edgeai.runtime_instance WHERE id=?)",Timestamp.from(now),id);
     }
     public void stopForRun(UUID runId,Instant now) {
         var ids=jdbc.query("""
@@ -108,18 +115,18 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
     public Optional<TaskResult> result(UUID taskId) {
         var values=jdbc.query("SELECT * FROM edgeai.task_result WHERE task_id=? AND committed",(r,n)->new TaskResult(
             r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getObject("attempt_id",UUID.class),r.getObject("runtime_id",UUID.class),
-            r.getLong("epoch"),r.getObject("producer_pod_uid",UUID.class),r.getString("manifest_digest"),instant(r,"created_at"),List.of()),taskId);
+            r.getLong("epoch"),r.getObject("producer_pod_uid",UUID.class),r.getString("manifest_digest"),instant(r,"created_at"),List.of(),r.getObject("remote_allocation_id",UUID.class)),taskId);
         if(values.isEmpty())return Optional.empty();var r=values.getFirst();
         var outputs=jdbc.query("SELECT * FROM edgeai.result_artifact WHERE result_id=? ORDER BY port COLLATE \"C\"",(a,n)->new TaskResult.Output(a.getString("port"),
             new VerifiedArtifact(a.getString("bucket"),a.getString("object_key"),a.getString("object_version"),a.getString("sha256"),a.getLong("bytes"),a.getString("media_type"))),r.id());
-        return Optional.of(new TaskResult(r.id(),r.taskId(),r.attemptId(),r.runtimeId(),r.epoch(),r.producerPodUid(),r.manifestDigest(),r.createdAt(),outputs));
+        return Optional.of(new TaskResult(r.id(),r.taskId(),r.attemptId(),r.runtimeId(),r.epoch(),r.producerPodUid(),r.manifestDigest(),r.createdAt(),outputs,r.remoteAllocationId()));
     }
     public void commit(TaskResult r,Instant now) {
         Timestamp time=Timestamp.from(now);
         jdbc.update("""
-            INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,producer_pod_uid,manifest_digest,created_at)
-            VALUES (?,?,?,?,?,?,?,?)
-            """,r.id(),r.taskId(),r.attemptId(),r.runtimeId(),r.epoch(),r.producerPodUid(),r.manifestDigest(),time);
+            INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,producer_pod_uid,manifest_digest,created_at,remote_allocation_id)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,r.id(),r.taskId(),r.attemptId(),r.runtimeId(),r.epoch(),r.producerPodUid(),r.manifestDigest(),time,r.remoteAllocationId());
         for(var output:r.outputs()) {
             var a=output.artifact();
             jdbc.update("""
@@ -144,16 +151,22 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         for(UUID id:ids) jdbc.update("INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) SELECT ?,?,1,1,'QUEUED',w.mode,w.node_id,'INITIAL',?,? FROM edgeai.workflow_run w WHERE w.id=?",UUID.randomUUID(),id,Timestamp.from(now),Timestamp.from(now),runId);
     }
     public Optional<RuntimeCommand> leaseCommand(String namespace,UUID owner,Instant now,Duration duration) {
+        return lease(namespace,owner,now,duration,false);
+    }
+    public Optional<RuntimeCommand> leaseRemoteCommand(String namespace,UUID owner,Instant now,Duration duration) {
+        return lease(namespace,owner,now,duration,true);
+    }
+    private Optional<RuntimeCommand> lease(String namespace,UUID owner,Instant now,Duration duration,boolean remote) {
         RuntimeNames.dns(namespace,63);
         if(owner==null || duration.isNegative() || duration.isZero() || duration.compareTo(Duration.ofMinutes(5))>0) throw new IllegalArgumentException("Lease must be positive and at most five minutes");
         return jdbc.query("""
             UPDATE edgeai.runtime_command SET lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
             WHERE id=(SELECT id FROM edgeai.runtime_command WHERE NOT completed AND available_at<=?
-                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE namespace=?)
+                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE namespace=? AND (remote_allocation_id IS NOT NULL)=?)
                 AND (lease_until IS NULL OR lease_until<=?) ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
             RETURNING *
             """,(r,n)->new RuntimeCommand(r.getObject("id",UUID.class),r.getObject("runtime_id",UUID.class),r.getString("kind"),r.getInt("attempts"),
-                r.getObject("lease_owner",UUID.class),instant(r,"lease_until")),owner,Timestamp.from(now.plus(duration)),Timestamp.from(now),Timestamp.from(now),namespace,Timestamp.from(now)).stream().findFirst();
+                r.getObject("lease_owner",UUID.class),instant(r,"lease_until")),owner,Timestamp.from(now.plus(duration)),Timestamp.from(now),Timestamp.from(now),namespace,remote,Timestamp.from(now)).stream().findFirst();
     }
     public boolean finishCommand(UUID id,UUID owner,Instant now) {
         return jdbc.update("UPDATE edgeai.runtime_command SET completed=true,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_owner=?",Timestamp.from(now),id,owner)==1;

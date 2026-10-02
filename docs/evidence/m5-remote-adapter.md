@@ -1,8 +1,9 @@
-# M5 Remote 참조 경계 — 구성 요소 로컬 검증
+# M5 Remote 참조 경계 — 구성 요소 검증
 
 범위는 ADR0010, domain.remote, ReferenceRemoteGateway, remote-reference-api.yaml,
 simulator/remote_server.py다. 실제 별도 Python 프로세스와 HTTP/SQLite/파일을 사용한다.
-현재 공개 Run/Task/Offload/Result 경로에는 연결하지 않았으며 M5 전체 완료가 아니다.
+이 adapter 단계에서는 공개 실행 경로에 연결하지 않았으며 M5 전체 완료가 아니다.
+후속 영속 모델·결과 API/화면 연결의 검증은 `m5-remote-runtime.md`에 따로 기록한다.
 실제 2세부 API가 제공되지 않았으므로 참조 프로토콜의 검증을 외부 시스템 수용으로 확대하지 않는다.
 
 | testRunId (2026-10-02) | 직접 확인한 범위 |
@@ -43,7 +44,7 @@ fixture 확장 중 wildcard Map 타입 오류도 수정했다(114038Z-89e9a4fd).
 단위시험114449Z-7ab1efc5는 잘못된 surrogate가 정규화에서 손실되는 문제를 검출했다.
 Unicode 쌍 검증 후57개 전체 통과했다. 검증 기준을 줄이거나 실패 시험을 제외하지 않았다.
 
-## 남은 필수 연결
+## 이 단계 이후의 필수 연결
 
 1. 새 migration의 RemoteAllocation/runtime kind 및 명확한 producer identity. Pod/Node UID를 위조하지 않는다.
 2. Run/Task/Offload API·UI의 REMOTE 선택, 영속 command/lease/reconciliation과 cancel-before-create 처리.
@@ -51,5 +52,17 @@ Unicode 쌍 검증 후57개 전체 통과했다. 검증 기준을 줄이거나 �
 4. 원격 장애·취소·전환·재시도 경쟁/늦은 결과 차단을 실제 PostgreSQL·MinIO와 종단 시험.
 5. 실제 제공자 endpoint/auth/계약 정합화와 실장비·모델 수용. 합성 실행을 이 증거로 대체하지 않는다.
 
-CI scaffold/local/full에 test-remote를 포함했다. 이번 코드의 신규 CI와 배포 검증은 아직 대기다.
+1·3·4의 내부 모델/결과 경로는 후속 로컬 검증을 진행했으며 자동 worker/공개 API 종단은 아직 남아 있다.
+
+## CI와 실제 배포 확인
+
+CI scaffold/local/full에 test-remote를 포함했다. 코드0143094e8a90cb2cdd629815235a6d52c366dc91의
+[Actions37003825328](https://github.com/dsa04156/edgeai/actions/runs/37003825328)은
+scaffold/storage/runner/images/gitops 5 jobs 모두 success다. 내려받은 결과JSON15개 모두 PASS/0이며
+참조 Remote13개, 실제 kind18Run·자동 CPU/MEMORY/LATENCY 전환·late401·cleanup0도 포함한다.
+kind 증거는 20261002T120515Z-b7f6cbc2다. 이 kind 시험은 Kubernetes 회귀이며 Remote 자동 worker 시험은 아니다.
+
+20261002T122443Z-92195a03에서 GitOps pin fe1f252와 API/Dashboard/MinIO 실제 imageID의 검증 digest 일치,
+Ready·PVC Bound·ArgoSynced를 확인했다. 기존 공유 Traefik/Ingress status 문제로 aggregate health는
+Progressing이다. V10–V11의 신규 플랫폼 연결 코드가 배포됐다는 뜻은 아니다.
 기존 자동 전환 코드951c4bd의 실제 CI/배포 근거는 m5-automatic-offload.md에 별도로 기록한다.

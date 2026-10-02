@@ -4,7 +4,7 @@ test("result view distinguishes pending, verified metadata and unavailable stora
   // UI-only fixture. Real PostgreSQL/S3 and Kubernetes execution have separate gates.
   const runId = "11111111-1111-4111-8111-111111111111", taskId = "22222222-2222-4222-8222-222222222222";
   const attemptId = "33333333-3333-4333-8333-333333333333", resultId = "44444444-4444-4444-8444-444444444444";
-  let phase: "pending" | "retry" | "verified" | "unavailable" = "pending";
+  let phase: "pending" | "retry" | "verified" | "remote" | "unavailable" = "pending";
   const now = "2026-10-02T08:00:00Z";
   await page.route("**/api/control-plane/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
@@ -18,7 +18,8 @@ test("result view distinguishes pending, verified metadata and unavailable stora
     else if (path === `tasks/${taskId}`) body = { task, attempts: [{ id: attemptId, taskId, number: 1, epoch: 1, state: phase === "retry" ? "FAILED" : task.state }] };
     else if (path === `tasks/${taskId}/results`) {
       if (phase === "unavailable") return route.fulfill({ status: 503, json: { code: "RESULT_STORE_UNAVAILABLE", message: "결과 저장소에 연결할 수 없습니다. 복구 후 다시 시도하세요." } });
-      body = { taskId, items: phase === "pending" || phase === "retry" ? [] : [{ id: resultId, taskId, attemptId, runtimeId: runId, epoch: 1, producerPodUid: attemptId,
+      body = { taskId, items: phase === "pending" || phase === "retry" ? [] : [{ id: resultId, taskId, attemptId, runtimeId: runId, epoch: 1, producerPodUid: phase === "remote" ? null : attemptId,
+        remoteAllocationId: phase === "remote" ? "55555555-5555-4555-8555-555555555555" : null, remoteSourceMode: phase === "remote" ? "SYNTHETIC" : null,
         manifestDigest: "a".repeat(64), createdAt: now, artifacts: [{ port: "output", bucket: "edgeai-artifacts", objectKey: `tasks/${taskId}/attempts/${attemptId}/output`,
           objectVersion: "fixture-version", bytes: 1234, mediaType: "application/json", sha256: "b".repeat(64) }] }] };
     } else return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
@@ -50,6 +51,13 @@ test("result view distinguishes pending, verified metadata and unavailable stora
   await expect(results).toContainText(resultId);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await results.screenshot({ path: testInfo.outputPath("verified-result.png") });
+  phase = "remote";
+  await results.getByRole("button", { name: "결과 새로고침", exact: true }).click();
+  await expect(results).toContainText("Remote 참조 계산 · 실장비 검증 아님");
+  await results.getByText("결과 ID·체크섬·파일 버전", { exact: true }).click();
+  await expect(results.getByText("RemoteAllocation 55555555-5555-4555-8555-555555555555", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await results.screenshot({ path: testInfo.outputPath("remote-reference-result.png") });
   phase = "unavailable";
   await results.getByRole("button", { name: "결과 새로고침", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "결과 저장소에 연결할 수 없습니다." })).toBeVisible();

@@ -987,13 +987,26 @@ export interface components {
             runtimeId: string;
             /** Format: int64 */
             epoch: number;
-            /** Format: uuid */
-            producerPodUid: string;
+            /**
+             * Format: uuid
+             * @description Kubernetes 결과의 실제 producer Pod UID. Remote 결과는 null입니다.
+             */
+            producerPodUid: string | null;
+            /**
+             * Format: uuid
+             * @description Remote 결과의 영속 할당 ID. producerPodUid와 정확히 하나만 제공됩니다.
+             */
+            remoteAllocationId: string | null;
+            /**
+             * @description Remote 참조 계산은 SYNTHETIC입니다. 실제 외부 제공자 EXTERNAL과 구분하며 Kubernetes 결과에서는 null입니다.
+             * @enum {unknown}
+             */
+            remoteSourceMode: null | "SYNTHETIC" | "EXTERNAL";
             manifestDigest: string;
             /** Format: date-time */
             createdAt: string;
             artifacts: components["schemas"]["ResultArtifact"][];
-        };
+        } & unknown;
         ResultArtifact: {
             port: string;
             bucket: string;

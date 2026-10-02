@@ -2,7 +2,8 @@
 
 [STATUS]
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
-실행 측정·자동 전환도 실제 kind·CI·배포까지 검증했다. Remote 참조 adapter는 로컬 검증했으며 전체 플랫폼은 PARTIAL이다.
+실행 측정·자동 전환과 Remote 참조 adapter도 CI·배포까지 검증했다. RemoteAllocation/결과 연결은 로컬 검증했으며 전체 플랫폼은 PARTIAL이다.
+현재 M5 Remote 자동 worker·공개 실행/전환 API 연결이 남았다. 상세: docs/evidence/m5-remote-runtime.md.
 현재 상세: docs/evidence/m5-retry-offload.md. M4 완료: docs/evidence/m4-runtime.md. M3 완료 증거는 docs/evidence/m3-workflow.md에 보존한다.
 공개 저장소: https://github.com/dsa04156/edgeai
 M4 첫 구성 요소 코드 640e995의 CI 36975219681: scaffold/storage/runner/images/gitops 모두 success, 결과 JSON12개 PASS/0.
@@ -19,7 +20,10 @@ V8/Runner 내부 telemetry API·cgroup 수집·서비스 지연·현재 Attempt 
 5 jobs/결과JSON14개/실제kind18Run/source951c4bd 배포까지 검증했다. 상세는 docs/evidence/m5-automatic-offload.md다.
 ADR0010 Remote 참조 adapter/SQLite 시뮬레이터: 단위57(HTTP/TLS10 포함), 실제 프로세스 통합13,
 3개 OpenAPI/MVC18 로컬 통과. 상세는 docs/evidence/m5-remote-adapter.md다.
-플랫폼 연결·실제 외부 계약·상태형 복원은 남아 있으며 신규 Remote 코드 CI는 대기다.
+참조 adapter CI37003825328 5 jobs/결과JSON15개 PASS, source0143094 실제 이미지/Ready/PVC/ArgoSynced 확인.
+ADR0011/V10–V11 RemoteAllocation, Pod와 분리한 producer, 관측 revision/lease/늦은 결과 차단,
+실제 S3 검증 후 결과 확정·하위 BATCH와 결과 API/화면을 추가했다. 로컬 PG80·단위58·실제 MinIO3 통과.
+Remote 자동 worker·공개 REMOTE 선택·실제 외부 계약·상태형 복원은 남아 있으며 이번 연결 코드 CI는 대기다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
 Flyway V1–V5, 계층형 Spring 패키지, 한국어 Swagger27개, GitHub Actions/GHCR/ArgoCD 연결.
@@ -34,6 +38,10 @@ Attempt HMAC과 실제 Pod-bound TokenReview 신원을 함께 검증한다. 전�
 새 Run/결과 확정과 다음 실행 명령을 같은 DB 트랜잭션에 저장하며 과거 M3 Run은 자동 실행하지 않는다.
 
 [VERIFIED]
+ADR0011 로컬: PostgreSQL80·단위/MVC58·계약/MVC19·실제 MinIO/DB3·PC/모바일 UI22 PASS.
+실제 Remote 파일→MinIO→DB 결과→고정 입력의 Remote 하위 BATCH까지 계산값·SHA·version을 확인했다.
+실DB/API PC·모바일8·Swagger·DB 장애503/동일 프로세스 복구도 PASS(20261002T123523Z-2f3da4ae).
+이는 내부 lifecycle 통합 검증이며 Remote 자동 worker/공개 REMOTE 실행 요청 시험은 아니다.
 M5 명시적 offload 로컬: 실제 PostgreSQL60·단위/MVC42·계약/MVC18·PC/모바일 UI18 PASS.
 실DB/API PC·모바일8·한국어 Swagger30·실제 DB 장애/복구도 PASS(20261002T095243Z-b6c8245c).
 실제kind 노드 전환/전환 중 API 재시작/고정 BATCH 입력/취소/시작 제한·cleanup을 통과했다.
@@ -69,7 +77,9 @@ M4 범위의 차단 없음. M5–M10은 미완료이며 전체 LOCAL_VERIFIED/FU
 
 [NEXT]
 M4 완료: e4be5ff CI36986090769 5jobs/JSON14개 PASS, kind9Run·aecd457 pin/실제imageID·Ready/PVC/Argo 확인.
-M5 ADR0009·V9 자동 전환의 UI/실제kind 검증을 마치고 Remote adapter 계약과 장애 경로를 구현한다.
+M5 Remote worker의 영속 명령/조정·고정 S3 입출력 전송을 연결한다. 이후 공개 Run/Offload REMOTE 선택,
+최초 실행부터 하위/재시도/전환까지 유지하는 제공자 binding, 재시작·취소·전환 종단을 검증한다.
+다음 단계는 M6 VD → M7 다중 장치/STREAM → M8 부하 → M9 운영/복구/보안 → M10 실장비다.
 아래는 M4 연결 단계의 이전 진행 기록이다.
 현재 연결 코드의 CI 확인과 Runner·MinIO 검증 이미지 발행, 영속 키·bucket 설정 후 배포 실행을 활성화한다.
 9d15fb1 CI36981974775 5jobs/JSON13개 통과, 배포 imageID·Ingress 회귀까지 확인했다.

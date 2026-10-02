@@ -2564,14 +2564,29 @@ components:
     TaskResult:
       type: object
       additionalProperties: false
-      required: [id, taskId, attemptId, runtimeId, epoch, producerPodUid, manifestDigest, createdAt, artifacts]
+      allOf:
+      - if:
+          properties:
+            remoteAllocationId: {type: string}
+          required: [remoteAllocationId]
+        then:
+          properties:
+            producerPodUid: {type: 'null'}
+            remoteSourceMode: {enum: [SYNTHETIC, EXTERNAL]}
+        else:
+          properties:
+            producerPodUid: {type: string}
+            remoteSourceMode: {type: 'null'}
+      required: [id, taskId, attemptId, runtimeId, epoch, producerPodUid, remoteAllocationId, remoteSourceMode, manifestDigest, createdAt, artifacts]
       properties:
         id: {type: string, format: uuid}
         taskId: {type: string, format: uuid}
         attemptId: {type: string, format: uuid}
         runtimeId: {type: string, format: uuid}
         epoch: {type: integer, format: int64, minimum: 1}
-        producerPodUid: {type: string, format: uuid}
+        producerPodUid: {type: [string, 'null'], format: uuid, description: Kubernetes 결과의 실제 producer Pod UID. Remote 결과는 null입니다.}
+        remoteAllocationId: {type: [string, 'null'], format: uuid, description: Remote 결과의 영속 할당 ID. producerPodUid와 정확히 하나만 제공됩니다.}
+        remoteSourceMode: {enum: [null, SYNTHETIC, EXTERNAL], description: Remote 참조 계산은 SYNTHETIC입니다. 실제 외부 제공자 EXTERNAL과 구분하며 Kubernetes 결과에서는 null입니다.}
         manifestDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
         createdAt: {type: string, format: date-time}
         artifacts:

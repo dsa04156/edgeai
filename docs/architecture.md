@@ -35,9 +35,13 @@ V8 runtime_telemetry는 현재 producer가 보고한 cgroup 사용량과 서비�
 ADR0009/V9는 연속된 실제 측정·warmup/cooldown·전환 예산과 판단 이력을 보존하고 이전 노드를
 제외한 AUTO 재배치를 수행한다. 실제 kind/CI/배포에서 검증했다.
 ADR0010의 RemoteGateway는 allocation/run/task/attempt/epoch를 사용하는 내부 경계다.
-HTTP 참조 adapter와 SQLite 기반 합성 제공자를 실제 HTTP/TLS·별도 프로세스로 로컬 검증했다.
-공개 실행 경로와 RemoteAllocation/producer/Result 연결은 남아 있으며 Kubernetes Pod/Node UID를
-Remote 신원으로 대신하지 않는다. 실제 외부 API는 제공된 계약에 맞춘 별도 adapter가 필요하다.
+HTTP 참조 adapter와 SQLite 기반 합성 제공자를 실제 HTTP/TLS·별도 프로세스 및 CI에서 검증했다.
+ADR0011/V10–V11은 RuntimeInstance와 RemoteAllocation을 1:1로 연결하고 Kubernetes/Remote 명령
+조회를 분리한다. Remote 결과는 allocation 신원을 가지며 Job/Pod/Node UID는 null이다. 제공자의 성공
+관측만으로 결과를 확정하지 않고 실제 S3 검증 후 현재 Attempt/epoch/lease/취소를 다시 확인한다.
+결과 API·화면에서 SYNTHETIC 참조 계산을 표시한다. 이 내부 경로는 실제 DB/S3/HTTP로 로컬 검증했다.
+자동 Remote worker·공개 REMOTE 요청/전환·제공자 설정 연결은 남아 있다. 실제 외부 API는 제공된 계약에
+맞춘 별도 adapter가 필요하다. 상세 검증 및 한계는 `docs/evidence/m5-remote-runtime.md`를 따른다.
 
 | 경로 | 책임 |
 |---|---|
@@ -77,11 +81,13 @@ backend/
 │   ├── execution/    # WorkflowRun, Task, TaskAttempt
 │   ├── runtime/      # 실행 규격·자원·배치 입력, RuntimeInstance·명령 lease·Pod 신원
 │   ├── storage/      # Artifact 계약·봉인된 TaskResult·저장소 port
+│   ├── remote/       # 원격 신원·불변 할당/제공자 binding·파일·관측·gateway port
 │   └── repository/   # 저장소 인터페이스
 └── adapters/src/main/java/io/edgeai/adapters/
     ├── kubernetes/   # 실제 Node API, CA/token/pagination, 순수 Job compiler
     ├── storage/      # 고정 bucket·object version·내용 검증
-    └── repository/   # Profile/Device/Node/Workflow/Execution/Runtime JDBC 구현
+    ├── remote/       # 참조 제공자 HTTP/TLS·파일 전송
+    └── repository/   # Profile/Device/Node/Workflow/Execution/Runtime/Remote JDBC 구현
 ```
 
 요청 처리는 `controller → service → ProfileRepository → JdbcProfileRepository` 순서다.
