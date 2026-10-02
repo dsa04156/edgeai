@@ -67,7 +67,7 @@ DB 중단 시 503와 동일 API/UI 프로세스의 복구까지 모두 통과했
 - integration: 20261002T015818Z-9cb09f25
 - health/Profile/Swagger: 20261002T015826Z-4e61b9e7
 
-[CI/CD 연결 및 API 설명 — 진행 중]
+[CI/CD 연결 및 API 설명 — 첫 구현 기록]
 사용자 요청에 따라 GitHub Actions → GHCR → Git digest 갱신 → ArgoCD 흐름을 구현했다.
 기존 context/ArgoCD/Traefik/local-path를 조회했고 전용 edgeai namespace와 Secret을 준비했다.
 Kustomize/ArgoCD manifests는 실제 클러스터 server dry-run을 통과했다.
@@ -90,3 +90,26 @@ CSRF 거절 코드 검증에서 중단됐다. 기본 거절 처리의 /error 재
 토큰 누락·잘못된 토큰 모두 403, 정상 등록/재등록/충돌/조회는 201/200/409/200으로 확인했다.
 deployment-smoke 20261002T025851Z-53df87c0, contract 20261002T025908Z-d79f7da1: PASS/0.
 빠른 재실행 시 TIME_WAIT를 활성 서버로 오인하던 포트 검사도 수정했고 활성 listener 차단은 확인했다.
+
+[CI/CD 연결 및 API 설명 — 배포 확인, 2026-10-02]
+코드 39eb6fe의 GitHub Actions 36958143060: scaffold/storage/images/gitops 모두 success.
+내려받은 원시 결과 JSON 9개 모두 PASS/0. 실제 컨테이너 이미지 시험도 포함한다.
+https://github.com/dsa04156/edgeai/actions/runs/36958143060
+Actions가 검증한 두 이미지 digest를 912fa23으로 자동 기록했고 익명 GHCR manifest 조회도 200이었다.
+ArgoCD edgeai-dev를 등록했으며 실제 Pod의 API/Dashboard imageID가 검증한 digest와 일치한다.
+PostgreSQL PVC 5Gi Bound, DB/API/Dashboard 각 1/1 Ready, Git 동기화 Synced를 확인했다.
+클러스터의 Docker Hub CDN reset으로 PostgreSQL은 동일 digest의 공식 ECR 미러로 전환했다(41bd732).
+
+실제 Ingress에서 UI/CSS·API 연결·Swagger·인증·CSRF·등록201/재등록200/충돌409/조회200 통과.
+두 사설망 주소 모두 인증된 Swagger/한글 계약/API 조회200 확인.
+근거: kubernetes-http 20261002T031016Z-1de769da,
+gitops-state 20261002T031127Z-a7f88d2d, ingress-swagger 20261002T031127Z-a1448527 (PASS/0).
+배포 Swagger: http://edgeai.192.168.0.56.sslip.io/swagger-ui.html
+대체 주소: http://edgeai.10.254.192.217.nip.io/swagger-ui.html
+계정은 Git에서 제외한 .tools/kubernetes/edgeai-runtime.env에 보관한다.
+
+남은 제한: 기존 Traefik LoadBalancer Service의 status.loadBalancer가 비어 Ingress 상태에도
+주소가 게시되지 않는다. 실제 HTTP와 Pod는 정상이지만 ArgoCD aggregate health는 Progressing이다.
+공유 Traefik/클러스터 설정은 변경하지 않았다. 작업 중 기존 control-plane 노드의 DiskPressure와
+scheduler lease 갱신 실패도 관측했으며 이후 Pod 배치는 재개됐다. 클러스터 전체 안정성은 별도 운영 점검 대상이다.
+로컬 검증 API/UI/DB와 일회성 registry probe Pod는 종료·제거했다. 배포 서비스와 PVC는 유지한다.
