@@ -17,7 +17,7 @@
 | M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
-M4까지 구현·검증을 완료했으며 현재 M5를 진행한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
+M4까지 구현·검증을 완료했으며 현재 M5 잔여 검증과 M6 구현을 진행한다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과
 BATCH 해제·취소를 실제 PostgreSQL/MinIO로 시험했다. Kubernetes 생성/관측 worker·내부 인증/API를
 연결했고 실제 클러스터의 scheduler·Pod TokenReview·UID 삭제를 대기 컨테이너로 검증했다.
@@ -134,4 +134,6 @@ VD 실행은 기본 비활성이며 공개 등록은 아직 runtime을 자동 �
 ADR0017/V15는 인증된 poll 서버와 session/sequence 재전송 상태·lease/Ready·idle drain 및 감독
 프로세스의 자체 교체 요청을 연결한다. 실제 Spring HTTP·PostgreSQL·Python 감독 프로세스의
 준비/종료·503/lease 만료를 검증한다. Kubernetes 관측은 이 통합시험에서 fixture다.
-다음은 공개 provision/Operation/상태 API·UI와 실제 VD Run 배정·Task claim/Result의 연결이다.
+ADR0018은 공개 provision/replace/drain·Operation/실행 상태 API와 UI를 연결했다. 실제 DB의
+동시 요청·멱등성·준비/종료 이력과 UI 상태/재전송을 검증한다. 상세는 docs/evidence/m6-vd-public-execution.md다.
+다음은 실제 Pod→poll 전체 수용과 VD Run 배정·Task claim/Result 및 demo-vd다.

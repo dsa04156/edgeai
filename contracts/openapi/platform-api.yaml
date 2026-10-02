@@ -1494,11 +1494,12 @@ paths:
     get:
       tags: [Operation]
       operationId: getOperation
-      summary: 비동기 실행 전환 상태 조회
+      summary: 비동기 실행 전환·VD 작업 상태 조회
       description: >-
-        현재 TASK_OFFLOAD Operation의 이전/새 Attempt, 대상 노드 또는 고정 Remote 제공자, drain/start 마감과 실패 코드를 조회합니다.
+        kind로 TASK_OFFLOAD와 VD_PROVISION/VD_REPLACE/VD_DRAIN을 구분합니다. TASK_OFFLOAD는 이전/새 Attempt, 대상 노드 또는 고정 Remote 제공자, drain/start 마감과 실패 코드를 조회합니다.
         DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다.
-        FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
+        VD RUNNING은 준비/종료 대기, SUCCEEDED는 준비 확인 또는 물리 종료 확인입니다. SUPERSEDED는 새 요청으로 대체됨입니다.
+        VD 성공은 Task/Result 완료를 뜻하지 않습니다. TASK_OFFLOAD의 FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
       parameters:
       - name: operationId
         in: path
@@ -1510,7 +1511,7 @@ paths:
           description: 비동기 전환 상태
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/OffloadOperation'}
+              schema: {$ref: '#/components/schemas/Operation'}
         '400': {description: UUID 형식 오류}
         '401': {description: Basic 인증 필요}
         '404': {description: Operation이 없습니다.}
@@ -1523,7 +1524,7 @@ paths:
       description: >-
         edgeai.vd/v1 규격의 VD Profile과 실제 DEVICE/SERVICE 버전을 검증하고 원본 연결을 원자적으로 저장합니다.
         같은 key와 생성 입력은 기존 VD를 반환하고 다른 입력은409입니다. 해제 뒤 재전송도 기존 VD이며 재활성화하지 않습니다.
-        현재 REGISTERED는 논리 등록만 완료된 상태입니다. 실제 Runtime 생성·Ready·VD 경유 Task 실행은 후속 연결 범위입니다.
+        현재 REGISTERED는 논리 등록만 완료된 상태입니다. 실행은 별도 provision 요청으로 시작하고 execution에서 준비 상태를 확인합니다. VD 경유 Task 실행은 후속 연결 범위입니다.
       security: [{localBasic: [], csrfToken: []}]
       requestBody:
         required: true
@@ -1620,7 +1621,7 @@ paths:
       tags: [VD]
       operationId: releaseVirtualDevice
       summary: VD 논리 해제와 원본 연결 종료
-      description: VD를 RELEASED로 표시하고 활성 source를 닫습니다. 관리 중인 실행이 있으면 종료 Operation을 함께 기록하며 완료 전까지 이전 원본 Device 해제를 막습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 응답은 논리 해제이며 실제 Pod 종료 완료를 뜻하지 않습니다. 실제 Kubernetes worker와 공개 Operation 조회 연결은 후속 범위입니다.
+      description: VD를 RELEASED로 표시하고 활성 source를 닫습니다. 관리 중인 실행이 있으면 종료 Operation을 함께 기록하며 완료 전까지 이전 원본 Device 해제를 막습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 응답은 논리 해제이며 실제 Pod 종료 완료를 뜻하지 않습니다. execution의 pendingOperation과 Operation 조회에서 실제 종료를 확인하세요.
       security: [{localBasic: [], csrfToken: []}]
       responses:
         '200':
@@ -1631,6 +1632,155 @@ paths:
         '400': {$ref: '#/components/responses/VirtualDeviceError'}
         '401': {description: Basic 인증 필요}
         '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/provision:
+    post:
+      tags: [VD]
+      operationId: provisionVirtualDevice
+      summary: VD 실행 시작 요청
+      description: >-
+        현재 설정으로 지속 실행을 시작합니다. 같은 설정의 실행이 있으면 재사용하며, 다른 설정이면 종료 후 교체합니다.
+        현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다.
+        새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다.
+        VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
+      security: [{localBasic: [], csrfToken: []}]
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}, description: 대상 VD UUID}
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}, description: 동일 요청 재전송에서 유지할 UUID}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VDExecutionRequest'}
+            example: {revision: 0}
+      responses:
+        '202':
+          description: 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/operations/{operationId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '200':
+          description: 동일 요청의 기존 Operation
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/replace:
+    post:
+      tags: [VD]
+      operationId: replaceVirtualDeviceRuntime
+      summary: VD 실행 세대 교체 요청
+      description: >-
+        현재 실행의 종료를 확인한 뒤 새 세대를 만듭니다. 교체할 실행이 없으면409입니다. vdId와 이전 이력은 유지됩니다.
+        현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다.
+        새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다.
+        VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
+      security: [{localBasic: [], csrfToken: []}]
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}, description: 대상 VD UUID}
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}, description: 동일 요청 재전송에서 유지할 UUID}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VDExecutionRequest'}
+            example: {revision: 0}
+      responses:
+        '202':
+          description: 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/operations/{operationId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '200':
+          description: 동일 요청의 기존 Operation
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/drain:
+    post:
+      tags: [VD]
+      operationId: drainVirtualDeviceRuntime
+      summary: VD 실행 종료 요청
+      description: >-
+        새 작업 수용을 중단하고 drain 후 물리 Pod 종료를 기다립니다. 제한 시간 초과는 강제 종료로 전환합니다. 실행이 없으면 즉시 SUCCEEDED이며 VD 등록은 유지됩니다.
+        현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다.
+        새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다.
+        VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
+      security: [{localBasic: [], csrfToken: []}]
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}, description: 대상 VD UUID}
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}, description: 동일 요청 재전송에서 유지할 UUID}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VDExecutionRequest'}
+            example: {revision: 0}
+      responses:
+        '202':
+          description: 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/operations/{operationId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '200':
+          description: 동일 요청의 기존 Operation
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDOperation'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/execution:
+    get:
+      tags: [VD]
+      operationId: getVirtualDeviceExecution
+      summary: VD 실행 준비 상태·세대·작업 이력 조회
+      description: >-
+        asOf 시점의 일관된 DB 스냅샷입니다. ready는 RUNNING 의도·Pod Ready 관측·미만료 인증 lease를 모두 요구합니다.
+        과거 observedState=READY만으로 현재 준비 상태를 판단하지 마세요. current는 미종료 실행이며 없으면 null입니다.
+        pendingOperation은 현재 진행 작업이며 runtimeHistory/bindings/operations는 각각 최신100개입니다.
+        각 Truncated 값이 true이면 이전 이력이 더 있습니다. 기능 비활성·VD 해제 후에도 이력은 조회 가능합니다.
+        세션·자격·내부 설정은 반환하지 않습니다. 성공한 Operation도 현재 실행이나 Task/Result 성공을 보장하지 않습니다.
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}, description: 대상 VD UUID}
+      responses:
+        '200':
+          description: VD 실행 상태와 보존된 이력
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VDExecution'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '401': {description: Basic 인증 필요}
         '404': {$ref: '#/components/responses/VirtualDeviceError'}
         '503': {$ref: '#/components/responses/VirtualDeviceError'}
 components:
@@ -2870,6 +3020,84 @@ components:
           type:
           - integer
           - 'null'
+    Operation:
+      oneOf:
+      - {$ref: '#/components/schemas/OffloadOperation'}
+      - {$ref: '#/components/schemas/VDOperation'}
+    VDExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [revision]
+      properties:
+        revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+    VDOperation:
+      type: object
+      additionalProperties: false
+      required: [id, kind, vdId, requestedRevision, sourceRuntimeId, targetRuntimeId, state, reason, createdAt, updatedAt, finishedAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [VD_PROVISION, VD_REPLACE, VD_DRAIN]}
+        vdId: {type: string, format: uuid}
+        requestedRevision: {type: integer, format: int64}
+        sourceRuntimeId: {type: [string, 'null'], format: uuid}
+        targetRuntimeId: {type: [string, 'null'], format: uuid}
+        state: {type: string, enum: [RUNNING, SUCCEEDED, FAILED, SUPERSEDED]}
+        reason: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+    VDRuntime:
+      type: object
+      additionalProperties: false
+      required: [id, vdId, generation, requestedRevision, desiredState, observedState, ready, podUid, nodeUid, nodeName, leaseUntil, readyAt, startupDeadline, drainDeadline, failureReason, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        vdId: {type: string, format: uuid}
+        generation: {type: integer, format: int64, minimum: 1}
+        requestedRevision: {type: integer, format: int64}
+        desiredState: {type: string, enum: [RUNNING, DRAINING, STOPPED]}
+        observedState: {type: string, enum: [PENDING, SUBMITTED, READY, UNREADY, TERMINATED]}
+        ready: {type: boolean, description: asOf 시점 준비 상태. leaseUntil 이후에는 이 응답으로 준비됨을 표시하지 마세요.}
+        podUid: {type: [string, 'null'], format: uuid}
+        nodeUid: {type: [string, 'null'], format: uuid}
+        nodeName: {type: [string, 'null']}
+        leaseUntil: {type: [string, 'null'], format: date-time}
+        readyAt: {type: [string, 'null'], format: date-time}
+        startupDeadline: {type: string, format: date-time}
+        drainDeadline: {type: [string, 'null'], format: date-time}
+        failureReason: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    VDRuntimeBinding:
+      type: object
+      additionalProperties: false
+      required: [id, vdId, runtimeId, openedRevision, closedRevision, openedAt, closedAt]
+      properties:
+        id: {type: string, format: uuid}
+        vdId: {type: string, format: uuid}
+        runtimeId: {type: string, format: uuid}
+        openedRevision: {type: integer, format: int64}
+        closedRevision: {type: [integer, 'null'], format: int64}
+        openedAt: {type: string, format: date-time}
+        closedAt: {type: [string, 'null'], format: date-time}
+    VDExecution:
+      type: object
+      additionalProperties: false
+      required: [vdId, enabled, asOf, current, pendingOperation, runtimeHistory, runtimeHistoryTruncated, bindings, bindingsTruncated, operations, operationsTruncated]
+      properties:
+        vdId: {type: string, format: uuid}
+        enabled: {type: boolean}
+        asOf: {type: string, format: date-time}
+        current:
+          oneOf: [{$ref: '#/components/schemas/VDRuntime'}, {type: 'null'}]
+        pendingOperation:
+          oneOf: [{$ref: '#/components/schemas/VDOperation'}, {type: 'null'}]
+        runtimeHistory: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/VDRuntime'}}
+        runtimeHistoryTruncated: {type: boolean}
+        bindings: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/VDRuntimeBinding'}}
+        bindingsTruncated: {type: boolean}
+        operations: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/VDOperation'}}
+        operationsTruncated: {type: boolean}
     VirtualDeviceSources:
       type: array
       maxItems: 16

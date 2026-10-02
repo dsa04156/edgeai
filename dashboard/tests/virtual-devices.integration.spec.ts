@@ -46,6 +46,12 @@ test("real VD source replacement preserves identity, fences stale edits and prot
   const detail = page.locator('[aria-labelledby="vd-detail-title"]');
   await expect(detail).toContainText(`VD ID ${vd.id}`); await expect(detail).toContainText("등록됨");
   expect(vd.state).toBe("REGISTERED");
+  const execution = await page.request.get(`${path}/execution`, { headers }); expect(execution.status()).toBe(200);
+  const executionState = await execution.json();expect(executionState.current).toBeNull();expect(executionState.operations).toEqual([]);
+  if (!executionState.enabled) {
+    await expect(detail.getByRole("region", { name: "VD 실행", exact: true })).toContainText("VD 실행 기능이 비활성화되어 있습니다.");
+    expect((await page.request.post(`${path}/provision`, { headers: { ...headers, "Idempotency-Key": randomUUID() }, data: { revision: 0 } })).status()).toBe(503);
+  }
   for (const method of ["POST", "PATCH", "DELETE"]) {
     const denied = await page.request.fetch(method === "POST" ? "/api/control-plane/virtual-devices" : path,
       { method, headers: { authorization }, ...(method === "DELETE" ? {} : { data: {} }) });

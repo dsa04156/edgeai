@@ -65,3 +65,15 @@ pin86ff9bd의 실제 이미지/Ready/PVC Bound/Argo Synced까지 확인했다
 실행 활성화를 뜻하지 않는다. 공개 provision/교체/drain·Operation/상태 API와 화면, VD 정책의
 실제 활성 Runtime Task 배정·claim/Result·취소·장애 복구 및 demo-vd를 구현해야 한다.
 M5 상태형 복원·실제 외부 계약 수용, M7–M10도 남아 있으며 전체 플랫폼은 PARTIAL이다.
+
+## d89d2bb CI와 실제 배포 확인
+
+CI37040484693은 storage/runner/scaffold/images/gitops5 jobs 모두 success다. 내려받은
+검증 result.json15개는 모두 PASS/exit0이며 실제 Runner 컨테이너27개와 기존 실제kind22Run을 포함한다.
+고정 S3 artifact20개의 체크섬/바이트/계산값 검증과 생성한 kind 삭제를 확인했다. kind 종료 직전
+Dashboard 컨테이너는 Running/Ready=false였다. 최종 kind UI 준비 상태의 증거로 취급하지 않으며
+아래 기존 클러스터의 실제 Dashboard Ready/imageID 검증과 구분한다.
+이는 poll 코드를 포함한 기존 실행 회귀이고 실제 VD Pod/poll/Task 종단 완료 증거는 아니다.
+GitOps6d46ec4의 API/Dashboard/MinIO3개 imageID가 source d89d2bb의 pin과 일치하고 모두 Ready,
+PVC Bound, Argo Synced인 것을 `20261002T175035Z-94ede97d`에서 확인했다. 공유 Ingress 제한으로
+Argo aggregate health는 Progressing이며 이 제한을 숨기지 않는다.

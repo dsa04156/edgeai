@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OperationControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean OffloadService service;
+    @MockitoBean io.edgeai.app.service.VDExecutionService vds;
     @Test void authenticationCsrfAndMissingIdempotencyPreventCommands() throws Exception {
         String id=UUID.randomUUID().toString();
         mvc.perform(get("/api/v1/operations/"+id)).andExpect(status().isUnauthorized());

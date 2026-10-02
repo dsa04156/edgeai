@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
+import { VirtualDeviceExecution } from "./virtual-device-execution";
 import { ConnectionPanel } from "../components/connection-panel";
 
 type Schema = components["schemas"];
@@ -28,7 +29,7 @@ function PlacementFields({ initial = { mode: "AUTO" } }: { initial?: VD["placeme
   const [mode, setMode] = useState(initial.mode);
   return <><label>배치 의도<select name="mode" value={mode} onChange={e => setMode(e.target.value as "AUTO" | "NODE")}><option value="AUTO">자동 배치</option><option value="NODE">특정 노드 지정</option></select></label>
     {mode === "NODE" && <label>배치 Node ID<input name="nodeId" required maxLength={36} defaultValue={initial.mode === "NODE" ? initial.nodeId : ""} placeholder="장치·노드 관리에서 확인한 UUID" /></label>}
-    <p className="hint">후속 런타임 생성에 사용할 설정입니다. 현재 이 설정을 저장해도 실행을 시작하지 않습니다.</p></>;
+    <p className="hint">새 VD는 등록 후 실행을 시작할 수 있습니다. 실행 중인 VD의 원본·배치를 바꾸면 이전 실행 종료 후 교체합니다.</p></>;
 }
 function configuration(form: FormData) {
   const keys = form.getAll("sourceKey"), devices = form.getAll("deviceId");
@@ -96,6 +97,7 @@ export function VirtualDeviceRegistry() {
         <div className="toolbar"><h2 id="vd-detail-title">{detail.vd.displayName}</h2><span className="stage">{stateNames[detail.vd.state]}</span></div>
         <p className="digest mono">VD ID {detail.vd.id}</p>
         <dl><div><dt>VD Profile 버전</dt><dd className="mono digest">{detail.vd.profileVersionId}</dd></div><div><dt>실행 서비스 버전</dt><dd className="mono digest">{detail.vd.serviceProfileVersionId}</dd></div></dl>
+        <VirtualDeviceExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} />
         <h3>현재 원본 연결</h3>{detail.activeSources.length ? <ul className="history-list">{detail.activeSources.map(source => <li key={source.id}><strong>{source.sourceKey}</strong> · {sourceNames[source.sourceMode]}<span className="block mono digest">{source.deviceId}</span></li>)}</ul> : <p className="muted">활성 원본 연결이 없습니다.</p>}
         {detail.vd.state === "REGISTERED" && <form key={`${detail.vd.id}-${detail.vd.revision}`} aria-label="VD 설정 수정" onSubmit={event => {
           event.preventDefault(); const input = new FormData(event.currentTarget);

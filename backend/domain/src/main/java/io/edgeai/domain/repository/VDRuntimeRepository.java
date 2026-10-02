@@ -22,6 +22,7 @@ public interface VDRuntimeRepository {
     Optional<VDOperation> operation(UUID id);
     Optional<VDOperation> byKey(UUID vdId,String key);
     Optional<VDOperation> pending(UUID vdId);
+    List<VDOperation> operations(UUID vdId,int limit);
     void createOperation(VDOperation operation);
     void operationTarget(UUID operationId,UUID runtimeId,Instant now);
     void finishOperation(UUID operationId,String state,String reason,Instant now);

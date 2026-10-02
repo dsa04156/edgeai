@@ -1,8 +1,8 @@
 # API 범위
 
 API 정의서의 30개 작업은 설계 초안이다. 공통 prefix는 ADR-0001에서 `/api/v1`으로 정합화했다.
-현재 REST 계약은 `contracts/openapi/platform-api.yaml`의 30개 operation이다. 원문 초안의 30개와 범위는 다르다.
-M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10개 + M4 Result1개 + M5 전환2개다.
+현재 REST 계약은 `contracts/openapi/platform-api.yaml`의 39개 operation이다. 원문 초안의 30개와 범위는 다르다.
+M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10개 + M4 Result1개 + M5 전환2개 + M6 VD9개다.
 
 | 단계 | 설계 영역 | 예정 작업 |
 |---|---|---|
@@ -13,13 +13,13 @@ M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10�
 | M3 | Run | 실행 요청·목록·상세·취소 (4) 구현 |
 | M3 | Task | 상세·취소 (2) 구현 |
 | M4 | Result | 검증된 결과 조회 (1) 및 실제 실행 전체 경로 검증 완료 |
-| M5 | Task Offload | 실행 중 NODE/REMOTE 전환 (1). NODE는 kind·CI·배포, REMOTE는 로컬 검증 |
-| M6 | VD | 생성·목록·상세·수정·해제 (5) |
-| M5 | Operation | TASK_OFFLOAD 상태 조회 (1), 노드 또는 고정 Remote 대상 표시 |
+| M5 | Task Offload | 실행 중 NODE/REMOTE 전환 (1). NODE/REMOTE 모두 참조 제공자의 실제 kind·CI·배포 검증 |
+| M6 | VD | 생성·목록·상세·수정·해제 (5), 시작·교체·종료·실행 상태 (4) |
+| M5/M6 | Operation | TASK_OFFLOAD 및 VD_PROVISION/VD_REPLACE/VD_DRAIN 합집합 조회 (1) |
 
 각 슬라이스에서 Request/Response/Error, idempotency, 상태 전이, 권한, 수용시험을 구체화한 뒤 구현한다.
 TaskAttempt 생성은 사용자 공개 API가 아니라 내부 재시도·오프로딩 정책이다.
 M3에서 AUTO/NODE 요청과 불변 DAG·Idempotency-Key·취소를 확정했다(ADR 0004).
-M5/ADR0012에서 기존 Run/Offload에 REMOTE 제공자 선택을 추가했다. Operation 수는30개로 유지한다.
-Remote 자동 측정 전환은 미지원이며 실제 외부 API 수용시험과 클러스터 전환 종단은 남아 있다.
+M5/ADR0012에서 기존 Run/Offload에 REMOTE 제공자 선택을 추가했다. 당시 Operation 수는30개였다. M6 등록·실행 관리 추가 후39개다.
+Remote 자동 측정 전환은 미지원이며 실제 외부 API 수용시험·상태형 복원은 남아 있다. 참조 제공자의 실제 kind 양방향 전환은 검증했다.
 실제 실행/검증된 Result commit은 M4, VD는 M6, STREAM 실행은 M7이다.

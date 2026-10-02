@@ -30,12 +30,13 @@ worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Ru
 실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
-Flyway V1–V15, 계층형 Spring 패키지, 한국어 Swagger35개, GitHub Actions/GHCR/ArgoCD 연결.
+Flyway V1–V15, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
 M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
 V14는 내부 runtime/Operation·명령 lease·교체/drain 상태와 registry hook을 추가한다.
 ADR0016의 실제 Pod gateway/worker·HMAC 자격, Pod-bound TokenReview·UID 소유/삭제·watch/relist를
 추가했다. ADR0017/V15는 인증된 poll·순번 저장·lease/Ready·idle drain을 연결했다.
-VD는 기본 비활성이며 공개 Operation과 Run VD 실행은 남았다.
+ADR0018은 공개 시작·교체·종료·실행 상태4 API, Operation 합집합 조회와 UI를 추가했다.
+VD는 기본 비활성이며 실제 Pod/poll 전체 수용과 Run VD Task/Result 연결은 남았다.
 상세: docs/evidence/m6-vd-lifecycle.md 및 docs/evidence/m6-vd-gateway.md.
 poll 상세: docs/evidence/m6-vd-poll.md. 실제 Python 감독 프로세스→Spring HTTP→PostgreSQL을
 검증하며 Kubernetes 신원/Ready는 fixture다. 실제 Task 배정/Result 종단은 아니다.
@@ -68,7 +69,11 @@ docs/evidence/m6-vd-gateway.md를 따른다. 대기 workload를 사용하므로 
 gateway cf499be CI37036686347 5jobs/JSON15개·실제Runner27·kind22Run/S3결과20 PASS.
 86ff9bd pin의 실제imageID·Ready/PVCBound/ArgoSynced172048Z-00d56a91 PASS.
 V15 poll 로컬: 단위79·실제PG111(poll9,실제감독프로세스/HTTP2 포함)·계약4/MVC23 PASS.
-신규 poll 코드의 CI·배포는 push 후 별도로 확인한다. 공개VD 실행/Task 연결은 남는다.
+poll d89d2bb CI37040484693 5jobs/JSON15개·실제Runner27·기존kind22Run PASS.
+6d46ec4 pin 실제imageID/Ready/PVCBound/ArgoSynced175035Z-94ede97d PASS.
+공개 실행 ADR0018 로컬: 단위81·실제PG116(신규5)·계약4/MVC25·UI32 PASS.
+실제API/DB PC모바일10·Swagger39·VD execution503/동일프로세스복구175257Z-32f133c1 PASS.
+실제 Pod/poll 전체 수용·VD Task 연결과 새 코드 CI/배포는 남는다. docs/evidence/m6-vd-public-execution.md.
 ADR0012 로컬: 단위60·PostgreSQL80·계약/MVC19·실제 MinIO/DB/provider14·PC/모바일 UI26 PASS.
 실제 Spring 스케줄러의 공개 Remote BATCH, 실제 제공자 SIGKILL/재시도, 취소와 출력 변조 차단,
 설정 변경 시 전송 차단·재전송, 동시 worker의 단일 실행/결과를 검증했다. NODE 전환 부분은 fixture다.

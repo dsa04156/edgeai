@@ -128,3 +128,6 @@ Device 해제 보호와 PC/모바일 관리 화면. 실제 VD runtime/Operation/
 HTTP 장애/영속 DB 명령 복구를 구분해 검증한다. 감독 프로세스의 poll 서버·VD Task 연결은 남는다.
 [인증된 poll과 영속 순번](m6-vd-poll.md)은 실제 서버/DB/감독 프로세스의 idle lifecycle 연결을
 검증한다. 실제 Kubernetes Pod와의 전체 연결 및 VD Task 배정·Result는 후속이다.
+
+[공개 VD 실행 관리](m6-vd-public-execution.md)는 시작/교체/종료·실행 스냅샷·Operation 조회와
+화면을 검증한다. 실제 PostgreSQL/MVC와 UI fixture·실제 API stack의 범위를 구분한다.

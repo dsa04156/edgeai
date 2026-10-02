@@ -9,9 +9,10 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const allowed = request.method === "GET" ? target === "csrf"
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
+    || new RegExp(`^virtual-devices/${uuid}/execution$`).test(target)
     || new RegExp(`^(devices|nodes|virtual-devices)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices|virtual-devices)/${uuid}$`).test(target);
   if (!allowed)

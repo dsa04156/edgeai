@@ -1,6 +1,7 @@
 package io.edgeai.app.exception;
 
 import io.edgeai.app.controller.VirtualDeviceController;
+import io.edgeai.app.controller.VDExecutionController;
 import io.edgeai.app.dto.ApiErrorResponse;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -9,11 +10,11 @@ import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(assignableTypes=VirtualDeviceController.class)
+@RestControllerAdvice(assignableTypes={VirtualDeviceController.class,VDExecutionController.class})
 public class VirtualDeviceExceptionHandler {
     @ExceptionHandler(ControlPlaneException.class)
     ResponseEntity<ApiErrorResponse> controlled(ControlPlaneException e) { return error(e.status(),e.code(),e.getMessage()); }
-    @ExceptionHandler({IllegalArgumentException.class,MethodArgumentTypeMismatchException.class,HttpMessageNotReadableException.class})
+    @ExceptionHandler({IllegalArgumentException.class,MethodArgumentTypeMismatchException.class,HttpMessageNotReadableException.class,org.springframework.web.bind.ServletRequestBindingException.class})
     ResponseEntity<ApiErrorResponse> invalid() { return error(400,"INVALID_VIRTUAL_DEVICE","입력 필드·UUID·revision·VD Profile 규격을 확인하세요."); }
     @ExceptionHandler(ProfilePayloadTooLargeException.class)
     ResponseEntity<ApiErrorResponse> tooLarge() { return error(413,"PAYLOAD_TOO_LARGE","VD 요청은 UTF-8 64 KiB 이하로 입력하세요."); }

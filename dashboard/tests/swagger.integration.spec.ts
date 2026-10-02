@@ -17,7 +17,7 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.getByRole("heading", { name: /EdgeAI Control Plane/ })).toBeVisible();
   const contract = await page.request.get(`${api}/openapi.yaml`);
   expect(await contract.text()).toBe(await readFile("../contracts/openapi/platform-api.yaml", "utf8"));
-  await expect(page.locator(".opblock")).toHaveCount(35);
+  await expect(page.locator(".opblock")).toHaveCount(39);
   await expect(page.locator("#operations-Device-registerDevice .opblock-summary-description")).toHaveText("물리 장치 등록");
   await expect(page.locator("#operations-Device-reportDeviceObservation .opblock-summary-description")).toHaveText("장치 상태·작은 관측 데이터 보고");
   await expect(page.locator("#operations-Node-listNodes .opblock-summary-description")).toHaveText("관측된 Kubernetes 실행 노드 목록");
@@ -25,10 +25,12 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.locator("#operations-Run-createWorkflowRun .opblock-summary-description")).toHaveText("워크플로 실행 요청 생성");
   await expect(page.locator("#operations-Result-getTaskResults .opblock-summary-description")).toHaveText("작업의 검증된 결과와 artifact 메타데이터 조회");
   await expect(page.locator("#operations-Task-offloadTask .opblock-summary-description")).toHaveText("실행 중인 작업을 다른 노드 또는 Remote로 전환");
-  await expect(page.locator("#operations-Operation-getOperation .opblock-summary-description")).toHaveText("비동기 실행 전환 상태 조회");
+  await expect(page.locator("#operations-Operation-getOperation .opblock-summary-description")).toHaveText("비동기 실행 전환·VD 작업 상태 조회");
   await page.screenshot({ path: testInfo.outputPath("swagger-ui.png"), fullPage: true });
 
   await expect(page.locator("#operations-VD-createVirtualDevice .opblock-summary-description")).toHaveText("VD 식별자와 원본 장치 연결 등록");
+  await expect(page.locator("#operations-VD-provisionVirtualDevice .opblock-summary-description")).toHaveText("VD 실행 시작 요청");
+  await expect(page.locator("#operations-VD-getVirtualDeviceExecution .opblock-summary-description")).toHaveText("VD 실행 준비 상태·세대·작업 이력 조회");
   const operation = page.locator("#operations-Profile-publishProfile");
   await expect(operation.locator(".opblock-summary-description")).toHaveText("프로필 새 버전 등록");
   await operation.locator(".opblock-summary-control").click();

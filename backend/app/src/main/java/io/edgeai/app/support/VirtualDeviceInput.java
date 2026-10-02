@@ -12,6 +12,7 @@ public final class VirtualDeviceInput {
     public record Configuration(String displayName, Map<String,UUID> sources, VirtualDevice.Placement placement) {}
     public record Create(String key, UUID profileVersionId, Configuration configuration, String digest) {}
     public record Update(long revision, Configuration configuration) {}
+    public static long lifecycleRevision(String body) { return number(parse(body,"revision").get("revision"),0,9007199254740991L); }
     public static Create create(String body) {
         var map=parse(body,"key","displayName","profileVersionId","sources","placement");
         String key=key(map.get("key"));UUID profile=uuid(map.get("profileVersionId"));var configuration=configuration(map);

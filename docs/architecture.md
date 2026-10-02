@@ -114,7 +114,7 @@ VDSourceBinding은 slot별 현재 연결과 열린/닫힌 revision을 보존한�
 원본 Device UUID 순서로 잠근다. 장치 해제와 연결을 직렬화하며 활성 binding의 Device 해제는409다.
 DB 복합 FK·활성 UNIQUE·이력 변경 차단과 지연 제약으로 필수 source 집합·해제 상태도 검증한다.
 
-이는 등록 계층이다. 지속 VD runtime의 소유/수명, Operation과 실제 Task 실행은 아직 연결하지 않았으며
+이는 등록 계층이다. 지속 VD runtime과 Operation은 아래 계층에서 관리하며 실제 Task 실행은 아직 연결하지 않았고
 기존 TaskAttempt Job이나 Node ID를 VD runtime으로 취급하지 않는다. 상세는 ADR0013과 M6 요구사항을 따른다.
 
 ADR0014의 순수 `KubernetesVDPodCompiler`는 고정 SERVICE 이미지의 지속 Pod를 만든다.
@@ -127,5 +127,6 @@ ADR0015/V14는 실행 세대·설정 스냅샷·runtime binding 이력·Operatio
 Ready를 부여하지 않는다. `EDGEAI_VD_ENABLED=false`가 기본값이다.
 ADR0017/V15는 HMAC/Pod 신원 인증·순번 receipt·lease/Ready·idle drain과 supervisor 자체 교체 요청을
 서버 poll에 연결한다. 현재 배정은 비어 있으며 미배정 완료 보고를 수용하지 않는다.
-공개 Operation/UI·VD Run 배정과 실제 Task/Result는 아직 연결하지 않았다.
+ADR0018은 공개 provision/replace/drain·execution 스냅샷과 Operation 합집합 조회 및 UI를 연결한다.
+VD Run 배정과 실제 Task/Result는 아직 연결하지 않았다.
 공개 등록만으로 VD를 Ready 또는 실행 가능으로 표시하지 않는다.

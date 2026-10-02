@@ -68,6 +68,7 @@ public final class JdbcVDRuntimeRepository implements VDRuntimeRepository {
     public Optional<VDOperation> operation(UUID id) { return jdbc.query("SELECT * FROM edgeai.vd_operation WHERE id=?",OPERATION,id).stream().findFirst(); }
     public Optional<VDOperation> byKey(UUID vdId,String key) { return jdbc.query("SELECT * FROM edgeai.vd_operation WHERE vd_id=? AND request_key=?",OPERATION,vdId,key).stream().findFirst(); }
     public Optional<VDOperation> pending(UUID vdId) { return jdbc.query("SELECT * FROM edgeai.vd_operation WHERE vd_id=? AND state='RUNNING'",OPERATION,vdId).stream().findFirst(); }
+    public List<VDOperation> operations(UUID vdId,int limit) { return jdbc.query("SELECT * FROM edgeai.vd_operation WHERE vd_id=? ORDER BY created_at DESC,id DESC LIMIT ?",OPERATION,vdId,limit); }
     public void createOperation(VDOperation o) {
         jdbc.update("""
             INSERT INTO edgeai.vd_operation(id,vd_id,request_key,request_digest,kind,requested_revision,configuration,configuration_digest,

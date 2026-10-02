@@ -61,3 +61,9 @@ VirtualDevice 생성/목록/상세/수정/해제5개 operation을 추가하여 �
 각 역할·필수 원본 조건·revision 충돌·논리 해제·등록과 런타임 Ready의 차이를 한국어로 설명한다.
 Device 해제의 DEVICE_IN_USE(409)도 계약에 반영했다. VD 상세는 현재 연결 전체와 최근100개 이력을
 구분한다. OpenAPI 원본에서 Dashboard 타입과 JAR 문서를 함께 생성한다.
+
+## M6 공개 실행 관리
+
+ADR0018의 시작·교체·종료·실행 상태4개를 추가하여 공개 Swagger는39개 operation이다.
+기존 Operation 조회는 TASK_OFFLOAD/VD 명령 합집합을 반환한다. 각 설명에 revision·요청 키,
+202/200 재전송, 준비/물리 종료의 차이, 이력 제한과 기본 비활성·Task 연결 잔여 범위를 명시한다.
