@@ -184,7 +184,8 @@ class Session:
             # The deadline can pass inside MQTT, HTTP or a model step after the
             # initial check. Report the owning session's terminal reason consistently.
             reason = ('STREAM_CANCELLED' if self.cancel.is_set() else
-                      'STREAM_SESSION_TIMEOUT' if time.monotonic() >= self.deadline else None)
+                      'STREAM_SESSION_TIMEOUT' if time.monotonic() >= self.deadline else
+                      'STREAM_ASSIGNMENT_EXPIRED' if any(a.clock() >= a.deadline for a in self.assignments.values()) else None)
             self.close()
             if reason is not None and isinstance(failure, Exception):
                 raise SessionError(reason) from None

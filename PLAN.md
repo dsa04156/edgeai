@@ -212,3 +212,9 @@ ADR0035/V23은 서버가 최신 확정본을 새 Attempt·경로 세대로 인�
 취소 경합·DB 불변 제약과 독립 계산 프로세스의9→14 재개를 검증했다.
 [인계 증거](docs/evidence/m7-stream-checkpoint-handover.md)를 따른다. Device/인접 Task의
 journal 전환, SERVICE/Runner·공개 STREAM·실제 Kubernetes 다중 장치 수용은 남는다.
+
+ADR0036의 DeviceSource는 같은 Device Session의 송신·adapter 상태·자동 heartbeat와
+명시적 LOCAL journal 경로 인계를 연결한다. 실제 Spring/PG/권한 worker/TLS broker에서
+옛 ACL 회수·새 경로 재전송·독립 계산9→14·END/ACK를 검증했다.
+[Device source 증거](docs/evidence/m7-device-source-handover.md)를 따른다. Task/인접 Task의
+인계 orchestration·SERVICE/Runner·공개 STREAM·Kubernetes 다중 장치 수용은 이어서 진행한다.

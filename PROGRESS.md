@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0036 DeviceSource의 인증 송신·자동 heartbeat·동일 Device Session의 journal 인계를 구현했다.
+실제 SQLite/SIGKILL7개·HTTPS/TLS MQTT7개·Spring/PG/권한 worker/broker23개를 통과했다.
+전체 Runner99개·HTTPS/MQTT50개 및 후속 fanout 포함 journal8개·트랜잭션 중 취소/기한 갱신2개도 PASS다.
+옛 경로 실제 ACL 회수 뒤 미확인 DATA 재전송·계산9→14·END/ACK·동일 세대 재시작을 확인했다.
+선행 ba3b2ac CI37099723313은 peer 만료 감지 위치의 오류 종류 차이로 runner failure이며 배포되지 않았다.
+실제 MQTT poll 내부 기한 만료로 재현하고 Session 오류를 정리한2개 시험은 PASS다.
+상세: docs/evidence/m7-device-source-handover.md. Task/인접 Task 인계 orchestration과 공개 STREAM은 남는다.
 ADR0035/V23 서버 검증 checkpoint 인계와 명시적 SDK/Session 복원을 연결했다.
 새 Attempt·경로 세대에 state/커서/END를 보존하며 serial만 증가시킨다. 실제 Spring/PG/MinIO13개에서
 독립 모델9→14·동시 인계·취소 경합·Device Session 변경 거절·DB 불변 제약을 검증했다.

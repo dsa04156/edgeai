@@ -170,6 +170,38 @@ class StreamBindingIntegrationTest {
         assertThatThrownBy(()->bindings.runner(new RunnerPrincipal(q.execution().attempt(),1,q.execution().pod()),json.canonical(runnerBody(q)))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
         runner(q.execution(),"streams",runnerBody(q),409);
     }
+    @Test void actualDeviceSourcePreservesUnconfirmedFramesAcrossRealBrokerGenerationHandover()throws Exception {
+        var r=route(30);var root=Files.createDirectory(BROKER.root.resolve("source-"+UUID.randomUUID()));
+        var oldBinding=device(r.source(),token(r.source()),identity(r),200);
+        var request=new TreeMap<String,Object>(Map.of("origin","http://127.0.0.1:"+apiPort,"runId",r.execution().run().toString(),"generationId",r.permission().generation().id().toString(),
+            "deviceId",r.source().device().id().toString(),"sessionId",r.source().session().id().toString(),"deviceEpoch",r.source().session().epoch(),
+            "attemptId",r.execution().attempt().toString(),"attemptEpoch",1,"podUid",r.execution().pod().podUid().toString()));
+        for(var entry:Map.of("request.json",json.canonical(request),"device.token",token(r.source()),
+                "runner.token",runnerTokens.issue(runtimes.byAttempt(r.execution().attempt()).orElseThrow()),"pod.token","pod-proof-fixture").entrySet()){
+            var path=root.resolve(entry.getKey());Files.writeString(path,entry.getValue());Files.setPosixFilePermissions(path,java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        }
+        var process=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning",
+            "src/test/fixtures/stream_source_probe.py",root.toString()).redirectOutput(root.resolve("probe.log").toFile()).redirectError(root.resolve("probe-error.log").toFile()).start();
+        try{
+            until(()->Files.exists(root.resolve("ready")) || !process.isAlive());
+            assertThat(Files.exists(root.resolve("ready"))).as("Source prepared: %s",Files.readString(root.resolve("probe.log"))).isTrue();
+            var old=r.permission().generation();routes.fence(old.id(),"REPLACED");
+            until(()->routeStore.generation(old.id()).orElseThrow().closedAt()!=null);
+            var next=routes.prepare(r.permission().route().id(),UUID.randomUUID(),old.producer(),old.consumer(),DIGEST,30);
+            until(()->routeStore.generation(next.id()).orElseThrow().state().equals("ACTIVE"));
+            var stale=client(oldBinding);
+            assertThat(stale.subscribe((String)((Map<?,?>)oldBinding.get("mqtt")).get("acksTopic"),1).getReasonCodes()).containsExactly(135);
+            stale.disconnectForcibly(0,100,false);stale.close(true);clients.remove(stale);
+            Files.writeString(root.resolve("next.tmp"),json.canonical(Map.of("generationId",next.id().toString())));
+            Files.move(root.resolve("next.tmp"),root.resolve("next.json"),StandardCopyOption.ATOMIC_MOVE);
+            assertThat(process.waitFor(25,TimeUnit.SECONDS)).as("Source handover probe completed").isTrue();
+            assertThat(process.exitValue()).as("Source probe: %s",Files.readString(root.resolve("probe.log"))).isZero();
+            assertThat(Files.readString(root.resolve("probe.log"))).isEqualTo("PASS actual Spring Device source generation handover and TLS calculation 9-to-14\n");
+            assertThat(Files.size(root.resolve("probe-error.log"))).isZero();
+            assertThat(routeStore.heartbeat(next.id()).producerSequence()).isGreaterThan(0);
+            assertThat(routeStore.heartbeat(next.id()).consumerSequence()).isGreaterThan(0);
+        }finally{if(process.isAlive()){process.destroyForcibly();assertThat(process.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
+    }
     @Test void runnerRequiresPodProofMatchingAttemptAndCurrentBinding()throws Exception {
         var r=route(120);var other=route(120);String path="/internal/v1/attempts/"+r.execution().attempt()+"/streams";
         var token=runnerTokens.issue(runtimes.byAttempt(r.execution().attempt()).orElseThrow());

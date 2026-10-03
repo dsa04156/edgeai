@@ -123,9 +123,9 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
 시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
 종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
 
-`test-runner.sh`의92개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
-HTTPS/MQTT/계산/Session 통합은 별도42개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
-다르며 후자는 아직 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
+`test-runner.sh`의100개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
+HTTPS/MQTT/계산/Session 통합은 별도50개다. S3 새 볼륨 복원·Attempt 인계 구성 요소도 검증했으며
+실제 Kubernetes의 Pod/Node 전환 연결은 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
 [실제 검증 기록](../docs/evidence/m7-stream-transport.md).
 
 `stream_assignment.BindingClient`는 검증된 HTTPS API에서 Device/Runner 배정을 조회한다.
@@ -180,3 +180,18 @@ checkpoint_client=checkpoints, restore_latest=True)`를 사용하면 인증 late
 인계한 뒤 SDK가 새 고정 version을 복원한다. Device Session 교체는 별도의 순번 연속성 계약이
 필요해 거절한다. 이 옵션은 Task 생성이나 peer journal 전환을 수행하지 않는다.
 [인계 설계·검증](../docs/evidence/m7-stream-checkpoint-handover.md)을 따른다.
+
+## Device 송신과 소비 경로 전환
+
+`stream_source.DeviceSource`는 같은 Device Session의 `BindingClient`, Run과 generation ID 목록을
+받아 인증 배정·heartbeat·TLS MQTT·LOCAL 송신 journal을 관리한다. 0700 디렉터리를 준비하고
+처음에는 `create=True`, 같은 볼륨 재시작은 기본값으로 연다. `emit([Emission(route_id, payload,
+media_type)], state=adapter_cursor_bytes)`는 샘플·순번·adapter 상태를 원자적으로 기록한다.
+`step()`을 계속 호출해야 전송과 heartbeat가 진행된다. Backpressure면 샘플과 adapter 커서를
+보관한 채 처리 확인 후 재시도한다. MQTT PUBACK은 송신 기록을 삭제하지 않는다.
+
+제어 서버가 소비 경로를 전환했다면 이전 owner를 닫고 현재 generation ID 목록으로
+`DeviceSource(..., create=False, handover=True)`를 연다. 같은 Device Session·논리 경로만
+허용하며 미확인 DATA/END·순번·adapter 상태를 보존한다. 장치 세션 변경이나 볼륨 손실을
+자동 재시작으로 대체하지 않는다. `settled`는 END의 처리 확인이며 플랫폼 Run 성공을 뜻하지 않는다.
+자세한 실제/fixture 범위는 [Device source 검증](../docs/evidence/m7-device-source-handover.md)을 따른다.

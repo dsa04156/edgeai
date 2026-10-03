@@ -4,9 +4,10 @@ This is a data-plane journal, not the control-plane DataRoute repository. MQTT P
 never removes an outbox frame. Only a trusted consumer processing watermark does.
 Reopening requires the same volume and exact bindings. Portable external snapshots
 and new-volume restore are implemented separately in stream_checkpoint.
+Explicit same-Device-session source handover can change output generations only.
 """
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import fcntl
 import json
 import os
@@ -14,7 +15,7 @@ from pathlib import Path
 import sqlite3
 import stat
 
-from edgeai_runner.stream_protocol import Binding, Frame, MAX_COUNTER, decode
+from edgeai_runner.stream_protocol import Binding, Frame, Producer, MAX_COUNTER, decode
 
 
 class JournalError(ValueError):
@@ -73,13 +74,20 @@ def manifest(inputs, outputs, limits):
 
 class Journal:
     """One owner/process/thread per private directory; create and recover are explicit."""
-    def __init__(self, directory, inputs, outputs, limits=Limits(), *, create=False, durability='LOCAL'):
+    def __init__(self, directory, inputs, outputs, limits=Limits(), *, create=False, durability='LOCAL',
+                 source_handover=False, guard=None):
         require(type(limits) is Limits, 'Invalid stream journal limit')
         require(durability in ('LOCAL', 'EXTERNAL'), 'Invalid stream durability')
         self.durability = durability
         self._clock_ready = False
         self.inputs = self._bindings(inputs)
         self.outputs = self._bindings(outputs)
+        require(guard is None or callable(guard), 'Invalid stream authority guard')
+        require(type(source_handover) is bool and (not source_handover or not create and durability == 'LOCAL'
+                and not self.inputs and self.outputs and callable(guard)
+                and len({b.producer for b in self.outputs.values()}) == 1
+                and all(b.producer.kind == 'DEVICE_SESSION' for b in self.outputs.values())),
+                'Explicit same-session Device source handover required')
         require(not self.inputs.keys() & self.outputs.keys(), 'Duplicate stream journal route')
         require(self.inputs or self.outputs, 'Stream journal requires routes')
         routes = len(self.inputs) + len(self.outputs)
@@ -90,7 +98,7 @@ class Journal:
         self.limits = limits
         self.db = None
         self.lock = None
-        self.authority_guard = None
+        self.authority_guard = guard
         directory = Path(directory)
         self.directory = directory
         if create:
@@ -129,6 +137,8 @@ class Journal:
                     os.fsync(parent)
                 finally:
                     os.close(parent)
+            if source_handover:
+                self._handover_source(expected)
             require(self.db.execute('SELECT manifest FROM checkpoint').fetchone() == (expected,),
                     'Stream journal binding or limits changed')
             # Local format upgrade is additive. A pre-checkpoint journal can only
@@ -147,6 +157,40 @@ class Journal:
         except BaseException:
             self.close()
             raise
+
+    def _handover_source(self, expected):
+        """Called under the exclusive directory lock and authenticated current guard."""
+        row = self.db.execute('SELECT manifest FROM checkpoint').fetchone()
+        require(row is not None and len(row[0]) <= 16384, 'Invalid Device source manifest')
+        old = json.loads(row[0])
+        previous = self._bindings([Binding(v['routeId'], v['generation'], Producer.parse(v['producer']))
+                                   for v in old['outputs']])
+        require(not old['inputs'] and manifest([], list(previous.values()), self.limits) == row[0]
+                and previous.keys() == self.outputs.keys(), 'Device source routes or limits changed')
+        for identity, binding in previous.items():
+            current = self.outputs[identity]
+            require(binding.producer == current.producer and binding.generation <= current.generation,
+                    'Device source identity changed or generation regressed')
+        require(self.db.execute('SELECT mode,confirmed_serial,digest FROM durability').fetchone() == ('LOCAL', -1, None),
+                'Externally checkpointed source requires server handover')
+        candidate = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='snapshot_candidate'").fetchone()
+        require(not candidate or self.db.execute('SELECT 1 FROM snapshot_candidate LIMIT 1').fetchone() is None,
+                'Pending external checkpoint requires server handover')
+        require(set(self.db.execute('SELECT id,direction FROM route')) == {(identity, 'OUT') for identity in previous},
+                'Device source journal must contain only its output routes')
+        self._clock_ready = True
+        with self._transaction():
+            if row == (expected,):
+                return
+            # One frame at a time, bounded by the existing per-route reservation.
+            for identity, sequence, wire in self.db.execute('SELECT route_id,sequence,wire FROM frame ORDER BY route_id,sequence'):
+                frame = decode(wire)
+                previous[identity].verify(frame)
+                require(frame.sequence == sequence, 'Device source frame index mismatch')
+                rebound = replace(frame, binding=self.outputs[identity])
+                self.db.execute('UPDATE frame SET wire=? WHERE route_id=? AND sequence=?', (rebound.encode(), identity, sequence))
+            self._capacity()
+            self.db.execute('UPDATE checkpoint SET manifest=? WHERE id=1', (expected,))
 
     @staticmethod
     def _bindings(bindings):

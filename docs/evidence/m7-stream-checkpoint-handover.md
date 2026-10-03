@@ -69,3 +69,7 @@ V21·V22 파일 해시와 적용 checksum은 이전과 같으며 V1–V22를 수
 Pod 종료/생성이나 운영 MQTT ACL 회수의 증거는 아니다. 출력 frame 변경은 Java parser 시험이며
 새 세대의 실제 MQTT 재전송·Device/인접 Task journal 전환·공개 STREAM 종단은 후속이다.
 합성 참조 계산은 실장비/실제 모델 수용을 대신하지 않는다. 이 변경의 원격 CI·배포는 별도 확인한다.
+
+소스 `ba3b2ac`의 CI `37099723313`은 runner의 기존 peer 만료 시험에서 오류가 나 전체 failure다.
+scaffold/storage는 success, images/gitops는 skipped다. 후속 [Device source 검증](m7-device-source-handover.md)의
+만료 경합 재현·수정 기록을 따른다. 기존 로컬 PASS를 원격 CI·배포 성공으로 확대하지 않는다.

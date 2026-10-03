@@ -258,6 +258,27 @@ class StreamSessionTest(unittest.TestCase):
             self.assertEqual(0,recovered.checkpoint().revision)
             self.assertEqual((),recovered.outgoing())
 
+    def test_expiry_inside_real_mqtt_poll_has_one_session_reason_and_stops_model(self):
+        session=self.setup_flow(command=[sys.executable,str(RUNNER/'tests/fixtures/stream_workload.py'),'hang'])
+        self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:session.processor.workload is not None)
+        child=session.processor.workload.process
+        poll=session.link.client.loop
+        def blocked_poll(*args,**kwargs):
+            result=poll(*args,**kwargs)
+            deadline=max(a.deadline for a in session.assignments.values())
+            time.sleep(max(0,deadline-time.monotonic())+.05)
+            self.assertIsNotNone(child.poll())
+            return result
+        with patch.object(session.link.client,'loop',side_effect=blocked_poll):
+            with self.assertRaisesRegex(SessionError,'STREAM_ASSIGNMENT_EXPIRED'):
+                session.step()
+        self.assertTrue(session.closed)
+        self.assertTrue(session.link.closed)
+        with Journal(self.directory/'journal',[A,B],[OUT],Limits(max_frames=6)) as recovered:
+            self.assertEqual(0,recovered.checkpoint().revision)
+            self.assertEqual((),recovered.outgoing())
+
     def test_fenced_control_response_stops_model_without_retry(self):
         session=self.setup_flow(command=[sys.executable,str(RUNNER/'tests/fixtures/stream_workload.py'),'hang'])
         self.emit(A,b'4');self.emit(B,b'5')
