@@ -177,6 +177,10 @@ ADR0028/V21의 양쪽 heartbeat·순번 재전송/동시성·SDK live refresh와
 CI37085573042의5 jobs/JSON17개·실제kind와 GitOps19d7cec의 정확한 이미지 배포 검증을 통과했다.
 ADR0029의 지속 계산 프로세스·watchdog·journal 연결은 Runner69개·실제TLS MQTT26개·
 Spring/DB/broker22개를 통과했다. [계산 검증](docs/evidence/m7-stream-workload.md)의 범위를 따른다.
+계산cf4876c의 CI37088407643 5 jobs/JSON17개·실제kind와 GitOps7fad529의 정확한 이미지 배포도 확인했다.
 다음은 운영 broker·Runner/SERVICE 실행 인터페이스,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
+ADR0030 자동 Session은 실제 인증 배정·heartbeat 재개/재시도와 계산 수명을 묶었다.
+Runner70개·실제 HTTPS/MQTT35개·Spring/DB/broker22개를 로컬 검증했다.
+[세션 검증](docs/evidence/m7-stream-session.md)의 공개 실행·외부 checkpoint 경계를 유지한다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

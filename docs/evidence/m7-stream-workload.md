@@ -59,4 +59,15 @@ Spring→Python 지속 계산 probe를 포함한다. 요청/응답 schema와 합
 
 운영 broker·SERVICE Profile/Runner entrypoint·공개 Run/API/Swagger/UI, S3 checkpoint와 새 Pod 복원,
 실제 Kubernetes의 다중 Device BATCH/STREAM 데모는 계속 남는다. M5 잔여와 M8–M10도 미완료다.
-이 변경의 새로운 CI·이미지·배포 결과는 후속 확인 대상이다.
+이후 확인한 CI·이미지·배포는 아래 기록을 따른다.
+
+## 후속 CI·배포 확인
+
+소스cf4876c의 CI37088407643은5 jobs 모두 success이며 내려받은 JSON17개가 PASS/0이다.
+Runner container69개020316Z-e1847a4e·실제MQTT26개020502Z-45539873과 실제 kind
+021515Z-7da2c6e7의 BATCH/Remote/VD·복구·S3 결과20+5개·생성한 클러스터 삭제를 확인했다.
+kind는 기존 실행 회귀이며 공개 STREAM의 Kubernetes 수용이 아니다.
+
+GitOps7fad529의 실제 배포023616Z-25449368은 sourcecf4876c의 정확한 API/dashboard/MinIO
+imageID·Ready·PVCBound·ArgoSynced와 VD 활성화를 확인했다. 전체 Argo health는Progressing이다.
+후속 자동 Session 변경의 CI·배포와는 구분한다.

@@ -11,7 +11,7 @@ import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from edgeai_runner.stream_assignment import Assignment, AssignmentError, BindingClient
+from edgeai_runner.stream_assignment import Assignment, AssignmentError, AssignmentUnavailable, BindingClient
 from test_stream_journal import A, OUT, data
 
 GENERATION = '99999999-9999-4999-8999-999999999999'
@@ -199,6 +199,23 @@ class StreamAssignmentTest(unittest.TestCase):
         self.assertEqual(f'/internal/v1/attempts/{OUT.producer.id}/streams/heartbeat',path)
         self.assertTrue(headers['x-edgeai-pod-token']=='fixture-pod')
         self.assertEqual(POD,body['podUid']);self.assertEqual(1,body['sequence'])
+
+    def test_only_transient_http_failures_are_retryable_and_request_timeout_is_validated(self):
+        _,token,api=self.fixture(document())
+        client=BindingClient(api.url,A.producer,token,allow_http_loopback=True)
+        for status in (429,500,502,503,504):
+            api.status=status
+            with self.assertRaises(AssignmentUnavailable):client.fetch(GENERATION,timeout=.25)
+        for status in (400,401,403,404,405,409,413):
+            api.status=status
+            with self.assertRaises(AssignmentError) as failure:client.fetch(GENERATION,timeout=.25)
+            self.assertNotIsInstance(failure.exception,AssignmentUnavailable)
+        count=len(api.calls)
+        for timeout in (0,-1,6,True,float('nan'),'1'):
+            with self.assertRaises(AssignmentError):client.fetch(GENERATION,timeout=timeout)
+        self.assertEqual(count,len(api.calls))
+        api.status=200
+        self.assertEqual(A,client.fetch(GENERATION,timeout=.25).binding)
 
 
 if __name__ == '__main__':unittest.main()

@@ -13,7 +13,7 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_protocol import Producer
 from edgeai_runner.stream_journal import Emission, Journal
 from edgeai_runner.stream_mqtt import Link
-from edgeai_runner.stream_processor import Processor
+from edgeai_runner.stream_session import Session
 
 phase='configuration'
 
@@ -32,20 +32,20 @@ def run(root):
     phase='device-discovery'
     producer=device_client.fetch(value['generationId'])
     phase='runner-discovery'
-    incoming=runner_client.fetch(value['generationId'])
-    if producer.binding != incoming.binding or producer.direction!='PRODUCER' or incoming.direction!='CONSUMER':
-        raise RuntimeError('Invalid actual SDK bindings')
+    session_root=root/'consumer-session';session_root.mkdir(mode=0o700)
     phase='journal'
-    with Journal(root/'source',[],[producer.binding],create=True) as source_journal, Journal(root/'consumer',[incoming.binding],[],create=True) as sink:
+    with Journal(root/'source',[],[producer.binding],create=True) as source_journal, Session(runner_client,value['runId'],
+            {'input':value['generationId']},{},[sys.executable,str(Path(__file__).resolve().parents[5]/'runner/examples/stream_sum.py')],
+            session_root,timeout=20,create=True) as session:
+        incoming=session.assignments[value['generationId']]
+        if producer.binding != incoming.binding or producer.direction!='PRODUCER' or incoming.direction!='CONSUMER':
+            raise RuntimeError('Invalid actual SDK bindings')
+        sink=session.journal;sink_link=session.link;processor=session.processor
         source_link=Link.from_assignments(source_journal,[producer])
-        sink_link=Link.from_assignments(sink,[incoming])
-        work=root/'work';work.mkdir(mode=0o700)
-        processor=Processor(sink_link,[sys.executable,str(Path(__file__).resolve().parents[5]/'runner/examples/stream_sum.py')],
-                            work,{'input':incoming.binding.route_id},{},create=True)
         def pump_until(condition):
             until=time.monotonic()+8
             while time.monotonic()<until:
-                source_link.step(.001);processor.step()
+                source_link.step(.001);session.step()
                 if condition():return
                 time.sleep(.005)
             raise ProbeFailure(f'progress timeout source_ready={source_link.ready} sink_ready={sink_link.ready} '
@@ -59,16 +59,12 @@ def run(root):
             # Carry the original links past their original deadline before computing.
             deadline=max(producer.deadline,incoming.deadline)
             producer_sequence=device_client.heartbeat(value['generationId'],0).sequence
-            consumer_sequence=runner_client.heartbeat(value['generationId'],0).sequence
             while time.monotonic()<deadline+.2:
-                producer_sequence+=1;consumer_sequence+=1
-                device_client.heartbeat(value['generationId'],producer_sequence)
-                reply=runner_client.heartbeat(value['generationId'],consumer_sequence)
+                producer_sequence+=1
                 source_link.refresh([device_client.heartbeat(value['generationId'],producer_sequence).assignment])
-                processor.refresh([reply.assignment])
                 until=time.monotonic()+.4
                 while time.monotonic()<until:
-                    source_link.step(.001);processor.step();time.sleep(.005)
+                    source_link.step(.001);session.step();time.sleep(.005)
             phase='mqtt-data'
             source_journal.commit(0,[],b'',[
                 Emission(producer.binding.route_id,b'4','application/json'),
@@ -81,11 +77,12 @@ def run(root):
             phase='processing-ack'
             pump_until(lambda:not source_journal.outgoing())
             if sink.checkpoint().state!=b'9':raise RuntimeError('Actual SDK state not committed')
-            for assignment,directory in [(producer,root/'source'),(incoming,root/'consumer')]:
+            if session.heartbeats<3:raise RuntimeError('Automatic session heartbeat did not advance')
+            for assignment,directory in [(producer,root/'source'),(incoming,session_root/'journal')]:
                 for file in directory.iterdir():
                     if assignment.connection.secret.encode() in file.read_bytes():raise RuntimeError('Credential persisted in journal')
         finally:
-            source_link.close();processor.close()
+            source_link.close()
 
 
 if __name__=='__main__':

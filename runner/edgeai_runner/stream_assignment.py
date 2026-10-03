@@ -27,6 +27,10 @@ class AssignmentError(RuntimeError):
     """Fixed, non-sensitive reason; response bodies and tokens are never included."""
 
 
+class AssignmentUnavailable(AssignmentError):
+    """A transient transport/service failure; retry only within existing authority."""
+
+
 def require(condition, reason='Invalid stream assignment'):
     if not condition:
         raise AssignmentError(reason)
@@ -184,13 +188,13 @@ class BindingClient:
         self.actor, self.token_file, self.pod_uid, self.pod_token_file = actor, Path(token_file), pod_uid, pod_token_file
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect(), urllib.request.HTTPSHandler(context=context))
 
-    def fetch(self, generation_id):
-        encoded, started = self._request(generation_id)
+    def fetch(self, generation_id, *, timeout=5):
+        encoded, started = self._request(generation_id, timeout=timeout)
         return Assignment.decode(encoded, self.actor, generation_id, started)
 
-    def heartbeat(self, generation_id, sequence):
+    def heartbeat(self, generation_id, sequence, *, timeout=5):
         require(type(sequence) is int and 0 <= sequence <= 9007199254740991, 'Invalid stream heartbeat sequence')
-        encoded, started = self._request(generation_id, sequence)
+        encoded, started = self._request(generation_id, sequence, timeout=timeout)
         try:
             require(0 < len(encoded) <= MAX_RESPONSE, 'Invalid stream heartbeat response')
             value = json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
@@ -203,7 +207,8 @@ class BindingClient:
         except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
             raise AssignmentError('Invalid stream heartbeat response') from None
 
-    def _request(self, generation_id, sequence=None):
+    def _request(self, generation_id, sequence=None, *, timeout=5):
+        require(type(timeout) in (int, float) and .01 <= timeout <= 5, 'Invalid stream request timeout')
         try:
             _uuid(generation_id)
             body = {'epoch': self.actor.epoch, 'generationId': generation_id}
@@ -215,7 +220,7 @@ class BindingClient:
                 headers['X-EdgeAI-Pod-Token'] = _token(self.pod_token_file, 16384, projected=True)
             request = urllib.request.Request(self.url + ('/heartbeat' if sequence is not None else ''), data=json.dumps(body).encode(), headers=headers, method='POST')
             started = time.monotonic()
-            with self.http.open(request, timeout=5) as response:
+            with self.http.open(request, timeout=timeout) as response:
                 require(response.status == 200 and response.headers.get_content_type() == 'application/json'
                         and 'no-store' in [v.strip().lower() for v in response.headers.get('Cache-Control', '').split(',')], 'Invalid stream discovery response')
                 encoded = response.read(MAX_RESPONSE + 1)
@@ -224,8 +229,10 @@ class BindingClient:
             status = error.code; error.close()
             if status in (401, 403, 404, 409):
                 raise AssignmentError('Stream discovery fenced') from None
-            raise AssignmentError('Stream discovery unavailable') from None
+            if status in (429, 500, 502, 503, 504):
+                raise AssignmentUnavailable('Stream discovery unavailable') from None
+            raise AssignmentError('Stream discovery rejected') from None
         except (urllib.error.URLError, TimeoutError, OSError):
-            raise AssignmentError('Stream discovery unavailable') from None
+            raise AssignmentUnavailable('Stream discovery unavailable') from None
         except StreamProtocolError:
             raise AssignmentError('Invalid stream discovery identity') from None

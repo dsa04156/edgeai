@@ -25,6 +25,8 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 기한 갱신 뒤 계산·상태 저장·처리 확인을 검증했고, 한쪽 부재·재전송으로 기한이 늘어나지 않습니다.
 [지속 계산 프로세스·watchdog](docs/evidence/m7-stream-workload.md)을 실제 TLS MQTT·Spring·SQLite로
 검증했습니다. 모델 재사용·출력 적체·로컬 상태 복원·기한 만료 종료를 포함합니다.
+[자동 세션 실행 루프](docs/evidence/m7-stream-session.md)는 인증 배정과 heartbeat 순번 재개·
+응답 유실/일시 오류 재시도·계산 정리를 연결하며 실제 Spring 인증 경로로 검증했습니다.
 운영 broker·SERVICE/Runner 실행 연결·S3 checkpoint/새 Pod 복원·공개 스트리밍 실행은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.

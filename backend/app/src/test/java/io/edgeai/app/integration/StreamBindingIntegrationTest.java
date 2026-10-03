@@ -142,7 +142,7 @@ class StreamBindingIntegrationTest {
     }
     @Test void actualPythonSdkDiscoversSpringBindingsAndCommitsTlsMqttCalculation()throws Exception {
         var r=route(8);var root=Files.createDirectory(BROKER.root.resolve("sdk-"+UUID.randomUUID()));
-        var request=new TreeMap<String,Object>(Map.of("origin","http://127.0.0.1:"+apiPort,"generationId",r.permission().generation().id().toString(),
+        var request=new TreeMap<String,Object>(Map.of("origin","http://127.0.0.1:"+apiPort,"runId",r.execution().run().toString(),"generationId",r.permission().generation().id().toString(),
             "deviceId",r.source().device().id().toString(),"sessionId",r.source().session().id().toString(),"deviceEpoch",r.source().session().epoch(),
             "attemptId",r.execution().attempt().toString(),"attemptEpoch",1,"podUid",r.execution().pod().podUid().toString()));
         for(var entry:Map.of("request.json",json.canonical(request),"device.token",token(r.source()),

@@ -25,7 +25,12 @@ ADR0029 지속 계산 subprocess·watchdog·Processor는 로컬 Runner69개(0153
 실제 TLS MQTT26개(015610Z-bbcac546),Spring/DB/broker22개(015042Z-1edb329c)를 통과했다.
 모델 재사용·WAIT/출력 적체·fanout·동일 볼륨 복원·잘못된 응답·부모 HTTP 대기 중 만료 종료와
 VD Task session 자손 정리를 검증했다. 상세는 docs/evidence/m7-stream-workload.md다.
-이 계산 변경의 신규 CI·배포는 후속 확인 대상이다. 운영 broker·SERVICE/Runner 실행 연결·새 Pod checkpoint 복원과
+ADR0030 자동 Session은 Run/port별 인증 배정·서버 heartbeat 순번 재개·응답 유실/503 재시도와
+계산/연결 정리를 통합했다. Runner70개022028Z-2420a08f, 실제 HTTPS/MQTT35개022149Z-856bc0f6,
+Spring/DB/broker22개021811Z-db9bc151 PASS다. 상세는 docs/evidence/m7-stream-session.md다.
+계산cf4876c CI37088407643은5 jobs/JSON17개·실제kind를 통과했다. GitOps7fad529·
+023616Z-25449368에서 exact imageID/Ready/PVCBound/ArgoSynced·VD 활성화를 확인했다.
+새 세션 변경의 CI·배포는 후속 확인 대상이다. 운영 broker·SERVICE/Runner 실행 연결·새 Pod checkpoint 복원과
 공개 실행/API/UI·실제 Kubernetes 다중 장치 수용은 남았다. 공개 STREAM501은 유지한다.
 최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
