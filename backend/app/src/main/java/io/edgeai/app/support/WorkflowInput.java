@@ -21,9 +21,22 @@ public final class WorkflowInput {
     public static Map<?, ?> runRequest(String body) {
         var map=parameters(JSON.parse(body,65536));
         if(!map.keySet().containsAll(Set.of("workflowVersionId","execution","parameters")) ||
-                !Set.of("workflowVersionId","execution","parameters","retry","offload","streamInputs").containsAll(map.keySet()))
+                !Set.of("workflowVersionId","execution","parameters","retry","offload","streamInputs","taskExecutions").containsAll(map.keySet()))
             throw new IllegalArgumentException("Unexpected Run fields");
         JSON.boundedCanonical(map,65536);return map;
+    }
+    public static Map<String,Object> taskExecutions(Object value) {
+        var input=parameters(value);if(input.size()>128)throw new IllegalArgumentException("At most 128 Task placements allowed");
+        var result=new TreeMap<String,Object>();
+        for(var entry:input.entrySet()) {
+            String key=text(entry.getKey(),100);
+            if(!key.matches("[a-z][a-z0-9]*([._-][a-z0-9]+)*"))throw new IllegalArgumentException("Invalid Task key");
+            var placement=parameters(entry.getValue());String mode=text(placement.get("mode"),8);
+            if(mode.equals("AUTO")) {object(placement,"mode");result.put(key,Map.of("mode",mode));}
+            else if(mode.equals("NODE")) {object(placement,"mode","nodeId");result.put(key,Map.of("mode",mode,"nodeId",uuid(placement.get("nodeId")).toString()));}
+            else throw new IllegalArgumentException("Task placement must be AUTO or NODE");
+        }
+        return result;
     }
     public static RetryPolicy retryPolicy(Object value) {
         var map=object(value,"maxAttempts","backoffSeconds","maxElapsedSeconds","retryOn");

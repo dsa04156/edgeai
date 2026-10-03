@@ -90,7 +90,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
         time.sleep(.02)
 
 
-def run_case(name, placement, cancel=False, recover=False, finalize=False, offload=False, automatic=False):
+def run_case(name, placement, cancel=False, recover=False, finalize=False, offload=False, automatic=False, task_placements=None):
     global active, phase, csrf
     csrf = request('csrf')['token']
     prefix = config.get('resourcePrefix', 'stream-demo-' + uuid.uuid4().hex) + '-' + name
@@ -136,6 +136,8 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
         ('root', 'sink', 'sum', 'input', 'STREAM'), ('root', 'report', 'result', 'root', 'BATCH'), ('sink', 'report', 'result', 'sink', 'BATCH'))]
     version = request('workflows/' + workflow['id'] + '/versions', 'POST', {'version': '1.0.0', 'tasks': tasks, 'dependencies': edges}, 201)
     body = {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}
+    if task_placements:
+        body['taskExecutions'] = task_placements
     if recover or finalize:
         body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['RUNTIME_LOST']}
     if automatic:
@@ -148,6 +150,13 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
     detail = request('workflow-runs/' + active)
     task_ids = {t['key']: t['id'] for t in detail['tasks']}
     current = {'case': name, 'runId': active, 'tasks': task_ids, 'placement': placement}
+    if task_placements:
+        assert run['taskExecutions'] == task_placements and run['mode'] == placement['mode']
+        current['taskExecutions'] = task_placements
+        for task in detail['tasks']:
+            target = task_placements.get(task['key'], placement)
+            assert task['initialMode'] == target['mode'] and task['initialNodeId'] == target.get('nodeId')
+        assert not request('tasks/' + task_ids['report'])['attempts'], 'BATCH report started before STREAM results'
 
     def routes():
         values = request('workflow-runs/' + active + '/streams')['items']
@@ -279,6 +288,9 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
                 old, new = sorted(attempts, key=lambda a: a['number'])
                 assert old['state'] == ('OFFLOADED' if offload else 'FAILED') and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
                 assert new['cause'] == ('OFFLOAD' if offload else 'RETRY')
+                if task_placements:
+                    target = task_placements[key]
+                    assert old['mode'] == new['mode'] == target['mode'] and old['nodeId'] == new['nodeId'] == target.get('nodeId')
                 if offload:
                     if automatic and key == 'root':
                         assert new['mode'] == 'AUTO' and new['nodeId'] is None
@@ -376,6 +388,9 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
                 assert len(attempts) == (2 if retried else 1) and attempts[-1]['state'] == 'SUCCEEDED' and len(values) == 1
                 if retried:
                     assert attempts[0]['state'] == ('OFFLOADED' if offload else 'FAILED') and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
+                if task_placements:
+                    target = task_placements.get(key, placement)
+                    assert all(a['mode'] == target['mode'] and a['nodeId'] == target.get('nodeId') for a in attempts)
                 value = values[0]
                 assert value['attemptId'] == attempts[-1]['id'] and value['producerPodUid'] and len(value['artifacts']) == 1
                 if finalize and key == 'root':
@@ -400,10 +415,12 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
 
 def main():
     names = config.get('cases', ['auto', 'node', 'recover', 'finalizer', 'cancel'])
-    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel'}
+    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover'}
     for name in names:
         placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' or name.startswith('offload') else {'mode': 'AUTO'}
-        run_case(name, placement, cancel=name == 'cancel' or name.endswith('-cancel'), recover=name == 'recover', finalize=name == 'finalizer', offload=name.startswith('offload'), automatic=name.startswith('offload-automatic'))
+        task_placements = {task: {'mode': 'NODE', 'nodeId': config['nodeId'] if task == 'root' else config['targetNodeId']}
+                           for task in ('root', 'sink', 'report')} if name.startswith('placement') else None
+        run_case(name, placement, cancel=name == 'cancel' or name.endswith('-cancel'), recover=name in ('recover', 'placement-recover'), finalize=name == 'finalizer', offload=name.startswith('offload'), automatic=name.startswith('offload-automatic'), task_placements=task_placements)
     save('done.json', report)
 
 

@@ -23,7 +23,7 @@ class StreamRunPlanTest {
     private Fixture fixture(boolean forwardBatch,boolean reverseBatch,int frames)throws Exception {
         var run=UUID.randomUUID();var now=Instant.now();var tasks=new ArrayList<Task>();var specs=new HashMap<UUID,ServiceExecutionSpec>();
         for(String key:List.of("a","b","c","d")){
-            var t=new Task(UUID.randomUUID(),run,UUID.randomUUID(),key,"READY",null,now,now);tasks.add(t);specs.put(t.id(),spec(key.equals("a")||key.equals("b"),frames));
+            var t=new Task(UUID.randomUUID(),run,UUID.randomUUID(),key,"READY",null,now,now,"AUTO",null);tasks.add(t);specs.put(t.id(),spec(key.equals("a")||key.equals("b"),frames));
         }
         var edges=new ArrayList<Dag.Edge>();edges.add(new Dag.Edge("a","c","output","input",Dag.Mode.STREAM));edges.add(new Dag.Edge("b","d","output","input",Dag.Mode.STREAM));
         if(forwardBatch)edges.add(new Dag.Edge("a","d","result","file-input",Dag.Mode.BATCH));

@@ -45,6 +45,94 @@ class WorkflowIntegrationTest {
     private String perform(MockHttpServletRequestBuilder request,int statusCode) throws Exception { return mvc.perform(request.with(user("test")).with(csrf())).andExpect(status().is(statusCode)).andReturn().getResponse().getContentAsString(); }
     private Task named(WorkflowRun run,String key) { return executions.detail(run.id()).tasks().stream().filter(t->t.key().equals(key)).findFirst().orElseThrow(); }
 
+    private UUID placementNode() {
+        UUID id=UUID.randomUUID();
+        jdbc.update("INSERT INTO edgeai.execution_node(id,name,architecture,operating_system,observed_status,cpu,memory,labels,observed_at) VALUES (?,?,'amd64','linux','NOT_READY','1','1Gi','{\"source\":\"placement-fixture\"}',now())",id,"placement-"+id);
+        return id;
+    }
+    private Map<String,Object> placementRequest(UUID version,UUID defaultNode,UUID childNode) {
+        var request=new LinkedHashMap<String,Object>();
+        request.put("workflowVersionId",version.toString());request.put("parameters",Map.of());
+        request.put("execution",Map.of("mode","NODE","nodeId",defaultNode.toString()));
+        request.put("taskExecutions",Map.of("root",Map.of("mode","AUTO"),"child",Map.of("mode","NODE","nodeId",childNode.toString())));
+        return request;
+    }
+    @Test void publicTaskPlacementPinsWaitingTasksAndNormalizesReplay() throws Exception {
+        var version=version();UUID defaultNode=placementNode(),childNode=placementNode();
+        var request=placementRequest(version.id(),defaultNode,childNode);String key=UUID.randomUUID().toString();
+        var response=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),201));
+        var run=executions.detail(UUID.fromString(response.path("id").asText())).run();
+        assertThat(response.path("taskExecutions").path("child").path("nodeId").asText()).isEqualTo(childNode.toString());
+        assertThat(run.nodeId()).isEqualTo(defaultNode);
+        var root=named(run,"root");var child=named(run,"child");var independent=named(run,"independent");
+        assertThat(root.initialMode()).isEqualTo("AUTO");assertThat(root.initialNodeId()).isNull();
+        assertThat(child.initialMode()).isEqualTo("NODE");assertThat(child.initialNodeId()).isEqualTo(childNode);
+        assertThat(child.state()).isEqualTo("WAITING");assertThat(executions.taskDetail(child.id()).attempts()).isEmpty();
+        assertThat(independent.initialNodeId()).isEqualTo(defaultNode);
+        assertThat(executions.taskDetail(root.id()).attempts()).singleElement().satisfies(a->{assertThat(a.mode()).isEqualTo("AUTO");assertThat(a.nodeId()).isNull();});
+        assertThat(executions.taskDetail(independent.id()).attempts()).singleElement().satisfies(a->assertThat(a.nodeId()).isEqualTo(defaultNode));
+        var detail=json.readTree(perform(get("/api/v1/tasks/"+child.id()),200));
+        assertThat(detail.path("task").path("initialMode").asText()).isEqualTo("NODE");
+        assertThat(detail.path("task").path("initialNodeId").asText()).isEqualTo(childNode.toString());
+        var reordered=new LinkedHashMap<String,Object>();
+        reordered.put("child",Map.of("nodeId",childNode.toString().toUpperCase(Locale.ROOT),"mode","NODE"));reordered.put("root",Map.of("mode","AUTO"));
+        request.put("taskExecutions",reordered);
+        perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),200);
+        request.put("taskExecutions",Map.of("root",Map.of("mode","AUTO"),"child",Map.of("mode","NODE","nodeId",defaultNode.toString())));
+        perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),409);
+        String emptyKey=UUID.randomUUID().toString();request.remove("taskExecutions");
+        var plain=executions.create(emptyKey,encode(request));request.put("taskExecutions",Map.of());
+        assertThat(executions.create(emptyKey,encode(request)).value().id()).isEqualTo(plain.value().id());
+    }
+    @Test void invalidTaskPlacementsCannotLeavePartialRuns() throws Exception {
+        var version=version();UUID node=placementNode();var request=placementRequest(version.id(),node,node);
+        var tooMany=new TreeMap<String,Object>();for(int i=0;i<129;i++)tooMany.put("task-"+i,Map.of("mode","AUTO"));
+        for(Object invalid:Arrays.asList(null,List.of(),Map.of("missing",Map.of("mode","AUTO")),Map.of("root",Map.of("mode","REMOTE")),
+                Map.of("root",Map.of("mode","NODE")),Map.of("root",Map.of("mode","AUTO","nodeId",node.toString())),Map.of("root",Map.of("mode","NODE","nodeId","1-1-1-1-1")),tooMany)) {
+            request.put("taskExecutions",invalid);String key=UUID.randomUUID().toString();
+            perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),400);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(key))).isZero();
+        }
+        request.put("taskExecutions",Map.of("root",Map.of("mode","NODE","nodeId",UUID.randomUUID().toString())));
+        String missing=UUID.randomUUID().toString();
+        perform(post("/api/v1/workflow-runs").header("Idempotency-Key",missing).contentType("application/json").content(encode(request)),404);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(missing))).isZero();
+        request.put("taskExecutions",Map.of("root",Map.of("mode","AUTO")));
+        for(var policy:List.of(Map.of("mode","REMOTE","providerKey","fixture"),Map.of("mode","VD","vdId",UUID.randomUUID().toString()))) {
+            request.put("execution",policy);String key=UUID.randomUUID().toString();
+            var error=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),409));
+            assertThat(error.path("code").asText()).isEqualTo("TASK_PLACEMENT_UNSUPPORTED");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(key))).isZero();
+        }
+    }
+    @Test void concurrentPlacementCreationHasOneImmutablePlan() throws Exception {
+        var version=version();UUID a=placementNode(),b=placementNode();String key=UUID.randomUUID().toString();
+        var runs=parallel(i->executions.create(key,encode(placementRequest(version.id(),a,b))));
+        assertThat(runs.stream().filter(Creation::created).count()).isEqualTo(1);
+        var run=runs.getFirst().value();assertThat(runs).allMatch(r->r.value().id().equals(run.id()));
+        assertThat(executions.detail(run.id()).tasks()).hasSize(3);
+        assertThat(named(run,"child").initialNodeId()).isEqualTo(b);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id=?",Integer.class,run.id())).isEqualTo(2);
+    }
+    @Test void databaseProtectsInitialPlanAndRejectsAnIncorrectInitialAttempt() {
+        var version=version();UUID a=placementNode(),b=placementNode();
+        var run=executions.create(UUID.randomUUID().toString(),encode(placementRequest(version.id(),a,b))).value();var child=named(run,"child");
+        for(String sql:List.of("UPDATE edgeai.workflow_run SET task_executions='{}' WHERE id=?","UPDATE edgeai.workflow_run SET workflow_version_id='"+version().id()+"' WHERE id=?"))
+            assertThatThrownBy(()->jdbc.update(sql,run.id())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("immutable");
+        for(String sql:List.of("UPDATE edgeai.task SET initial_node_id='"+a+"' WHERE id=?","UPDATE edgeai.task SET initial_mode='AUTO',initial_node_id=null WHERE id=?","UPDATE edgeai.task SET definition_id='"+named(run,"root").definitionId()+"' WHERE id=?"))
+            assertThatThrownBy(()->jdbc.update(sql,child.id())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("immutable");
+        assertThatThrownBy(()->jdbc.update("DELETE FROM edgeai.execution_node WHERE id=?",b)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        String insert="INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) VALUES (?,?,?,?,'QUEUED',?,?,'INITIAL',now(),now())";
+        assertThatThrownBy(()->jdbc.update(insert,UUID.randomUUID(),child.id(),1,1,"NODE",a)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("INITIAL Attempt");
+        assertThatThrownBy(()->jdbc.update(insert,UUID.randomUUID(),child.id(),1,1,"AUTO",null)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("INITIAL Attempt");
+        assertThatThrownBy(()->jdbc.update(insert,UUID.randomUUID(),child.id(),2,2,"NODE",b)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("INITIAL Attempt");
+        new TransactionTemplate(transactions).execute(status->{status.setRollbackOnly();assertThat(jdbc.update(insert,UUID.randomUUID(),child.id(),1,1,"NODE",b)).isEqualTo(1);return null;});
+        String clone="INSERT INTO edgeai.workflow_run(id,workflow_version_id,idempotency_key,request_digest,mode,parameters,state,created_at,updated_at,task_executions) SELECT ?,workflow_version_id,?,request_digest,'AUTO','{}','PENDING',now(),now(),CAST(? AS jsonb) FROM edgeai.workflow_run WHERE id=?";
+        for(String invalid:List.of("[]","{\"missing\":{\"mode\":\"AUTO\"}}","{\"root\":{\"mode\":\"AUTO\",\"nodeId\":null}}","{\"root\":{\"mode\":\"NODE\",\"nodeId\":\""+UUID.randomUUID()+"\"}}"))
+            assertThatThrownBy(()->jdbc.update(clone,UUID.randomUUID(),UUID.randomUUID(),invalid,run.id())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class).hasMessageContaining("Task");
+        new TransactionTemplate(transactions).execute(status->{status.setRollbackOnly();assertThat(jdbc.update(clone,UUID.randomUUID(),UUID.randomUUID(),"{}",run.id())).isEqualTo(1);return null;});
+    }
+
     @Test void httpWorkflowPublicationRunReplayCancelAndIndependentBranch() throws Exception {
         String body=encode(Map.of("key","http-workflow-"+UUID.randomUUID(),"displayName","실행 시험"));
         var workflow=json.readTree(perform(post("/api/v1/workflows").contentType("application/json").content(body),201));

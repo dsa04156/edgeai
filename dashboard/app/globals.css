@@ -86,6 +86,7 @@ h1 { word-break: keep-all; }
 summary { cursor: pointer; min-height: 44px; padding: 8px 0; }
 select { min-width: 0; max-width: 100%; }
 .form-row > label { min-width: 0; }
+@media (max-width: 560px) { .task-placement-row { align-items: stretch; flex-direction: column; } }
 
 .retry-errors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 20px; padding: 16px; border: 1px solid var(--line); }
 .retry-errors legend { padding: 0 4px; }

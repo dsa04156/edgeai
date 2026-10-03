@@ -1,6 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0053/V29 작업별 최초 AUTO/NODE 배치를 공개 API·Swagger·화면에 연결했다. Run 기본값과
+불변 Task 최초 위치를 분리하고 BATCH 하위·STREAM 그룹·재시도/최종 처리·offload 후 위치를 검증했다.
+PG212·실제 저장소38·단위105·UI42·실제 API/DB/Swagger PC모바일10개 PASS.
+실제 Kubernetes 전체11개/Runner Pod39개/고정 S3결과24개 PASS(192206Z-e77aa57a), API 교체13.332초.
+다른 최초 Node·그룹 장애 복구·고정 결과·소유 자원/Job 장벽 정리를 확인했다.
+기존 로컬 DB V29 성공, 이전 Task9,335개·기본 배치 불일치0(192822Z-b237dee1).
+선행204645f CI37145780408은 images의 자동 전환 취소 구간 실패·gitops skipped다.
+원시17개 중16PASS/1FAIL이며 상세 driver 진단이 artifact에 없어 원인은 미확정이다.
+새 report에 비밀값을 제외한 실패 위치를 보존해 다음 CI에서 확인한다. 새 코드의 이미지/배포와
+VD/REMOTE 혼합 배치·외부 수용은 남는다. docs/evidence/m7-task-initial-placement.md.
+M5 잔여/M7–M10 전체 미완료 유지.
+
+아래는 선행 자동 전환 검증 이력이다.
 실제 Kubernetes의 메모리 부하→STREAM 그룹 자동 전환·취소·전환 한도를 검증했다.
 최종9개 시나리오/Runner Pod31개/고정 S3결과18개 PASS(183338Z-5496a478).
 선택 작업은 다른 노드 AUTO, 동료는 기존 NODE를 유지하고 상태9→14/23/BATCH37을 보존한다.

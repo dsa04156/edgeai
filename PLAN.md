@@ -18,6 +18,14 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0053/V29의 작업별 최초 AUTO/NODE 배치를 구현했다. 공개 API·불변 DB·대기 Task·
+BATCH 하위·STREAM 그룹/최종 처리 복구·전환 후 재시도·Swagger/화면을 연결했다.
+PG212·실제 저장소38·단위105·UI42·실API/DB/Swagger10개 및 실제 Kubernetes 전체11개/
+Pod39개/S3결과24개 PASS다. 새 이미지/배포, VD/REMOTE 혼합 배치와 외부 장치 수용은 남는다.
+선행204645f CI37145780408의 자동 취소 driver 실패는 원인 미확정이다. 실패 위치를 다음 CI
+artifact에 보존해 확인한다. [작업별 배치 근거](docs/evidence/m7-task-initial-placement.md).
+
+아래는 구성 요소별 구현·검증 이력이다.
 ADR0052/V28에서 공개 STREAM 자동 전환을 연결한다. 모든 구성원의 체크포인트·대기 시간·
 전환 예산을 확인하고 선택 작업만 방문 노드를 제외한 AUTO로 옮긴다. Runner 측정도 스트리밍
 계산부터 최종 처리까지 이어간다. 실제 PG206·Runner111·TLS MQTT90·서버8·UI40을 로컬

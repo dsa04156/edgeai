@@ -205,8 +205,28 @@ class StreamRunIntegrationTest {
         "targetNodeId",target.toString(),"drainTimeoutSeconds",60,"startTimeoutSeconds",60));}
     private OffloadOperation transfer(UUID run,UUID target){return offloads.request(task(run,"source").id(),UUID.randomUUID().toString(),transferBody(run,"source",target)).value();}
     private void drainTransfer(UUID run,UUID operation){finishPhysical(run,"source");finishPhysical(run,"sink");revokeGroup(run);offloads.advance(operation);}
-    private void claimOn(UUID run,String name,UUID node){var a=attempt(run,name);var p=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),node,"transfer-"+node);
-        lifecycle.submitted(a.id(),p.jobUid());lifecycle.claim(a.id(),a.epoch(),p);}
+    private RuntimeLifecycleService.Assignment claimOn(UUID run,String name,UUID node){var a=attempt(run,name);var p=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),node,"transfer-"+node);
+        lifecycle.submitted(a.id(),p.jobUid());return lifecycle.claim(a.id(),a.epoch(),p);}
+    private List<UUID> placementNodes(){var ids=List.of(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID());var now=Instant.now();
+        nodes.recordSnapshot(ids.stream().map(id->new io.edgeai.domain.node.ExecutionNode(id,"transfer-"+id,"amd64","linux","READY","4","4Gi","{}",now)).toList(),now);return ids;}
+    private Map<String,Object> placements(UUID source,UUID sink){return Map.of("source",Map.of("mode","NODE","nodeId",source.toString()),"sink",Map.of("mode","NODE","nodeId",sink.toString()));}
+
+    @Test void distinctInitialPlacementsSurviveWholeGroupRetry()throws Exception{
+        var targets=placementNodes();UUID source=targets.get(0),sink=targets.get(1);
+        var body=request(definition(false,false));body.put("taskExecutions",placements(source,sink));
+        body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        UUID run=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+        assertThat(executions.run(run,false).orElseThrow().mode()).isEqualTo("AUTO");
+        claimOn(run,"source",source);claimOn(run,"sink",sink);streams.prepare(run);checkpoint(run,false);
+        lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");
+        finishPhysical(run,"source");finishPhysical(run,"sink");revokeGroup(run);due(run);
+        assertThat(lifecycle.retryTask(task(run,"sink").id())).isTrue();
+        for(String name:List.of("source","sink")){assertThat(attempt(run,name).cause()).isEqualTo("RETRY");assertThat(attempt(run,name).number()).isEqualTo(2);}
+        assertThat(attempt(run,"source").nodeId()).isEqualTo(source);assertThat(attempt(run,"sink").nodeId()).isEqualTo(sink);
+        assertThat(task(run,"source").initialNodeId()).isEqualTo(source);assertThat(task(run,"sink").initialNodeId()).isEqualTo(sink);
+        claimOn(run,"source",source);claimOn(run,"sink",sink);streams.prepare(run);
+        assertThat(routes.forRun(run,20,0)).allMatch(r->routes.history(r.id(),20,0).size()==2);
+    }
 
     @Test void publicStreamOffloadPinsWholeGroupAndWaitsForEveryStopRevocationAndClaim()throws Exception{
         var run=create(definition(false,true));claim(run,"source");claim(run,"sink");streams.prepare(run);
@@ -293,16 +313,16 @@ class StreamRunIntegrationTest {
         assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task_offload_member SET target_attempt_id=NULL WHERE operation_id=?",o.id())).isInstanceOf(DataIntegrityViolationException.class);
     }
     @Test void nodePoliciesSurviveGroupTransferAndOffloadDoesNotConsumeRetryBudget()throws Exception{
-        UUID source=UUID.randomUUID(),target=UUID.randomUUID();var now=Instant.now();
-        nodes.recordSnapshot(List.of(source,target).stream().map(id->new io.edgeai.domain.node.ExecutionNode(id,"transfer-"+id,
-            "amd64","linux","READY","4","4Gi","{}",now)).toList(),now);
+        var targets=placementNodes();UUID source=targets.get(0),target=targets.get(1),initialSource=targets.get(2);
         var d=definition(false,false);var body=request(d);body.put("execution",Map.of("mode","NODE","nodeId",source.toString()));
+        body.put("taskExecutions",Map.of("source",Map.of("mode","NODE","nodeId",initialSource.toString())));
         body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
         var run=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
-        claimOn(run,"source",source);claimOn(run,"sink",source);streams.prepare(run);checkpoint(run,false);
+        claimOn(run,"source",initialSource);claimOn(run,"sink",source);streams.prepare(run);checkpoint(run,false);
         var o=transfer(run,target);drainTransfer(run,o.id());
         assertThat(attempt(run,"source").nodeId()).isEqualTo(target);assertThat(attempt(run,"sink").nodeId()).isEqualTo(source);
         claimOn(run,"source",target);claimOn(run,"sink",source);streams.prepare(run);
+        assertThat(task(run,"source").initialNodeId()).isEqualTo(initialSource);
         lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");
         for(String name:List.of("source","sink"))assertThat(task(run,name).state()).isEqualTo("RETRY_WAIT");
         finishPhysical(run,"source");finishPhysical(run,"sink");revokeGroup(run);due(run);
@@ -330,7 +350,11 @@ class StreamRunIntegrationTest {
         body.put("streamInputs",List.of(d.inputs().getFirst()));assertThat(create(key,body,409)).contains("IDEMPOTENCY_CONFLICT");
     }
     @Test void grantedFinalizerRetriesAloneAfterPhysicalAndBrokerBarriersAndRetainsOriginalGrant()throws Exception{
-        UUID run=recoveryRun(definition(false,true),3);claim(run,"source");claim(run,"sink");streams.prepare(run);var sealed=seal(run);
+        var targets=placementNodes();UUID source=targets.get(0),sink=targets.get(1);
+        var body=request(definition(false,true));body.put("taskExecutions",placements(source,sink));
+        body.put("retry",Map.of("maxAttempts",3,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        UUID run=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+        claimOn(run,"source",source);claimOn(run,"sink",sink);streams.prepare(run);var sealed=seal(run);
         var original=principal(run,"sink");var grant=completions.granted(original.attemptId()).orElseThrow();commitFinalizer(run,"source");
         // The broker worker is mocked in this PG test: model its closure of the completed source's Device routes.
         for(var route:routes.forRun(run,20,0))if(route.deviceSource()){
@@ -344,7 +368,8 @@ class StreamRunIntegrationTest {
             assertThat(lifecycle.retryTask(task(run,"sink").id())).isFalse();finishPhysical(run,"sink");
             if(round==2){assertThat(lifecycle.retryTask(task(run,"sink").id())).isFalse();revokeGroup(run);}
             assertThat(parallel(i->lifecycle.retryTask(task(run,"sink").id()))).containsOnlyOnce(true);
-            claim(run,"sink");assertThat(streams.prepare(run)).isEmpty();
+            assertThat(attempt(run,"sink").nodeId()).isEqualTo(sink);assertThat(task(run,"sink").initialNodeId()).isEqualTo(sink);
+            claimOn(run,"sink",sink);assertThat(streams.prepare(run)).isEmpty();
             var p=principal(run,"sink");assertThat(p.epoch()).isEqualTo(round);
             var reply=(Map<?,?>)streamExecution.execution(p,identity(p));assertThat(reply.get("state")).isEqualTo("FINALIZE");
             assertThat(reply.get("checkpointActor")).isEqualTo(Map.of("attemptId",original.attemptId().toString(),"epoch",original.epoch()));
@@ -406,7 +431,10 @@ class StreamRunIntegrationTest {
         }
     }
     @Test void everyBatchPredecessorMustHaveSealedResultBeforeAnyStreamMemberStarts()throws Exception{
-        var d=definition(true,false);UUID id=create(d);var prep=claim(id,"prep");
+        var targets=placementNodes();UUID source=targets.get(0),sink=targets.get(1);
+        var d=definition(true,false);var body=request(d);body.put("taskExecutions",placements(source,sink));
+        UUID id=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));var prep=claim(id,"prep");
+        assertThat(task(id,"source").initialNodeId()).isEqualTo(source);assertThat(task(id,"sink").initialNodeId()).isEqualTo(sink);
         assertThat(task(id,"source").state()).isEqualTo("WAITING");assertThat(task(id,"sink").state()).isEqualTo("WAITING");
         // Deliberately incomplete state fixture proves state alone cannot release a group.
         jdbc.update("UPDATE edgeai.task SET state='SUCCEEDED' WHERE id=?",task(id,"prep").id());streams.releaseReady(id);
@@ -417,7 +445,8 @@ class StreamRunIntegrationTest {
         var content=output.content(task(id,"prep").id(),prep.runtime().attemptId());
         lifecycle.commitVerified(permit,List.of(new TaskResult.Output("output",new VerifiedArtifact("fixture-only",content.objectKey(),output.versionId(),content.sha256(),content.bytes(),content.mediaType()))));
         assertThat(attempt(id,"source").state()).isEqualTo("DISPATCHING");assertThat(attempt(id,"sink").state()).isEqualTo("DISPATCHING");
-        assertThat(claim(id,"source").inputs()).isEmpty();assertThat(claim(id,"sink").inputs()).hasSize(1);
+        assertThat(attempt(id,"source").nodeId()).isEqualTo(source);assertThat(attempt(id,"sink").nodeId()).isEqualTo(sink);
+        assertThat(claimOn(id,"source",source).inputs()).isEmpty();assertThat(claimOn(id,"sink",sink).inputs()).hasSize(1);
         streams.prepare(id);assertThat(routes.forRun(id,20,0)).allMatch(r->routes.history(r.id(),20,0).size()==1);
     }
     @Test void sameDeviceFanoutSharesComponentAndWaitsForBothClaims()throws Exception{

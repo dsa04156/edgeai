@@ -225,7 +225,7 @@ def main():
             result = subprocess.run(['python3', 'scripts/test-stream-kubernetes.py', '--context', context,
                 '--api-image', images['api'], '--api-source', source_revision,
                 '--runner-image', images['runner'], '--runner-source', source_revision,
-                '--minio-image', images['minio'], '--report', '.tools/kind-stream.json'], env=env, timeout=1650)
+                '--minio-image', images['minio'], '--report', '.tools/kind-stream.json'], env=env, timeout=1950)
             if result.returncode:
                 raise RuntimeError('kind multi-device stream acceptance failed')
             print('Verifying retained stream identities and persistent TLS broker replacement', flush=True)

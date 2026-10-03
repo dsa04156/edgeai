@@ -42,7 +42,8 @@ class RetryIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     private final JsonDocuments json=new JsonDocuments();
     private record Fixture(WorkflowRun run,UUID root,UUID child,UUID attempt,String namespace) {}
-    @SuppressWarnings("unchecked") private Fixture fixture(int attempts,int backoff,int elapsed,Set<String> codes) throws Exception {
+    private Fixture fixture(int attempts,int backoff,int elapsed,Set<String> codes) throws Exception {return fixture(attempts,backoff,elapsed,codes,Map.of());}
+    @SuppressWarnings("unchecked") private Fixture fixture(int attempts,int backoff,int elapsed,Set<String> codes,Map<String,Object> placements) throws Exception {
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key","retry-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
@@ -50,7 +51,7 @@ class RetryIntegrationTest {
         var tasks=List.of("root","child").stream().map(key->Map.of("key",key,"serviceProfileVersionId",profile.id().toString(),"parameters",Map.of())).toList();
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",tasks,"dependencies",List.of(Map.of("fromTask","root","toTask","child","fromPort","output","toPort","input","mode","BATCH"))))).value();
         var run=executions.create(UUID.randomUUID().toString(),json.canonical(Map.of("workflowVersionId",version.id().toString(),"parameters",Map.of(),"execution",Map.of("mode","AUTO"),
-            "retry",Map.of("maxAttempts",attempts,"backoffSeconds",backoff,"maxElapsedSeconds",elapsed,"retryOn",codes.stream().sorted().toList())))).value();
+            "taskExecutions",placements,"retry",Map.of("maxAttempts",attempts,"backoffSeconds",backoff,"maxElapsedSeconds",elapsed,"retryOn",codes.stream().sorted().toList())))).value();
         var values=executions.detail(run.id()).tasks();UUID root=values.stream().filter(t->t.key().equals("root")).findFirst().orElseThrow().id();
         var f=new Fixture(run,root,values.stream().filter(t->t.key().equals("child")).findFirst().orElseThrow().id(),executions.taskDetail(root).attempts().getFirst().id(),"retry-"+UUID.randomUUID());
         lifecycle.plan(f.attempt(),f.namespace());return f;
@@ -65,6 +66,30 @@ class RetryIntegrationTest {
     private void states(Fixture f,String root,String child){assertThat(executions.taskDetail(f.root()).task().state()).isEqualTo(root);assertThat(executions.taskDetail(f.child()).task().state()).isEqualTo(child);}
     private ResultManifest manifest(){return new ResultManifest(List.of(new ResultManifest.Output("output",2,"a".repeat(64),"application/json","fixture-version")));}
     private List<TaskResult.Output> receipt(UUID task,UUID attempt){var o=manifest().outputs().getFirst();return List.of(new TaskResult.Output(o.port(),new VerifiedArtifact("fixture-only",o.content(task,attempt).objectKey(),o.versionId(),o.sha256(),o.bytes(),o.mediaType())));}
+
+    @Test void taskOverridesSurviveRetryAndVerifiedBatchRelease() throws Exception {
+        UUID rootNode=UUID.randomUUID(),childNode=UUID.randomUUID();
+        for(UUID node:List.of(rootNode,childNode))jdbc.update("INSERT INTO edgeai.execution_node(id,name,architecture,operating_system,observed_status,cpu,memory,labels,observed_at) VALUES (?,?,'amd64','linux','READY','4','4Gi','{}',now())",node,"placement-"+node);
+        var f=fixture(2,1,300,Set.of("RUNTIME_LOST"),Map.of("root",Map.of("mode","NODE","nodeId",rootNode.toString()),"child",Map.of("mode","NODE","nodeId",childNode.toString())));
+        assertThat(f.run().mode()).isEqualTo("AUTO");
+        var first=repository.attempt(f.attempt()).orElseThrow();assertThat(first.nodeId()).isEqualTo(rootNode);
+        var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),rootNode,"placement-"+rootNode);
+        lifecycle.submitted(first.id(),pod.jobUid());lifecycle.claim(first.id(),first.epoch(),pod);completeCreate(first.id());
+        lifecycle.observeFailure(first.id(),"RUNTIME_LOST");lifecycle.confirmStopped(first.id());clock.advance(1);
+        assertThat(lifecycle.retryTask(f.root())).isTrue();var next=executions.taskDetail(f.root()).attempts().getFirst();
+        assertThat(next.cause()).isEqualTo("RETRY");assertThat(next.nodeId()).isEqualTo(rootNode);
+        var retryPod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),rootNode,"placement-"+rootNode);
+        lifecycle.submitted(next.id(),retryPod.jobUid());lifecycle.claim(next.id(),next.epoch(),retryPod);
+        assertThat(executions.taskDetail(f.child()).attempts()).isEmpty();
+        var permit=lifecycle.prepareCommit(next.id(),next.epoch(),retryPod.podUid(),manifest());
+        lifecycle.commitVerified(permit,receipt(f.root(),next.id()));
+        var child=executions.taskDetail(f.child());assertThat(child.task().initialNodeId()).isEqualTo(childNode);
+        assertThat(child.attempts()).singleElement().satisfies(a->{assertThat(a.cause()).isEqualTo("INITIAL");assertThat(a.nodeId()).isEqualTo(childNode);});
+        var childAttempt=child.attempts().getFirst();lifecycle.plan(childAttempt.id(),f.namespace());
+        var childPod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),childNode,"placement-"+childNode);
+        lifecycle.submitted(childAttempt.id(),childPod.jobUid());
+        assertThat(lifecycle.claim(childAttempt.id(),1,childPod).inputs()).hasSize(1);
+    }
 
     @Test void retriesSameTaskAfterStopAndBackoffThenCommitsOnceAndReleasesChild() throws Exception {
         var f=fixture();var pod=claim(f.attempt(),1);var oldPermit=lifecycle.prepareCommit(f.attempt(),1,pod.podUid(),manifest());

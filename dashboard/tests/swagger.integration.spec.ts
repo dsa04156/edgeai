@@ -24,6 +24,13 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.locator("#operations-Node-listNodes .opblock-summary-description")).toHaveText("관측된 Kubernetes 실행 노드 목록");
   await expect(page.locator("#operations-Workflow-publishWorkflowVersion .opblock-summary-description")).toHaveText("검증된 DAG 버전 발행");
   await expect(page.locator("#operations-Run-createWorkflowRun .opblock-summary-description")).toHaveText("워크플로 실행 요청 생성");
+  const runOperation = page.locator("#operations-Run-createWorkflowRun");
+  await runOperation.locator(".opblock-summary-control").click();
+  const runDescription = runOperation.locator(".opblock-description-wrapper").filter({ hasText: "발행된 DAG를 Run과 Task로 구체화합니다." });
+  await expect(runDescription).toContainText("initialMode/initialNodeId");
+  await expect(runDescription).toContainText("재시도는 직전 Attempt의 실제 위치를 계승");
+  await runOperation.screenshot({ path: testInfo.outputPath("task-placement-swagger.png") });
+  await runOperation.locator(".opblock-summary-control").click();
   await expect(page.locator("#operations-Run-listRunStreamRoutes .opblock-summary-description")).toHaveText("실행의 스트림 입력·그룹·경로 세대 조회");
   await expect(page.locator("#operations-Result-getTaskResults .opblock-summary-description")).toHaveText("작업의 검증된 결과와 artifact 메타데이터 조회");
   await expect(page.locator("#operations-Task-offloadTask .opblock-summary-description")).toHaveText("실행 중인 작업을 다른 노드 또는 Remote로 전환");

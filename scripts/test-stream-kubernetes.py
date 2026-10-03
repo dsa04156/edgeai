@@ -21,7 +21,17 @@ import urllib.request
 import uuid
 from vd_acceptance import ROOT, wait
 
-CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel')
+CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover')
+
+
+def driver_failure_evidence(value):
+    """Keep only driver-generated phase/type/code locations, never exception text or HTTP bodies."""
+    patterns = {'phase': r'[a-zA-Z0-9-]{1,128}', 'type': r'[a-zA-Z][a-zA-Z0-9]{0,79}',
+                'locations': r'[a-zA-Z0-9_.-]+:[0-9]+(?:,[a-zA-Z0-9_.-]+:[0-9]+)*',
+                'runId': r'[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}'}
+    value = value if isinstance(value, dict) else {}
+    return {key: field if isinstance(field := value.get(key), str) and len(field) <= 2000 and re.fullmatch(pattern, field)
+            else None for key, pattern in patterns.items()}
 
 
 def main():
@@ -349,7 +359,7 @@ with response: print(response.status)
             eligible = [n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
                         and any(c['type'] == 'Ready' and c['status'] == 'True' for c in n['status']['conditions'])
                         and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', []))]
-            assert len(eligible) >= (2 if any(name.startswith('offload') for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer'
+            assert len(eligible) >= (2 if any(name.startswith(('offload', 'placement')) for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer or task placement'
             node = eligible[0]
             config = {'origin': api_origin, 'runnerImage': snapshot['runnerImage'], 'nodeId': node['metadata']['uid'],
                       'nodeName': node['metadata']['name'],
@@ -370,13 +380,16 @@ with response: print(response.status)
                 [{'name': 'work', 'emptyDir': {}}, {'name': 'scenario', 'configMap': {'name': root + '-scenario'}}]))
             wait(lambda: running(driver), 150, 'Owned source driver did not start')
             completed = set()
-            deadline = time.monotonic() + 1350
+            deadline = time.monotonic() + 1500
             restarted = False
             while time.monotonic() < deadline:
                 running(driver)
                 script = "import json;from pathlib import Path;print(json.dumps({n:json.loads(Path('/work',n+'.json').read_text()) for n in ('phase','failure','done','report') if Path('/work',n+'.json').exists()}))"
                 state = json.loads(call(['-n', 'edgeai', 'exec', driver, '--', 'python3', '-c', script]))
-                assert 'failure' not in state, 'Actual source driver failed: ' + json.dumps(state.get('failure', {}))
+                if 'failure' in state:
+                    snapshot['driverFailure'] = driver_failure_evidence(state['failure'])
+                    print('Owned source failure: ' + json.dumps(snapshot['driverFailure']), flush=True)
+                    raise AssertionError('Actual source driver failed; sanitized evidence retained')
                 current = state.get('phase')
                 if current:
                     run = current['runId'];uuid.UUID(run);run_ids.add(run);observe(run)
@@ -394,6 +407,18 @@ with response: print(response.status)
                                 time.sleep(.3)
                                 continue
                             snapshot['checkpointBarriers'].append({'phase': phase, 'runId': run, 'states': current['expectedStates'], 'sha256': actual})
+                            if current['case'].startswith('placement') and phase.endswith(('-first', '-recovered')):
+                                pods = [p for p in resources(run) if p['kind'] == 'Pod']
+                                assert len(pods) == 2 and all(p['metadata']['uid'] in seen for p in pods)
+                                observed_nodes = {}
+                                for name in ('root', 'sink'):
+                                    pod = next(p for p in pods if p['metadata']['labels']['edgeai.io/task-id'] == current['tasks'][name])
+                                    observed_nodes[name] = seen[pod['metadata']['uid']]['nodeUid']
+                                    assert observed_nodes[name] == current['taskExecutions'][name]['nodeId']
+                                assert observed_nodes['root'] != observed_nodes['sink']
+                                for name, target in current['taskExecutions'].items():
+                                    assert query("SELECT initial_mode,initial_node_id FROM edgeai.task WHERE id='" + str(uuid.UUID(current['tasks'][name])) + "'") == 'NODE|' + target['nodeId']
+                                snapshot.setdefault('taskPlacementBarriers', []).append({'phase': phase, 'runId': run, 'observedNodeUids': observed_nodes, 'initialTaskTargetsPreserved': True})
                             if current['case'].startswith('offload') and phase.endswith('-first'):
                                 owned = resources(run);before = [p for p in owned if p['kind'] == 'Pod']
                                 assert len(before) == 2 and all(p['metadata']['uid'] in seen for p in before)
@@ -428,21 +453,21 @@ with response: print(response.status)
                                 assert before == after, 'API restart replaced a live stream Pod'
                                 snapshot['apiRestart'] = {'oldUid': old, 'newUid': api_uid, 'preservedRunnerPodUids': sorted(before), 'elapsedSeconds': round(time.monotonic() - started, 3)}
                                 restarted = True
-                            if phase == 'recover-first':
+                            if phase in ('recover-first', 'placement-recover-first'):
                                 owned = resources(run)
                                 before = [p for p in owned if p['kind'] == 'Pod']
                                 assert len(before) == 2 and all(p['metadata']['uid'] in seen for p in before)
                                 job = next(p for p in owned if p['kind'] == 'Job' and p['metadata']['labels']['edgeai.io/task-id'] == current['tasks']['sink'])
                                 meta = job['metadata']
                                 assert meta['labels']['edgeai.io/run-id'] == run and meta['labels']['app.kubernetes.io/managed-by'] == 'edgeai-runtime-controller'
-                                snapshot['groupFault'] = {'runId': run, 'deletedJobUid': meta['uid'], 'oldPodUids': sorted(p['metadata']['uid'] for p in before),
+                                snapshot['placementGroupFault' if current['case'] == 'placement-recover' else 'groupFault'] = {'runId': run, 'deletedJobUid': meta['uid'], 'oldPodUids': sorted(p['metadata']['uid'] for p in before),
                                     'oldAttemptIds': sorted(p['metadata']['labels']['edgeai.io/attempt-id'] for p in before),
                                     'oldGenerationIds': sorted(r['generation']['id'] for r in current['routes'])}
                                 # Foreground removal stops the owned Pod; the real controller observes the missing Job.
                                 call(['delete', '--raw', '/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' + meta['name'], '-f', '-'],
                                      {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground', 'preconditions': {'uid': meta['uid']}})
-                            if phase == 'recover-recovered':
-                                fault = snapshot['groupFault']
+                            if phase in ('recover-recovered', 'placement-recover-recovered'):
+                                fault = snapshot['placementGroupFault' if current['case'] == 'placement-recover' else 'groupFault']
                                 after = {p['metadata']['uid'] for p in resources(run) if p['kind'] == 'Pod'}
                                 assert len(after) == 2 and not after.intersection(fault['oldPodUids'])
                                 old_attempts = ','.join("'" + str(uuid.UUID(a)) + "'" for a in fault['oldAttemptIds'])
@@ -589,6 +614,8 @@ with response: print(response.status)
                         assert restarted
                     if 'recover' in args.cases:
                         assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
+                    if 'placement-recover' in args.cases:
+                        assert snapshot['placementGroupFault']['oldRuntimesStopped'] and snapshot['placementGroupFault']['oldGenerationsClosed']
                     if 'finalizer' in args.cases:
                         assert snapshot['finalizerFault']['originalGrantPreserved'] and snapshot['finalizerFault']['checkpointHistoryPreserved']
                     for name in args.cases:
@@ -608,6 +635,8 @@ with response: print(response.status)
                         for row in case['results']:
                             result = row['result'];observed = seen[result['producerPodUid']]
                             assert observed['runId'] == case['runId'] and observed['attemptId'] == result['attemptId']
+                            if case['case'].startswith('placement'):
+                                assert observed['nodeUid'] == case['taskExecutions'][row['task']]['nodeId']
                             if case['placement']['mode'] == 'NODE':
                                 if case['case'] == 'offload-automatic' and row['task'] == 'root':
                                     assert observed['nodeUid'] == snapshot['offloads'][case['case']]['selectedTargetNodeId'] != case['placement']['nodeId']
@@ -616,9 +645,14 @@ with response: print(response.status)
                                     assert observed['nodeUid'] == expected_node
                             artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
                     assert len(artifacts) == sum(3 for case in args.cases if case != 'cancel' and not case.endswith('-cancel'))
-                    result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
-                    assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
-                    print(result.stdout.decode().strip(), flush=True)
+                    if artifacts:
+                        result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
+                        assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
+                        print(result.stdout.decode().strip(), flush=True)
+                    else:
+                        assert all(case['cancelled'] and not case['results'] for case in snapshot['cases'])
+                        assert query('SELECT count(*) FROM edgeai.task_result') == '0'
+                        print('PASS: cancellation-only selection has no committed Result; no artifact download claimed', flush=True)
                     snapshot['verifiedArtifacts'] = len(artifacts)
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
                     succeeded = True
@@ -627,6 +661,8 @@ with response: print(response.status)
             else:
                 raise AssertionError('Actual Kubernetes stream scenario deadline exceeded')
         except BaseException:
+            snapshot['status'] = 'FAIL'
+            report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
             if db_ready:
                 try:
                     run_ids.update(str(uuid.UUID(row)) for row in query('SELECT id FROM edgeai.workflow_run').splitlines())
@@ -651,6 +687,8 @@ with response: print(response.status)
                     with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'wb') as output:
                         output.write(result.stdout)
                     print('Owned Pod diagnostic saved privately: ' + path.name, flush=True)
+            # CI already archives this explicit report path. Private Pod logs remain local.
+            report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
             raise
         finally:
             if db_ready:

@@ -30,7 +30,10 @@ Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. 기�
 Run의 실행 정책은 전체 DAG 기본값이다. 공개 STREAM 실행은 현재 Device session을 고정하고
 같은 스트림 그룹을 함께 배정한다. ADR0047은 기존 retry를 그룹/최종 처리 복구에 연결하며
 ADR0051은 명시적 NODE offload, ADR0052는 측정 기반 자동 그룹 offload를 연결한다.
-STREAM REMOTE/VD 실행과 단계별 초기 배치는 남는다.
+ADR0053은 AUTO/NODE Run의 작업별 최초 AUTO/NODE 배치를 연결한다. 실제 PG212·UI42·
+실API/DB/Swagger10개 및 실제 Kubernetes 전체11개/Pod39개/S324를 통과했다.
+새 게시 이미지/CI/배포와 VD/REMOTE 혼합 배치·STREAM REMOTE/VD 실행은 남는다.
+[작업별 배치 근거](evidence/m7-task-initial-placement.md)를 따른다.
 실제 검증 범위는 [공개 재시도 근거](evidence/m7-public-stream-retry.md)와
 [그룹 전환 근거](evidence/m7-stream-group-offload.md), [자동 전환 근거](evidence/m7-stream-automatic-offload.md)를 따른다.
 따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
@@ -93,4 +96,6 @@ dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 �
 검증했고 전체7개 회귀와 해당 이미지 CI를 통과했다. 자동 정책의 실제 모델 메모리 부하·다른 노드 전환·checkpoint/결과·동료의 전환 한도·취소도
 현재 JAR 전체9개/Pod31개/S318에서 통과했다. 이미지/CI별 범위는
 [자동 전환 근거](evidence/m7-stream-automatic-offload.md)를 따른다.
-VD/REMOTE·단계별 배치 및 실장비 수용은 남는다.
+AUTO/NODE 작업별 배치는 ADR0053에서 위와 같이 검증했다. VD/REMOTE 혼합 배치·스트림 및
+실장비 수용은 남는다. 선행204645f의9개 CI는 자동 취소 driver 실패로 게시/배포되지 않았으며,
+로컬 재통과와 CI 원인 해소를 구분한다.

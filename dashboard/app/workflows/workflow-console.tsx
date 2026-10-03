@@ -6,6 +6,7 @@ import { ConnectionPanel } from "../components/connection-panel";
 import { RuntimeMeasurements } from "./runtime-measurements";
 import { StreamInputFields, type StreamInput } from "./stream-inputs";
 import { StreamRoutes } from "./stream-routes";
+import { TaskExecutionFields, type TaskExecutions } from "./task-executions";
 import { OffloadPolicyFields, OffloadPolicySummary, type AutomaticOffloadPolicy } from "./offload-policy";
 
 type Schema = components["schemas"];
@@ -39,6 +40,7 @@ export function WorkflowConsole() {
   const [mode, setMode] = useState("AUTO"); const [providerKey, setProviderKey] = useState("reference"); const [offloadMode, setOffloadMode] = useState("NODE"); const [parameters, setParameters] = useState("{}");
   const [vdId, setVdId] = useState("");
   const [streamInputs, setStreamInputs] = useState<StreamInput[]>([]);
+  const [taskExecutions, setTaskExecutions] = useState<TaskExecutions>({});
   const [retryAttempts, setRetryAttempts] = useState(1);
   const [automaticOffload, setAutomaticOffload] = useState<AutomaticOffloadPolicy | null>(null);
   const [retryBackoff, setRetryBackoff] = useState(5); const [retryWindow, setRetryWindow] = useState(600);
@@ -67,14 +69,14 @@ export function WorkflowConsole() {
   async function loadRuns(offset = runOffset, authorization = auth) { setRuns(await (await api(`workflow-runs?limit=20&offset=${offset}`, undefined, authorization)).json()); setRunOffset(offset); }
   async function showWorkflow(id: string, offset = 0) {
     const value = await (await api(`workflows/${id}?limit=10&offset=${offset}`)).json();
-    if (workflow?.workflow.id !== id) { setVersion(null); setVersionJson(""); }
+    if (workflow?.workflow.id !== id) { setVersion(null); setVersionJson(""); setTaskExecutions({}); }
     setWorkflow(value); setVersionOffset(offset);
   }
   async function showVersion(workflowId: string, number: string) {
     const text = await (await api(`workflows/${workflowId}?version=${encodeURIComponent(number)}`)).text();
     const value = JSON.parse(text).versions[0]; setVersion(value);
     setVersionJson(stringify((parse(text) as { versions: { dag: unknown }[] }).versions[0].dag, null, 2) || "");
-    setKey(requestKey()); setCancel(null);
+    setKey(requestKey()); setCancel(null); setTaskExecutions({});
   }
   async function showRun(id: string) {
     const text = await (await api(`workflow-runs/${id}`)).text(); setRun(JSON.parse(text)); setRunJson(stringify(parse(text), null, 2) || ""); setTask(null); setResults(null); setOffload(null); setCancel(null);
@@ -98,6 +100,7 @@ export function WorkflowConsole() {
   }
   function disconnect() {
     setVdId("");
+    setTaskExecutions({});
     setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
     setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setOffload(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setAutomaticOffload(null); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
   }
@@ -144,15 +147,17 @@ export function WorkflowConsole() {
           if (automaticOffload && [automaticOffload.cpuPercent, automaticOffload.memoryPercent, automaticOffload.latencyMicros].every(v => v == null)) throw new Error("자동 전환 기준을 한 개 이상 입력하세요.");
           const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : mode === "VD" ? { mode, vdId } : { mode, nodeId }, parameters: objectJson(parameters),
             ...(streamInputs.length ? { streamInputs } : {}),
+            ...(Object.keys(taskExecutions).length && (mode === "AUTO" || mode === "NODE") ? { taskExecutions } : {}),
             ...(automaticOffload && mode !== "REMOTE" && mode !== "VD" ? { offload: automaticOffload } : {}),
             ...(retryAttempts > 1 ? { retry: { maxAttempts: retryAttempts, backoffSeconds: retryBackoff, maxElapsedSeconds: retryWindow, retryOn } } : {}) }, key);
           const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
-          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
+          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) { setAutomaticOffload(null); setTaskExecutions({}); } }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
           {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
           {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
           {mode === "VD" && <><label>실행할 가상 장치 ID<input required maxLength={36} value={vdId} onChange={e => setVdId(e.target.value)} placeholder="Ready인 VD UUID" /></label><p className="hint"><a href="/virtual-devices">가상 장치</a>에서 준비 상태와 ID를 확인하세요. 모든 작업은 VD와 같은 SERVICE 버전을 사용하며 실행 자리가 비면 시작합니다. 공유 자원 측정으로는 작업별 자동 전환을 설정할 수 없습니다.</p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
+          {(mode === "AUTO" || mode === "NODE") && version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} onChange={setTaskExecutions} />}
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
           <StreamInputFields value={streamInputs} onChange={setStreamInputs} />
           <label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>
@@ -176,7 +181,7 @@ export function WorkflowConsole() {
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <OffloadPolicySummary value={run.run.offload} />
         <StreamRoutes key={run.run.id} tasks={run.tasks} disabled={busy} fetchPage={async offset => (await api(`workflow-runs/${run.run.id}/streams?limit=20&offset=${offset}`)).json()} />
-        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
+        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button><span className="block muted digest">최초 배치 · {t.initialMode}{t.initialNodeId ? ` · ${nodes.find(n => n.id === t.initialNodeId)?.name || t.initialNodeId}` : ""}</span></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.remoteTarget ? ` · ${a.remoteTarget.providerKey} · ${a.remoteTarget.sourceMode}` : ""}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
         {task && (task.attempts[0]?.mode === "REMOTE"
           ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>

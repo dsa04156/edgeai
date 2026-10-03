@@ -1067,7 +1067,12 @@ paths:
       description: 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로
         다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다.
         실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는
-        scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로
+        scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. taskExecutions로 DAG 작업 키별
+        AUTO/NODE 최초 배치를 지정할 수 있습니다. 생략한 작업은 execution 기본값을 따릅니다. 대기 중인
+        BATCH 하위 작업과 STREAM 그룹에도 적용하며 Task의 initialMode/initialNodeId로 확인합니다.
+        재시도는 직전 Attempt의 실제 위치를 계승하므로 전환 뒤 최초 위치로 되돌아가지 않습니다.
+        알 수 없는 작업 키는400, 없는 노드는404, VD/REMOTE Run의 작업별 배치 요청은409입니다.
+        REMOTE는 서버에 설정된 providerKey로
         제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이
         비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을
         함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은
@@ -2792,6 +2797,30 @@ components:
           minItems: 2
           maxItems: 6
           items: {$ref: '#/components/schemas/RuntimeTelemetry'}
+    TaskExecutions:
+      type: object
+      maxProperties: 128
+      propertyNames: {$ref: '#/components/schemas/ProfileKey'}
+      description: >-
+        발행된 DAG의 작업 키별 최초 실행 위치입니다. AUTO/NODE Run에서 사용하며 생략한 작업은
+        Run의 execution을 따릅니다. 빈 객체와 생략은 같은 멱등 요청으로 처리합니다. 대기 중인 작업도
+        최초 위치를 고정하며 재시도는 직전 Attempt의 실제 위치를 계승합니다.
+      additionalProperties:
+        oneOf:
+        - type: object
+          additionalProperties: false
+          required: [mode]
+          properties:
+            mode: {type: string, enum: [AUTO]}
+        - type: object
+          additionalProperties: false
+          required: [mode, nodeId]
+          properties:
+            mode: {type: string, enum: [NODE]}
+            nodeId: {type: string, format: uuid, description: 관측된 Kubernetes 노드 UID입니다.}
+      example:
+        decode: {mode: AUTO}
+        infer: {mode: NODE, nodeId: 730912fc-52fb-437b-a31b-5df5c68e22ab}
     RunCreate:
       type: object
       additionalProperties: false
@@ -2813,6 +2842,8 @@ components:
           items: {$ref: '#/components/schemas/StreamRunInput'}
         execution:
           $ref: '#/components/schemas/ExecutionPolicy'
+        taskExecutions:
+          $ref: '#/components/schemas/TaskExecutions'
         retry:
           $ref: '#/components/schemas/RetryPolicy'
         offload:
@@ -2887,6 +2918,7 @@ components:
       - remoteTarget
       - retry
       - offload
+      - taskExecutions
       - parameters
       - state
       - createdAt
@@ -2899,6 +2931,7 @@ components:
           type: string
           format: uuid
         remoteTarget: {$ref: '#/components/schemas/RemoteTarget'}
+        taskExecutions: {$ref: '#/components/schemas/TaskExecutions'}
         mode:
           type: string
           enum:
@@ -2944,6 +2977,8 @@ components:
       - key
       - state
       - cancellationReason
+      - initialMode
+      - initialNodeId
       - createdAt
       - updatedAt
       properties:
@@ -2958,6 +2993,14 @@ components:
           format: uuid
         key:
           $ref: '#/components/schemas/ProfileKey'
+        initialMode:
+          type: string
+          enum: [AUTO, NODE, REMOTE, VD]
+          description: Run 기본값과 작업별 지정을 적용한 불변 최초 배치입니다. 전환 후 현재 위치는 Attempt에서 확인합니다.
+        initialNodeId:
+          type: [string, 'null']
+          format: uuid
+          description: 최초 NODE 배치의 노드 UID입니다. 나머지 모드는 null입니다.
         state:
           type: string
           enum:
@@ -3012,7 +3055,7 @@ components:
           type: integer
           minimum: 1
         remoteTarget: {$ref: '#/components/schemas/RemoteTarget'}
-        mode: {type: string, enum: [AUTO, NODE, REMOTE, VD], description: 이 Attempt의 실제 실행 정책. Run의 최초 정책과 구분합니다.}
+        mode: {type: string, enum: [AUTO, NODE, REMOTE, VD], description: 이 Attempt의 실제 실행 정책. Task의 최초 배치와 구분하며 전환 후 재시도도 이 위치를 계승합니다.}
         nodeId: {type: [string, 'null'], format: uuid}
         vdId: {type: [string, 'null'], format: uuid, description: 이 Attempt가 실행될 VD. 명시적 NODE/REMOTE 전환 후에는 null입니다.}
         cause: {type: string, enum: [INITIAL, RETRY, OFFLOAD]}

@@ -50,6 +50,7 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("VD 실행 설정");
   await page.getByRole("region", { name: "선택한 DAG · 1.0.0", exact: true }).screenshot({ path: testInfo.outputPath("vd-execution-disabled.png") });
   await page.getByRole("combobox", { name: /실행 위치 정책/ }).selectOption("AUTO");
+  await page.getByRole("combobox", { name: "root 실행 위치", exact: true }).selectOption("AUTO");
   await page.getByRole("textbox", { name: "실행 매개변수 JSON", exact: true }).fill('{"serial":9007199254740993}');
   await page.getByLabel("최대 실행 횟수", { exact: true }).fill("3");
   await page.getByLabel("재시도 대기 시간(초)", { exact: true }).fill("7");
@@ -61,6 +62,7 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   const response = await created; expect(response.status()).toBe(201);
   expect(response.request().headers()["idempotency-key"]).toBe(requestKey);
   const run = await response.json();
+  expect(run.taskExecutions).toEqual({ root: { mode: "AUTO" } });
   expect(run.retry.maxAttempts).toBe(3); expect(run.retry.backoffSeconds).toBe(7); expect(run.retry.maxElapsedSeconds).toBe(300);
   expect([...run.retry.retryOn].sort()).toEqual(["RUNTIME_LOST", "STORAGE_FAILED"]);
   await expect(page.getByText("작업별 최대 3회 · 실패 후 7초 대기 · 최초 시도부터 300초 동안 재시도 가능", { exact: true })).toBeVisible();
@@ -75,6 +77,7 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   await selected.getByRole("button", { name: "root", exact: true }).click();
   await expect(selected).toContainText("Attempt #1 · epoch 1 · 접수됨");
   await selected.getByRole("button", { name: "child", exact: true }).click();
+  await expect(selected.getByRole("row").filter({ has: page.getByRole("button", { name: "child", exact: true }) })).toContainText("최초 배치 · AUTO");
   await expect(selected).toContainText("선행 작업을 기다리는 중");
   await selected.getByText("실행 매개변수·작업 상세", { exact: true }).click();
   await expect(page.getByLabel("실행 상세 JSON", { exact: true })).toContainText("9007199254740993");

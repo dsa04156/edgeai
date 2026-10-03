@@ -36,6 +36,7 @@ public class ExecutionService {
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
         UUID idempotency=uuid(key);var input=runRequest(body);
+        var taskExecutions=input.containsKey("taskExecutions")?taskExecutions(input.get("taskExecutions")):Map.<String,Object>of();
         var streamInputs=input.containsKey("streamInputs")?StreamRunInput.parse(input.get("streamInputs")):List.<StreamRunInput>of();
         var retry=input.containsKey("retry")?retryPolicy(input.get("retry")):RetryPolicy.disabled();
         var offload=offloadPolicy(input.get("offload"));String offloadJson=offload==null?null:JSON.canonical(input.get("offload"));
@@ -54,13 +55,24 @@ public class ExecutionService {
         if(!retry.equals(RetryPolicy.disabled()))normalized.put("retry",document(retry));
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         if(!streamInputs.isEmpty())normalized.put("streamInputs",streamInputs.stream().map(StreamRunInput::document).toList());
+        if(!taskExecutions.isEmpty())normalized.put("taskExecutions",taskExecutions);
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
+        if(!taskExecutions.isEmpty() && !Set.of("AUTO","NODE").contains(mode))
+            throw error(409,"TASK_PLACEMENT_UNSUPPORTED","작업별 최초 배치는 AUTO/NODE Run에서 지원합니다. VD/Remote 혼합 배치는 아직 지원하지 않습니다.");
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         if(vdId!=null && offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 자원 측정은 공유 컨테이너 값이므로 작업별 자동 전환을 설정할 수 없습니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
         var dag=storedDag(version.dagJson());
+        var definitions=workflows.definitions(versionId);
+        var keys=definitions.stream().map(io.edgeai.domain.workflow.TaskDefinition::key).collect(java.util.stream.Collectors.toSet());
+        if(!keys.containsAll(taskExecutions.keySet()))throw error(400,"TASK_PLACEMENT_INVALID","작업별 실행 위치는 발행된 DAG의 작업 키를 참조해야 합니다.");
+        for(var value:taskExecutions.values()) {
+            var placement=(Map<?,?>)value;
+            if(placement.get("mode").equals("NODE") && nodes.find(uuid(placement.get("nodeId"))).isEmpty())
+                throw error(404,"NODE_NOT_FOUND","작업별 실행 위치에서 참조할 노드를 찾을 수 없습니다.");
+        }
         boolean stream=!streamInputs.isEmpty() || streams.streaming(dag);
         var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
@@ -69,9 +81,9 @@ public class ExecutionService {
         if(vdId!=null)lifecycle.validateVDRequest(vdId,versionId,runtimeNamespace);
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId);
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId,JSON.canonical(taskExecutions));
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
-        repository.initialize(run,workflows.definitions(versionId),stream?Set.of():dag.roots());
+        repository.initialize(run,definitions,stream?Set.of():dag.roots());
         if(stream)streams.configure(run,runtimeNamespace,streamInputs,sessions);
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
         return new Creation<>(repository.run(run.id(),false).orElseThrow(),true);
