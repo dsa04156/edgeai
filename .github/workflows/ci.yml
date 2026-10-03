@@ -230,6 +230,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends mosquitto
+          python3 -m venv .tools/stream-venv
+          .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
       - name: Verify actual Kubernetes Runner and recovery before publishing API images
         env:
           EDGEAI_RUNNER_DIGEST: ${{ needs.runner.outputs.runner_digest }}
@@ -258,6 +260,7 @@ jobs:
             .tools/kind-runtime.json
             .tools/kind-vd.json
             .tools/kind-stream.json
+            .tools/kind-stream-broker.json
           include-hidden-files: true
           retention-days: 14
   gitops:

@@ -228,7 +228,19 @@ def main():
                 '--minio-image', images['minio'], '--report', '.tools/kind-stream.json'], env=env, timeout=1200)
             if result.returncode:
                 raise RuntimeError('kind multi-device stream acceptance failed')
-            print('PASS: isolated kind runtime, VD and multi-device STREAM acceptance', flush=True)
+            print('Verifying retained stream identities and persistent TLS broker replacement', flush=True)
+            stream_state = str(state / 'stream-identities')
+            call(['python3', 'scripts/bootstrap-stream-secrets.py', '--context', context, '--state-dir', stream_state], env=env)
+            call(['python3', 'scripts/test-stream-bootstrap.py', '--context', context, '--state-dir', stream_state], env=env)
+            broker_config = (ROOT / 'deploy/kubernetes/components/stream/mosquitto.conf').read_text()
+            kcall(['-n', 'edgeai', 'create', '-f', '-'], {'apiVersion': 'v1', 'kind': 'ConfigMap',
+                'metadata': {'name': 'edgeai-mqtt-config-v1', 'namespace': 'edgeai', 'labels': LABELS},
+                'immutable': True, 'data': {'mosquitto.conf': broker_config}})
+            kcall(['-n', 'edgeai', 'create', '-f', 'deploy/kubernetes/components/stream/broker.yaml'])
+            output = call([str(ROOT / '.tools/stream-venv/bin/python'), 'scripts/test-stream-platform-broker.py',
+                '--context', context, '--report', '.tools/kind-stream-broker.json'], env=env, timeout=300)
+            print(output.strip(), flush=True)
+            print('PASS: isolated kind runtime, VD, multi-device STREAM and persistent TLS broker acceptance', flush=True)
             return 0
         finally:
             for process in forwards:

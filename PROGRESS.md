@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0049 운영용 불변 신원4개·공개 설정3개와 영속 TLS broker를 준비했다. 실제 설치 재실행/
+복구·충돌 거절6개 및 새 Pod/동일PVC의 권한 유지·익명/오인증/신뢰 거절을 통과했다.
+선택 Kustomize 컴포넌트와 kind 게이트를 추가했으며 API/MinIO TLS 활성화·데모는 다음 단계다.
+docs/evidence/m7-persistent-stream-platform.md. 선행a29 CI5jobs/17JSON·배포 PASS;
+HTTPS533d850은푸시했고 CI37131722732 진행 중이다. M5 잔여/M7–M10 미완료 유지.
+
+아래는 추가 HTTPS 포트 검증 이력이다.
 ADR0048 같은 API 프로세스의 선택적 native HTTPS 포트를 추가했다. 실제 HTTP/HTTPS 인증·
 CSRF·신뢰/hostname2개와 전체 단위105개·PG190개 PASS. Kubernetes 스트림5개 시나리오도
 이 포트로 연결해 Pod17개·S3파일12개·API 교체9.207초·그룹/최종 처리 복구·정리를 검증했다.

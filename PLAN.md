@@ -23,6 +23,8 @@ PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과�
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).
 운영 연결을 위해 ADR0048에서 같은 API의 추가 HTTPS 포트를 구현·검증한다. 후속으로 영속 TLS
 브로커/S3·런타임 공개 CA·개인 키 준비와 운영 다중 장치 데모를 연결한다.
+ADR0049에서 영속 TLS broker·불변 신원/CA·복구6개·실제 Pod 교체를 검증했다. 선택 컴포넌트의
+API/MinIO 활성화와 실제 운영 다중 장치 데모를 다음으로 진행한다. 새 기반 CI는 별도 게이트다.
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료
 대기·응답 유실/재시작과 실제 Spring/PG/S3/TLS broker의 종료·Result 확정을 연결했다.

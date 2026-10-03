@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgeai-minio
+spec:
+  template:
+    spec:
+      containers:
+        - name: minio
+          args: [server, /data, --certs-dir, /bootstrap/tls, --console-address, ':9001']
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: s3, scheme: HTTPS}
+          livenessProbe:
+            httpGet: {path: /minio/health/live, port: s3, scheme: HTTPS}
+          volumeMounts:
+            - {name: tls, mountPath: /bootstrap/tls, readOnly: true}
+      volumes:
+        - name: tls
+          secret:
+            secretName: edgeai-minio-identity-v1
+            defaultMode: 288
+            items:
+              - {key: tls.crt, path: public.crt}
+              - {key: tls.key, path: private.key}

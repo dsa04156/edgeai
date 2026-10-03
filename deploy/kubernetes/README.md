@@ -52,6 +52,22 @@ VD는 이름을 실행 설정에 고정한다. 상세: [ADR0042](../../docs/adr/
 인증/CSRF는 기본 API와 같고 인증서 변경은 Pod 재기동으로 반영한다.
 [설계·검증 범위](../../docs/adr/0048-native-api-tls-connector.md).
 
+영속 STREAM 신원은 `python3 scripts/bootstrap-stream-secrets.py --context <context>`로 준비한다.
+OpenSSL·JDK keytool·mosquitto_ctrl이 필요하며 기존 소유 namespace/RBAC를 먼저 준비해야 한다.
+다른 설치는 `--state-dir <별도-비공개-디렉터리>`를 사용한다. 기본 복구본은
+`.tools/kubernetes/stream-v1/recovery.json`(0600)이며 Git에 넣거나 출력하지 않는다. 기존 값과
+충돌하면 중단하며 키·CA를 자동 교체하지 않는다. CA Secret은 workload에 마운트하지 않는다.
+
+선택 컴포넌트 `deploy/kubernetes/components/stream`은 영속 TLS broker와 API/MinIO TLS 설정을
+제공한다. 아직 dev overlay에는 활성화하지 않았다. 검증된 HTTPS 지원 이미지·신원·공개 CA와
+기존 활성 실행/VD를 확인한 뒤 overlay의 `components`에 `../../components/stream`을 연결한다.
+기존 MinIO data PVC는 유지한다. 내부 ClusterIP/DNS 연결이며 외부 장치 라우팅은 별도다.
+신원 검사는 `python3 scripts/test-stream-bootstrap.py --context <context>`, 준비된 broker 검사는
+Paho가 설치된 Python으로 `scripts/test-stream-platform-broker.py --context <context>`를 실행한다.
+후자는 실제 broker Pod를 한 번 교체하므로 실행 중인 스트림이 없는 전용 검증 시점에 사용한다.
+[신원·영속성 계약](../../docs/adr/0049-persistent-stream-platform.md),
+[검증 범위](../../docs/evidence/m7-persistent-stream-platform.md).
+
 `bash scripts/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
 검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
 빌드 이미지 자체는 `python3 scripts/test-stream-kubernetes.py --context <context> --api-image <API digest 또는 소스 commit tag>
