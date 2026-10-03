@@ -78,8 +78,8 @@ public class ExecutionService {
         for(var definition:definitions) {
             var placement=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);
             String targetMode=(String)placement.get("mode");
-            if(stream && Set.of("VD","REMOTE").contains(targetMode))
-                throw error(409,"STREAM_TARGET_UNSUPPORTED","STREAM Run의 VD/Remote 배치에는 별도 스트림 실행 연결이 필요합니다.");
+            if(stream && targetMode.equals("REMOTE"))
+                throw error(409,"STREAM_TARGET_UNSUPPORTED","STREAM Run의 Remote 배치에는 별도 스트림 실행 연결이 필요합니다.");
             if(targetMode.equals("VD")) {
                 if(offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 공유 자원을 작업별 자동 전환에 사용할 수 없습니다.");
                 vdProfiles.computeIfAbsent(uuid(placement.get("vdId")),id->new HashSet<>()).add(definition.serviceProfileVersionId());
@@ -89,11 +89,11 @@ public class ExecutionService {
                 if(taskExecutions.containsKey(definition.key()))taskRemoteTargets.put(definition.key(),remoteProvider.select((String)placement.get("providerKey")));
             }
         }
-        var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         for(var entry:vdProfiles.entrySet())lifecycle.validateVDTaskProfiles(entry.getKey(),entry.getValue(),runtimeNamespace);
+        var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
         var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId,JSON.canonical(taskExecutions));

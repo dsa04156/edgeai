@@ -29,7 +29,9 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   const runDescription = runOperation.locator(".opblock-description-wrapper").filter({ hasText: "발행된 DAG를 Run과 Task로 구체화합니다." });
   await expect(runDescription).toContainText("initialMode/initialNodeId/initialVdId/initialRemoteTarget");
   await expect(runDescription).toContainText("BATCH의 AUTO/NODE/VD/REMOTE 최초 배치");
-  await expect(runDescription).toContainText("STREAM의 VD/REMOTE 배치는409");
+  await expect(runDescription).toContainText("STREAM의 REMOTE 배치는409");
+  await expect(runDescription).toContainText("AUTO/NODE/VD로");
+  await expect(runDescription).toContainText("VD_STREAM_CAPACITY");
   await expect(runDescription).toContainText("재시도는 직전 Attempt의 실제 위치를 계승");
   await runOperation.screenshot({ path: testInfo.outputPath("task-placement-swagger.png") });
   await runOperation.locator(".opblock-summary-control").click();

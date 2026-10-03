@@ -53,7 +53,7 @@ public class StreamRecoveryService {
             var attempt=history.getFirst();var runtime=runtimes.byAttempt(attempt.id()).orElse(null);
             // Finalization recovery has a separate durable grant boundary. Never restart a sealed computation.
             if(completions.task(attempt.id()).filter(c->c.grantedAt()!=null).isPresent() || runtimes.result(task.id()).isPresent()
-                || runtime==null || runtime.remote() || runtime.vd() || !runtime.desiredState().equals("RUNNING")
+                || runtime==null || runtime.remote() || !runtime.desiredState().equals("RUNNING")
                 || !Set.of("DISPATCHING","RUNNING").contains(attempt.state()))return false;
             var first=history.stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
             var until=first.createdAt().plusSeconds(policy.maxElapsedSeconds());

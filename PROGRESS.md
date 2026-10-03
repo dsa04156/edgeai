@@ -1,6 +1,23 @@
 # 진행 상태
 
 [STATUS]
+ADR0055/V31–V32 VD STREAM의 서버·DB·Swagger·UI를 구현했다. 자기 VD→Device→Run
+잠금·다른 VD 공동 완료·같은 Pod의 Attempt/토큰 분리·그룹 용량 거절·실제 자식 종료 보고 뒤
+재시도/취소와 완료 허가 뒤 VD 최종 처리 복구를 실제 PG 시험으로 확인했다.
+PG219(211440Z-6754e4a7)·새 VD5개 포함 STREAM/route53·단위105·기존 저장소40·계약5/MVC26 PASS.
+화면 lint/type/build·기존42개와 수정한 새 PC/모바일2개도 PASS다. 새 DB 시험의 Pod·S3·브로커
+receipt는 fixture이며 실제 VD 자식 Runner의 TLS/S3/상태 인계·Kubernetes·새 CI/배포는 남는다.
+실제 API/DB/Swagger PC·모바일10개(212323Z-80951e84)와 로컬 V30→V32의 기존
+Task9,371개 신원·최초 대상 보존(212706Z-46c55521)도 PASS다.
+docs/evidence/m7-vd-stream-execution.md. M5 잔여/M7–M10 전체 미완료 유지.
+
+선행abf6bfd CI37151914101은5jobs/원시17개·PG214·Runner111/MQTT90·VD5/S38·
+STREAM11/Pod39/S324·kind22Run·영속TLS/배포데모 PASS다. GitOps720203b의 정확한imageID·
+Ready/PVCBound/ArgoSynced(211258Z-1187337c)와 기존10파일/두PVC 보존(211350Z-0ef63124)을 확인했다.
+공유Ingress aggregate Progressing은 유지한다. 후속 Remote 혼합3개 게이트는0d31eb8 main에
+푸시했고 CI37154396986은 진행 중이다. 새 VD STREAM 로컬 변경의 CI/배포 증거가 아니다.
+
+아래는 선행 BATCH 혼합 배치 구현 이력이다.
 ADR0054/V30 BATCH 작업별 VD/REMOTE 혼합 배치를 공개 API·Swagger·화면에 연결했다.
 대기 Task의 최초 VD/제공자를 고정하고 실제 VD producer는 자기 VD→Run 순서로 잠근다.
 PG214·실제 저장소40·단위105·UI42·계약5/MVC26·실API/DB/Swagger10개 PASS.

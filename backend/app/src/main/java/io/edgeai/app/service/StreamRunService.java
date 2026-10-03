@@ -30,18 +30,20 @@ public class StreamRunService {
     private final RuntimeRepository runtimes;
     private final StreamExecutionRepository completions;
     private final OffloadRepository offloads;
+    private final VDRuntimeRepository vdRuntimes;
     private final Clock clock;
     private final boolean enabled;
     private final String brokerDigest;
     private final int leaseSeconds;
     public StreamRunService(StreamRunRepository store,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,DeviceRepository devices,DataRouteRepository routes,DataRouteService lifecycle,
-            RuntimeRepository runtimes,StreamExecutionRepository completions,OffloadRepository offloads,Clock clock,
+            RuntimeRepository runtimes,StreamExecutionRepository completions,OffloadRepository offloads,VDRuntimeRepository vdRuntimes,Clock clock,
             @Value("${edgeai.stream.runs-enabled:false}") boolean enabled,@Value("${edgeai.stream.enabled:false}") boolean authority,
             @Value("${edgeai.stream.bindings-enabled:false}") boolean bindings,@Value("${edgeai.runtime.enabled:false}") boolean runtime,
             @Value("${edgeai.stream.broker-digest:}") String brokerDigest,@Value("${edgeai.stream.lease-seconds:30}") int leaseSeconds){
         this.store=store;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.devices=devices;
         this.routes=routes;this.lifecycle=lifecycle;this.runtimes=runtimes;this.completions=completions;this.offloads=offloads;this.clock=clock;
+        this.vdRuntimes=vdRuntimes;
         this.enabled=enabled && authority && bindings && runtime;this.brokerDigest=brokerDigest;this.leaseSeconds=leaseSeconds;
         if(enabled){RouteGeneration.digest(brokerDigest);if(!this.enabled || leaseSeconds<5 || leaseSeconds>120)
             throw new IllegalArgumentException("Public stream execution requires runtime, authority, bindings and a 5–120 second lease");}
@@ -102,7 +104,7 @@ public class StreamRunService {
     @Transactional
     public Map<UUID,DeviceSession> pin(List<StreamRunInput> inputs,String mode){
         if(!enabled)throw error(501,"STREAM_NOT_IMPLEMENTED","공개 STREAM 실행 설정과 운영 연결이 아직 활성화되지 않았습니다.");
-        if(!Set.of("AUTO","NODE").contains(mode))throw error(409,"STREAM_EXECUTION_POLICY_UNSUPPORTED","현재 공개 STREAM은 AUTO 또는 NODE 실행을 사용하세요.");
+        if(!Set.of("AUTO","NODE","VD").contains(mode))throw error(409,"STREAM_EXECUTION_POLICY_UNSUPPORTED","현재 공개 STREAM은 AUTO, NODE 또는 VD 실행을 사용하세요.");
         var result=new HashMap<UUID,DeviceSession>();
         for(var id:inputs.stream().map(StreamRunInput::deviceId).distinct().sorted().toList()){
             var device=devices.find(id,true).orElseThrow(()->error(404,"DEVICE_NOT_FOUND","스트림 원본 장치가 없습니다."));
@@ -131,6 +133,14 @@ public class StreamRunService {
             store.bind(new StreamRunRepository.DeviceBinding(route.id(),run.id(),input.deviceId(),session.id(),session.epoch()));
         }
         var plan=plan(run);
+        var slots=new HashMap<UUID,Map<UUID,Integer>>();
+        for(var task:tasks)if(task.initialVdId()!=null && !plan.componentRoutes(task.id()).isEmpty())
+            slots.computeIfAbsent(plan.components().get(task.id()),id->new HashMap<>()).merge(task.initialVdId(),1,Integer::sum);
+        for(var component:slots.values())for(var entry:component.entrySet()){
+            var runtime=vdRuntimes.current(entry.getKey()).orElseThrow(()->error(409,"VD_NOT_READY","VD를 먼저 기동하세요."));
+            if(entry.getValue()>VDRuntimeDocuments.launch(runtime).maxConcurrentTasks())
+                throw error(409,"VD_STREAM_CAPACITY","같이 실행되어야 하는 스트림 작업 수가 해당 VD의 동시 실행 용량을 초과합니다.");
+        }
         completions.freeze(run.id(),JSON.digest("edgeai-stream-membership-v1",plan.routes().stream().map(r->r.id().toString()).sorted().toList()),clock.instant());
         releaseReady(run.id());
     }

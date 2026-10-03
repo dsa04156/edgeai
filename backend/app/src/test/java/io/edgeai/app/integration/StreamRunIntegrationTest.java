@@ -12,6 +12,9 @@ import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.storage.*;
 import io.edgeai.domain.stream.*;
+import io.edgeai.domain.vd.*;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.*;
 import java.util.*;
@@ -36,9 +39,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** Public MVC and real PostgreSQL transactions. Pod identities, broker receipts and S3 receipts are explicit fixtures. */
 @SpringBootTest(properties={"edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.runtime.namespace=public-stream-test",
+    "edgeai.vd.enabled=true","edgeai.vd.lease-seconds=60",
     "edgeai.stream.enabled=true","edgeai.stream.bindings-enabled=true","edgeai.stream.runs-enabled=true",
     "edgeai.stream.broker-digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","edgeai.stream.lease-seconds=120"})
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print=org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 class StreamRunIntegrationTest {
     private static final Path KEY=key();
     private static Path key(){try{
@@ -48,6 +52,7 @@ class StreamRunIntegrationTest {
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p){p.add("edgeai.runtime.key-file",KEY::toString);p.add("edgeai.stream.device-key-file",KEY::toString);}
     @AfterAll static void removeKey()throws Exception{Files.delete(KEY);}
     @MockitoBean RuntimeGateway gateway;@MockitoBean S3ArtifactStore storage;@MockitoBean MosquittoStreamBroker broker;
+    @MockitoBean VDGateway vdGateway;
     @MockitoBean StreamAuthorityWorker authorityWorker;@MockitoBean StreamConnectionSettings connection;@MockitoBean StreamRunWorker scheduledWorker;
     @Autowired ProfileService profiles;@Autowired WorkflowService workflows;@Autowired DeviceService devices;@Autowired DeviceRepository deviceStore;
     @Autowired ExecutionService runs;@Autowired ExecutionRepository executions;@Autowired RuntimeLifecycleService lifecycle;@Autowired RuntimeRepository runtimes;
@@ -57,6 +62,9 @@ class StreamRunIntegrationTest {
     @Autowired WorkflowRepository workflowStore;
     @Autowired StreamExecutionService streamExecution;@Autowired StreamCheckpointRepository checkpoints;
     @Autowired OffloadService offloads;@Autowired OffloadRepository offloadStore;@Autowired NodeService nodes;
+    @Autowired VirtualDeviceService virtualDevices;@Autowired VirtualDeviceRepository vds;@Autowired VDLifecycleService vdLifecycle;
+    @Autowired VDRuntimeRepository supervisors;@Autowired VDTaskRepository allocations;@Autowired VDPollService vdPoll;
+    @Autowired RunnerTokenService runnerTokens;
     private final JsonDocuments json=new JsonDocuments();
     private record Definition(UUID version,List<Map<String,Object>> inputs,List<Device> devices){}
     private String encode(Object value){return json.canonical(value);}
@@ -144,6 +152,11 @@ class StreamRunIntegrationTest {
     private void worker(){new StreamRunWorker(store,streams,lifecycle,"public-stream-test").tick();}
     private io.edgeai.app.config.RunnerPrincipal principal(UUID run,String name){
         var r=runtimes.byAttempt(attempt(run,name).id()).orElseThrow();
+        if(r.vd()){
+            var a=allocations.byRuntime(r.id()).orElseThrow();var v=supervisors.runtime(a.vdRuntimeId()).orElseThrow();
+            return new io.edgeai.app.config.RunnerPrincipal(r.attemptId(),r.epoch(),null,
+                new VDTaskProducer(v.id(),v.generation(),v.sessionId(),v.podUid(),v.nodeUid(),v.nodeName()));
+        }
         return new io.edgeai.app.config.RunnerPrincipal(r.attemptId(),r.epoch(),new RuntimePod(r.jobUid(),r.producerPodUid(),r.nodeUid(),r.nodeName()));
     }
     private String identity(io.edgeai.app.config.RunnerPrincipal p,Object... extra){
@@ -153,6 +166,9 @@ class StreamRunIntegrationTest {
     /** Checkpoint bytes/S3 receipt are fixtures here; actual signed-object finalization is tested separately. */
     private Map<String,StreamCheckpoint> seal(UUID run){return checkpoint(run,true);}
     private Map<String,StreamCheckpoint> checkpoint(UUID run,boolean seal){
+        return checkpoint(run,seal,true);
+    }
+    private Map<String,StreamCheckpoint> checkpoint(UUID run,boolean seal,boolean complete){
         for(var route:routes.forRun(run,20,0)){var g=routes.open(route.id()).orElseThrow();
             routeLifecycle.activate(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));}
         var source=principal(run,"source");streamExecution.execution(source,identity(source));
@@ -174,13 +190,16 @@ class StreamRunIntegrationTest {
             var cp=new StreamCheckpoint(UUID.randomUUID(),run,t.id(),p.attemptId(),r.id(),p.epoch(),p.podUid(),profile,request,3,summary,
                 new VerifiedArtifact("fixture-only",content.objectKey(),UUID.randomUUID().toString(),content.sha256(),content.bytes(),content.mediaType()),Instant.now(),null);
             new TransactionTemplate(transactions).execute(tx->{executions.run(run,true);checkpoints.insert(cp);return null;});
-            if(seal)streamExecution.complete(p,identity(p,"checkpointId",cp.id().toString()));saved.put(name,cp);
+            if(seal && complete)streamExecution.complete(p,identity(p,"checkpointId",cp.id().toString()));saved.put(name,cp);
         }
-        if(!seal)return saved;
+        if(!seal || !complete)return saved;
+        finishDevices(run);
+        assertThat(saved.values()).allMatch(c->completions.granted(c.attemptId()).isPresent());return saved;
+    }
+    private void finishDevices(UUID run){
         for(var pin:store.bindings(run)){var g=routes.open(pin.routeId()).orElseThrow();
             streamExecution.deviceComplete(new io.edgeai.app.config.DeviceStreamPrincipal(pin.deviceId(),pin.sessionId(),pin.epoch()),
                 encode(Map.of("epoch",pin.epoch(),"generationId",g.id().toString(),"sequence",3)));}
-        assertThat(saved.values()).allMatch(c->completions.granted(c.attemptId()).isPresent());return saved;
     }
     private void commitFinalizer(UUID run,String name){
         var p=principal(run,name);var output=new ResultManifest.Output("result",2,"a".repeat(64),"application/json","fixture-version");
@@ -210,6 +229,162 @@ class StreamRunIntegrationTest {
     private List<UUID> placementNodes(){var ids=List.of(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID());var now=Instant.now();
         nodes.recordSnapshot(ids.stream().map(id->new io.edgeai.domain.node.ExecutionNode(id,"transfer-"+id,"amd64","linux","READY","4","4Gi","{}",now)).toList(),now);return ids;}
     private Map<String,Object> placements(UUID source,UUID sink){return Map.of("source",Map.of("mode","NODE","nodeId",source.toString()),"sink",Map.of("mode","NODE","nodeId",sink.toString()));}
+
+    private record VD(VirtualDevice device,VDRuntime runtime,UUID session,VDGateway.PodIdentity pod){}
+    private VD readyVD(UUID service,int capacity){
+        UUID profile=profile(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v1","type","emulation","serviceProfileVersionId",service.toString(),
+            "sources",Map.of(),"state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",capacity,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
+        var vd=virtualDevices.create(encode(Map.of("key","stream-vd-"+UUID.randomUUID(),"displayName","Stream VD fixture",
+            "profileVersionId",profile.toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value();
+        var op=vdLifecycle.provision(vd.id(),0,"provision",new io.edgeai.app.config.RuntimeSettings("public-stream-test","edgeai-runner",URI.create("http://fixture.invalid"),120),false);
+        var r=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());
+        var f=new VD(vd,r,UUID.randomUUID(),new VDGateway.PodIdentity(r.podUid(),UUID.randomUUID(),"fixture-node",true));
+        poll(f,0,List.of(),List.of());return f;
+    }
+    private Map<String,Object> poll(VD vd,long sequence,List<TaskAttempt> active,List<TaskAttempt> completed){
+        var body=Map.of("vdId",vd.device().id().toString(),"runtimeId",vd.runtime().id().toString(),"generation",vd.runtime().generation(),
+            "podUid",vd.pod().podUid().toString(),"sessionId",vd.session().toString(),"sequence",sequence,"state","RUNNING",
+            "active",active.stream().map(a->Map.of("attemptId",a.id().toString(),"epoch",a.epoch())).toList(),
+            "completed",completed.stream().map(a->Map.of("attemptId",a.id().toString(),"epoch",a.epoch(),"exitCode",0)).toList());
+        return vdPoll.poll(new io.edgeai.app.config.VDPrincipal(vd.runtime().id(),vd.device().id(),vd.runtime().generation(),vd.pod()),encode(body).getBytes(StandardCharsets.UTF_8));
+    }
+    private void claimVD(UUID run,String name,VD vd){
+        var a=attempt(run,name);lifecycle.claimVD(a.id(),a.epoch(),new VDTaskProducer(vd.runtime().id(),vd.runtime().generation(),vd.session(),
+            vd.pod().podUid(),vd.pod().nodeUid(),vd.pod().nodeName()));
+    }
+    private UUID publicRun(Map<String,Object> body)throws Exception{
+        return UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+    }
+    private Map<String,Object> vdTarget(VD vd){return Map.of("mode","VD","vdId",vd.device().id().toString());}
+    private Map<String,VD> readyVDs(Definition d){
+        var result=new HashMap<String,VD>();workflowStore.definitions(d.version()).forEach(t->result.put(t.key(),readyVD(t.serviceProfileVersionId(),1)));return result;
+    }
+    private void whilePeerLocked(VD peer,Callable<?> action)throws Exception{
+        try(var pool=Executors.newSingleThreadExecutor()){
+            new TransactionTemplate(transactions).execute(tx->{
+                vds.find(peer.device().id(),true).orElseThrow();var future=pool.submit(action);
+                try{future.get(8,TimeUnit.SECONDS);}catch(Exception e){throw new AssertionError("Stream operation acquired another VD's mutex",e);}return null;
+            });
+        }
+    }
+    @Test void differentVdServicesAuthorizeTheirOwnRoutesAndGrantTogetherWithoutPeerMutexes()throws Exception{
+        var d=definition(false,false);var vd=readyVDs(d);var source=vd.get("source");var sink=vd.get("sink");
+        var body=request(d);body.put("execution",vdTarget(source));body.put("taskExecutions",Map.of("sink",vdTarget(sink)));
+        UUID run=publicRun(body);
+        for(String name:List.of("source","sink")){
+            assertThat(task(run,name).initialVdId()).isEqualTo(vd.get(name).device().id());poll(vd.get(name),1,List.of(),List.of());claimVD(run,name,vd.get(name));
+        }
+        streams.prepare(run);var saved=checkpoint(run,true,false);var a=principal(run,"source");var b=principal(run,"sink");
+        assertThat(a.podUid()).isNotEqualTo(b.podUid());
+        whilePeerLocked(sink,()->streamExecution.complete(a,identity(a,"checkpointId",saved.get("source").id().toString())));
+        finishDevices(run);
+        // Run's default VD is source; sink authorization and joint completion must never lock source.
+        whilePeerLocked(source,()->{
+            assertThat(routeLifecycle.authorizeTask(task(run,"sink").id(),saved.get("sink").request().generationIds(),
+                new StreamBrokerGateway.Principal("TASK",new RouteGeneration.Actor(b.attemptId(),b.epoch())))).hasSize(1);
+            return streamExecution.complete(b,identity(b,"checkpointId",saved.get("sink").id().toString()));
+        });
+        assertThat(saved.values()).allMatch(c->completions.granted(c.attemptId()).isPresent());
+        parallel(i->{var p=i%2==0?a:b;return streamExecution.complete(p,identity(p,"checkpointId",saved.get(i%2==0?"source":"sink").id().toString()));});
+        for(String name:List.of("source","sink")){
+            commitFinalizer(run,name);var result=runtimes.result(task(run,name).id()).orElseThrow();
+            assertThat(result.vdRuntimeId()).isEqualTo(vd.get(name).runtime().id());
+            assertThat(result.producerPodUid()).isEqualTo(vd.get(name).pod().podUid());
+            poll(vd.get(name),2,List.of(),List.of(attempt(run,name)));
+            assertThat(allocations.open(vd.get(name).runtime().id())).isEmpty();
+        }
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("SUCCEEDED");
+    }
+    @Test void sharedVdRejectsInsufficientComponentCapacityAndSeparatesAttemptTokensWithinOnePod()throws Exception{
+        var device=device();var spec=service(List.of("input"),false,false);
+        var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),
+            List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+        var small=readyVD(spec,1);var body=request(d);body.put("execution",vdTarget(small));
+        String key=UUID.randomUUID().toString();assertThat(create(key,body,409)).contains("VD_STREAM_CAPACITY");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(key))).isZero();
+        var vd=readyVD(spec,2);body.put("execution",vdTarget(vd));UUID run=publicRun(body);
+        assertThat((List<?>)poll(vd,1,List.of(),List.of()).get("assignments")).hasSize(2);
+        claimVD(run,"source",vd);claimVD(run,"sink",vd);streams.prepare(run);
+        var a=principal(run,"source");var b=principal(run,"sink");
+        assertThat(a.attemptId()).isNotEqualTo(b.attemptId());assertThat(a.podUid()).isEqualTo(b.podUid());
+        org.mockito.Mockito.when(vdGateway.authenticatePod(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq("stream-pod-fixture"))).thenReturn(vd.pod());
+        String token=runnerTokens.issue(runtimes.byAttempt(a.attemptId()).orElseThrow());
+        mvc.perform(post("/internal/v1/attempts/"+b.attemptId()+"/streams/execution").header("Authorization","Bearer "+token)
+            .header("X-EdgeAI-Pod-Token","stream-pod-fixture").contentType("application/json").content(identity(b))).andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/v1/attempts/"+a.attemptId()+"/streams/execution").header("Authorization","Bearer "+token)
+            .header("X-EdgeAI-Pod-Token","stream-pod-fixture").contentType("application/json").content(identity(a))).andExpect(status().isOk());
+        seal(run);commitFinalizer(run,"source");commitFinalizer(run,"sink");
+        poll(vd,2,List.of(),List.of(attempt(run,"source"),attempt(run,"sink")));
+        assertThat(allocations.open(vd.runtime().id())).isEmpty();assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("SUCCEEDED");
+    }
+    @Test void mixedVdAndNodeGroupRetryWaitsForChildExitAndBrokerRevocationAndKeepsTargets()throws Exception{
+        var d=definition(false,false);var sourceSpec=workflowStore.definitions(d.version()).stream().filter(t->t.key().equals("source")).findFirst().orElseThrow();
+        var vd=readyVD(sourceSpec.serviceProfileVersionId(),1);var body=request(d);body.put("taskExecutions",Map.of("source",vdTarget(vd)));
+        body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        UUID run=publicRun(body);poll(vd,1,List.of(),List.of());claimVD(run,"source",vd);claim(run,"sink");streams.prepare(run);var saved=checkpoint(run,false);
+        var old=attempt(run,"source");var oldPrincipal=principal(run,"source");
+        lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");
+        assertThat(task(run,"source").state()).isEqualTo("RETRY_WAIT");assertThat(task(run,"sink").state()).isEqualTo("RETRY_WAIT");
+        due(run);finishPhysical(run,"sink");assertThat(lifecycle.retryTask(task(run,"source").id())).isFalse();
+        assertThat(((List<?>)poll(vd,2,List.of(old),List.of()).get("cancelAttempts")).stream().map(Object::toString).toList()).contains(old.id().toString());
+        assertThat(lifecycle.retryTask(task(run,"source").id())).isFalse();poll(vd,3,List.of(),List.of(old));
+        assertThat(lifecycle.retryTask(task(run,"source").id())).isFalse();revokeGroup(run);
+        assertThat(parallel(i->lifecycle.retryTask(task(run,i%2==0?"source":"sink").id()))).containsOnlyOnce(true);
+        assertThat(attempt(run,"source").vdId()).isEqualTo(vd.device().id());assertThat(attempt(run,"source").epoch()).isEqualTo(2);
+        assertThat(attempt(run,"sink").mode()).isEqualTo("AUTO");assertThat(attempt(run,"sink").vdId()).isNull();
+        poll(vd,4,List.of(),List.of());claimVD(run,"source",vd);claim(run,"sink");streams.prepare(run);
+        assertThatThrownBy(()->streamExecution.execution(oldPrincipal,identity(oldPrincipal))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThat(routes.forRun(run,20,0)).allMatch(r->routes.history(r.id(),20,0).size()==2);
+        for(var route:routes.forRun(run,20,0)){var g=routes.open(route.id()).orElseThrow();
+            routeLifecycle.activate(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));}
+        for(String name:List.of("source","sink")){
+            var p=principal(run,name);assertThat(((Map<?,?>)streamExecution.execution(p,identity(p))).get("recovery")).isEqualTo("HANDOVER");
+            assertThat(checkpoints.latest(task(run,name).id()).orElseThrow().id()).isEqualTo(saved.get(name).id());
+        }
+        // Object/state transfer is verified by the S3/SDK suite; this fixture proves its required handover boundary.
+        runs.cancelRun(run,"{}");poll(vd,5,List.of(),List.of(attempt(run,"source")));finishPhysical(run,"sink");
+        routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));revokeGroup(run);
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("CANCELLED");
+    }
+    @Test void sharedVdCancellationFencesBothTasksUntilAllChildExitsAreAcknowledged()throws Exception{
+        var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,2);
+        var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+        var body=request(d);body.put("execution",vdTarget(vd));UUID run=publicRun(body);
+        poll(vd,1,List.of(),List.of());claimVD(run,"source",vd);claimVD(run,"sink",vd);streams.prepare(run);
+        var a=attempt(run,"source");var b=attempt(run,"sink");var p=principal(run,"source");
+        runs.cancelRun(run,"{}");assertThatThrownBy(()->streamExecution.execution(p,identity(p))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThat(((List<?>)poll(vd,2,List.of(a,b),List.of()).get("cancelAttempts")).stream().map(Object::toString).toList()).containsExactlyInAnyOrder(a.id().toString(),b.id().toString());
+        poll(vd,3,List.of(b),List.of(a));assertThat(allocations.open(vd.runtime().id())).hasSize(1);
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("CANCELLING");
+        poll(vd,4,List.of(),List.of(b));
+        // Production authority worker performs this reconciliation; broker receipt remains an explicit fixture.
+        routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));revokeGroup(run);
+        assertThat(allocations.open(vd.runtime().id())).isEmpty();assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("CANCELLED");
+        assertThat(runtimes.result(task(run,"source").id())).isEmpty();assertThat(runtimes.result(task(run,"sink").id())).isEmpty();
+    }
+    @Test void vdFinalizerRetryPreservesSealedCheckpointAndDoesNotRestartCompletedPeer()throws Exception{
+        var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,2);
+        var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+        var body=request(d);body.put("execution",vdTarget(vd));
+        body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        UUID run=publicRun(body);poll(vd,1,List.of(),List.of());claimVD(run,"source",vd);claimVD(run,"sink",vd);streams.prepare(run);
+        var sealed=seal(run);commitFinalizer(run,"source");var old=attempt(run,"sink");var oldPrincipal=principal(run,"sink");
+        lifecycle.observeFailure(old.id(),"RUNTIME_LOST");due(run);
+        assertThat(lifecycle.retryTask(task(run,"sink").id())).isFalse();
+        poll(vd,2,List.of(),List.of(attempt(run,"source"),old));
+        assertThat(lifecycle.retryTask(task(run,"sink").id())).isFalse();
+        routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));revokeGroup(run);
+        assertThat(lifecycle.retryTask(task(run,"sink").id())).isTrue();
+        assertThat(attempt(run,"sink").vdId()).isEqualTo(vd.device().id());assertThat(executions.attempts(task(run,"source").id())).hasSize(1);
+        poll(vd,3,List.of(),List.of());claimVD(run,"sink",vd);var p=principal(run,"sink");
+        var state=(Map<?,?>)streamExecution.execution(p,identity(p));assertThat(state.get("state")).isEqualTo("FINALIZE");
+        assertThat(state.get("checkpointId")).isEqualTo(sealed.get("sink").id().toString());
+        assertThat(((Map<?,?>)state.get("checkpointActor")).get("attemptId")).isEqualTo(old.id().toString());
+        assertThat(streamExecution.finalized(p,identity(p,"checkpointId",sealed.get("sink").id().toString())).id()).isEqualTo(sealed.get("sink").id());
+        assertThatThrownBy(()->streamExecution.execution(oldPrincipal,identity(oldPrincipal))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        commitFinalizer(run,"sink");poll(vd,4,List.of(),List.of(attempt(run,"sink")));
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("SUCCEEDED");
+    }
 
     @Test void distinctInitialPlacementsSurviveWholeGroupRetry()throws Exception{
         var targets=placementNodes();UUID source=targets.get(0),sink=targets.get(1);
@@ -469,7 +644,7 @@ class StreamRunIntegrationTest {
     }
     @Test void unsupportedRecoveryAndInactiveOrMissingDeviceCannotCreatePartialRuns()throws Exception{
         var d=definition(false,false);var body=request(d);
-        body.put("execution",Map.of("mode","VD","vdId",UUID.randomUUID().toString()));rejected(d,body,409);
+        body.put("execution",Map.of("mode","VD","vdId",UUID.randomUUID().toString()));rejected(d,body,404);
         body=request(d);body.put("execution",Map.of("mode","REMOTE","providerKey","reference"));rejected(d,body,409);
         body=request(d);body.put("retry",Map.of("maxAttempts",9,"backoffSeconds",1,"maxElapsedSeconds",30,"retryOn",List.of("WORKLOAD_FAILED")));rejected(d,body,400);
         var missing=new TreeMap<>(d.inputs().getFirst());missing.put("deviceId",UUID.randomUUID().toString());body=request(d);body.put("streamInputs",List.of(missing,d.inputs().get(1)));rejected(d,body,404);

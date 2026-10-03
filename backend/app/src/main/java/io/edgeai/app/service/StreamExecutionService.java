@@ -35,7 +35,7 @@ public class StreamExecutionService {
     }
     @Transactional
     public Object execution(RunnerPrincipal principal,String body) {
-        RunnerInput.parse(body,principal);var r=runtime(principal);var c=lock(r.runId());authorize(principal);
+        RunnerInput.parse(body,principal);var r=runtime(principal);var c=lock(r.runId(),false,principal.attemptId());authorize(principal);
         var plan=plan(c);if(plan.isEmpty())return Map.of("state","WAITING");var p=plan.get();
         if(p.specs().get(r.taskId()).stream()==null)throw conflict("STREAM_SERVICE_REQUIRED");
         freeze(c);
@@ -58,7 +58,7 @@ public class StreamExecutionService {
     @Transactional
     public StreamCheckpoint finalized(RunnerPrincipal principal,String body) {
         var input=RunnerInput.parse(body,principal,"checkpointId");var id=uuid(input.get("checkpointId"));
-        var r=runtime(principal);var c=lock(r.runId());authorize(principal);requiredPlan(c);
+        var r=runtime(principal);var c=lock(r.runId(),false,principal.attemptId());authorize(principal);requiredPlan(c);
         var checkpoint=grantedCheckpoint(principal,r);
         if(!checkpoint.id().equals(id))throw conflict("STREAM_COMPLETION_CONFLICT");
         return checkpoint;
@@ -103,7 +103,7 @@ public class StreamExecutionService {
     @Transactional
     public Object complete(RunnerPrincipal principal,String body) {
         var input=RunnerInput.parse(body,principal,"checkpointId");var id=uuid(input.get("checkpointId"));
-        var r=runtime(principal);var c=lock(r.runId());authorize(principal);
+        var r=runtime(principal);var c=lock(r.runId(),false,principal.attemptId());authorize(principal);
         if(store.granted(r.attemptId()).isPresent()){
             if(!grantedCheckpoint(principal,r).id().equals(id))throw conflict("STREAM_COMPLETION_CONFLICT");
             return taskReply(id,true);
@@ -165,7 +165,7 @@ public class StreamExecutionService {
                 throw conflict("STREAM_COMPONENT_CHANGED");
             var ids=plan.taskRoutes(entry.getKey()).stream().map(r->generations.get(r.id()).id()).collect(java.util.stream.Collectors.toSet());
             if(!ids.equals(new HashSet<>(checkpoint.request().generationIds())))throw conflict("STREAM_COMPONENT_CHANGED");
-            terminal(checkpoint);lifecycle.authorizeProducerUntil(actor.id(),actor.epoch(),checkpoint.producerPodUid());
+            terminal(checkpoint);lifecycle.validateStreamPeer(actor.id(),actor.epoch(),checkpoint.producerPodUid());
             terminal.put(entry.getKey(),checkpoint);
         }
         for(var route:plan.componentRoutes(task)) {
@@ -204,13 +204,14 @@ public class StreamExecutionService {
         var summary=parameters(JSON.decode(checkpoint.summaryJson()));
         for(var raw:(List<?>)summary.get("routes"))cursor(checkpoint,uuid(parameters(raw).get("routeId")));
     }
-    private Context lock(UUID runId) {
-        return lock(runId,false);
-    }
     private Context lock(UUID runId,boolean completedReplay) {
-        var before=executions.run(runId,false).orElseThrow();var initial=routeStore.forRun(runId,StreamRunPlan.MAX_ROUTES+1,0);
+        return lock(runId,completedReplay,null);
+    }
+    private Context lock(UUID runId,boolean completedReplay,UUID callerAttempt) {
+        var initial=routeStore.forRun(runId,StreamRunPlan.MAX_ROUTES+1,0);
         if(initial.size()>StreamRunPlan.MAX_ROUTES)throw conflict("STREAM_ROUTE_LIMIT");
-        if(before.vdId()!=null)vds.find(before.vdId(),true).orElseThrow();
+        if(callerAttempt!=null){var attempt=executions.attempt(callerAttempt).orElseThrow();
+            if(attempt.vdId()!=null)vds.find(attempt.vdId(),true).orElseThrow();}
         initial.stream().map(DataRoute::sourceDeviceId).filter(Objects::nonNull).distinct().sorted().forEach(id->devices.find(id,true).orElseThrow());
         var run=executions.run(runId,true).orElseThrow();
         if(!Set.of("PENDING","RUNNING").contains(run.state()) && !(completedReplay && run.state().equals("SUCCEEDED")))throw conflict("STREAM_RUN_INACTIVE");

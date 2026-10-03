@@ -124,7 +124,7 @@ public class RuntimeLifecycleService {
             c.attempt().vdId()==null || !c.attempt().vdId().equals(c.task().initialVdId()))throw fenced();
         var vd=vds.find(c.attempt().vdId(),false).orElseThrow(RuntimeLifecycleService::fenced);
         if(!definition(c).serviceProfileVersionId().equals(vd.serviceProfileVersionId()))throw error(409,"VD_SERVICE_MISMATCH","작업과 VD의 SERVICE Profile 버전이 다릅니다.");
-        validateDag(c.run().workflowVersionId());
+        validateDag(c.run().workflowVersionId(),streams.managed(c.run().id()));
         var spec=spec(c);inputs(c,spec);parameters(c);var now=clock.instant();
         // Retries/children can queue during replacement; only the public initial request requires Ready.
         var r=new RuntimeInstance(UUID.randomUUID(),c.attempt().id(),c.task().id(),c.run().id(),c.attempt().epoch(),namespace,null,UUID.randomUUID(),
@@ -294,6 +294,12 @@ public class RuntimeLifecycleService {
             if(supervisor.drainDeadline()!=null && supervisor.drainDeadline().isBefore(until))until=supervisor.drainDeadline();
         }
         return until;
+    }
+    /** Joint completion only: inspect peer authority under the Run lock without taking another VD mutex.
+     * This does not issue credentials or commit a peer result; those paths still lock the caller's VD. */
+    @Transactional(propagation=org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void validateStreamPeer(UUID attemptId,long epoch,UUID podUid){
+        var c=lockRun(attemptId);producer(c,runtime(attemptId),epoch,podUid);
     }
     @Transactional
     public CommitPermit prepareCommit(UUID attemptId,long epoch,UUID podUid,ResultManifest manifest) {

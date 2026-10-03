@@ -238,22 +238,17 @@ class StreamRouteIntegrationTest {
         var inactive=deviceRoute(f);devices.release(f.device().id());
         conflict("PRODUCER_CHANGED",()->prepare(inactive,session(f),f.actors().get("device")));
     }
-    @Test void vdDeviceRunLockOrderDoesNotInvertRegistryUpdates()throws Exception {
-        var f=fixture(true);var route=deviceRoute(f);var pid=new AtomicInteger();
+    @Test void routeAdministrationDoesNotAcquireTheRunDefaultVdMutex()throws Exception {
+        var f=fixture(true);var route=deviceRoute(f);
         try(var pool=Executors.newSingleThreadExecutor()){
-            var job=transaction(()->{
+            transaction(()->{
                 vds.find(f.run().vdId(),true).orElseThrow();
-                var future=pool.submit(()->transaction(()->{pid.set(jdbc.queryForObject("SELECT pg_backend_pid()",Integer.class));return prepare(route,session(f),f.actors().get("device"));}));
-                long end=System.nanoTime()+Duration.ofSeconds(8).toNanos();boolean waiting=false;
-                while(System.nanoTime()<end){
-                    if(pid.get()!=0 && Boolean.TRUE.equals(jdbc.queryForObject("SELECT cardinality(pg_blocking_pids(?))>0",Boolean.class,pid.get()))){waiting=true;break;}
-                    try{Thread.sleep(20);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
-                }
-                assertThat(waiting).isTrue();
+                var future=pool.submit(()->prepare(route,session(f),f.actors().get("device")));
+                try{assertThat(future.get(8,TimeUnit.SECONDS).state()).isEqualTo("PREPARING");}
+                catch(Exception e){throw new AssertionError("Route administration acquired a VD mutex",e);}
                 jdbc.queryForObject("SELECT id FROM edgeai.device WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.device().id());
-                jdbc.queryForObject("SELECT id FROM edgeai.workflow_run WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.run().id());return future;
+                jdbc.queryForObject("SELECT id FROM edgeai.workflow_run WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.run().id());return null;
             });
-            assertThat(job.get(10,TimeUnit.SECONDS).state()).isEqualTo("PREPARING");
         }
     }
     @Test void heartbeatExtendsOnlyTheOlderActorObservationAndReplaysAreReadOnly()throws Exception {

@@ -18,11 +18,22 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0055/V31–V32의 VD STREAM 제어·동시 실행 용량·권한·그룹/최종 처리 재시도를 연결했다.
+PG219·새 VD5개를 포함한 STREAM/route53개·단위105·기존 실제 저장소40·계약5/MVC26을 통과했다.
+화면 lint/type/build·기존42개와 수정한 새 VD 선택 PC/모바일2개도 통과했다. Pod/S3/브로커
+receipt를 사용한 새 DB 시험과 실제 VD 스트리밍 종단 수용은 구분한다. 후속 실제 supervisor/
+Kubernetes·CI·배포와 Remote STREAM/VD 그룹 전환은 남는다.
+실제 API/DB/Swagger PC·모바일10개와 로컬 V30→V32의 기존 Task9,371개 보존도 확인했다.
+[VD 스트리밍 근거](docs/evidence/m7-vd-stream-execution.md)를 따른다.
+
 ADR0054/V30은 BATCH 작업별 VD/REMOTE 혼합 배치를 추가했다. PG214·실제 저장소40·
 단위105·UI42·계약5/MVC26·실API/DB/Swagger10·기존 Task9,359개 보존을 통과했다.
 실제 Kubernetes VD→NODE→VD·API 교체·고정 S3와 기존 VD 회귀5개/결과8개도 PASS다.
 후속 실제 Kubernetes↔Remote 최초 혼합3개/Node Pod3개/S3결과5개·API 교체·취소·계산1회도
-통과했다(204108Z-330b498b). 새 이미지·CI·배포, STREAM VD/REMOTE와 외부 수용은 남는다.
+통과했다(204108Z-330b498b). abf6bfd CI37151914101은5jobs/원시17개·PG214·VD5/S38·
+STREAM11/Pod39/S324 PASS이며 GitOps720203b 실제 이미지/Ready·PVC·ArgoSynced와
+기존10파일/두PVC 보존을 확인했다(211258Z-1187337c/211350Z-0ef63124).
+새 Remote 혼합 게이트0d31eb8을 푸시했고 CI37154396986은 진행 중이다.
 [혼합 배치 근거](docs/evidence/m7-mixed-task-targets.md)를 따른다.
 선행fe32ed8 CI37149032705의5jobs/원시17개·STREAM11/Pod39/S324와 GitOpsaabb815 실제
 imageID·Ready/PVCBound/ArgoSynced·V29·기존10파일/두PVC 보존은 확인했다.

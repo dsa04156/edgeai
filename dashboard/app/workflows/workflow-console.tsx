@@ -42,6 +42,7 @@ export function WorkflowConsole() {
   const [streamInputs, setStreamInputs] = useState<StreamInput[]>([]);
   const [taskExecutions, setTaskExecutions] = useState<TaskExecutions>({});
   const externalTarget = ["REMOTE", "VD"].includes(mode) || Object.values(taskExecutions).some(value => ["REMOTE", "VD"].includes(value.mode));
+  const remoteTarget = mode === "REMOTE" || Object.values(taskExecutions).some(value => value.mode === "REMOTE");
   const streamExecution = streamInputs.length > 0 || !!version?.dag.dependencies.some(edge => edge.mode === "STREAM");
   const [retryAttempts, setRetryAttempts] = useState(1);
   const [automaticOffload, setAutomaticOffload] = useState<AutomaticOffloadPolicy | null>(null);
@@ -145,7 +146,7 @@ export function WorkflowConsole() {
       </section>}
       {version && <section className="panel" aria-labelledby="selected-version-title"><h2 id="selected-version-title">선택한 DAG · {version.version}</h2><p className="digest mono">버전 ID {version.id}</p><p className="digest mono">{version.digest}</p><pre aria-label="발행된 DAG JSON">{versionJson}</pre>
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
-          if (streamExecution && externalTarget) throw new Error("STREAM 실행은 AUTO/NODE 작업 배치만 지원합니다.");
+          if (streamExecution && remoteTarget) throw new Error("STREAM 실행은 AUTO/NODE/VD 작업 배치를 지원합니다. Remote 스트리밍은 아직 지원하지 않습니다.");
           if (retryAttempts > 1 && retryOn.length === 0) throw new Error("재시도할 오류를 한 개 이상 선택하세요.");
           if (automaticOffload && [automaticOffload.cpuPercent, automaticOffload.memoryPercent, automaticOffload.latencyMicros].every(v => v == null)) throw new Error("자동 전환 기준을 한 개 이상 입력하세요.");
           const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : mode === "VD" ? { mode, vdId } : { mode, nodeId }, parameters: objectJson(parameters),

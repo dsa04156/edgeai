@@ -119,6 +119,7 @@ public class DataRouteService {
     /** Caller authentication is separate; locks are retained by a surrounding assignment transaction. */
     @Transactional
     public StreamBrokerGateway.Permission authorize(UUID id,StreamBrokerGateway.Principal caller){
+        lockActor(caller);
         var g=lockedGeneration(id);requireLive(g,true);var route=routes.route(g.routeId(),false).orElseThrow();
         var permission=new StreamBrokerGateway.Permission(route,g);
         if(!caller.equals(permission.producer()) && !caller.equals(permission.consumer()))throw conflict("STREAM_FOREIGN_ACTOR");
@@ -135,8 +136,7 @@ public class DataRouteService {
         var initial=routes.forTask(taskId,33);
         if(initial.isEmpty() || initial.size()>32 || generationIds.size()!=initial.size() || new HashSet<>(generationIds).size()!=generationIds.size())
             throw conflict("STREAM_CHECKPOINT_ROUTES_CHANGED");
-        var runId=initial.getFirst().runId();var run=executions.run(runId,false).orElseThrow();
-        if(run.vdId()!=null)vds.find(run.vdId(),true).orElseThrow();
+        var runId=initial.getFirst().runId();lockActor(caller);
         initial.stream().map(DataRoute::sourceDeviceId).filter(Objects::nonNull).distinct().sorted()
             .forEach(id->devices.find(id,true).orElseThrow());
         executions.run(runId,true).orElseThrow();
@@ -185,10 +185,13 @@ public class DataRouteService {
             && (running?attempt.get().state().equals("RUNNING"):Set.of("QUEUED","DISPATCHING","RUNNING").contains(attempt.get().state()));
     }
     private WorkflowRun lockRun(UUID id,UUID deviceId){
-        var before=executions.run(id,false).orElseThrow(()->new ControlPlaneException(404,"RUN_NOT_FOUND","실행 요청을 찾을 수 없습니다."));
-        if(before.vdId()!=null)vds.find(before.vdId(),true).orElseThrow();
         if(deviceId!=null)devices.find(deviceId,true).orElseThrow(()->new ControlPlaneException(404,"DEVICE_NOT_FOUND","원본 장치를 찾을 수 없습니다."));
-        return executions.run(id,true).orElseThrow();
+        return executions.run(id,true).orElseThrow(()->new ControlPlaneException(404,"RUN_NOT_FOUND","실행 요청을 찾을 수 없습니다."));
+    }
+    private void lockActor(StreamBrokerGateway.Principal caller){
+        if(!caller.kind().equals("TASK"))return;
+        var attempt=executions.attempt(caller.actor().id()).orElseThrow(()->conflict("STREAM_FOREIGN_ACTOR"));
+        if(attempt.vdId()!=null)vds.find(attempt.vdId(),true).orElseThrow(()->conflict("STREAM_FOREIGN_ACTOR"));
     }
     private DataRoute lock(UUID id){var r=routes.route(id,false).orElseThrow(()->new ControlPlaneException(404,"STREAM_ROUTE_NOT_FOUND","데이터 경로가 없습니다."));lockRun(r.runId(),r.sourceDeviceId());return routes.route(id,true).orElseThrow();}
     private RouteGeneration get(UUID id){return routes.generation(id).orElseThrow(()->new ControlPlaneException(404,"STREAM_GENERATION_NOT_FOUND","데이터 경로 실행 세대가 없습니다."));}

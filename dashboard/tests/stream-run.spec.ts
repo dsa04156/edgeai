@@ -84,3 +84,55 @@ test("stream metadata proxy permits only the authenticated GET route", async ({ 
   expect((await request.post(path, { data: {} })).status()).toBe(404);
   expect((await request.get(`${path}/credentials`)).status()).toBe(404);
 });
+
+test("VD stream placement preserves request identity after capacity rejection and excludes Remote", async ({ page }, testInfo) => {
+  const workflowId = "11111111-1111-4111-8111-111111111111", versionId = "22222222-2222-4222-8222-222222222222";
+  const runId = "33333333-3333-4333-8333-333333333333", vdA = "44444444-4444-4444-8444-444444444444", vdB = "55555555-5555-4555-8555-555555555555";
+  const now = "2026-10-04T00:00:00Z", keys: string[] = [];
+  const run = { id: runId, workflowVersionId: versionId, mode: "VD", vdId: vdA, state: "RUNNING", parameters: {}, createdAt: now, updatedAt: now };
+  const dag = { tasks: ["source", "sink"].map(key => ({ key, serviceProfileVersionId: versionId, parameters: {} })),
+    dependencies: [{ fromTask: "source", toTask: "sink", fromPort: "output", toPort: "input", mode: "STREAM" }] };
+  await page.route("**/api/control-plane/**", async route => {
+    const req = route.request(), path = new URL(req.url()).pathname.replace("/api/control-plane/", "");
+    if (path === "workflow-runs" && req.method() === "POST") {
+      keys.push(req.headers()["idempotency-key"]);
+      expect(req.postDataJSON()).toEqual({ workflowVersionId: versionId, execution: { mode: "VD", vdId: vdA }, parameters: {},
+        taskExecutions: { sink: { mode: "VD", vdId: vdB } } });
+      if (keys.length === 1) return route.fulfill({ status: 409, json: { code: "VD_STREAM_CAPACITY", message: "같이 실행되어야 하는 스트림 작업 수가 해당 VD의 동시 실행 용량을 초과합니다." } });
+      return route.fulfill({ status: 201, json: run });
+    }
+    let body: unknown;
+    if (path === "csrf") body = { token: "fixture" };
+    else if (path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
+    else if (path === "workflows") body = { items: [{ id: workflowId, key: "vd-stream", displayName: "VD 스트림 시험", createdAt: now }], nextOffset: null };
+    else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "vd-stream", displayName: "VD 스트림 시험" },
+      versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag, createdAt: now }], nextOffset: null };
+    else if (path === "workflow-runs") body = { items: keys.length > 1 ? [run] : [], nextOffset: null };
+    else if (path === `workflow-runs/${runId}`) body = { run, tasks: [] };
+    else return route.fulfill({ status: 404, json: {} });
+    return route.fulfill({ status: 200, json: body });
+  });
+  await page.goto("/workflows");
+  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture"); await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
+  await page.getByRole("button", { name: "연결", exact: true }).click();
+  await page.getByRole("button", { name: "VD 스트림 시험 vd-stream", exact: true }).click();
+  await page.getByRole("button", { name: "1.0.0", exact: true }).click();
+  const sink = page.getByRole("combobox", { name: "sink 실행 위치", exact: true });
+  await expect(sink.locator('option[value="VD"]')).toHaveJSProperty("disabled", false);
+  await expect(sink.locator('option[value="REMOTE"]')).toHaveJSProperty("disabled", true);
+  await page.getByRole("combobox", { name: "실행 위치 정책", exact: true }).selectOption("REMOTE");
+  await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Remote 스트리밍은 아직 지원하지 않습니다."); expect(keys).toHaveLength(0);
+  await page.getByRole("combobox", { name: "실행 위치 정책", exact: true }).selectOption("VD");
+  await page.getByLabel("실행할 가상 장치 ID", { exact: true }).fill(vdA);
+  await sink.selectOption("VD"); await page.getByLabel("sink 가상 장치 ID", { exact: true }).fill(vdB);
+  await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("동시 실행 용량");
+  await expect(page.getByLabel("실행할 가상 장치 ID", { exact: true })).toHaveValue(vdA);
+  await expect(page.getByLabel("sink 가상 장치 ID", { exact: true })).toHaveValue(vdB);
+  await page.getByRole("group", { name: "작업별 실행 위치", exact: true }).screenshot({ path: testInfo.outputPath("vd-stream-placement.png") });
+  await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "선택한 실행", exact: true })).toBeVisible();
+  expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
