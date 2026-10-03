@@ -207,9 +207,15 @@ class VDTaskIntegrationTest {
     }
     @Test void drainWaitsForTasksAndFinalExitStopsSupervisorWithoutInventingResult()throws Exception {
         var f=fixture(1,1);var r=assigned(f,poll(f,body(f,1,List.of(),List.of()),200)).getFirst();runner(f,r,"claim",runnerBody(f,r),200);
+        var leased=supervisors.runtime(f.supervisor().id()).orElseThrow();
+        assertThat(lifecycle.authorizeProducerUntil(r.attemptId(),r.epoch(),f.supervisor().podUid())).isEqualTo(leased.leaseUntil()).isBefore(current(r).expiresAt());
         vdLifecycle.drain(f.vd().id(),0,"drain");fenced(()->vdLifecycle.drained(f.supervisor().id(),f.session()));
+        var requested=supervisors.runtime(f.supervisor().id()).orElseThrow();
+        assertThat(lifecycle.authorizeProducerUntil(r.attemptId(),r.epoch(),f.supervisor().podUid())).isEqualTo(requested.drainDeadline()).isBefore(requested.leaseUntil());
         var draining=poll(f,body(f,2,List.of(r),List.of()),200);assertThat(draining.get("command")).isEqualTo("DRAIN");assertThat(assigned(f,draining)).isEmpty();
         lifecycle.authorize(r.attemptId(),r.epoch(),f.supervisor().podUid());
+        var supervisor=supervisors.runtime(f.supervisor().id()).orElseThrow();
+        assertThat(lifecycle.authorizeProducerUntil(r.attemptId(),r.epoch(),f.supervisor().podUid())).isEqualTo(supervisor.leaseUntil()).isBeforeOrEqualTo(supervisor.drainDeadline());
         var done=poll(f,body(f,3,List.of(),List.of(r)),200);assertThat(done.get("command")).isEqualTo("STOP");
         assertThat(supervisors.runtime(f.supervisor().id()).orElseThrow().desiredState()).isEqualTo("STOPPED");assertThat(runtimes.result(r.taskId())).isEmpty();
         runner(f,r,"claim",runnerBody(f,r),401);
@@ -230,7 +236,8 @@ class VDTaskIntegrationTest {
     }
     @Test void expiredLeaseFencesProducerButDoesNotReleaseSlotBeforePodTermination()throws Exception {
         var f=fixture(1,1);var r=assigned(f,poll(f,body(f,1,List.of(),List.of()),200)).getFirst();runner(f,r,"claim",runnerBody(f,r),200);
-        clock.offset.addAndGet(61);runner(f,r,"commit",resultBody(f,r),409);taskService.reconcile(r.id());assertThat(current(r).failureReason()).isEqualTo("RUNTIME_LOST");
+        clock.offset.addAndGet(61);fenced(()->lifecycle.authorizeProducerUntil(r.attemptId(),r.epoch(),f.supervisor().podUid()));
+        runner(f,r,"commit",resultBody(f,r),409);taskService.reconcile(r.id());assertThat(current(r).failureReason()).isEqualTo("RUNTIME_LOST");
         assertThat(allocations.byRuntime(r.id()).orElseThrow().open()).isTrue();assertThat(current(r).observedState()).isEqualTo("RUNNING");
     }
     @Test void queueTimeoutAndUnallocatedCancellationTerminateWithoutSupervisorMutation()throws Exception {

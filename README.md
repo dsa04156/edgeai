@@ -17,7 +17,9 @@ VD Task 배정·Runner·결과 API/화면을 연결했습니다. 실제 Kubernet
 [M6 완료 범위와 근거](docs/evidence/m6-completion-audit.md)를 확인하세요. 현재 M7 다중 장치·스트리밍을 구현 중입니다.
 MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/회수](docs/evidence/m7-stream-broker.md)를
 구성 요소별로 검증했습니다. [권한 worker](docs/evidence/m7-stream-worker.md)의 실제 DB/TLS broker
-자동 조정도 로컬 검증했으며, 인증된 배정·Runner 연결 전이므로 공개 STREAM은 아직501입니다.
+자동 조정은 CI·배포까지 검증했습니다. 현재 Device 세션 토큰과 Runner/Pod 인증을 확인하는
+[스트림 배정 API](docs/evidence/m7-stream-bindings.md)를 실제 HTTP/DB/TLS broker로 로컬 검증했으며,
+SDK·Runner 처리 연결 전이므로 공개 STREAM은 아직501입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -52,6 +54,7 @@ bash scripts/dev-dashboard.sh
 - 워크플로·실행 요청 관리: <http://127.0.0.1:13080/workflows>
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
 - Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
+- 스트림 내부 API 설명: <http://127.0.0.1:18080/swagger-ui/index.html?contract=streams>
 - OpenAPI 계약: <http://127.0.0.1:18080/openapi.yaml>
 - API readiness: <http://127.0.0.1:18080/actuator/health/readiness>
 - API metadata: `GET /api/v1/platform` (로컬 Basic 인증 필요)
@@ -103,6 +106,11 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
 
 화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
+상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`을 표시하며 Device 세션 토큰과
+Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명합니다. 관리자가 Device의
+현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.
+배정은 `EDGEAI_STREAM_ENABLED=true`와 `EDGEAI_STREAM_BINDINGS_ENABLED=true`, 별도 장치 서명 키가
+필요합니다. 기본 비활성이며 SDK의 lease 준수/갱신과 공개 STREAM 실행을 대신하지 않습니다.
 포트를 바꾸면 같은 호스트의 API를 사용하며, Swagger 자산은 JAR에 포함되어 외부 CDN이나
 온라인 validator에 연결하지 않습니다. 인증 정보는 Swagger 브라우저 저장소에 영속 저장하지 않습니다.
 

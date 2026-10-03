@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: EdgeAI authenticated stream bindings
+  version: 0.1.0
+  description: M7 내부 배정 계약. MQTT 비밀번호/세션 토큰은 로그·일반 metadata에 저장하지 않는다. 실제 SDK lease
+    준수·갱신과 공개 STREAM 실행은 후속 연결이다.
+servers:
+- url: /
+paths:
+  /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams:
+    post:
+      operationId: bindDeviceStream
+      summary: 현재 Device 주체의 스트림 배정 조회
+      description: 현재 주체·ACTIVE 세대·lease와 고정 broker 설정을 확인한 뒤 정확한 topic/producer binding
+        및 본인 MQTT 자격을 no-store로 반환한다. 세대를 생성하거나 lease를 연장하지 않는다. Runner는 실제 Pod 및
+        runtime claim도 재검사한다. 받은 serverTime/leaseUntil과 요청 경과 시간을 기준으로 기한 내에만 사용해야
+        한다. 공개 STREAM 실행 활성화와는 별개다.
+      security:
+      - deviceSession: []
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: &id001
+          type: string
+          format: uuid
+      - name: sessionId
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceBindingRequest'
+      responses:
+        '200':
+          description: '현재 lease까지 유효한 비공개 배정. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binding'
+        '400':
+          description: JSON 형식/필드/epoch 오류
+        '401':
+          description: 현재 세션 토큰 또는 Runner/Pod 인증 실패
+        '403':
+          description: 스트림 인증 경로 비활성 또는 권한 거절
+        '404':
+          description: 세대가 없음
+        '409':
+          description: 이전 주체·다른 route·미활성/회수된 세대·만료·취소·설정 불일치
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 배정 비활성
+        '503':
+          description: DB/Kubernetes/자격 설정 일시 장애
+  /internal/v1/attempts/{attemptId}/streams:
+    post:
+      operationId: bindRunnerStream
+      summary: 현재 Runner 주체의 스트림 배정 조회
+      description: 현재 주체·ACTIVE 세대·lease와 고정 broker 설정을 확인한 뒤 정확한 topic/producer binding
+        및 본인 MQTT 자격을 no-store로 반환한다. 세대를 생성하거나 lease를 연장하지 않는다. Runner는 실제 Pod 및
+        runtime claim도 재검사한다. 받은 serverTime/leaseUntil과 요청 경과 시간을 기준으로 기한 내에만 사용해야
+        한다. 공개 STREAM 실행 활성화와는 별개다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunnerBindingRequest'
+      responses:
+        '200':
+          description: '현재 lease까지 유효한 비공개 배정. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binding'
+        '400':
+          description: JSON 형식/필드/epoch 오류
+        '401':
+          description: 현재 세션 토큰 또는 Runner/Pod 인증 실패
+        '403':
+          description: 스트림 인증 경로 비활성 또는 권한 거절
+        '404':
+          description: 세대가 없음
+        '409':
+          description: 이전 주체·다른 route·미활성/회수된 세대·만료·취소·설정 불일치
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 배정 비활성
+        '503':
+          description: DB/Kubernetes/자격 설정 일시 장애
+components:
+  securitySchemes:
+    deviceSession:
+      type: http
+      scheme: bearer
+      description: 관리자가 현재 Device 세션에 발급한 stream-token.
+    runnerClaim:
+      type: http
+      scheme: bearer
+    podIdentity:
+      type: apiKey
+      in: header
+      name: X-EdgeAI-Pod-Token
+  schemas:
+    DeviceBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - epoch
+      - generationId
+      properties:
+        epoch: &id002
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        generationId: *id001
+    RunnerBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - epoch
+      - podUid
+      - generationId
+      properties:
+        epoch: *id002
+        podUid: *id001
+        generationId: *id001
+    Producer:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - deviceId
+        - sessionId
+        - epoch
+        properties:
+          kind:
+            const: DEVICE_SESSION
+          deviceId: *id001
+          sessionId: *id001
+          epoch: *id002
+      - type: object
+        additionalProperties: false
+        required:
+        - kind
+        - attemptId
+        - epoch
+        properties:
+          kind:
+            const: TASK_ATTEMPT
+          attemptId: *id001
+          epoch: *id002
+    Consumer:
+      type: object
+      additionalProperties: false
+      required:
+      - attemptId
+      - epoch
+      properties:
+        attemptId: *id001
+        epoch: *id002
+    Mqtt:
+      type: object
+      additionalProperties: false
+      required:
+      - host
+      - port
+      - tls
+      - caPem
+      - clientId
+      - username
+      - password
+      - framesTopic
+      - acksTopic
+      properties:
+        host:
+          type: string
+          maxLength: 253
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        tls:
+          type: boolean
+        caPem:
+          type: string
+          maxLength: 131072
+        clientId:
+          type: string
+          maxLength: 128
+        username:
+          type: string
+          maxLength: 128
+        password:
+          type: string
+          maxLength: 64
+          format: password
+        framesTopic:
+          type: string
+          maxLength: 160
+        acksTopic:
+          type: string
+          maxLength: 160
+    Binding:
+      type: object
+      additionalProperties: false
+      required:
+      - apiVersion
+      - generationId
+      - routeId
+      - runId
+      - generation
+      - direction
+      - producer
+      - consumer
+      - mediaType
+      - maxPayloadBytes
+      - serverTime
+      - leaseUntil
+      - mqtt
+      properties:
+        apiVersion:
+          const: edgeai.stream-assignment/v1
+        generationId: *id001
+        routeId: *id001
+        runId: *id001
+        generation: *id002
+        direction:
+          enum:
+          - PRODUCER
+          - CONSUMER
+        producer:
+          $ref: '#/components/schemas/Producer'
+        consumer:
+          $ref: '#/components/schemas/Consumer'
+        mediaType:
+          type: string
+          maxLength: 127
+        maxPayloadBytes:
+          type: integer
+          minimum: 1
+          maximum: 262144
+        serverTime:
+          type: string
+          format: date-time
+        leaseUntil:
+          type: string
+          format: date-time
+        mqtt:
+          $ref: '#/components/schemas/Mqtt'

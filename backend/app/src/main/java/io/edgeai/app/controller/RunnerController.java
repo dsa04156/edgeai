@@ -2,6 +2,9 @@ package io.edgeai.app.controller;
 import io.edgeai.app.config.RunnerPrincipal;
 import io.edgeai.app.service.RunnerApiService;
 import io.edgeai.app.service.RuntimeTelemetryService;
+import io.edgeai.app.service.StreamBindingService;
+import io.edgeai.app.exception.ControlPlaneException;
+import org.springframework.beans.factory.ObjectProvider;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.*;
@@ -15,7 +18,12 @@ import static io.edgeai.app.support.WorkflowInput.JSON;
 public class RunnerController {
     private final RunnerApiService service;
     private final RuntimeTelemetryService telemetry;
-    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry){this.service=service;this.telemetry=telemetry;}
+    private final ObjectProvider<StreamBindingService> streams;
+    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry,ObjectProvider<StreamBindingService> streams){this.service=service;this.telemetry=telemetry;this.streams=streams;}
+    @PostMapping("/streams") public ResponseEntity<String> streams(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
+        var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
+        return response(200,bindings.runner(principal,body));
+    }
     @PostMapping("/claim") public ResponseEntity<String> claim(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,service.claim(principal,body));}
     @PostMapping("/uploads") public ResponseEntity<String> uploads(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,service.uploads(principal,body));}
     @PostMapping("/commit") public ResponseEntity<String> commit(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){

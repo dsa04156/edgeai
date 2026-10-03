@@ -47,6 +47,18 @@ worker는 기본 비활성이다. `.env.example`의 EDGEAI_STREAM 설정으로 �
 S3 checkpoint/새 Pod 복원, 공개 API/Swagger/UI, 실제 Kubernetes 다중 장치 흐름이 남는다.
 새 worker 코드의 CI·배포는 이 로컬 시험만으로 통과했다고 판정하지 않는다.
 
+## 후속 CI·배포 확인
+
+소스 `cd61529`의 [CI37077442217](https://github.com/dsa04156/edgeai/actions/runs/37077442217)은
+5 jobs 모두 success이며 내려받은 결과JSON17개가 PASS/0이다. stream broker14개는
+`20261002T232538Z-dda0e317`, 실제 kind는 `20261002T233557Z-03e311f4`다.
+실제 BATCH/Remote/VD 실행·복구·고정 S3 결과20+5개와 시험 클러스터 삭제 로그를 확인했다.
+GitOps `2410f10`의 실제 배포 `20261002T235701Z-9ed76739`도 PASS/0이다.
+API/Dashboard/MinIO imageID가 이 소스의 검증 이미지와 일치하고 Ready, PVC Bound,
+Argo Synced 및 VD 실행 활성화를 확인했다. Argo 전체 health는 기존 Ingress 때문에 Progressing이다.
+stream worker는 배포에서 기본 비활성으로 유지하며 운영 broker의 실제 활성 수용을 뜻하지 않는다.
+인증 배정의 후속 로컬 구현·검증은 [별도 기록](m7-stream-bindings.md)을 따른다.
+
 재현: 실제 PostgreSQL과 Mosquitto/OpenSSL을 준비한 뒤 `bash scripts/test-stream-broker.sh`.
 기존 CI scaffold job의 같은 명령에 자동 포함된다. 비표준 broker 경로는
 [broker 검증 문서](m7-stream-broker.md)의 환경 변수를 따른다.

@@ -111,6 +111,15 @@ public class DataRouteService {
         var g=lockedGeneration(id);var route=routes.route(g.routeId(),false).orElseThrow();
         return g.producer().equals(producer) && g.consumer().equals(consumer) && g.usableAt(now(g)) && invalid(route,producer,consumer,true)==null;
     }
+    /** Caller authentication is separate; locks are retained by a surrounding assignment transaction. */
+    @Transactional
+    public StreamBrokerGateway.Permission authorize(UUID id,StreamBrokerGateway.Principal caller){
+        var g=lockedGeneration(id);requireLive(g,true);var route=routes.route(g.routeId(),false).orElseThrow();
+        var permission=new StreamBrokerGateway.Permission(route,g);
+        if(!caller.equals(permission.producer()) && !caller.equals(permission.consumer()))throw conflict("STREAM_FOREIGN_ACTOR");
+        String reason=invalid(route,g.producer(),g.consumer(),true);if(reason!=null)throw conflict(reason);
+        return permission;
+    }
     private void requireLive(RouteGeneration g,boolean active){
         if(g.fencedAt()!=null || !now(g).isBefore(g.leaseUntil()) || (active && g.activatedAt()==null))throw conflict("STREAM_GENERATION_FENCED");
         String reason=invalid(routes.route(g.routeId(),false).orElseThrow(),g.producer(),g.consumer(),false);if(reason!=null)throw conflict(reason);

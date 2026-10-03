@@ -257,6 +257,17 @@ public class RuntimeLifecycleService {
         var c=lock(attemptId);var r=runtime(attemptId);producer(c,r,epoch,podUid);
         var spec=spec(c);return new Assignment(r,spec,parameters(c),inputs(c,spec));
     }
+    /** Stream binding authorization does not resolve BATCH artifact inputs. */
+    @Transactional
+    public Instant authorizeProducerUntil(UUID attemptId,long epoch,UUID podUid){
+        var c=lock(attemptId);var r=runtime(attemptId);producer(c,r,epoch,podUid);var until=r.expiresAt();
+        if(r.vd()){
+            var allocation=vdAuthority(r,podUid);var supervisor=vdRuntimes.runtime(allocation.vdRuntimeId()).orElseThrow();
+            if(supervisor.leaseUntil().isBefore(until))until=supervisor.leaseUntil();
+            if(supervisor.drainDeadline()!=null && supervisor.drainDeadline().isBefore(until))until=supervisor.drainDeadline();
+        }
+        return until;
+    }
     @Transactional
     public CommitPermit prepareCommit(UUID attemptId,long epoch,UUID podUid,ResultManifest manifest) {
         var c=lock(attemptId);var r=runtime(attemptId);String digest=digest(manifest);

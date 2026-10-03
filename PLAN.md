@@ -165,6 +165,9 @@ ADR0023/V19 DataRoute 영속 세대·내부 제어 상태는 실제 PostgreSQL12
 상세는 `docs/evidence/m7-stream-routes.md`다.
 ADR0024 broker 권한 발급/회수 adapter는 실제 TLS broker·DB 세대 전환8개를 통과했다.
 ADR0025/V20 DB 권한 worker는 실제 스케줄러·DB/TLS broker14개 로컬 시험을 통과했다.
-다음은 새 worker CI·배포와 인증된 제어 서버 배정·운영 broker 연결·Runner/SERVICE 스트림 인터페이스,
+ADR0026 인증 배정은 Device 세션 토큰과 기존 Runner/Pod 인증을 연결해 실제 HTTP/DB/TLS broker로
+로컬 검증했다. SDK의 lease 준수/갱신과 실제 Pod의 스트림 수용은 남았다.
+worker cd61529의 CI37077442217·실제kind와 GitOps2410f10 배포 검증도 통과했다.
+다음은 인증 배정의 새 CI·배포와 SDK lease·운영 broker 연결·Runner/SERVICE 스트림 인터페이스,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

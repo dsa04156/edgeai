@@ -45,7 +45,7 @@ Run의 실행 정책은 전체 DAG 기본값이고, STREAM edge는 발행할 수
 정의가 없다. [ADR0021](adr/0021-stream-frame-boundary.md)과
 [ADR0022](adr/0022-stream-processing-journal.md)에서 frame/처리 확인·로컬 journal·MQTT adapter를
 구체화했다. [ADR0023](adr/0023-stream-route-authority.md)/V19는 DataRoute 영속 상태와 세대 제어를
-구현하고 실제 DB에서 검증했다. 인증된 배정·실제 broker 권한 수명·S3 checkpoint는 남았다. M5의 상태형
+구현하고 실제 DB에서 검증했다. 후속 broker 권한 수명·인증 배정의 구성 요소 검증은 아래를 따른다. S3 checkpoint와 M5의 상태형
 복원 잔여 조건은 이 결정과 함께 검토하고, 단순 처음부터 재시작을 checkpoint 복원이라 부르지 않는다.
 
 수용은 프로토콜 단위→실제 DB/브로커→Runner/다중 입력→실제 Kubernetes→장애/재연결→
@@ -69,9 +69,12 @@ checkpoint/재전송/중복 제거 경계를 정의해야 한다.
 않았다. 별도 통합 시험은 private 계정/정확한 topic ACL·TLS를 사용하지만 운영 계정 발급/해제와
 실행 배정 연결 완료를 뜻하지 않는다. 실제 실행 전달 경로는 Compose 설정을 그대로 운영 계약으로 사용하지 않는다. Mosquitto
 Dynamic Security의 client/role/topic 제어는 [ADR0024](adr/0024-stream-broker-authority.md)에서 채택해
-실제 TLS broker adapter로 검증했다. 서버 worker·운영 broker·인증 배정 연결은 남아 있다.
+실제 TLS broker adapter로 검증했다. 운영 broker의 실제 활성 수용은 남아 있다.
 [공식 설명](https://mosquitto.org/documentation/dynamic-security/).
 
 후속 [ADR0025](adr/0025-stream-authority-worker.md)는 DB의 PREPARING/FENCED 상태를 영속 명령으로
 삼아 주기적 현재 주체 검사와 bounded broker 발급/회수를 연결한다. 실제 Spring scheduler·DB/TLS
-broker·응답 유실·두 worker 경합의 로컬 시험을 통과했으며 운영 broker·인증 배정은 계속 남는다.
+broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
+후속 [ADR0026](adr/0026-stream-authenticated-bindings.md)은 Device 세션 토큰과 Runner/Pod 인증을
+배정 조회에 연결했고 실제 HTTP/DB/TLS broker 시험을 통과했다. Pod 신원은 명시적 fixture다.
+SDK의 lease 준수·갱신, 운영 broker·실제 Runner 데이터 흐름과 공개 실행 수용은 계속 남는다.

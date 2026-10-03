@@ -1,7 +1,7 @@
 /* global SwaggerUIBundle */
 window.addEventListener("load", () => {
   SwaggerUIBundle({
-    url: "/openapi.yaml",
+    url: new URLSearchParams(window.location.search).get("contract") === "streams" ? "/stream-openapi.yaml" : "/openapi.yaml",
     dom_id: "#swagger-ui",
     deepLinking: true,
     displayRequestDuration: true,
@@ -17,7 +17,7 @@ window.addEventListener("load", () => {
         throw new Error("API requests must stay on this Control Plane origin.");
       }
       const prepared = { ...request, headers: { ...request.headers }, credentials: "same-origin" };
-      if (!["GET", "HEAD", "OPTIONS"].includes((request.method || "GET").toUpperCase())) {
+      if (!target.pathname.startsWith("/internal/") && !["GET", "HEAD", "OPTIONS"].includes((request.method || "GET").toUpperCase())) {
         const headers = new Headers();
         const authorization = prepared.headers.Authorization || prepared.headers.authorization;
         if (authorization) headers.set("Authorization", authorization);

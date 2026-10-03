@@ -148,3 +148,7 @@ TLS/timeout/소켓 정리를 실제 연결로 검증했다. DB worker와 공개 
 
 [영속 권한 worker](m7-stream-worker.md): 실제 DB/TLS broker·Spring scheduler와 응답 유실·새 worker/
 두 worker 경합·느린 발급 중 fence·lease 만료를 검증했다. 인증 배정·Runner/공개 STREAM 연결은 남는다.
+
+[인증 배정](m7-stream-bindings.md): 현재 Device 세션 토큰·Runner/Pod 인증 경계를 실제 HTTP/DB/TLS
+broker로 검증하고 관리40개/스트림2개 Swagger를 연결했다. Pod 신원은 fixture이며 SDK lease·실제
+Runner/공개 STREAM·다중 장치 수용은 남는다.

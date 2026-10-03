@@ -34,6 +34,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/RemoteGatewayIntegrationTest.class'
     exclude '**/RemoteWorkerIntegrationTest.class'
     exclude '**/StreamBrokerIntegrationTest.class'
+    exclude '**/StreamBindingIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -75,10 +76,15 @@ tasks.register('streamBrokerIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/StreamBrokerIntegrationTest.class'
+    include '**/StreamBindingIntegrationTest.class'
 }
 
 // Serve the exact reviewed contract; do not infer a competing schema from controllers.
 tasks.named('processResources') {
+    from(rootProject.file('../contracts/openapi/stream-api.yaml')) {
+        into 'static'
+        rename { 'stream-openapi.yaml' }
+    }
     from(rootProject.file('../contracts/openapi/platform-api.yaml')) {
         into 'static'
         rename { 'openapi.yaml' }

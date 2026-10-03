@@ -30,6 +30,9 @@ server:
 edgeai:
   stream:
     enabled: ${EDGEAI_STREAM_ENABLED:false}
+    bindings-enabled: ${EDGEAI_STREAM_BINDINGS_ENABLED:false}
+    device-key-file: ${EDGEAI_STREAM_DEVICE_KEY_FILE:}
+    client-url: ${EDGEAI_STREAM_CLIENT_URL:}
     broker-url: ${EDGEAI_STREAM_BROKER_URL:}
     broker-digest: ${EDGEAI_STREAM_BROKER_DIGEST:}
     admin-user: ${EDGEAI_STREAM_ADMIN_USER:edgeai-admin}

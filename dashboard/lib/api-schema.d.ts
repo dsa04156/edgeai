@@ -682,6 +682,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/devices/{deviceId}/sessions/{sessionId}/stream-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 현재 장치 세션의 스트림 배정 토큰 발급
+         * @description 관리자가 현재 활성 Device 세션에 설치할 토큰을 발급한다. Basic 인증과 CSRF가 필요하고 반복 요청은 같은 토큰이다. 장치 해제·세션 교체 뒤 기존 토큰은 사용할 수 없다. 토큰은 관리 API 권한이 없으며 별도 내부 스트림 배정 API에서 본인 세대의 MQTT 자격만 조회한다. 응답을 로그/일반 metadata에 저장하지 않는다. EDGEAI_STREAM_ENABLED가 false면501이며 공개 STREAM 실행을 활성화하는 API가 아니다.
+         */
+        post: operations["issueDeviceStreamToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3949,6 +3972,99 @@ export interface operations {
             };
             404: components["responses"]["VirtualDeviceError"];
             503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    issueDeviceStreamToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description 현재 세션에 한정된 토큰. Cache-Control: no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        deviceId: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        epoch: number;
+                        /** @constant */
+                        tokenType: "Bearer";
+                        /** Format: password */
+                        token: string;
+                    };
+                };
+            };
+            /** @description 빈 JSON 객체가 필요함 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 관리 Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 토큰/세션 누락 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치가 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치 해제 또는 현재 세션 불일치 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 본문16KiB 제한 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 스트림 배정 비활성 */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DB/토큰 키 설정 장애 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }

@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SwaggerUiTest {
     @Autowired MockMvc mvc;
     @Test void documentationAndAssetsRequireAuthentication() throws Exception {
-        for (String path : new String[]{"/swagger-ui.html", "/swagger-ui/index.html", "/openapi.yaml", "/swagger-ui/assets/swagger-ui-bundle.js"})
+        for (String path : new String[]{"/swagger-ui.html", "/swagger-ui/index.html", "/openapi.yaml", "/stream-openapi.yaml", "/swagger-ui/assets/swagger-ui-bundle.js"})
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
     }
     @Test void servesPackagedUiAndTheReviewedContract() throws Exception {
@@ -29,5 +29,8 @@ class SwaggerUiTest {
         mvc.perform(get("/openapi.yaml").with(user("test")))
             .andExpect(status().isOk()).andExpect(content().string(containsString("operationId: publishProfile")))
             .andExpect(content().string(containsString("openapi: 3.1.0")));
+        mvc.perform(get("/stream-openapi.yaml").with(user("test")))
+            .andExpect(status().isOk()).andExpect(content().string(containsString("operationId: bindDeviceStream")))
+            .andExpect(content().string(containsString("operationId: bindRunnerStream")));
     }
 }

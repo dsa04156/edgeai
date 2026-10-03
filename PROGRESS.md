@@ -8,14 +8,18 @@ frame/처리 확인·로컬 원자적 journal·MQTT 전달을 구현했고 실�
 통과했다. ADR0024 Mosquitto 권한 adapter도 실제 TLS broker·DB 세대 전환8개 시험을 통과했다.
 ADR0025/V20 DB 권한 worker도 실제 Spring scheduler·응답 유실/새 worker·두 worker 경합을 포함한
 실제 DB/TLS broker14개(20261002T230042Z-e4ac4863) 로컬 검증을 통과했다.
-인증 배정·운영 broker·Runner 스트림 workload·새 Pod checkpoint 복원 연결은 남아 있다.
-상세: docs/evidence/m7-stream-transport.md, docs/evidence/m7-stream-routes.md, docs/evidence/m7-stream-broker.md.
+ADR0026 인증 배정은 실제 HTTP/DB/TLS broker의 현재 세션 토큰·Runner/Pod 경계5개와
+기존 broker/worker14개를 로컬 검증했다. Pod 신원 확인은 이 시험에서 명시적 gateway fixture다.
+SDK의 lease 준수/갱신·운영 broker·Runner 스트림 workload·새 Pod checkpoint 복원 연결은 남아 있다.
+상세: docs/evidence/m7-stream-bindings.md 및 해당 문서의 선행 구성 요소 기록.
 717b5cd CI37067700149는5jobs/JSON16개·실제kind 통과. 후속 문서 커밋으로 배포pin은 갱신되지 않았다.
 후속224befe CI37071378244는5jobs/JSON16개·실제kind PASS. GitOps b742894와
 실제 imageID/Ready/PVC/ArgoSynced는20261002T224649Z-9f80f766에서 PASS/0이다.
 broker adapter9d8f89b의 CI37074435731은5jobs/JSON17개·실제kind 모두 PASS다.
 GitOps aab300d/실제 imageID·Ready·PVC·ArgoSynced는20261002T232338Z-64c92ed7에서 PASS/0이다.
-worker 최신 코드의 새 CI·배포 확인은 별도 후속이며 공개 STREAM501은 유지한다.
+worker cd61529 CI37077442217은5jobs/JSON17개·실제kind 모두 PASS다.
+GitOps2410f10의 실제 이미지/Ready/PVC/ArgoSynced는20261002T235701Z-9ed76739에서 PASS/0이다.
+인증 배정 최신 코드의 새 CI·배포 확인은 별도 후속이며 공개 STREAM501은 유지한다.
 최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.
@@ -46,7 +50,7 @@ worker f6dc087 CI37013658656 5 jobs/결과JSON15개 PASS, 기존 실제 kind18Ru
 실제 외부 계약·상태형 복원은 남아 있다.
 Profile 불변 버전, Device/Node/Session/Observation, 불변 Workflow DAG,
 Idempotency-Key 기반 Run/Task/Attempt 생성·조회·취소·의존성 전파와 실제 Dashboard.
-Flyway V1–V19, 계층형 Spring 패키지, 한국어 Swagger39개, GitHub Actions/GHCR/ArgoCD 연결.
+Flyway V1–V20, 계층형 Spring 패키지, 한국어 관리 Swagger40개·별도 스트림 배정2개, GitHub Actions/GHCR/ArgoCD 연결.
 M6 첫 구현: 영속 VD 등록/수정/해제·원본 조건/연결 이력·Device 해제 보호 API와 `/virtual-devices` 화면.
 V14는 내부 runtime/Operation·명령 lease·교체/drain 상태와 registry hook을 추가한다.
 ADR0016의 실제 Pod gateway/worker·HMAC 자격, Pod-bound TokenReview·UID 소유/삭제·watch/relist를
