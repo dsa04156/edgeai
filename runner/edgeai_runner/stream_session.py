@@ -141,8 +141,14 @@ class Session:
             # immediately, then schedule against the current conservative lease.
             self.next_at[identity] = time.monotonic() + (0 if sequence == 0 else min(1., current[identity].remaining() / 4))
             self.processor.step()
-        except BaseException:
+        except BaseException as failure:
+            # The deadline can pass inside MQTT, HTTP or a model step after the
+            # initial check. Report the owning session's terminal reason consistently.
+            reason = ('STREAM_CANCELLED' if self.cancel.is_set() else
+                      'STREAM_SESSION_TIMEOUT' if time.monotonic() >= self.deadline else None)
             self.close()
+            if reason is not None and isinstance(failure, Exception):
+                raise SessionError(reason) from None
             raise
 
     def close(self):

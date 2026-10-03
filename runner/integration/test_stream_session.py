@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import uuid
 
 from test_stream_mqtt import Broker, eventually
@@ -214,6 +215,20 @@ class StreamSessionTest(unittest.TestCase):
         child=session.processor.workload.process
         with self.assertRaises((SessionError,AssignmentError)):
             eventually(self.pump,lambda:session.closed,3)
+        self.assertTrue(session.closed);self.assertIsNotNone(child.poll())
+
+    def test_deadline_crossed_inside_processor_reports_session_timeout_and_stops_child(self):
+        session=self.setup_flow(timeout=2,command=[sys.executable,str(RUNNER/'tests/fixtures/stream_workload.py'),'hang'])
+        self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:session.processor.workload is not None)
+        child=session.processor.workload.process
+        advance=session.processor.step
+        def cross_deadline():
+            time.sleep(max(0,session.deadline-time.monotonic())+.03)
+            advance()
+        with patch.object(session.processor,'step',side_effect=cross_deadline):
+            with self.assertRaisesRegex(SessionError,'^STREAM_SESSION_TIMEOUT$'):
+                session.step()
         self.assertTrue(session.closed);self.assertIsNotNone(child.poll())
 
     def test_foreign_run_and_duplicate_generation_mapping_fail_before_journal_creation(self):

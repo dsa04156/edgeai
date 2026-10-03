@@ -45,3 +45,17 @@ ACK를 연결하고, 새 Pod/Attempt/generation 복원을 구현해야 한다. S
 port·최종 Result, 혼합 BATCH/STREAM 시작 조건과 종료 확인, 운영 broker/TLS·공개 API/UI·
 실제 다중 Device Kubernetes 데모가 남는다. M5 잔여·M7–M10 및 전체 목표는 미완료다.
 이 변경의 신규 CI·이미지·실제 배포 결과는 후속 확인 대상이다.
+
+## CI 기한 경합 수정
+
+source9af9688의 CI37090538441은 scaffold/storage 성공, runner 실패로 images/gitops가
+실행되지 않았다. Runner70개는 통과했으나 실제 MQTT35개 중 세션 timeout 시험에서
+초기 검사 뒤 MQTT 내부에서 기한이 지나 `MqttError`가 노출됐다. 모델 정리와 별개로
+세션의 종료 원인이 호출 시점에 따라 달라지는 문제다.
+
+실제 hang 모델을 기동한 뒤 Processor 호출 안에서 기한을 넘기는 회귀 시험으로
+동일 오류를 재현했다(20261003T024855Z-627e38e1 FAIL/0이 아닌 exit1).
+Session은 처리 도중 발생한 예외에서도 취소·전체 timeout을 일관된 SessionError로
+반환한다. 기한 전의 다른 오류와 BaseException 신호는 원래대로 전파한다.
+수정 후 실제 HTTPS/MQTT 전체36개는 20261003T024959Z-d0d98edf에서 PASS/0,
+51.523초를 확인했다. 신규 CI·이미지·배포 검증은 별도로 추적한다.
