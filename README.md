@@ -41,7 +41,9 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 샘플·순번을 보존하며 실제 broker 권한 회수 뒤 새 경로로 재전송하고 계산을 이어갑니다.
 [SERVICE·Runner 스트림 실행](docs/evidence/m7-service-stream-runner.md)은 지속 계산과 최종 파일
 생성을 구분하고, 외부 체크포인트와 서버 완료 허가 후 결과를 만듭니다. Runner 소비 경로를
-검증했으며 서버 배정·완료 장벽 및 공개 STREAM 실행은 아직 연결 전입니다.
+검증했습니다. 후속 [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는
+경로 고정과 참여자별 종료 확인을 영속화하고 허가 전 Result 확정을 막습니다.
+DeviceSource 완료 대기·공개 실행 생성·최종 상태 복구·실제 Kubernetes 스트림 종단은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -128,12 +130,14 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
 
 화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
-상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 배정 조회2개와 heartbeat2개를
-표시하며 순번·재전송·기한 갱신/거절 조건을 설명합니다. Device 세션 토큰과
+상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 내부 API 11개를 표시합니다.
+배정 조회·heartbeat·체크포인트 저장/복원/인계·실행 배정·Task/Device 공동 완료의 역할과
+순번·재전송·기한 갱신/거절 조건을 설명합니다. Device 세션 토큰과
 Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명합니다. 관리자가 Device의
 현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.
 배정은 `EDGEAI_STREAM_ENABLED=true`와 `EDGEAI_STREAM_BINDINGS_ENABLED=true`, 별도 장치 서명 키가
-필요합니다. 기본 비활성이며 SDK의 lease 준수/갱신과 공개 STREAM 실행을 대신하지 않습니다.
+필요합니다. [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는 구성 요소
+검증을 통과했으며, 공개 STREAM 실행과 운영 연결은 아직 비활성입니다.
 포트를 바꾸면 같은 호스트의 API를 사용하며, Swagger 자산은 JAR에 포함되어 외부 CDN이나
 온라인 validator에 연결하지 않습니다. 인증 정보는 Swagger 브라우저 저장소에 영속 저장하지 않습니다.
 

@@ -30,6 +30,7 @@ public class StreamCheckpointService {
     private final ExecutionRepository executions;private final WorkflowRepository workflows;
     private final DataRouteService routes;private final RuntimeLifecycleService lifecycle;
     private final DataRouteRepository routeStore;
+    private final StreamExecutionRepository streamExecutions;
     private final ArtifactStore storage;private final ArtifactFiles files;private final Clock clock;
     private final TransactionTemplate transaction;private final Semaphore verifiers=new Semaphore(2);
     private record Authority(RuntimeInstance runtime,UUID profile,List<Permission> permissions){}
@@ -37,11 +38,12 @@ public class StreamCheckpointService {
     private record HandoverPermit(Authority authority,StreamCheckpoint source,List<Permission> previous,boolean replay){}
     public StreamCheckpointService(StreamCheckpointRepository checkpoints,RuntimeRepository runtimes,ExecutionRepository executions,
             WorkflowRepository workflows,DataRouteService routes,RuntimeLifecycleService lifecycle,ArtifactStore storage,
-            ArtifactFiles files,Clock clock,PlatformTransactionManager transactions,DataRouteRepository routeStore){
+            ArtifactFiles files,Clock clock,PlatformTransactionManager transactions,DataRouteRepository routeStore,StreamExecutionRepository streamExecutions){
         this.checkpoints=checkpoints;this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;
         this.routes=routes;this.lifecycle=lifecycle;this.storage=storage;this.files=files;this.clock=clock;
         this.transaction=new TransactionTemplate(transactions);
         this.routeStore=routeStore;
+        this.streamExecutions=streamExecutions;
     }
     public Object upload(RunnerPrincipal principal,String body){
         var input=RunnerInput.parse(body,principal,"checkpoint");var request=request(input.get("checkpoint"));
@@ -175,6 +177,7 @@ public class StreamCheckpointService {
             if(!replay.request().equals(request) || latest==null || !latest.id().equals(replay.id()))throw conflict(409,"STREAM_CHECKPOINT_CONFLICT");
             return new Permit(a,request,replay);
         }
+        if(streamExecutions.task(runtime.attemptId()).isPresent())throw conflict(409,"STREAM_CHECKPOINT_TERMINAL");
         if(!Objects.equals(request.previousId(),latest==null?null:latest.id()) || (latest!=null && request.serial()<=latest.request().serial()))
             throw conflict(409,"STREAM_CHECKPOINT_STALE");
         if(latest!=null && (!latest.attemptId().equals(runtime.attemptId()) || !latest.serviceProfileVersionId().equals(a.profile())

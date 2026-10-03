@@ -18,6 +18,11 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
+새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. 다음은 DeviceSource 완료
+대기, 공개 route 생성·그룹별 동시 시작, 허가 뒤 프로세스 재시작의 최종 상태 복구,
+운영 TLS·API/UI·실제 Kubernetes 다중 장치 종단이다. 공개 STREAM501은 유지한다.
+상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.
 M6 최종 판정과 한계는 [완료 감사](docs/evidence/m6-completion-audit.md)를 따른다.
 아래는 단계별 검증 이력이다. 실행 규격·Job compiler·S3 adapter·독립 Runner의
 구성 요소 구현과 CI·배포 시험을 완료했다. 이어 V5의 실행 상태·producer claim·명령 lease·결과 확정과

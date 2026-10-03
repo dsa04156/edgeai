@@ -50,6 +50,7 @@ class StreamRouteIntegrationTest {
     @Autowired ExecutionService executionApi;
     @Autowired DataRouteService service;
     @Autowired DataRouteRepository routes;
+    @Autowired StreamExecutionRepository streamExecutions;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JdbcTemplate jdbc;
     private final JsonDocuments json=new JsonDocuments();
@@ -295,7 +296,7 @@ class StreamRouteIntegrationTest {
             for(var job:jobs)assertThat(job.get(15,TimeUnit.SECONDS).sequence()).isEqualTo(1);
         }
         var seen=routes.heartbeat(g.id());assertThat(seen.producerSequence()).isEqualTo(1);assertThat(seen.consumerSequence()).isZero();
-        var fresh=new DataRouteService(routes,executions,definitions,deviceRepository,vds,streamProfiles,clock);
+        var fresh=new DataRouteService(routes,executions,definitions,deviceRepository,vds,streamProfiles,clock,streamExecutions);
         assertThat(transaction(()->fresh.heartbeat(g.id(),caller,0)).sequence()).isEqualTo(1);assertThat(routes.heartbeat(g.id())).isEqualTo(seen);
     }
     @Test void heartbeatDatabaseEnforcesOneActorSequenceWindowAndRetainedHistory()throws Exception {

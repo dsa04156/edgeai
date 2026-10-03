@@ -20,5 +20,11 @@ with Journal(directory/'journal',bindings,[],Limits(max_frames=8),create=True,du
         journal.receive(Frame(bindings[0],2,'DATA',b'5','application/json'))
         journal.commit(1,journal.pending(),b'14')
         snapshot=capture(journal,'a'*64)
+    if request.get('terminal',False):
+        confirm(journal,snapshot.serial,snapshot.sha256)
+        for i,b in enumerate(bindings):
+            journal.receive(Frame(b,3 if request.get('advance',False) and i==0 else 2,'END',b'',None))
+        journal.commit(journal.checkpoint().revision,journal.pending(),b'14' if request.get('advance',False) else b'9')
+        snapshot=capture(journal,'a'*64)
     (directory/'snapshot.json').write_bytes(snapshot.wire)
 print('STREAM_CHECKPOINT_API_FIXTURE_PASS')

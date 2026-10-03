@@ -34,11 +34,14 @@ public class RuntimeLifecycleService {
     private final VDTaskRepository vdTasks;
     private final boolean vdEnabled;
     private final int dispatchSeconds;
+    private final StreamExecutionRepository streamExecutions;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch,
-            VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds) {
+            VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds,
+            StreamExecutionRepository streamExecutions) {
         this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.remotes=remotes;this.clock=clock;this.autoDispatch=autoDispatch;
         this.vds=vds;this.vdRuntimes=vdRuntimes;this.vdTasks=vdTasks;this.vdEnabled=vdEnabled;this.dispatchSeconds=dispatchSeconds;
+        this.streamExecutions=streamExecutions;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
@@ -275,8 +278,12 @@ public class RuntimeLifecycleService {
         var c=lock(attemptId);var r=runtime(attemptId);String digest=digest(manifest);
         var replay=replay(r,epoch,podUid,null,digest);
         if(replay!=null)return new CommitPermit(r,manifest,digest,replay);
-        producer(c,r,epoch,podUid);validateManifest(spec(c),manifest);
+        producer(c,r,epoch,podUid);requireStreamGrant(c);validateManifest(spec(c),manifest);
         return new CommitPermit(r,manifest,digest,null);
+    }
+    private void requireStreamGrant(Context context) {
+        if(spec(context).stream()!=null && streamExecutions.task(context.attempt().id()).filter(t->t.grantedAt()!=null).isEmpty())
+            throw error(409,"STREAM_COMPLETION_REQUIRED","연결된 모든 스트림 참여자의 종료 확인 후 결과를 확정할 수 있습니다.");
     }
     @Transactional
     public CommitPermit prepareRemoteCommit(UUID attemptId,long epoch,UUID allocationId,ResultManifest manifest) {
@@ -291,6 +298,7 @@ public class RuntimeLifecycleService {
         var replay=replay(r,permit.runtime().epoch(),permit.runtime().producerPodUid(),permit.runtime().remoteAllocationId(),permit.digest());
         if(replay!=null)return new Creation<>(replay,false);
         producer(c,r,permit.runtime().epoch(),permit.runtime().producerPodUid(),permit.runtime().remoteAllocationId());
+        requireStreamGrant(c);
         validateManifest(spec(c),permit.manifest());
         if(r.remote())validateRemoteManifest(r,permit.manifest());
         if(!digest(permit.manifest()).equals(permit.digest()) || verified.size()!=permit.manifest().outputs().size())throw new IllegalArgumentException("Invalid verification receipt");

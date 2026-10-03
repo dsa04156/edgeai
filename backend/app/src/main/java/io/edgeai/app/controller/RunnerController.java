@@ -33,6 +33,14 @@ public class RunnerController {
         return response(200,bindings.runner(principal,body));
     }
     @PostMapping("/claim") public ResponseEntity<String> claim(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,service.claim(principal,body));}
+    @PostMapping("/streams/execution") public ResponseEntity<String> streamExecution(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
+        var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
+        return response(200,bindings.execution(principal,body));
+    }
+    @PostMapping("/streams/complete") public ResponseEntity<String> streamComplete(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
+        var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
+        return response(200,bindings.complete(principal,body));
+    }
     @PostMapping("/streams/heartbeat") public ResponseEntity<String> heartbeat(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
         var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
         return response(200,bindings.runnerHeartbeat(principal,body));

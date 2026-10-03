@@ -10,6 +10,10 @@ security:
 - runnerClaim: []
   podIdentity: []
 paths:
+  /internal/v1/attempts/{attemptId}/streams/execution:
+    $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1execution
+  /internal/v1/attempts/{attemptId}/streams/complete:
+    $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1complete
   /internal/v1/attempts/{attemptId}/streams/checkpoints/uploads:
     $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1checkpoints~1uploads
   /internal/v1/attempts/{attemptId}/streams/checkpoints/commit:

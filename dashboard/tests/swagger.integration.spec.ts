@@ -48,9 +48,12 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   expect((await response.json()).key).toBe(key);
   expect((await page.request.get(`${api}/api/v1/profiles/DEVICE/${key}/versions/1.0.0`)).status()).toBe(200);
   await page.goto(`${api}/swagger-ui/index.html?contract=streams`);
-  await expect(page.locator(".opblock")).toHaveCount(8);
+  await expect(page.locator(".opblock")).toHaveCount(11);
   expect(await (await page.request.get(`${api}/stream-openapi.yaml`)).text()).toBe(await readFile("../contracts/openapi/stream-api.yaml", "utf8"));
   const checkpoints = [
+    ["assignStreamExecution", "현재 Runner의 스트림 실행 포트와 복원 방식 조회", "경로 구성을 고정"],
+    ["completeRunnerStream", "Runner의 최종 체크포인트를 보고하고 공동 완료 허가 조회", "마지막 처리 확인"],
+    ["completeDeviceStream", "Device의 마지막 처리 확인을 보고하고 공동 완료 허가 조회", "동일 현재 Device 세션"],
     ["uploadStreamCheckpoint", "현재 Runner 체크포인트의 S3 업로드 권한 요청", "PUT 성공만으로"],
     ["commitStreamCheckpoint", "S3 파일을 검증하고 체크포인트를 원자적으로 확정", "입력·출력 위치"],
     ["latestStreamCheckpoint", "현재 Task의 최신 확정 체크포인트와 다운로드 권한 조회", "고정 S3 version"],

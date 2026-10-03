@@ -19,17 +19,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class DataRouteService {
     private final DataRouteRepository routes;private final ExecutionRepository executions;private final WorkflowRepository workflows;
     private final DeviceRepository devices;private final VirtualDeviceRepository vds;private final ProfileRepository profiles;private final Clock clock;
+    private final StreamExecutionRepository streamExecutions;
     private final JsonDocuments json=new JsonDocuments();
     public DataRouteService(DataRouteRepository routes,ExecutionRepository executions,WorkflowRepository workflows,DeviceRepository devices,
-            VirtualDeviceRepository vds,ProfileRepository profiles,Clock clock){
+            VirtualDeviceRepository vds,ProfileRepository profiles,Clock clock,StreamExecutionRepository streamExecutions){
         this.routes=routes;this.executions=executions;this.workflows=workflows;this.devices=devices;this.vds=vds;this.profiles=profiles;this.clock=clock;
+        this.streamExecutions=streamExecutions;
     }
     @Transactional
     public DataRoute fromTask(UUID runId,UUID producerTask,String producerPort,UUID consumerTask,String consumerPort,int maxPayloadBytes){
         var run=lockRun(runId,null);activeRun(run);
         var source=definition(run,producerTask);var target=definition(run,consumerTask);
-        var sourcePort=spec(source.serviceProfileVersionId()).outputs().get(producerPort);
-        var input=spec(target.serviceProfileVersionId()).inputs().get(consumerPort);
+        var sourcePort=output(spec(source.serviceProfileVersionId()),producerPort);
+        var input=input(spec(target.serviceProfileVersionId()),consumerPort);
         if(sourcePort==null || input==null || !sourcePort.mediaType().equals(input.mediaType())
             || maxPayloadBytes>sourcePort.maxBytes() || maxPayloadBytes>input.maxBytes())throw new IllegalArgumentException("Incompatible stream ports");
         var dag=WorkflowInput.storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson());
@@ -43,7 +45,7 @@ public class DataRouteService {
     public DataRoute fromDevice(UUID runId,UUID deviceId,String producerPort,UUID consumerTask,String consumerPort,int maxPayloadBytes){
         var run=lockRun(runId,deviceId);activeRun(run);var device=devices.find(deviceId,false).orElseThrow();
         if(device.state()!=Device.State.ACTIVE)throw conflict("STREAM_SOURCE_INACTIVE");
-        var target=definition(run,consumerTask);var input=spec(target.serviceProfileVersionId()).inputs().get(consumerPort);
+        var target=definition(run,consumerTask);var input=input(spec(target.serviceProfileVersionId()),consumerPort);
         if(input==null || maxPayloadBytes>input.maxBytes())throw new IllegalArgumentException("Invalid stream input budget");
         var dag=WorkflowInput.storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson());
         if(dag.dependencies().stream().anyMatch(e->e.toTask().equals(target.key()) && e.toPort().equals(consumerPort)))
@@ -58,6 +60,7 @@ public class DataRouteService {
                 next.sourceMode(),next.sourcePort(),next.consumerTaskId(),next.consumerPort(),next.mediaType(),next.maxPayloadBytes(),r.createdAt());
             if(!r.equals(same))throw conflict("STREAM_INPUT_BOUND");return r;
         }
+        if(streamExecutions.bindingDigest(next.runId()).isPresent())throw conflict("STREAM_MEMBERSHIP_FROZEN");
         routes.create(next);return routes.route(next.id(),false).orElseThrow();
     }
     @Transactional
@@ -70,6 +73,8 @@ public class DataRouteService {
             if(!old.get().routeId().equals(routeId) || !old.get().requestDigest().equals(requestDigest))throw conflict("STREAM_REQUEST_CONFLICT");return old.get();
         }
         if(routes.open(routeId).isPresent())throw conflict("STREAM_REVOCATION_PENDING");
+        if(streamExecutions.task(consumer.id()).isPresent() || !route.deviceSource() && streamExecutions.task(producer.id()).isPresent())
+            throw conflict("STREAM_EXECUTION_TERMINAL");
         String reason=invalid(route,producer,consumer,false);if(reason!=null)throw conflict(reason);
         long number=Math.addExact(routes.lastGeneration(routeId),1);var now=now();
         String policy=json.digest("edgeai-stream-policy-v1",Map.of("requestDigest",requestDigest,"generation",number,"generationId",requestId.toString(),
@@ -193,6 +198,15 @@ public class DataRouteService {
         return workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
     }
     private ServiceExecutionSpec spec(UUID profile){return ServiceExecutionInput.parseSpec(profiles.find(profile).orElseThrow().specJson());}
+    // Historical internal component fixtures used file ports; executable STREAM specs use only live ports.
+    private static ServiceExecutionSpec.InputPort input(ServiceExecutionSpec spec,String name) {
+        if(spec.stream()==null)return spec.inputs().get(name);
+        var port=spec.stream().inputs().get(name);return port==null?null:new ServiceExecutionSpec.InputPort(port.mediaType(),port.maxPayloadBytes(),true);
+    }
+    private static ServiceExecutionSpec.OutputPort output(ServiceExecutionSpec spec,String name) {
+        if(spec.stream()==null)return spec.outputs().get(name);
+        var port=spec.stream().outputs().get(name);return port==null?null:new ServiceExecutionSpec.OutputPort(port.mediaType(),port.maxPayloadBytes());
+    }
     private static void activeRun(WorkflowRun run){if(!Set.of("PENDING","RUNNING").contains(run.state()))throw conflict("STREAM_RUN_INACTIVE");}
     private static void verifyReceipt(RouteGeneration g,BrokerReceipt receipt){if(!g.matches(receipt))throw conflict("STREAM_BROKER_MISMATCH");}
     private static void ttl(int seconds){if(seconds<5 || seconds>120)throw new IllegalArgumentException("Stream lease must be 5–120 seconds");}

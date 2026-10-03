@@ -2,11 +2,142 @@ openapi: 3.1.0
 info:
   title: EdgeAI authenticated stream bindings
   version: 0.1.0
-  description: M7 내부 배정·생존 확인·체크포인트 확정 계약. MQTT 비밀번호/세션 토큰·서명 URL은 로그·일반 metadata에 저장하지 않는다. SDK는
+  description: M7 내부 배정·생존 확인·체크포인트·공동 완료 계약. MQTT 비밀번호/세션 토큰·서명 URL은 로그·일반 metadata에 저장하지 않는다. SDK는
     monotonic 기한을 적용한다. 공개 STREAM 실행은 후속 연결이다.
 servers:
 - url: /
 paths:
+  /internal/v1/attempts/{attemptId}/streams/execution:
+    post:
+      operationId: assignStreamExecution
+      summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
+      description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
+        반환하고, 아직 준비 중이면 WAITING을 반환한다. recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
+        연장하지 않는다. 공개 STREAM Run 생성은 아직 비활성이다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StreamExecutionRequest'
+      responses:
+        '200':
+          description: '배정 또는 공동 완료 상태. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamExecutionResponse'
+        '400':
+          description: 본문 필드·형식·순번 오류
+        '401':
+          description: 현재 Attempt/Pod 또는 Device 세션 인증 실패
+        '409':
+          description: 현재 주체·세대·기한·체크포인트·종료 순번 불일치 또는 취소
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 내부 실행 기능 비활성
+        '503':
+          description: DB 또는 Kubernetes 인증 일시 장애
+  /internal/v1/attempts/{attemptId}/streams/complete:
+    post:
+      operationId: completeRunnerStream
+      summary: Runner의 최종 체크포인트를 보고하고 공동 완료 허가 조회
+      description: 모든 입력·출력의 END와 마지막 처리 확인이 확정된 최신 체크포인트를 보고한다. 연결된 모든 Task와 Device가 종료를 확인하고 경로별 순번이 일치하면 같은 트랜잭션에서
+        FINALIZE를 기록한다. WAITING 동안 heartbeat와 세션을 유지한다. FINALIZE 뒤에만 최종 파일 결과를 확정할 수 있다. 같은 checkpointId 재요청은 멱등이고,
+        다른 작업이 이미 결과를 확정해 경로가 닫혀도 현재 실행 주체는 허가를 다시 읽을 수 있다. 취소·교체·기한 만료는 성공으로 바뀌지 않는다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StreamCompletionRequest'
+      responses:
+        '200':
+          description: '배정 또는 공동 완료 상태. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamCompletionResponse'
+        '400':
+          description: 본문 필드·형식·순번 오류
+        '401':
+          description: 현재 Attempt/Pod 또는 Device 세션 인증 실패
+        '409':
+          description: 현재 주체·세대·기한·체크포인트·종료 순번 불일치 또는 취소
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 내부 실행 기능 비활성
+        '503':
+          description: DB 또는 Kubernetes 인증 일시 장애
+  /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/complete:
+    post:
+      operationId: completeDeviceStream
+      summary: Device의 마지막 처리 확인을 보고하고 공동 완료 허가 조회
+      description: Device가 END에 대한 마지막 처리 확인을 받은 뒤 해당 generationId와 순번을 보고한다. 서버는 소비 작업의 확정 체크포인트와 순번을 대조한다. 연결된
+        모든 참여자가 준비될 때까지 WAITING이며 heartbeat를 유지해야 한다. FINALIZE는 해당 세대·순번에 영속 저장된다. 동일 현재 Device 세션은 경로가 닫히거나 Run이
+        성공한 뒤에도 같은 허가를 재조회할 수 있다. 세션 교체·Run 취소 또는 다른 순번은 거절한다.
+      security:
+      - deviceSession: []
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCompletionRequest'
+      responses:
+        '200':
+          description: '배정 또는 공동 완료 상태. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCompletionResponse'
+        '400':
+          description: 본문 필드·형식·순번 오류
+        '401':
+          description: 현재 Attempt/Pod 또는 Device 세션 인증 실패
+        '409':
+          description: 현재 주체·세대·기한·체크포인트·종료 순번 불일치 또는 취소
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 내부 실행 기능 비활성
+        '503':
+          description: DB 또는 Kubernetes 인증 일시 장애
   /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams:
     post:
       operationId: bindDeviceStream
@@ -347,6 +478,155 @@ components:
       in: header
       name: X-EdgeAI-Pod-Token
   schemas:
+    StreamExecutionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        podUid:
+          type: string
+          format: uuid
+      required:
+      - epoch
+      - podUid
+    StreamExecutionResponse:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          state:
+            const: WAITING
+        required:
+        - state
+      - type: object
+        additionalProperties: false
+        properties:
+          state:
+            const: READY
+          runId:
+            type: string
+            format: uuid
+          taskId:
+            type: string
+            format: uuid
+          attemptId:
+            type: string
+            format: uuid
+          epoch:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+          inputs:
+            type: object
+            minProperties: 1
+            maxProperties: 16
+            propertyNames:
+              maxLength: 100
+              pattern: ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$
+            additionalProperties:
+              type: string
+              format: uuid
+          outputs:
+            type: object
+            maxProperties: 16
+            propertyNames:
+              maxLength: 100
+              pattern: ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$
+            additionalProperties:
+              type: array
+              minItems: 1
+              maxItems: 16
+              uniqueItems: true
+              items:
+                type: string
+                format: uuid
+          recovery:
+            enum:
+            - NEW
+            - RESTORE
+            - HANDOVER
+        required:
+        - state
+        - runId
+        - taskId
+        - attemptId
+        - epoch
+        - inputs
+        - outputs
+        - recovery
+    StreamCompletionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        podUid:
+          type: string
+          format: uuid
+        checkpointId:
+          type: string
+          format: uuid
+      required:
+      - epoch
+      - podUid
+      - checkpointId
+    StreamCompletionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum:
+          - WAITING
+          - FINALIZE
+        checkpointId:
+          type: string
+          format: uuid
+      required:
+      - state
+      - checkpointId
+    DeviceCompletionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        generationId:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+      required:
+      - epoch
+      - generationId
+      - sequence
+    DeviceCompletionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum:
+          - WAITING
+          - FINALIZE
+        generationId:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+      required:
+      - state
+      - generationId
+      - sequence
     CheckpointCounter:
       type: integer
       minimum: 0

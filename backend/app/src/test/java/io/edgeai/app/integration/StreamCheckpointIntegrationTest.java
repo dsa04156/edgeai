@@ -2,6 +2,8 @@ package io.edgeai.app.integration;
 
 import io.edgeai.adapters.storage.S3ArtifactStore;
 import io.edgeai.app.config.RunnerPrincipal;
+import io.edgeai.app.config.DeviceStreamPrincipal;
+import io.edgeai.domain.execution.*;
 import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.app.service.*;
 import io.edgeai.app.support.JsonDocuments;
@@ -49,6 +51,8 @@ class StreamCheckpointIntegrationTest {
     }
     @Autowired ProfileService profiles;@Autowired WorkflowService workflows;@Autowired ExecutionService runs;@Autowired DeviceService devices;
     @Autowired RuntimeRepository runtimes;@Autowired RuntimeLifecycleService lifecycle;@Autowired RunnerTokenService tokens;
+    @Autowired StreamExecutionRepository streamExecutions;
+    @Autowired StreamExecutionService streamExecution;
     @Autowired DataRouteService routes;@Autowired DataRouteRepository routeStore;@Autowired StreamCheckpointRepository checkpoints;
     @Autowired ExecutionRepository executions;@Autowired WorkflowRepository definitions;@Autowired PlatformTransactionManager transactions;
     @Autowired S3ArtifactStore storage;@Autowired StreamCheckpointService service;@Autowired JdbcTemplate jdbc;
@@ -65,15 +69,26 @@ class StreamCheckpointIntegrationTest {
     @AfterEach void cleanup(){for(var id:runIds)runs.cancelRun(id,"{}");}
     @AfterAll static void stop()throws Exception{STORAGE.close();}
     private Execution execution()throws Exception {return execution(false);}
-    @SuppressWarnings("unchecked") private Execution execution(boolean retry)throws Exception {
-        var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
-        spec.put("inputs",Map.of("a",Map.of("mediaType","application/json","maxBytes",4096,"required",false),"b",Map.of("mediaType","application/json","maxBytes",4096,"required",false)));
+    private Execution execution(boolean retry)throws Exception{return execution(retry,false);}
+    @SuppressWarnings("unchecked") private Execution execution(boolean retry,boolean streaming)throws Exception {
+        var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/"+(streaming?"service-stream.example.json":"service-execution.example.json"))));
+        if(streaming)((Map<String,Object>)spec.get("stream")).put("outputs",Map.of());
+        else spec.put("inputs",Map.of("a",Map.of("mediaType","application/json","maxBytes",4096,"required",false),"b",Map.of("mediaType","application/json","maxBytes",4096,"required",false)));
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key","checkpoint-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
         var workflow=workflows.create(json.canonical(Map.of("key","checkpoint-"+UUID.randomUUID(),"displayName","Checkpoint fixture"))).value();
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",List.of(Map.of("key","sum","serviceProfileVersionId",profile.id().toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
         var input=new TreeMap<String,Object>(Map.of("workflowVersionId",version.id().toString(),"parameters",Map.of(),"execution",Map.of("mode","AUTO")));
         if(retry)input.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",600,"retryOn",List.of("WORKLOAD_FAILED")));
-        var run=runs.create(UUID.randomUUID().toString(),json.canonical(input)).value();runIds.add(run.id());
+        WorkflowRun run;
+        if(streaming){
+            // Public STREAM remains disabled; seed only its already-running Pod boundary.
+            var now=Instant.now();run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("stream-checkpoint-fixture",input),"AUTO",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now);
+            new TransactionTemplate(transactions).execute(s->{executions.create(run);executions.initialize(run,definitions.definitions(version.id()),Set.of("sum"));
+                var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
+                runtimes.create(new RuntimeInstance(UUID.randomUUID(),attempt.id(),task.id(),run.id(),1,"checkpoint-api-"+STORAGE.id,"edgeai-"+attempt.id(),UUID.randomUUID(),
+                    "RUNNING","PENDING",null,null,null,null,null,null,now,now));return null;});
+        }else run=runs.create(UUID.randomUUID().toString(),json.canonical(input)).value();
+        runIds.add(run.id());
         var task=runs.detail(run.id()).tasks().getFirst();var attempt=runs.taskDetail(task.id()).attempts().getFirst();
         var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(attempt.id(),pod);
         lifecycle.submitted(attempt.id(),pod.jobUid());lifecycle.claim(attempt.id(),1,pod);
@@ -90,11 +105,12 @@ class StreamCheckpointIntegrationTest {
         return new Execution(run.id(),task.id(),attempt.id(),pod,List.copyOf(permissions));
     }
     private byte[] snapshot(Execution e)throws Exception {return snapshot(e,false);}
-    private byte[] snapshot(Execution e,boolean advance)throws Exception {
+    private byte[] snapshot(Execution e,boolean advance)throws Exception{return snapshot(e,advance,false);}
+    private byte[] snapshot(Execution e,boolean advance,boolean terminal)throws Exception {
         var folder=Files.createTempDirectory(directory,"snapshot-");
         var bindings=e.permissions().stream().map(p->Map.of("routeId",p.route().id().toString(),"generation",p.generation().generation(),"producer",
             Map.of("kind","DEVICE_SESSION","deviceId",p.route().sourceDeviceId().toString(),"sessionId",p.generation().producer().id().toString(),"epoch",p.generation().producer().epoch()))).toList();
-        Files.writeString(folder.resolve("request.json"),json.canonical(Map.of("bindings",bindings,"advance",advance)));
+        Files.writeString(folder.resolve("request.json"),json.canonical(Map.of("bindings",bindings,"advance",advance,"terminal",terminal)));
         var child=new ProcessBuilder("python3",Path.of("src/test/fixtures/stream_checkpoint_api_probe.py").toAbsolutePath().toString(),folder.toString()).redirectErrorStream(true).start();
         try{
             assertThat(child.waitFor(10,TimeUnit.SECONDS)).isTrue();assertThat(child.exitValue()).isZero();
@@ -162,6 +178,28 @@ class StreamCheckpointIntegrationTest {
             permissions.add(new Permission(p.route(),next));
         }
         return new Execution(source.run(),source.task(),attempt,pod,List.copyOf(permissions));
+    }
+    @Test void actualSdkTerminalSnapshotAndVerifiedS3CommitGateComponentCompletion()throws Exception {
+        var e=execution(false,true);var principal=principal(e);String identity=json.canonical(body(e));
+        assertThat(((Map<?,?>)streamExecution.execution(principal,identity)).get("state")).isEqualTo("READY");
+        var initial=seal(e);var report=body(e);report.put("checkpointId",initial.id().toString());
+        assertThatThrownBy(()->streamExecution.complete(principal,json.canonical(report))).isInstanceOfSatisfying(ControlPlaneException.class,x->assertThat(x.code()).isEqualTo("STREAM_END_NOT_CONFIRMED"));
+        byte[] bytes=snapshot(e,false,true);var q=request(e,bytes,initial.id());String version=upload(e,q,bytes);
+        assertThat(send(e,"commit",commitBody(e,q,version)).status()).isEqualTo(201);var sealed=checkpoints.latest(e.task()).orElseThrow();
+        assertThat(sealed.artifact().versionId()).isEqualTo(version);assertThat(sealed.artifact().sha256()).isEqualTo(sha(bytes));
+        report.put("checkpointId",sealed.id().toString());assertThat(((Map<?,?>)streamExecution.complete(principal,json.canonical(report))).get("state")).isEqualTo("WAITING");
+        var manifest=new ResultManifest(List.of(new ResultManifest.Output("result",9,"a".repeat(64),"application/json","unused-preparation-version")));
+        assertThatThrownBy(()->lifecycle.prepareCommit(e.attempt(),1,e.pod().podUid(),manifest)).isInstanceOfSatisfying(ControlPlaneException.class,x->assertThat(x.code()).isEqualTo("STREAM_COMPLETION_REQUIRED"));
+        byte[] later=snapshot(e,true,true);var uploadBody=body(e);uploadBody.put("checkpoint",request(e,later,sealed.id()));
+        var denied=send(e,"uploads",uploadBody);assertThat(denied.status()).isEqualTo(409);assertThat(denied.body().get("code")).isEqualTo("STREAM_CHECKPOINT_TERMINAL");
+        assertThat(send(e,"commit",commitBody(e,q,version)).status()).isEqualTo(200);
+        for(int i=0;i<e.permissions().size();i++){
+            var p=e.permissions().get(i);var g=p.generation();var device=new DeviceStreamPrincipal(p.route().sourceDeviceId(),g.producer().id(),g.producer().epoch());
+            var response=(Map<?,?>)streamExecution.deviceComplete(device,json.canonical(Map.of("epoch",device.epoch(),"generationId",g.id().toString(),"sequence",2)));
+            assertThat(response.get("state")).isEqualTo(i==0?"WAITING":"FINALIZE");
+        }
+        assertThat(((Map<?,?>)streamExecution.complete(principal,json.canonical(report))).get("state")).isEqualTo("FINALIZE");
+        assertThat(lifecycle.prepareCommit(e.attempt(),1,e.pod().podUid(),manifest).runtime().attemptId()).isEqualTo(e.attempt());
     }
     @Test void newAttemptReceivesServerReboundSnapshotAndActualPythonContinuesFromNineToFourteen()throws Exception{
         var source=execution(true);var original=seal(source);var next=transition(source,true);
@@ -251,7 +289,7 @@ class StreamCheckpointIntegrationTest {
             }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}}
             public String uploadFile(ArtifactContent c,Path p){return storage.uploadFile(c,p);}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore,streamExecutions);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.handover(principal(next),json.canonical(handoverBody(next))));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(next.run(),"{}");}finally{release.countDown();}
@@ -271,7 +309,7 @@ class StreamCheckpointIntegrationTest {
             var downloaded=client.send(HttpRequest.newBuilder(URI.create((String)grant.get("url"))).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             assertThat(downloaded.statusCode()).isEqualTo(200);assertThat(downloaded.body()).isEqualTo(bytes);
         }
-        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore);
+        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions);
         assertThat(recreated.commit(principal(e),commitBody(e,q,version)).value().id()).isEqualTo(stored.id());
         assertThat(checkpoints.latest(e.task()).orElseThrow().summaryJson()).doesNotContain("\"stateBase64\"","\"frames\"");
     }
@@ -318,7 +356,9 @@ class StreamCheckpointIntegrationTest {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.stream_checkpoint WHERE task_id=?",Integer.class,e.task())).isEqualTo(1);
         var id=checkpoints.latest(e.task()).orElseThrow().id();
-        for(String sql:List.of("UPDATE edgeai.stream_checkpoint SET serial=serial+1 WHERE id='"+id+"'","DELETE FROM edgeai.stream_checkpoint WHERE id='"+id+"'","TRUNCATE edgeai.stream_checkpoint"))
+        // Include the referencing table so PostgreSQL reaches the immutable-history trigger,
+        // rather than its unsupported lone-table TRUNCATE guard (SQLSTATE 0A000).
+        for(String sql:List.of("UPDATE edgeai.stream_checkpoint SET serial=serial+1 WHERE id='"+id+"'","DELETE FROM edgeai.stream_checkpoint WHERE id='"+id+"'","TRUNCATE edgeai.stream_checkpoint,edgeai.stream_task_completion"))
             new TransactionTemplate(transactions).executeWithoutResult(s->{s.setRollbackOnly();assertThatThrownBy(()->jdbc.execute(sql)).isInstanceOf(org.springframework.dao.DataAccessException.class);});
         assertThat(checkpoints.latest(e.task()).orElseThrow().id()).isEqualTo(id);
     }
@@ -355,7 +395,7 @@ class StreamCheckpointIntegrationTest {
             public VerifiedArtifact verify(ArtifactContent c,String v){var verified=storage.verify(c,v);read.countDown();
                 try{if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("Fixture wait timed out");}catch(InterruptedException x){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}return verified;}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.commit(principal(e),commitBody(e,q,version)));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(e.run(),"{}");}finally{release.countDown();}

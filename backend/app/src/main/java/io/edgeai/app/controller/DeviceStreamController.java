@@ -20,6 +20,8 @@ public class DeviceStreamController {
     public ResponseEntity<String> binding(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().device(principal,body));}
     @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/heartbeat")
     public ResponseEntity<String> heartbeat(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().deviceHeartbeat(principal,body));}
+    @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/complete")
+    public ResponseEntity<String> complete(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().deviceComplete(principal,body));}
     private StreamBindingService service(){var service=bindings.getIfAvailable();if(service==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");return service;}
     private static ResponseEntity<String> response(Object value){return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).cacheControl(CacheControl.noStore()).body(new JsonDocuments().boundedCanonical(value,262144));}
 }

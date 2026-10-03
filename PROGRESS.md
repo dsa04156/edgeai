@@ -1,6 +1,18 @@
 # 진행 상태
 
 [STATUS]
+ADR0038/V24의 서버 실행 배정·경로 고정·Task/Device 구성 요소 공동 완료 허가를 구현했다.
+SERVICE live 포트와 모든 경로를 확인하며, 그룹 전체의 최신 END/처리 확인 순번이 일치해야
+Result를 확정할 수 있다. peer 완료/경로 회수 뒤의 허가 재조회·동시 보고·취소·불변 이력을 검증했다.
+새 실제 HTTP/PG9개, 전체 PG163개, 단위98개, 실제 SDK/HTTP/PG/S3 체크포인트14개와
+기존 Result/Remote/VD 포함 저장소30개·TLS broker23개·계약·PC/모바일/Swagger10개가 통과했다.
+내부 Swagger API는11개이며 V24도 프로젝트 DB 적용 후 불변으로 취급한다.
+상세: docs/evidence/m7-stream-execution-completion.md. 공개 STREAM501은 유지한다.
+DeviceSource 완료 대기·공개 route 생성/동시 시작·완료 허가 후 상태 복구·운영 TLS·UI·Kubernetes 수용은 남는다.
+선행5f0bae5 CI37103460164는5jobs/결과JSON17개·Runner컨테이너102개·MQTT58개·실제kind PASS다.
+GitOps c63dde0·071202Z-53439c81에서 정확한3개imageID·Ready·PVCBound·ArgoSynced·VD활성화를 확인했다.
+aggregate health는Progressing이며 이번 ADR0038 변경의 CI/배포 완료 근거와 구분한다.
+
 ADR0037 SERVICE stream 규격·CHECKPOINT 모드·파일/스트림 포트 분리와 Runner 실행 owner를 추가했다.
 최신 외부 checkpoint의 마지막 END/ACK와 서버의 해당 checkpoint 완료 허가 후 최종 파일을 생성한다.
 실제 Runner/model·HTTPS/TLS MQTT에서 결과14·볼륨 삭제 후9→14 복원·잘못된 허가/취소/실패를 검증했다.
