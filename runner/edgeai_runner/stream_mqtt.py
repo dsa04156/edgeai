@@ -19,6 +19,7 @@ from paho.mqtt.subscribeoptions import SubscribeOptions
 
 from edgeai_runner.stream_journal import Backpressure, JournalError, SequenceGap
 from edgeai_runner.stream_protocol import Acknowledgement, MAX_FRAME_BYTES, StreamProtocolError, decode, decode_ack
+from edgeai_runner.stream_assignment import Assignment, AssignmentError
 
 
 class MqttError(RuntimeError):
@@ -66,6 +67,12 @@ class Endpoint:
             if self.allow_plaintext_loopback is not True or not local:
                 raise MqttError('Verified MQTT TLS is required')
 
+    def credential(self):
+        return password(self.password_file)
+
+    def tls_context(self):
+        return ssl.create_default_context(cafile=self.ca_file) if self.ca_file is not None else None
+
 
 def topic(binding, channel):
     if channel not in ('frames', 'acks'):
@@ -92,7 +99,20 @@ def password(path):
 
 
 class Link:
-    def __init__(self, journal, endpoint, client_id):
+    @classmethod
+    def from_assignments(cls, journal, assignments):
+        if type(assignments) not in (list, tuple) or not 1 <= len(assignments) <= 32 or not all(type(a) is Assignment for a in assignments):
+            raise MqttError('Invalid stream assignments')
+        first = assignments[0]
+        if any(a.actor != first.actor or a.connection != first.connection for a in assignments):
+            raise MqttError('Stream assignments require one actor and broker connection')
+        inputs = {a.binding.route_id: a.binding for a in assignments if a.direction == 'CONSUMER'}
+        outputs = {a.binding.route_id: a.binding for a in assignments if a.direction == 'PRODUCER'}
+        if len(inputs) + len(outputs) != len(assignments) or inputs != journal.inputs or outputs != journal.outputs:
+            raise MqttError('Stream assignments do not match journal routes')
+        return cls(journal, first.connection, first.connection.client_id, assignments=assignments)
+
+    def __init__(self, journal, endpoint, client_id, *, assignments=()):
         if type(client_id) is not str or not 1 <= len(client_id) <= 128 or not all(c.isascii() and (c.isalnum() or c in '-_') for c in client_id):
             raise MqttError('Invalid MQTT client identifier')
         self.journal = journal
@@ -107,6 +127,11 @@ class Link:
         self._publish_at = 0
         self._socket_open = False
         self._connection_deadline = 0
+        self._assignments = {a.binding.route_id: a for a in assignments}
+        if self._assignments:
+            if journal.authority_guard is not None:
+                raise MqttError('Stream journal already has an authority owner')
+            self._check_authority()
         self._incoming = {topic(b, 'frames'): b for b in journal.inputs.values()}
         self._acks = {topic(b, 'acks'): b for b in journal.outputs.values()}
         self.client = _Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id, protocol=mqtt.MQTTv5,
@@ -114,15 +139,31 @@ class Link:
         self.client.connect_timeout = 3
         self.client.max_inflight_messages_set(16)
         self.client.max_queued_messages_set(32)
-        if endpoint.ca_file is not None:
-            self.client.tls_set_context(ssl.create_default_context(cafile=endpoint.ca_file))
+        context = endpoint.tls_context()
+        if context is not None:
+            self.client.tls_set_context(context)
         self.client.on_connect = self._connected
         self.client.on_disconnect = self._disconnected
         self.client.on_subscribe = self._subscribed
         self.client.on_message = self._message
         self.client.on_publish = self._published
+        if self._assignments:
+            journal.authority_guard = self._check_authority
+
+    def _check_authority(self):
+        if self.closed:
+            raise MqttError('MQTT link is closed')
+        try:
+            return min((a.remaining() for a in self._assignments.values()), default=120)
+        except AssignmentError:
+            # Close before asking Paho to disconnect, so queued writes cannot flush
+            # after expiry. This also fences commits through the attached journal.
+            if hasattr(self, 'client'):
+                self.close(force=True)
+            raise MqttError('Stream assignment expired') from None
 
     def _connected(self, client, userdata, flags, reason_code, properties):
+        self._check_authority()
         if reason_code.is_failure:
             self.error = MqttError('MQTT connection rejected')
             return
@@ -133,6 +174,7 @@ class Link:
             self.error = MqttError('MQTT subscription failed')
 
     def _subscribed(self, client, userdata, mid, reason_codes, properties):
+        self._check_authority()
         if any(code.is_failure for code in reason_codes):
             self.error = MqttError('MQTT subscription rejected')
         else:
@@ -150,11 +192,14 @@ class Link:
         # Broker acknowledgement deliberately does not touch the durable journal.
 
     def _message(self, client, userdata, message):
+        self._check_authority()
         try:
             if message.qos != 1 or message.retain:
                 raise StreamProtocolError('Invalid stream transport flags')
             if message.topic in self._incoming:
                 frame = self._incoming[message.topic].verify(decode(message.payload))
+                if self._assignments:
+                    self._assignments[frame.binding.route_id].verify_frame(frame)
                 self.journal.receive(frame)
             elif message.topic in self._acks:
                 ack = decode_ack(message.payload)
@@ -167,14 +212,16 @@ class Link:
             self.backpressured += 1
         except SequenceGap:
             self.gaps += 1
-        except (StreamProtocolError, JournalError):
+        except (StreamProtocolError, JournalError, AssignmentError):
             self.rejected += 1
         # Network ACK releases only broker/Paho memory. On a full queue or gap the
         # application's processing ACK remains unchanged, so the source replays.
         if message.qos == 1:
+            self._check_authority()
             client.ack(message.mid, message.qos)
 
     def _publish(self, channel, binding, payload):
+        self._check_authority()
         result = self.client.publish(topic(binding, channel), payload, qos=1, retain=False)
         if result.rc in (mqtt.MQTT_ERR_NO_CONN, mqtt.MQTT_ERR_CONN_LOST):
             self.ready = False
@@ -190,10 +237,14 @@ class Link:
             raise MqttError('Invalid MQTT polling timeout')
         if self.error is not None:
             raise self.error
+        remaining = self._check_authority()
+        timeout = min(timeout, remaining)
         if not self._socket_open:
             if time.monotonic() < self._retry_at:
                 return
-            self.client.username_pw_set(self.endpoint.username, password(self.endpoint.password_file))
+            if self._assignments and self.client.socket() is None:
+                self.client.connect_timeout = min(self.client.connect_timeout, remaining)
+            self.client.username_pw_set(self.endpoint.username, self.endpoint.credential())
             properties = Properties(PacketTypes.CONNECT)
             properties.ReceiveMaximum = 16
             properties.MaximumPacketSize = MAX_FRAME_BYTES + 1024
@@ -208,7 +259,9 @@ class Link:
             except OSError:
                 self._retry_at = time.monotonic() + 0.5
                 return
+        self._check_authority()
         rc = self.client.loop(timeout=timeout)
+        self._check_authority()
         if rc != mqtt.MQTT_ERR_SUCCESS:
             self.ready = False
             self._socket_open = False
@@ -221,17 +274,21 @@ class Link:
             self._retry_at = time.monotonic() + 0.5
         if self.ready and time.monotonic() >= self._publish_at:
             for frame in self.journal.outgoing(16):
+                if self._assignments:
+                    self._assignments[frame.binding.route_id].verify_frame(frame)
                 self._publish('frames', frame.binding, frame.encode())
             for identity, sequence in self.journal.checkpoint().input_sequences.items():
                 binding = self.journal.inputs[identity]
                 self._publish('acks', binding, Acknowledgement(binding, sequence).encode())
             self._publish_at = time.monotonic() + 0.25
 
-    def close(self):
+    def close(self, *, force=False):
         if not self.closed:
             self.closed = True
             self.ready = False
             try:
+                if force and self.client.socket() is not None:
+                    self.client.socket().close()
                 self.client.disconnect()
             finally:
                 # A blocked nonblocking DISCONNECT write must not keep the socket open.

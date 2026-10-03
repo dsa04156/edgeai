@@ -109,7 +109,8 @@ CPU/GPU 자원을 각 작업에 독점 할당하거나 서로 신뢰하지 않�
 [처리 확인](../contracts/streams/ack.schema.json)을 검증한다. `stream_journal`은 제한된 로컬
 SQLite에 입력·계산 상태·출력을 원자 저장한다. `stream_mqtt`는 고정 Paho MQTT2.1.0을 사용하며
 실제 MQTT5 전달·경로별 ACL·TLS·재연결을 담당한다. 제어 서버의 인증된 binding과 broker ACL
-설정이 전제다. 계정 생성·DataRoute API·공개 STREAM Run·Runner workload 연결은 아직 미구현이다.
+설정이 전제다. 서버의 권한 worker·인증 배정은 별도로 구현했고 공개 STREAM Run·Runner workload
+연결은 아직 미구현이다.
 
 ```bash
 python3 -m venv .tools/stream-venv
@@ -122,7 +123,16 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
 시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
 종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
 
-`test-runner.sh`의50개에는 codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
-MQTT 통합은 별도9개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
+`test-runner.sh`의58개에는 SDK8개·codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
+MQTT 통합은 별도13개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
 다르며 후자는 아직 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
 [실제 검증 기록](../docs/evidence/m7-stream-transport.md).
+
+`stream_assignment.BindingClient`는 검증된 HTTPS API에서 Device/Runner 배정을 조회한다.
+응답의 전체 주체·generation·topic·payload 규격을 확인하고 MQTT 자격은 메모리에만 유지한다.
+`Link.from_assignments(journal, assignments)`로 journal의 정확한 모든 경로를 연결해야 한다.
+step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을 검사해 만료한 socket을 닫고 쓰기를 거절하며,
+트랜잭션 도중 만료되면 전체 변경을 롤백한다. 이 조회는 lease를 연장하지 않는다.
+기존 저수준 `Link(journal, endpoint, client_id)`에는 인증 배정/lease 계약이 없으므로 운영 스트림
+실행의 대체 경로로 사용하지 않는다. 실제 Runner 프로세스 종료·lease 갱신은 후속 통합이다.
+[설계](../docs/adr/0027-stream-client-lease.md), [검증과 fixture 경계](../docs/evidence/m7-stream-client.md).

@@ -152,3 +152,7 @@ TLS/timeout/소켓 정리를 실제 연결로 검증했다. DB worker와 공개 
 [인증 배정](m7-stream-bindings.md): 현재 Device 세션 토큰·Runner/Pod 인증 경계를 실제 HTTP/DB/TLS
 broker로 검증하고 관리40개/스트림2개 Swagger를 연결했다. Pod 신원은 fixture이며 SDK lease·실제
 Runner/공개 STREAM·다중 장치 수용은 남는다.
+
+[SDK 배정·lease](m7-stream-client.md): 실제 HTTPS 계약 fixture→TLS MQTT·현재 주체/세대 검증,
+socket 만료·journal commit 전후 guard/rollback을 확인했다. 실제 Spring→Python→Kubernetes,
+lease 갱신·계산 프로세스 종료와 공개 STREAM 실행은 후속이다.

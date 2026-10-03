@@ -17,6 +17,9 @@ from edgeai_runner.stream_journal import Backpressure, Emission, Journal, Limits
 from edgeai_runner.stream_mqtt import Endpoint, Link, MqttError, topic
 from edgeai_runner.stream_protocol import Frame
 from test_stream_journal import A, B, OUT, data
+from test_stream_assignment import DiscoveryFixture, GENERATION, POD, document
+from edgeai_runner.stream_assignment import Assignment, AssignmentError, BindingClient
+import json
 
 
 def eventually(action, condition, seconds=8):
@@ -176,6 +179,81 @@ class StreamMqttTest(unittest.TestCase):
         eventually(self.pump, lambda: all(not j.outgoing() for j in self.journals.values()))
         self.assertEqual(b'9', sink.checkpoint().state)
         self.assertEqual(frozenset([A.route_id, B.route_id]), processor.checkpoint().ended_inputs)
+
+    def assignment(self, actor, *, direction='PRODUCER', duration=30):
+        value=document(direction=direction,duration=duration,username=actor,
+                       secret=self.broker.credentials[actor].read_text())
+        value['mqtt'].update(host='localhost' if self.broker.ca else '127.0.0.1',port=self.broker.port,
+                             tls=self.broker.ca is not None,caPem=self.broker.ca.read_text() if self.broker.ca else '')
+        return value
+
+    def assigned_peer(self, actor, assignment):
+        journal=Journal(self.root/actor,[A] if assignment.direction=='CONSUMER' else [],
+                        [A] if assignment.direction=='PRODUCER' else [],Limits(max_frames=6),create=True)
+        self.journals[actor]=journal
+        link=Link.from_assignments(journal,[assignment]);self.links[actor]=link
+        return journal,link
+
+    def test_actual_https_discovery_to_tls_mqtt_keeps_credentials_out_of_journal(self):
+        self.broker.enable_tls()
+        api=DiscoveryFixture(self.assignment('source-a'),certificate=self.broker.ca,key=self.root/'server.key')
+        self.addCleanup(api.close)
+        claim=self.root/'api.claim';claim.write_text('fixture-bootstrap');claim.chmod(0o600)
+        client=BindingClient(api.url,A.producer,claim,ca_file=self.broker.ca)
+        with self.assertRaises(AssignmentError):BindingClient(api.url,A.producer,claim).fetch(GENERATION)
+        producer=client.fetch(GENERATION)
+        api.value=self.assignment('processor',direction='CONSUMER')
+        consumer=BindingClient(api.url,OUT.producer,claim,pod_uid=POD,pod_token_file=claim,ca_file=self.broker.ca).fetch(GENERATION)
+        source,_=self.assigned_peer('source-a',producer);sink,_=self.assigned_peer('processor',consumer)
+        self.ready();self.emit('source-a',A,b'7')
+        eventually(self.pump,lambda:len(sink.pending())==1)
+        self.assertEqual(b'7',sink.pending()[0].payload)
+        sink.commit(0,sink.pending(),b'7')
+        eventually(self.pump,lambda:not source.outgoing())
+        for actor,assignment in [('source-a',producer),('processor',consumer)]:
+            for file in (self.root/actor).iterdir():
+                self.assertTrue(assignment.connection.secret.encode() not in file.read_bytes())
+
+    def test_lease_expiry_closes_actual_socket_and_fences_journal_without_broker_revoke(self):
+        producer=Assignment.decode(json.dumps(self.assignment('source-a',duration=2)).encode(),A.producer,GENERATION,time.monotonic())
+        consumer=Assignment.decode(json.dumps(self.assignment('processor',direction='CONSUMER')).encode(),OUT.producer,GENERATION,time.monotonic())
+        source,link=self.assigned_peer('source-a',producer);sink,_=self.assigned_peer('processor',consumer)
+        self.ready();self.emit('source-a',A,b'4')
+        eventually(self.pump,lambda:len(sink.pending())==1)
+        revision=source.checkpoint().revision
+        while time.monotonic()<producer.deadline:time.sleep(.01)
+        with self.assertRaisesRegex(MqttError,'expired'):link.step()
+        self.assertTrue(link.closed)
+        self.assertTrue(link.client.socket() is None or link.client.socket().fileno()==-1)
+        with self.assertRaises(MqttError):self.emit('source-a',A,b'5')
+        self.assertEqual(revision,source.checkpoint().revision)
+        self.assertEqual(1,len(source.outgoing()))
+        self.assertEqual(1,len(sink.pending()))
+
+    def test_assignments_reject_foreign_routes_and_invalid_payload_before_delivery(self):
+        producer=Assignment.decode(json.dumps(self.assignment('source-a')).encode(),A.producer,GENERATION,time.monotonic())
+        source,link=self.assigned_peer('source-a',producer)
+        other=Journal(self.root/'foreign',[B],[],Limits(max_frames=6),create=True);self.addCleanup(other.close)
+        with self.assertRaises(MqttError):Link.from_assignments(other,[producer])
+        self.ready()
+        source.commit(0,[],b'',[Emission(A.route_id,b'x'*4097,'application/json')])
+        with self.assertRaises(AssignmentError):
+            eventually(self.pump,lambda:False)
+        self.assertEqual(1,len(source.outgoing()))
+
+    def test_expiry_during_sqlite_commit_rolls_back_state_and_output_together(self):
+        now=[100.0]
+        assignment=Assignment.decode(json.dumps(self.assignment('source-a')).encode(),A.producer,GENERATION,100.0,clock=lambda:now[0])
+        source,link=self.assigned_peer('source-a',assignment)
+        # Advance the monotonic test clock after SQLite has begun modifying the
+        # transaction, before the authority check immediately preceding COMMIT.
+        source.db.set_trace_callback(lambda sql:now.__setitem__(0,200.0) if sql.startswith('UPDATE checkpoint') else None)
+        with self.assertRaisesRegex(MqttError,'expired'):
+            source.commit(0,[],b'not-committed',[Emission(A.route_id,b'4','application/json')])
+        self.assertTrue(link.closed)
+        self.assertEqual(0,source.checkpoint().revision)
+        self.assertEqual(b'',source.checkpoint().state)
+        self.assertEqual((),source.outgoing())
 
     def test_consumer_reopen_before_processing_ack_does_not_repeat_checkpoint(self):
         source, _ = self.peer('source-a', [], [A])

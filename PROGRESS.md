@@ -10,7 +10,9 @@ ADR0025/V20 DB 권한 worker도 실제 Spring scheduler·응답 유실/새 worke
 실제 DB/TLS broker14개(20261002T230042Z-e4ac4863) 로컬 검증을 통과했다.
 ADR0026 인증 배정은 실제 HTTP/DB/TLS broker의 현재 세션 토큰·Runner/Pod 경계5개와
 기존 broker/worker14개를 로컬 검증했다. Pod 신원 확인은 이 시험에서 명시적 gateway fixture다.
-SDK의 lease 준수/갱신·운영 broker·Runner 스트림 workload·새 Pod checkpoint 복원 연결은 남아 있다.
+ADR0027 SDK snapshot 검증·monotonic 기한·MQTT socket 종료/journal rollback을 로컬 검증했다.
+실제 HTTPS 계약 fixture→TLS MQTT13개와 Runner58개를 통과했다. 실제 Spring→Python 종단,
+lease 갱신·계산 프로세스 종료·운영 broker·Runner 스트림 workload·새 Pod checkpoint 복원은 남아 있다.
 상세: docs/evidence/m7-stream-bindings.md 및 해당 문서의 선행 구성 요소 기록.
 717b5cd CI37067700149는5jobs/JSON16개·실제kind 통과. 후속 문서 커밋으로 배포pin은 갱신되지 않았다.
 후속224befe CI37071378244는5jobs/JSON16개·실제kind PASS. GitOps b742894와
@@ -19,7 +21,7 @@ broker adapter9d8f89b의 CI37074435731은5jobs/JSON17개·실제kind 모두 PASS
 GitOps aab300d/실제 imageID·Ready·PVC·ArgoSynced는20261002T232338Z-64c92ed7에서 PASS/0이다.
 worker cd61529 CI37077442217은5jobs/JSON17개·실제kind 모두 PASS다.
 GitOps2410f10의 실제 이미지/Ready/PVC/ArgoSynced는20261002T235701Z-9ed76739에서 PASS/0이다.
-인증 배정 최신 코드의 새 CI·배포 확인은 별도 후속이며 공개 STREAM501은 유지한다.
+인증 배정337abb3은 main에 push했고 CI37080508316이 진행 중이다. SDK 후속 코드의 새 CI·배포는 별도이며 공개 STREAM501은 유지한다.
 최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.
 실행 측정·자동 전환·Remote 참조 adapter와 RemoteAllocation/결과 연결은 CI·배포까지 검증했다. 전체 플랫폼은 PARTIAL이다.

@@ -20,6 +20,8 @@ MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/�
 자동 조정은 CI·배포까지 검증했습니다. 현재 Device 세션 토큰과 Runner/Pod 인증을 확인하는
 [스트림 배정 API](docs/evidence/m7-stream-bindings.md)를 실제 HTTP/DB/TLS broker로 로컬 검증했으며,
 SDK·Runner 처리 연결 전이므로 공개 STREAM은 아직501입니다.
+SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback도 [로컬 검증](docs/evidence/m7-stream-client.md)했습니다.
+실제 Runner 계산·lease 갱신·운영 broker·Spring→Python 종단 연결은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

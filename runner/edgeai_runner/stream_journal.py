@@ -86,6 +86,7 @@ class Journal:
         self.limits = limits
         self.db = None
         self.lock = None
+        self.authority_guard = None
         directory = Path(directory)
         if create:
             directory.mkdir(mode=0o700)
@@ -153,9 +154,13 @@ class Journal:
     @contextmanager
     def _transaction(self):
         require(self.db is not None, 'Stream journal is closed')
+        if self.authority_guard is not None:
+            self.authority_guard()
         self.db.execute('BEGIN IMMEDIATE')
         try:
             yield
+            if self.authority_guard is not None:
+                self.authority_guard()
             self.db.commit()
         except BaseException:
             if self.db.in_transaction:
