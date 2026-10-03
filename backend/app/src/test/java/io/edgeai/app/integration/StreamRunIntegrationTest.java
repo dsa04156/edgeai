@@ -56,6 +56,7 @@ class StreamRunIntegrationTest {
     @Autowired DeviceStreamTokenService deviceTokens;
     @Autowired WorkflowRepository workflowStore;
     @Autowired StreamExecutionService streamExecution;@Autowired StreamCheckpointRepository checkpoints;
+    @Autowired OffloadService offloads;@Autowired OffloadRepository offloadStore;@Autowired NodeService nodes;
     private final JsonDocuments json=new JsonDocuments();
     private record Definition(UUID version,List<Map<String,Object>> inputs,List<Device> devices){}
     private String encode(Object value){return json.canonical(value);}
@@ -150,7 +151,8 @@ class StreamRunIntegrationTest {
         for(int i=0;i<extra.length;i+=2)value.put((String)extra[i],extra[i+1]);return encode(value);
     }
     /** Checkpoint bytes/S3 receipt are fixtures here; actual signed-object finalization is tested separately. */
-    private Map<String,StreamCheckpoint> seal(UUID run){
+    private Map<String,StreamCheckpoint> seal(UUID run){return checkpoint(run,true);}
+    private Map<String,StreamCheckpoint> checkpoint(UUID run,boolean seal){
         for(var route:routes.forRun(run,20,0)){var g=routes.open(route.id()).orElseThrow();
             routeLifecycle.activate(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));}
         var source=principal(run,"source");streamExecution.execution(source,identity(source));
@@ -163,7 +165,7 @@ class StreamRunIntegrationTest {
                 Object producer=route.deviceSource()?Map.of("kind","DEVICE_SESSION","deviceId",route.sourceDeviceId().toString(),"sessionId",g.producer().id().toString(),"epoch",g.producer().epoch())
                     :Map.of("kind","TASK_ATTEMPT","attemptId",g.producer().id().toString(),"epoch",g.producer().epoch());
                 (t.id().equals(route.consumerTaskId())?inputs:outputs).add(Map.of("routeId",route.id().toString(),"generation",g.generation(),"producer",producer));
-                cursors.add(Map.of("routeId",route.id().toString(),"received",3,"committed",3,"ended",true));
+                cursors.add(Map.of("routeId",route.id().toString(),"received",3,"committed",3,"ended",seal));
             }
             var request=new StreamCheckpoint.Request(null,10,"d".repeat(64),100,"e".repeat(64),ids);var content=request.content(t.id(),p.attemptId());
             var profile=workflowStore.definitions(executions.run(run,false).orElseThrow().workflowVersionId()).stream().filter(d->d.id().equals(t.definitionId())).findFirst().orElseThrow().serviceProfileVersionId();
@@ -172,8 +174,9 @@ class StreamRunIntegrationTest {
             var cp=new StreamCheckpoint(UUID.randomUUID(),run,t.id(),p.attemptId(),r.id(),p.epoch(),p.podUid(),profile,request,3,summary,
                 new VerifiedArtifact("fixture-only",content.objectKey(),UUID.randomUUID().toString(),content.sha256(),content.bytes(),content.mediaType()),Instant.now(),null);
             new TransactionTemplate(transactions).execute(tx->{executions.run(run,true);checkpoints.insert(cp);return null;});
-            streamExecution.complete(p,identity(p,"checkpointId",cp.id().toString()));saved.put(name,cp);
+            if(seal)streamExecution.complete(p,identity(p,"checkpointId",cp.id().toString()));saved.put(name,cp);
         }
+        if(!seal)return saved;
         for(var pin:store.bindings(run)){var g=routes.open(pin.routeId()).orElseThrow();
             streamExecution.deviceComplete(new io.edgeai.app.config.DeviceStreamPrincipal(pin.deviceId(),pin.sessionId(),pin.epoch()),
                 encode(Map.of("epoch",pin.epoch(),"generationId",g.id().toString(),"sequence",3)));}
@@ -194,6 +197,123 @@ class StreamRunIntegrationTest {
             for(int i=0;i<4;i++){int index=i;futures.add(pool.submit(()->{start.await();return action.apply(index);}));}
             start.countDown();var result=new ArrayList<T>();for(var f:futures)result.add(f.get(15,TimeUnit.SECONDS));return result;
         }
+    }
+
+    private UUID targetNode(){var id=UUID.randomUUID();nodes.recordSnapshot(List.of(new io.edgeai.domain.node.ExecutionNode(
+        id,"transfer-"+id,"amd64","linux","READY","4","4Gi","{}",Instant.now())),Instant.now());return id;}
+    private String transferBody(UUID run,String name,UUID target){return encode(Map.of("sourceAttemptId",attempt(run,name).id().toString(),
+        "targetNodeId",target.toString(),"drainTimeoutSeconds",60,"startTimeoutSeconds",60));}
+    private OffloadOperation transfer(UUID run,UUID target){return offloads.request(task(run,"source").id(),UUID.randomUUID().toString(),transferBody(run,"source",target)).value();}
+    private void drainTransfer(UUID run,UUID operation){finishPhysical(run,"source");finishPhysical(run,"sink");revokeGroup(run);offloads.advance(operation);}
+    private void claimOn(UUID run,String name,UUID node){var a=attempt(run,name);var p=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),node,"transfer-"+node);
+        lifecycle.submitted(a.id(),p.jobUid());lifecycle.claim(a.id(),a.epoch(),p);}
+
+    @Test void publicStreamOffloadPinsWholeGroupAndWaitsForEveryStopRevocationAndClaim()throws Exception{
+        var run=create(definition(false,true));claim(run,"source");claim(run,"sink");streams.prepare(run);
+        var saved=checkpoint(run,false);var oldSource=principal(run,"source");var oldSink=attempt(run,"sink");var target=targetNode();
+        var body=transferBody(run,"source",target);String key=UUID.randomUUID().toString();
+        var response=(Map<?,?>)json.decode(perform(post("/api/v1/tasks/"+task(run,"source").id()+"/offload")
+            .header("Idempotency-Key",key).contentType("application/json").content(body),202));
+        UUID id=UUID.fromString((String)response.get("id"));assertThat((List<?>)response.get("members")).hasSize(2);
+        assertThat(offloads.find(id).members()).isEqualTo(offloads.request(task(run,"source").id(),key,body).value().members());
+        assertThat(parallel(i->offloads.request(task(run,"source").id(),key,body).value().id())).containsOnly(id);
+        assertThat(offloadStore.forTask(task(run,"sink").id())).extracting(OffloadOperation::id).containsExactly(id);
+        assertThat(offloads.find(id).members()).extracting(OffloadMember::checkpointId).containsExactlyInAnyOrderElementsOf(saved.values().stream().map(StreamCheckpoint::id).toList());
+        assertThatThrownBy(()->lifecycle.authorize(oldSource.attemptId(),oldSource.epoch(),oldSource.podUid())).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThatThrownBy(()->offloads.request(task(run,"sink").id(),UUID.randomUUID().toString(),transferBody(run,"sink",target))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        offloads.advance(id);finishPhysical(run,"source");offloads.advance(id);
+        assertThat(executions.attempts(task(run,"source").id())).hasSize(1);
+        finishPhysical(run,"sink");offloads.advance(id);assertThat(offloads.find(id).state()).isEqualTo("DRAINING");
+        revokeGroup(run);parallel(i->{offloads.advance(id);return true;});
+        var operation=offloads.find(id);assertThat(operation.state()).isEqualTo("STARTING");
+        assertThat(operation.members()).allMatch(m->m.targetAttemptId()!=null);
+        for(String name:List.of("source","sink")){
+            assertThat(executions.attempts(task(run,name).id())).hasSize(2);assertThat(attempt(run,name).cause()).isEqualTo("OFFLOAD");
+            assertThat(executions.retry(task(run,name).id())).isEmpty();
+        }
+        assertThat(attempt(run,"source").nodeId()).isEqualTo(target);
+        assertThat(attempt(run,"sink").mode()).isEqualTo(oldSink.mode());assertThat(attempt(run,"sink").nodeId()).isEqualTo(oldSink.nodeId());
+        claimOn(run,"source",target);assertThat(offloads.find(id).state()).isEqualTo("STARTING");
+        streams.prepare(run);assertThat(routes.forRun(run,20,0)).allMatch(r->routes.open(r.id()).isEmpty());
+        claim(run,"sink");assertThat(offloads.find(id).state()).isEqualTo("SUCCEEDED");
+        assertThat(streams.prepare(run)).isEmpty();assertThat(routes.forRun(run,20,0)).allMatch(r->routes.open(r.id()).orElseThrow().generation()==2);
+        assertThat(task(run,"child").state()).isEqualTo("WAITING");assertThat(task(run,"independent").state()).isEqualTo("RUNNING");
+        for(var cp:saved.values())assertThat(checkpoints.latest(cp.taskId()).orElseThrow().id()).isEqualTo(cp.id());
+    }
+    @Test void peerCancellationDuringStreamTransferWaitsForTheWholeGroupAndNeverRestartsIt()throws Exception{
+        for(boolean started:List.of(false,true)){
+            var run=create(definition(false,true));claim(run,"source");claim(run,"sink");streams.prepare(run);checkpoint(run,false);
+            var o=transfer(run,targetNode());if(started)drainTransfer(run,o.id());
+            runs.cancelTask(task(run,"sink").id(),"{}");offloads.advance(o.id());assertThat(offloads.find(o.id()).state()).isEqualTo("CANCELLING");
+            finishPhysical(run,"source");offloads.advance(o.id());assertThat(offloads.find(o.id()).state()).isEqualTo("CANCELLING");
+            finishPhysical(run,"sink");revokeGroup(run);offloads.advance(o.id());assertThat(offloads.find(o.id()).state()).isEqualTo("CANCELLED");
+            assertThat(task(run,"independent").state()).isEqualTo("RUNNING");
+            assertThat(executions.attempts(task(run,"source").id())).hasSize(started?2:1);assertThat(runtimes.result(task(run,"source").id())).isEmpty();
+        }
+    }
+    @Test void streamTransferTimeoutFencesClaimedPeerAndSkipsDependentsWithoutRestartingThem()throws Exception{
+        for(boolean started:List.of(false,true)){
+            var run=create(definition(false,true));claim(run,"source");claim(run,"sink");streams.prepare(run);checkpoint(run,false);
+            var target=targetNode();var o=transfer(run,target);
+            if(started){drainTransfer(run,o.id());claimOn(run,"source",target);}
+            jdbc.update("UPDATE edgeai.task_offload SET "+(started?"start_deadline":"drain_deadline")+"=now()-interval '1 second' WHERE id=?",o.id());
+            if(started)assertThatThrownBy(()->claim(run,"sink")).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+            offloads.advance(o.id());assertThat(offloads.find(o.id()).state()).isEqualTo("FAILED");
+            assertThat(offloads.find(o.id()).failureReason()).isEqualTo(started?"TARGET_START_TIMEOUT":"SOURCE_DRAIN_TIMEOUT");
+            assertThat(task(run,"source").state()).isEqualTo("FAILED");assertThat(task(run,"independent").state()).isEqualTo("RUNNING");
+            for(String name:List.of("source","sink")){assertThat(runtimes.byAttempt(attempt(run,name).id()).orElseThrow().desiredState()).isEqualTo("STOPPED");assertThat(executions.retry(task(run,name).id())).isEmpty();}
+            assertThat(task(run,"child").state()).isEqualTo("SKIPPED");
+        }
+    }
+    @Test void failureBeforeAllTransferClaimsDoesNotTurnIntoASeparateGroupRetry()throws Exception{
+        var run=recoveryRun(definition(false,true),3);claim(run,"source");claim(run,"sink");streams.prepare(run);checkpoint(run,false);
+        var o=transfer(run,targetNode());drainTransfer(run,o.id());claim(run,"sink");
+        lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");
+        assertThat(offloads.find(o.id()).state()).isEqualTo("FAILED");assertThat(offloads.find(o.id()).failureReason()).isEqualTo("TARGET_FAILED");
+        for(String name:List.of("source","sink")){assertThat(executions.retry(task(run,name).id())).isEmpty();assertThat(runtimes.byAttempt(attempt(run,name).id()).orElseThrow().desiredState()).isEqualTo("STOPPED");}
+        assertThat(task(run,"independent").state()).isEqualTo("RUNNING");
+    }
+    @Test void missingCheckpointAndFinalizationRejectTransferBeforeAnySourceIsStopped()throws Exception{
+        for(boolean sealed:List.of(false,true)){
+            var run=create(definition(false,false));claim(run,"source");claim(run,"sink");streams.prepare(run);if(sealed)seal(run);
+            var target=targetNode();perform(post("/api/v1/tasks/"+task(run,"source").id()+"/offload").header("Idempotency-Key",UUID.randomUUID().toString())
+                .contentType("application/json").content(transferBody(run,"source",target)),409);
+            assertThat(offloadStore.forTask(task(run,"source").id())).isEmpty();
+            assertThat(runtimes.byAttempt(attempt(run,"source").id()).orElseThrow().desiredState()).isEqualTo("RUNNING");
+        }
+    }
+    @Test void databaseProtectsStreamTransferMembershipCheckpointAndSuccessorLineage()throws Exception{
+        var run=create(definition(false,false));claim(run,"source");claim(run,"sink");streams.prepare(run);checkpoint(run,false);
+        var o=transfer(run,targetNode());var m=o.members().getFirst();
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task_offload_member SET checkpoint_id=? WHERE operation_id=? AND task_id=?",o.members().getLast().checkpointId(),o.id(),m.taskId())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task_offload_member SET target_attempt_id=source_attempt_id WHERE operation_id=?",o.id())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(()->jdbc.update("DELETE FROM edgeai.task_offload_member WHERE operation_id=?",o.id())).isInstanceOf(DataIntegrityViolationException.class);
+        drainTransfer(run,o.id());assertThat(offloads.find(o.id()).state()).isEqualTo("STARTING");
+        assertThat(offloads.find(o.id()).members()).allMatch(v->v.targetAttemptId()!=null);
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task_offload_member SET target_attempt_id=NULL WHERE operation_id=?",o.id())).isInstanceOf(DataIntegrityViolationException.class);
+    }
+    @Test void nodePoliciesSurviveGroupTransferAndOffloadDoesNotConsumeRetryBudget()throws Exception{
+        UUID source=UUID.randomUUID(),target=UUID.randomUUID();var now=Instant.now();
+        nodes.recordSnapshot(List.of(source,target).stream().map(id->new io.edgeai.domain.node.ExecutionNode(id,"transfer-"+id,
+            "amd64","linux","READY","4","4Gi","{}",now)).toList(),now);
+        var d=definition(false,false);var body=request(d);body.put("execution",Map.of("mode","NODE","nodeId",source.toString()));
+        body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        var run=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+        claimOn(run,"source",source);claimOn(run,"sink",source);streams.prepare(run);checkpoint(run,false);
+        var o=transfer(run,target);drainTransfer(run,o.id());
+        assertThat(attempt(run,"source").nodeId()).isEqualTo(target);assertThat(attempt(run,"sink").nodeId()).isEqualTo(source);
+        claimOn(run,"source",target);claimOn(run,"sink",source);streams.prepare(run);
+        lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");
+        for(String name:List.of("source","sink"))assertThat(task(run,name).state()).isEqualTo("RETRY_WAIT");
+        finishPhysical(run,"source");finishPhysical(run,"sink");revokeGroup(run);due(run);
+        assertThat(lifecycle.retryTask(task(run,"source").id())).isTrue();
+        for(String name:List.of("source","sink")){
+            assertThat(attempt(run,name).number()).isEqualTo(3);assertThat(attempt(run,name).cause()).isEqualTo("RETRY");
+        }
+        assertThat(attempt(run,"source").nodeId()).isEqualTo(target);assertThat(attempt(run,"sink").nodeId()).isEqualTo(source);
+        claimOn(run,"source",target);claimOn(run,"sink",source);streams.prepare(run);
+        lifecycle.observeFailure(attempt(run,"sink").id(),"RUNTIME_LOST");assertThat(task(run,"sink").state()).isEqualTo("FAILED");
+        assertThat(executions.retry(task(run,"sink").id())).isEmpty();assertThat(offloads.find(o.id()).state()).isEqualTo("SUCCEEDED");
     }
 
     @Test void publicCreationPinsSessionsDispatchesWholeGroupAndReplaysReorderedInputs()throws Exception{

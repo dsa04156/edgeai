@@ -10,6 +10,9 @@ public interface OffloadRepository {
     List<UUID> active(String namespace,int limit);
     List<UUID> automaticCandidates(String namespace,int limit);
     void starting(UUID id,UUID targetAttemptId,Instant deadline,Instant now);
+    void memberTarget(UUID id,UUID taskId,UUID targetAttemptId);
+    boolean pendingStream(UUID attemptId);
+    boolean streamSuccessor(UUID sourceAttemptId,UUID targetAttemptId);
     boolean canStart(UUID attemptId,Instant now);
     void completedByClaim(UUID attemptId,Instant now);
     void failedAttempt(UUID attemptId,Instant now);

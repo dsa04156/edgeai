@@ -24,10 +24,14 @@ public class OffloadService {
     private final Clock clock;
     private final TelemetryRepository telemetry;
     private final RemoteProvider remoteProvider;
+    private final StreamOffloadService streamOffload;
+    private final StreamRunService streams;
     public OffloadService(OffloadRepository operations,ExecutionRepository executions,RuntimeRepository runtimes,WorkflowRepository workflows,
-            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry,RemoteProvider remoteProvider) {
+            ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry,RemoteProvider remoteProvider,
+            StreamOffloadService streamOffload,StreamRunService streams) {
         this.operations=operations;this.executions=executions;this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.lifecycle=lifecycle;this.clock=clock;this.telemetry=telemetry;
         this.remoteProvider=remoteProvider;
+        this.streamOffload=streamOffload;this.streams=streams;
     }
     @Transactional
     public Creation<OffloadOperation> request(UUID taskId,String key,String body) {
@@ -53,7 +57,9 @@ public class OffloadService {
             throw error(409,"OFFLOAD_LIMIT","진행 중인 전환을 확인하세요. 작업별 전환 요청 한도는 8회입니다.");
         var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
         var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
-        if(!spec.recoveryMode().equals("RESTART"))throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","SERVICE Profile에 recovery.mode=RESTART를 선언한 작업만 재시작 전환할 수 있습니다.");
+        boolean stream=spec.stream()!=null && spec.recoveryMode().equals("CHECKPOINT");
+        if(!stream && !spec.recoveryMode().equals("RESTART"))throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","RESTART 작업 또는 체크포인트가 확정된 STREAM 작업을 전환할 수 있습니다.");
+        var members=stream?streamOffload.plan(run,taskId,target,clock.instant()):List.<OffloadMember>of();
         if(remoteTarget!=null) {
             if(remoteTarget.equals(attempt.remoteTarget()))throw error(409,"OFFLOAD_TARGET_INVALID","현재 제공자와 다른 실행 위치를 선택하세요.");
         } else {
@@ -63,9 +69,10 @@ public class OffloadService {
                 !spec.architectures().contains(node.architecture()) || spec.nodeSelector().entrySet().stream().anyMatch(e->!e.getValue().equals(labels.get(e.getKey()))))
             throw error(409,"OFFLOAD_TARGET_INVALID","현재 노드와 다르고 SERVICE 요구조건에 맞는 최근 READY 노드를 선택하세요.");
         }
-        var now=clock.instant();var operation=new OffloadOperation(UUID.randomUUID(),taskId,run.id(),source,null,target,idempotency,digest,runtime.namespace(),"DRAINING",null,now.plusSeconds(drain),start,null,now,now,"MANUAL",List.of(),null,remoteTarget);
+        var now=clock.instant();var operation=new OffloadOperation(UUID.randomUUID(),taskId,run.id(),source,null,target,idempotency,digest,runtime.namespace(),"DRAINING",null,now.plusSeconds(drain),start,null,now,now,"MANUAL",List.of(),null,remoteTarget,members);
         if(!operations.create(operation))return replay(operations.byKey(idempotency).orElseThrow(),digest);
-        runtimes.offload(runtime.id(),now);return new Creation<>(operation,true);
+        if(stream)streamOffload.fence(operation,now);else runtimes.offload(runtime.id(),now);
+        return new Creation<>(operation,true);
     }
     @Transactional(readOnly=true)
     public OffloadOperation find(UUID id){return operations.find(id).orElseThrow(()->error(404,"OPERATION_NOT_FOUND","작업 상태를 찾을 수 없습니다."));}
@@ -78,12 +85,22 @@ public class OffloadService {
         var task=executions.task(operation.taskId()).orElseThrow();var now=clock.instant();
         if(Set.of("CANCELLING","CANCELLED","SKIPPED").contains(task.state()) || operation.state().equals("CANCELLING")) {
             operations.cancelForTask(task.id(),now);
-            if(runtimes.retryReady(task.id()))operations.terminal(id,"CANCELLED",null,now);
+            if(operation.members().isEmpty()?runtimes.retryReady(task.id()):streamOffload.stopped(operation))operations.terminal(id,"CANCELLED",null,now);
             return;
         }
         if(task.state().equals("FAILED")){operations.terminal(id,"FAILED","TARGET_FAILED",now);return;}
         if(operation.state().equals("DRAINING")) {
             if(!now.isBefore(operation.drainDeadline())){fail(operation,"SOURCE_DRAIN_TIMEOUT",now);return;}
+            if(!operation.members().isEmpty()){
+                if(!streamOffload.ready(operation))return;
+                UUID selected=null;
+                for(var member:operation.members()){
+                    var next=executions.startOffload(member.taskId(),member.targetNodeId(),member.excludedNodeNames(),now);
+                    operations.memberTarget(id,member.taskId(),next.id());lifecycle.plan(next.id(),operation.namespace());
+                    if(member.taskId().equals(operation.taskId()))selected=next.id();
+                }
+                operations.starting(id,Objects.requireNonNull(selected),now.plusSeconds(operation.startTimeoutSeconds()),now);return;
+            }
             if(!task.state().equals("OFFLOADING") || !runtimes.retryReady(task.id()))return;
             var attempt=operation.remoteTarget()==null?executions.startOffload(task.id(),operation.targetNodeId(),operation.excludedNodeNames(),now):executions.startRemoteOffload(task.id(),operation.remoteTarget(),now);
             lifecycle.plan(attempt.id(),operation.namespace());operations.starting(id,attempt.id(),now.plusSeconds(operation.startTimeoutSeconds()),now);
@@ -140,8 +157,9 @@ public class OffloadService {
         if(operation.targetAttemptId()!=null)runtimes.byAttempt(operation.targetAttemptId()).ifPresent(r->runtimes.fail(r.id(),reason,now));
         executions.failTask(operation.taskId(),now);
         var task=executions.task(operation.taskId()).orElseThrow();var run=executions.run(task.runId(),false).orElseThrow();
-        var descendants=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson()).descendants(task.key());
-        for(var child:executions.tasks(run.id()))if(descendants.contains(child.key())){executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);operations.cancelForTask(child.id(),now);}
+        var descendants=streams.affected(run,task.key());
+        for(var child:executions.tasks(run.id()))if(!child.id().equals(task.id()) && descendants.contains(child.key())){executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);operations.cancelForTask(child.id(),now);}
+        if(!operation.members().isEmpty())streamOffload.fenceRoutes(operation,now);
         runtimes.stopForRun(run.id(),now);executions.reconcileRunState(run.id(),now);operations.terminal(operation.id(),"FAILED",reason,now);
     }
     private static int seconds(Object value) {

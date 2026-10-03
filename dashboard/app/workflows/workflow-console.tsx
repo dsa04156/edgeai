@@ -184,7 +184,7 @@ export function WorkflowConsole() {
         {task?.attempts[0]?.vdId && <p className="hint">현재 작업의 VD: {task.attempts[0].vdId}. CPU·메모리는 VD 컨테이너 전체의 공유 측정값입니다.</p>}
         {task && <div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
-          <p className="hint">재시작 가능한 SERVICE만 전환할 수 있습니다. 이전 실행을 종료하고 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 전환 성공은 새 실행 시작을 뜻하며, 결과 성공과 구분합니다.</p>
+          <p className="hint">RESTART 작업은 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 체크포인트가 확정된 STREAM은 노드로 전환할 수 있습니다. 연결된 작업들도 함께 종료·재개하며 처리 상태를 이어받습니다. 전환 성공은 새 실행 시작을 뜻합니다.</p>
           {task.task.state === "RUNNING" && task.attempts.some(a => a.state === "RUNNING") && !offload && <button disabled={busy} onClick={() => setOffload({ sourceAttemptId: task.attempts.find(a => a.state === "RUNNING")!.id, key: requestKey() })}>실행 위치 전환</button>}
           {offload && <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); const taskId = task.task.id; void action(async () => {
             await post(`tasks/${taskId}/offload`, { sourceAttemptId: offload.sourceAttemptId, ...(offloadMode === "REMOTE" ? { targetProviderKey: String(data.get("targetProviderKey")) } : { targetNodeId: String(data.get("targetNodeId")) }), drainTimeoutSeconds: Number(data.get("drainTimeoutSeconds")), startTimeoutSeconds: Number(data.get("startTimeoutSeconds")) }, offload.key);
@@ -201,6 +201,12 @@ export function WorkflowConsole() {
             {o.trigger && <span className="block muted">{({ MANUAL: "사용자 요청", CPU: "CPU 사용률 기준 충족", MEMORY: "메모리 사용률 기준 충족", LATENCY: "서비스 지연 기준 충족" })[o.trigger]}</span>}
             {o.decision && <details><summary>자동 판단 근거 · 측정 {o.decision.samples.length}개</summary><OffloadPolicySummary value={o.decision.policy} /><p className="hint">판단 시각: {new Date(o.decision.evaluatedAt).toLocaleString()}</p><p className="digest">제외 노드: {o.excludedNodeNames.join(", ")}</p><pre aria-label="자동 전환 판단 근거">{JSON.stringify(o.decision, null, 2)}</pre></details>}
             {o.failureReason && <span className="block muted">실패 코드: {o.failureReason}</span>}
+            {!!o.members?.length && <details><summary>함께 전환하는 스트리밍 작업 {o.members.length}개</summary>
+              <p className="hint">선택한 작업은 새 노드로 이동하고, 다른 작업은 기존 배치 정책을 유지합니다. 모든 작업이 새 실행을 시작해야 전환 성공입니다.</p>
+              <ul>{o.members.map(m => <li key={m.taskId}><strong>{run.tasks.find(t => t.id === m.taskId)?.key || m.taskId}</strong> · {m.targetNodeId ? nodes.find(n => n.id === m.targetNodeId)?.name || m.targetNodeId : "자동 배치"}
+                <p className="digest mono">체크포인트 {m.checkpointId}</p><p className="digest mono">새 Attempt {m.targetAttemptId || "이전 실행 종료 대기"}</p>
+              </li>)}</ul>
+            </details>}
             <details><summary>전환 이력 ID</summary><p className="digest mono">Operation {o.id}</p><p className="digest mono">이전 Attempt {o.sourceAttemptId}</p><p className="digest mono">새 Attempt {o.targetAttemptId || "아직 생성되지 않음"}</p></details>
           </li>)}</ul> : <p className="muted">실행 위치 전환 이력이 없습니다.</p>}
         </div>}

@@ -362,7 +362,8 @@ public class RuntimeLifecycleService {
     private void recordFailure(Context c,RuntimeInstance r,String reason) {
         var now=clock.instant();boolean grouped=streamRecovery.manages(c.run(),c.task().id());
         boolean finalizing=grouped && streamRecovery.finalizing(c.attempt().id());
-        if(grouped && !finalizing && streamRecovery.schedule(c.run(),c.task().id(),reason,now)){
+        boolean transferring=grouped && offloads.pendingStream(c.attempt().id());
+        if(grouped && !finalizing && !transferring && streamRecovery.schedule(c.run(),c.task().id(),reason,now)){
             runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);return;
         }
         runtimes.fail(r.id(),reason,now);offloads.failedAttempt(c.attempt().id(),now);
@@ -370,7 +371,7 @@ public class RuntimeLifecycleService {
         var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
         var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
         var availableAt=now.plusSeconds(policy.backoffSeconds());
-        if((!grouped || finalizing) && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
+        if(!transferring && (!grouped || finalizing) && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
             executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
         else failDescendants(c.run(),c.task(),now);
         if(finalizing)streamRecovery.fenceFinalizer(c.run(),c.task().id(),now);

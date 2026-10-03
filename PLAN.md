@@ -18,6 +18,10 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0051/V27의 공개 STREAM 그룹 노드 전환을 연결했다. 전체 종료/회수 장벽·고정 체크포인트,
+같은 Task/새 OFFLOAD Attempt와 실제 독립 Runner의 상태 인계를 로컬 검증했다.
+전체 PG197·실서버7·단위105·UI40 및 계약 검증을 통과했다. 실제 Kubernetes의 새 전환·취소/
+API 재시작과 새 이미지/CI/배포 수용은 [전환 근거](docs/evidence/m7-stream-group-offload.md)의 다음 범위다.
 ADR0047에서 공개 Run의 retry 정책을 그룹/최종 처리 복구에 연결했다. 공개 API·실서버6개·
 PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과했다. 새 CI/배포를 확인한다.
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).

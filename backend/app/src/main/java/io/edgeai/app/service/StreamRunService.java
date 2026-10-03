@@ -29,18 +29,19 @@ public class StreamRunService {
     private final DataRouteService lifecycle;
     private final RuntimeRepository runtimes;
     private final StreamExecutionRepository completions;
+    private final OffloadRepository offloads;
     private final Clock clock;
     private final boolean enabled;
     private final String brokerDigest;
     private final int leaseSeconds;
     public StreamRunService(StreamRunRepository store,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,DeviceRepository devices,DataRouteRepository routes,DataRouteService lifecycle,
-            RuntimeRepository runtimes,StreamExecutionRepository completions,Clock clock,
+            RuntimeRepository runtimes,StreamExecutionRepository completions,OffloadRepository offloads,Clock clock,
             @Value("${edgeai.stream.runs-enabled:false}") boolean enabled,@Value("${edgeai.stream.enabled:false}") boolean authority,
             @Value("${edgeai.stream.bindings-enabled:false}") boolean bindings,@Value("${edgeai.runtime.enabled:false}") boolean runtime,
             @Value("${edgeai.stream.broker-digest:}") String brokerDigest,@Value("${edgeai.stream.lease-seconds:30}") int leaseSeconds){
         this.store=store;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.devices=devices;
-        this.routes=routes;this.lifecycle=lifecycle;this.runtimes=runtimes;this.completions=completions;this.clock=clock;
+        this.routes=routes;this.lifecycle=lifecycle;this.runtimes=runtimes;this.completions=completions;this.offloads=offloads;this.clock=clock;
         this.enabled=enabled && authority && bindings && runtime;this.brokerDigest=brokerDigest;this.leaseSeconds=leaseSeconds;
         if(enabled){RouteGeneration.digest(brokerDigest);if(!this.enabled || leaseSeconds<5 || leaseSeconds>120)
             throw new IllegalArgumentException("Public stream execution requires runtime, authority, bindings and a 5–120 second lease");}
@@ -210,7 +211,8 @@ public class StreamRunService {
         return route.deviceSource()?old.producer().equals(producer(route,attempts,pins)):retrySuccessor(attempts.get(route.sourceTaskId()),old.producer());
     }
     private boolean retrySuccessor(TaskAttempt current,RouteGeneration.Actor old){
-        return current.cause().equals("RETRY") && current.epoch()>old.epoch() && !current.id().equals(old.id())
+        return (current.cause().equals("RETRY") || current.cause().equals("OFFLOAD") && offloads.streamSuccessor(old.id(),current.id()))
+            && current.epoch()>old.epoch() && !current.id().equals(old.id())
             && runtimes.byAttempt(old.id()).filter(r->r.desiredState().equals("STOPPED") && r.observedState().equals("TERMINATED")).isPresent();
     }
     private static RouteGeneration.Actor actor(TaskAttempt a){return new RouteGeneration.Actor(a.id(),a.epoch());}

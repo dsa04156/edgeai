@@ -29,7 +29,9 @@ Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. 기�
 관측과 VD source binding은 관리 경로이며 센서 payload를 실행 입력으로 전달하는 경로가 아니다.
 Run의 실행 정책은 전체 DAG 기본값이다. 공개 STREAM 실행은 현재 Device session을 고정하고
 같은 스트림 그룹을 함께 배정한다. ADR0047은 기존 retry를 그룹/최종 처리 복구에 연결하며
-offload/REMOTE/VD는 아직 거절한다. 실제 검증 범위는 [공개 재시도 근거](evidence/m7-public-stream-retry.md)를 따른다.
+ADR0051은 명시적 NODE offload를 연결하며 STREAM 자동 offload/REMOTE/VD는 아직 거절한다.
+실제 검증 범위는 [공개 재시도 근거](evidence/m7-public-stream-retry.md)와
+[그룹 전환 근거](evidence/m7-stream-group-offload.md)를 따른다.
 따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
 
 ## 구현 전에 정할 계약과 검증
@@ -72,7 +74,8 @@ checkpoint/재전송/중복 제거 경계를 정의해야 한다.
 않았다. 별도 통합 시험은 private 계정/정확한 topic ACL·TLS를 사용하지만 운영 계정 발급/해제와
 실행 배정 연결 완료를 뜻하지 않는다. 실제 실행 전달 경로는 Compose 설정을 그대로 운영 계약으로 사용하지 않는다. Mosquitto
 Dynamic Security의 client/role/topic 제어는 [ADR0024](adr/0024-stream-broker-authority.md)에서 채택해
-실제 TLS broker adapter로 검증했다. 운영 broker의 실제 활성 수용은 남아 있다.
+실제 TLS broker adapter로 검증했다. ADR0050은 dev 배포의 영속 TLS broker/API/MinIO와
+실제 다중 장치 데모를 검증했다. 새 CI의 영속 기반 게이트는 별도로 확인한다.
 [공식 설명](https://mosquitto.org/documentation/dynamic-security/).
 
 후속 [ADR0025](adr/0025-stream-authority-worker.md)는 DB의 PREPARING/FENCED 상태를 영속 명령으로
@@ -84,4 +87,5 @@ broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
 프로세스·watchdog·journal은 실제 TLS MQTT와 Spring 인증 probe로 로컬 검증했다.
 이후 SERVICE/Runner 실행, S3 체크포인트 저장·동일 Attempt 새 볼륨 복원, 서버 검증 인계,
 Task/Device 공동 완료와 공개 Run 연결은 [검증 목록](verification-matrix.md)에 각각 기록했다.
-운영 TLS broker·실제 Kubernetes 다중 작업 종단, 인접 작업을 포함한 그룹 복구 및 실장비 수용은 남는다.
+dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 장애 복구는 검증했다.
+그룹 노드 전환의 실제 Kubernetes 수용, 자동 정책·VD/단계별 배치 및 실장비 수용은 남는다.
