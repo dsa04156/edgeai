@@ -36,14 +36,15 @@ public class RuntimeLifecycleService {
     private final int dispatchSeconds;
     private final StreamExecutionRepository streamExecutions;
     private final StreamRunService streams;
+    private final StreamRecoveryService streamRecovery;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch,
             VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds,
-            StreamExecutionRepository streamExecutions,StreamRunService streams) {
+            StreamExecutionRepository streamExecutions,StreamRunService streams,StreamRecoveryService streamRecovery) {
         this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.remotes=remotes;this.clock=clock;this.autoDispatch=autoDispatch;
         this.vds=vds;this.vdRuntimes=vdRuntimes;this.vdTasks=vdTasks;this.vdEnabled=vdEnabled;this.dispatchSeconds=dispatchSeconds;
         this.streamExecutions=streamExecutions;
-        this.streams=streams;
+        this.streams=streams;this.streamRecovery=streamRecovery;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
@@ -359,12 +360,16 @@ public class RuntimeLifecycleService {
         recordFailure(c,r,reason);
     }
     private void recordFailure(Context c,RuntimeInstance r,String reason) {
-        var now=clock.instant();runtimes.fail(r.id(),reason,now);offloads.failedAttempt(c.attempt().id(),now);
+        var now=clock.instant();boolean grouped=streamRecovery.manages(c.run(),c.task().id());
+        if(grouped && streamRecovery.schedule(c.run(),c.task().id(),reason,now)){
+            runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);return;
+        }
+        runtimes.fail(r.id(),reason,now);offloads.failedAttempt(c.attempt().id(),now);
         var policy=c.run().retry();
         var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
         var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
         var availableAt=now.plusSeconds(policy.backoffSeconds());
-        if(policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
+        if(!grouped && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
             executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
         else failDescendants(c.run(),c.task(),now);
         runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
@@ -382,6 +387,11 @@ public class RuntimeLifecycleService {
         if(!now.isBefore(retry.deadline())) {
             executions.failTask(taskId,now);failDescendants(run,task,now);
             runtimes.stopForRun(run.id(),now);executions.reconcileRunState(run.id(),now);return true;
+        }
+        if(streamRecovery.manages(run,taskId)){
+            var next=streamRecovery.retry(run,taskId,now);
+            for(var attempt:next)plan(attempt.id(),retry.namespace());
+            return !next.isEmpty();
         }
         if(now.isBefore(retry.availableAt()) || !runtimes.retryReady(taskId))return false;
         var previous=executions.attempt(retry.failedAttemptId()).orElseThrow();

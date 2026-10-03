@@ -54,6 +54,7 @@ class StreamRunIntegrationTest {
     @Autowired StreamRunService streams;@Autowired StreamRunRepository store;@Autowired DataRouteRepository routes;@Autowired DataRouteService routeLifecycle;
     @Autowired StreamExecutionRepository completions;@Autowired JdbcTemplate jdbc;@Autowired MockMvc mvc;@Autowired PlatformTransactionManager transactions;
     @Autowired DeviceStreamTokenService deviceTokens;
+    @Autowired WorkflowRepository workflowStore;
     private final JsonDocuments json=new JsonDocuments();
     private record Definition(UUID version,List<Map<String,Object>> inputs,List<Device> devices){}
     private String encode(Object value){return json.canonical(value);}
@@ -95,7 +96,34 @@ class StreamRunIntegrationTest {
     private Task task(UUID run,String name){return executions.tasks(run).stream().filter(t->t.key().equals(name)).findFirst().orElseThrow();}
     private TaskAttempt attempt(UUID run,String name){return executions.attempts(task(run,name).id()).getFirst();}
     private RuntimeLifecycleService.Assignment claim(UUID run,String name){var a=attempt(run,name);var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
-        lifecycle.submitted(a.id(),pod.jobUid());return lifecycle.claim(a.id(),1,pod);}
+        lifecycle.submitted(a.id(),pod.jobUid());return lifecycle.claim(a.id(),a.epoch(),pod);}
+    /** Internal recovery fixture; public retry remains rejected until finalization and source reconnect are integrated. */
+    private UUID recoveryRun(Definition d,int attempts)throws Exception{
+        return new TransactionTemplate(transactions).execute(tx->{
+            var inputs=io.edgeai.app.support.StreamRunInput.parse(json.decode(encode(d.inputs())));
+            var sessions=streams.pin(inputs,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
+            var run=new WorkflowRun(UUID.randomUUID(),d.version(),UUID.randomUUID(),"sha256:"+"a".repeat(64),"AUTO",null,"{}",
+                new RetryPolicy(attempts,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
+            assertThat(executions.create(run)).isTrue();executions.initialize(run,workflowStore.definitions(d.version()),Set.of());
+            streams.configure(run,"public-stream-test",inputs,sessions);lifecycle.startRun(run.id(),"public-stream-test");return run.id();
+        });
+    }
+    private void finishPhysical(UUID run,String name){
+        var a=attempt(run,name);var r=runtimes.byAttempt(a.id()).orElseThrow();
+        // Explicit provisioning fixture: the CREATE operation has finished and the old Pod has disappeared.
+        jdbc.update("UPDATE edgeai.runtime_command SET completed=true WHERE runtime_id=? AND kind='CREATE'",r.id());
+        lifecycle.confirmStopped(a.id());
+    }
+    private void revokeGroup(UUID run){
+        for(var route:routes.forRun(run,20,0))routes.open(route.id()).ifPresent(g->{
+            assertThat(g.fencedAt()).isNotNull();routeLifecycle.revoked(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));
+        });
+    }
+    private void due(UUID run)throws Exception{
+        var latest=executions.tasks(run).stream().map(t->executions.retry(t.id())).flatMap(Optional::stream)
+            .map(TaskRetry::availableAt).max(Comparator.naturalOrder()).orElseThrow();
+        long millis=Duration.between(Instant.now(),latest).toMillis();if(millis>=0)Thread.sleep(millis+20);
+    }
     private void worker(){new StreamRunWorker(store,streams,lifecycle,"public-stream-test").tick();}
     private void rejected(Definition d,Map<String,Object> request,int code)throws Exception{
         String key=UUID.randomUUID().toString();create(key,request,code);
@@ -221,6 +249,62 @@ class StreamRunIntegrationTest {
         assertThat(routes.history(route.id(),20,0)).hasSize(1);assertThat(routes.open(route.id())).isEmpty();
         assertThat(List.of(task(id,"source").state(),task(id,"sink").state())).containsExactlyInAnyOrder("FAILED","CANCELLING");
         assertThat(task(id,"independent").state()).isEqualTo("RUNNING");
+    }
+    @Test void unfinishedRecoveryFencesTheWholeGroupAndWaitsForAllPhysicalStopsAndBrokerRevocations()throws Exception{
+        UUID id=recoveryRun(definition(false,true),2);claim(id,"source");claim(id,"sink");streams.prepare(id);
+        var pins=store.bindings(id);var old=new HashMap<UUID,RouteGeneration>();
+        routes.forRun(id,20,0).forEach(r->old.put(r.id(),routes.open(r.id()).orElseThrow()));
+        lifecycle.observeFailure(attempt(id,"sink").id(),"RUNTIME_LOST");
+        assertThat(task(id,"source").state()).isEqualTo("RETRY_WAIT");assertThat(task(id,"sink").state()).isEqualTo("RETRY_WAIT");
+        assertThat(task(id,"independent").state()).isEqualTo("RUNNING");assertThat(task(id,"child").state()).isEqualTo("WAITING");
+        var a=executions.retry(task(id,"source").id()).orElseThrow();var b=executions.retry(task(id,"sink").id()).orElseThrow();
+        assertThat(a.availableAt()).isEqualTo(b.availableAt());assertThat(a.deadline()).isEqualTo(b.deadline());
+        assertThat(routes.forRun(id,20,0)).allMatch(r->routes.open(r.id()).orElseThrow().state().equals("FENCED"));
+        assertThat(runtimes.byAttempt(attempt(id,"source").id()).orElseThrow().failureReason()).isEqualTo("STREAM_GROUP_RESTART");
+        assertThat(lifecycle.retryTask(task(id,"source").id())).isFalse();due(id);
+        finishPhysical(id,"source");assertThat(lifecycle.retryTask(task(id,"source").id())).isFalse();
+        finishPhysical(id,"sink");assertThat(lifecycle.retryTask(task(id,"sink").id())).isFalse();
+        revokeGroup(id);
+        var results=parallel(i->lifecycle.retryTask(task(id,i%2==0?"source":"sink").id()));assertThat(results).containsOnlyOnce(true);
+        for(String name:List.of("source","sink")){
+            assertThat(executions.attempts(task(id,name).id())).hasSize(2);assertThat(attempt(id,name).epoch()).isEqualTo(2);
+            assertThat(attempt(id,name).cause()).isEqualTo("RETRY");assertThat(executions.retry(task(id,name).id())).isEmpty();claim(id,name);
+        }
+        assertThat(streams.prepare(id)).isEmpty();assertThat(store.bindings(id)).isEqualTo(pins);
+        for(var route:routes.forRun(id,20,0)){
+            var g=routes.open(route.id()).orElseThrow();assertThat(g.generation()).isEqualTo(2);assertThat(g.consumer().epoch()).isEqualTo(2);
+            assertThat(g.consumer().id()).isNotEqualTo(old.get(route.id()).consumer().id());
+            if(route.deviceSource())assertThat(g.producer()).isEqualTo(old.get(route.id()).producer());else assertThat(g.producer().epoch()).isEqualTo(2);
+        }
+        assertThat(executions.attempts(task(id,"independent").id())).hasSize(1);assertThat(executions.attempts(task(id,"child").id())).isEmpty();
+    }
+    @Test void simultaneousPeerFailuresReserveExactlyOneGroupRetryAndCancellationPreventsReassignment()throws Exception{
+        UUID id=recoveryRun(definition(false,true),2);claim(id,"source");claim(id,"sink");streams.prepare(id);
+        parallel(i->{lifecycle.observeFailure(attempt(id,i%2==0?"source":"sink").id(),"RUNTIME_LOST");return true;});
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.task_retry r JOIN edgeai.task t ON t.id=r.task_id WHERE t.run_id=?",Integer.class,id)).isEqualTo(2);
+        perform(post("/api/v1/tasks/"+task(id,"sink").id()+"/cancel").contentType("application/json").content("{}"),200);
+        finishPhysical(id,"source");finishPhysical(id,"sink");revokeGroup(id);
+        for(String name:List.of("source","sink")){
+            assertThat(lifecycle.retryTask(task(id,name).id())).isFalse();assertThat(executions.attempts(task(id,name).id())).hasSize(1);
+            assertThat(executions.retry(task(id,name).id())).isEmpty();
+        }
+        assertThat(task(id,"child").state()).isEqualTo("SKIPPED");assertThat(task(id,"independent").state()).isEqualTo("RUNNING");
+    }
+    @Test void groupRetryExhaustionAndExpiredWindowNeverRestartOnlyOnePeer()throws Exception{
+        UUID id=recoveryRun(definition(false,true),2);claim(id,"source");claim(id,"sink");streams.prepare(id);
+        lifecycle.observeFailure(attempt(id,"source").id(),"RUNTIME_LOST");finishPhysical(id,"source");finishPhysical(id,"sink");revokeGroup(id);due(id);
+        assertThat(lifecycle.retryTask(task(id,"sink").id())).isTrue();claim(id,"source");claim(id,"sink");streams.prepare(id);
+        lifecycle.observeFailure(attempt(id,"sink").id(),"RUNTIME_LOST");
+        assertThat(task(id,"sink").state()).isEqualTo("FAILED");assertThat(task(id,"source").state()).isEqualTo("CANCELLING");
+        assertThat(task(id,"child").state()).isEqualTo("SKIPPED");assertThat(task(id,"independent").state()).isEqualTo("RUNNING");
+        for(String name:List.of("source","sink")){assertThat(executions.retry(task(id,name).id())).isEmpty();assertThat(executions.attempts(task(id,name).id())).hasSize(2);}
+        UUID expired=recoveryRun(definition(false,true),3);claim(expired,"source");claim(expired,"sink");streams.prepare(expired);
+        lifecycle.observeFailure(attempt(expired,"source").id(),"RUNTIME_LOST");
+        // Persisted clock fixture exercises restart-time deadline enforcement without waiting 300 seconds.
+        jdbc.update("UPDATE edgeai.task_retry SET available_at=now()-interval '2 seconds',deadline=now()-interval '1 second' WHERE task_id IN (SELECT id FROM edgeai.task WHERE run_id=?)",expired);
+        assertThat(lifecycle.retryTask(task(expired,"sink").id())).isTrue();
+        assertThat(task(expired,"child").state()).isEqualTo("SKIPPED");assertThat(task(expired,"independent").state()).isEqualTo("RUNNING");
+        for(String name:List.of("source","sink")){assertThat(executions.retry(task(expired,name).id())).isEmpty();assertThat(executions.attempts(task(expired,name).id())).hasSize(1);}
     }
     @Test void routeInspectionIsAuthenticatedPaginatedAndContainsOnlyProvenanceAndStatus()throws Exception{
         UUID id=create(definition(false,false));String path="/api/v1/workflow-runs/"+id+"/streams";

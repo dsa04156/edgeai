@@ -1,11 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0044 계산 중 스트림 그룹의 원자적 재시도·전체 물리 종료/권한 회수 장벽을 구현했다.
+실제 두 Runner가 새 Attempt/폴더에서 외부 checkpoint 상태9를 복원하고 Device journal을 인계해
+root14/sink23/BATCH37을 확정했다. 전체 실제 저장소35·PG184·단위101 PASS다.
+Run retry 정책 생성과 Pod 경계는 이 시험에서 fixture이며 공개 재시도 정책은 아직 거절한다.
+공동 완료 허가 뒤 새 Attempt 복구·Device 자동 재연결·실제 Kubernetes 장애 수용은 남는다.
+상세: docs/evidence/m7-group-retry.md. M5 잔여/M7–M10과 전체 목표는 미완료다.
+
+아래는 Device 경로 조회의 검증 이력이다.
 ADR0043 Device 토큰의 본인 Run 경로·최신 세대 조회와 SDK를 추가했다.
 실제 HTTPS 조회 결과로 DeviceSource를 열고 송신해 독립 STREAM2개→BATCH 결과37·취소를 검증했다.
 단위101·실제 PG181·Runner110·실제 Source/DAG4·API/DB PC·모바일10·Swagger 내부13개 PASS다.
 새 조회 코드는 로컬 검증이며 이미지/CI/Kubernetes 수용은 별도다. 그룹 복구 자동화는 남는다.
-선행 e93d9e1의 전체 패키지 이미지 시험은 PASS이며 새 kind 게이트 c152d4d의 CI37120638129는 실행 중이다.
+선행 c152d4d의 새 kind STREAM 게이트는 CI37120638129 5jobs/17JSON과 실제 GitOps ab68e2a 배포를 통과했다.
 상세: docs/evidence/m7-device-route-discovery.md. M5 잔여/M7–M10 전체 수용은 미완료다.
 
 아래는 선행 TLS·Kubernetes 검증 이력이다.
@@ -18,7 +26,7 @@ MQTT 최초 전체 실행의 재연결1개 timeout은 단독/전체 재실행에
 AUTO/NODE DAG·API Pod 교체·취소·S3 결과6개와 값14/23/37, 실제 Runner Pod8개의 신원을 검증했다.
 이후 source e93d9e1의 CI5jobs/17JSON과 GitOps ee44614 실제 배포도 확인했다.
 빌드된 API 이미지 자체로 같은 Kubernetes DAG·재시작·취소·S3파일6개를114015Z-426fc3dd에서 통과했다.
-새 kind STREAM 게이트는 연결했으며 CI 실행 결과는 별도다. 상세: docs/evidence/m7-kubernetes-stream.md.
+새 kind STREAM 게이트도 후속 c152d4d CI에서 통과했다. 상세: docs/evidence/m7-kubernetes-stream.md.
 그룹 인계·운영 배포·다중 장치 데모·M5 잔여/M7–M10 전체 수용은 남는다.
 
 아래는 이전 단계의 검증 이력이다.

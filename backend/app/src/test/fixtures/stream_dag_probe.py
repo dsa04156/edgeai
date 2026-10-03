@@ -19,32 +19,39 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_checkpoint_client import CheckpointClient
 from edgeai_runner.stream_journal import Emission
 from edgeai_runner.stream_protocol import Producer
-from edgeai_runner.stream_source import DeviceSource
+from edgeai_runner.stream_source import DeviceSource, SourceError
+from edgeai_runner.stream_mqtt import MqttError
 
 folder = Path(sys.argv[1])
 config = json.loads((folder / 'request.json').read_bytes())
 children = {}
 phase = 'START'
+round_number = 1
+recovering = False
+retired = []
+
+def directory(name):
+    return folder / (name if round_number == 1 or name == 'report' else name + '-' + str(round_number))
 
 
 def launch():
     for name in ('root', 'sink', 'report'):
-        directory = folder / name
-        descriptor = directory / 'launch.json'
+        target = directory(name)
+        descriptor = target / 'launch.json'
         if name in children or not descriptor.exists():
             continue
         value = json.loads(descriptor.read_bytes())
-        work = directory / 'work'
+        work = target / 'work'
         work.mkdir(mode=0o700)
         work.chmod(0o2700)  # Reproduce the setgid directory inherited from Kubernetes fsGroup.
         env = os.environ.copy()
         env.update(EDGEAI_ATTEMPT_ID=value['attemptId'], EDGEAI_ATTEMPT_EPOCH=str(value['epoch']),
                    EDGEAI_POD_UID=value['podUid'], EDGEAI_CONTROL_PLANE_URL=config['origin'],
-                   EDGEAI_CLAIM_FILE=str(directory / 'claim'), EDGEAI_POD_TOKEN_FILE=str(directory / 'pod'),
+                   EDGEAI_CLAIM_FILE=str(target / 'claim'), EDGEAI_POD_TOKEN_FILE=str(target / 'pod'),
                    EDGEAI_WORK_DIR=str(work))
         for filename in ('runner.log', 'runner-error.log'):
-            (directory / filename).touch(mode=0o600)
-        with (directory / 'runner.log').open('wb') as out, (directory / 'runner-error.log').open('wb') as err:
+            (target / filename).touch(mode=0o600)
+        with (target / 'runner.log').open('wb') as out, (target / 'runner-error.log').open('wb') as err:
             children[name] = subprocess.Popen([sys.executable, '-W', 'error::ResourceWarning', str(repo / 'runner' / 'runner.py')],
                                                env=env, stdout=out, stderr=err)
 
@@ -54,42 +61,47 @@ def wait(predicate, tick=lambda: None):
     while not predicate():
         assert time.monotonic() < end, 'Actual stream DAG deadline exceeded'
         launch()
-        if not (folder / 'cancel-request').exists():
+        if not (folder / 'cancel-request').exists() and not recovering:
             assert all(p.poll() in (None, 0) for p in children.values()), 'Actual Runner failed'
         tick()
         time.sleep(.01)
 
 
 def main():
-    global phase
+    global phase, round_number, recovering
     phase = 'ROUTING'
     wait(lambda: (folder / 'routing.json').exists())
     routing = json.loads((folder / 'routing.json').read_bytes())
     with ExitStack() as stack:
         sources = {}
         discovered_routes = {}
-        for name, value in config['sources'].items():
-            client = BindingClient(config['origin'], Producer('DEVICE_SESSION', value['sessionId'], value['epoch'], value['deviceId']),
-                                   folder / (name + '.token'))
-            discovered = client.device_routes(config['runId'])
-            assert discovered['runState'] == 'RUNNING' and discovered['nextOffset'] is None
-            assert len(discovered['items']) == 1
-            route = discovered['items'][0]
-            discovered_routes[name] = route
-            assert route['routeId'] == routing['sources'][name]['routeId']
-            assert route['generation']['id'] == routing['sources'][name]['generationId']
-            assert route['generation']['state'] == 'ACTIVE' and route['sourceMode'] == 'SYNTHETIC'
-            directory = folder / ('source-' + name)
-            directory.mkdir(mode=0o700)
-            sources[name] = stack.enter_context(DeviceSource(client, config['runId'], [route['generation']['id']],
-                                                             directory, create=True, timeout=100))
         checkpoints = {}
-        for name in ('root', 'sink'):
-            directory = folder / name
-            value = json.loads((directory / 'launch.json').read_bytes())
-            client = BindingClient(config['origin'], Producer('TASK_ATTEMPT', value['attemptId'], value['epoch']),
-                                   directory / 'claim', pod_uid=value['podUid'], pod_token_file=directory / 'pod')
-            checkpoints[name] = CheckpointClient(client, config['runId'], routing['tasks'][name])
+
+        def connect(handover=False):
+            for name, value in config['sources'].items():
+                client = BindingClient(config['origin'], Producer('DEVICE_SESSION', value['sessionId'], value['epoch'], value['deviceId']),
+                                       folder / (name + '.token'))
+                discovered = client.device_routes(config['runId'])
+                assert discovered['runState'] == 'RUNNING' and discovered['nextOffset'] is None
+                assert len(discovered['items']) == 1
+                route = discovered['items'][0]
+                discovered_routes[name] = route
+                assert route['routeId'] == routing['sources'][name]['routeId']
+                assert route['generation']['id'] == routing['sources'][name]['generationId']
+                assert route['generation']['state'] == 'ACTIVE' and route['sourceMode'] == 'SYNTHETIC'
+                target = folder / ('source-' + name)
+                if not handover:
+                    target.mkdir(mode=0o700)
+                sources[name] = stack.enter_context(DeviceSource(client, config['runId'], [route['generation']['id']],
+                                                                 target, create=not handover, handover=handover, timeout=100))
+            for name in ('root', 'sink'):
+                target = directory(name)
+                value = json.loads((target / 'launch.json').read_bytes())
+                client = BindingClient(config['origin'], Producer('TASK_ATTEMPT', value['attemptId'], value['epoch']),
+                                       target / 'claim', pod_uid=value['podUid'], pod_token_file=target / 'pod')
+                checkpoints[name] = CheckpointClient(client, config['runId'], routing['tasks'][name])
+
+        connect()
 
         def step():
             for source in sources.values():
@@ -110,6 +122,34 @@ def main():
         emit(4, 5)
         wait(lambda: checkpointed({'root': 9, 'sink': 9}), step)
         assert len(children) == 2 and all(p.poll() is None for p in children.values())
+        if config['mode'] == 'recover':
+            phase = 'GROUP_RECOVERY'
+            recovering = True
+            (folder / 'recovery-request').touch()
+
+            def fenced_sources():
+                for source in sources.values():
+                    if source.closed:
+                        continue
+                    try:
+                        source.step()
+                    except (AssignmentError, SourceError, MqttError):
+                        pass
+                    assert not source.completed
+
+            wait(lambda: all(p.poll() is not None for p in children.values()) and all(s.closed for s in sources.values()), fenced_sources)
+            assert all(p.wait() != 0 for p in children.values())
+            assert all(not (directory(name) / 'work' / 'outputs' / 'result').exists() for name in children)
+            retired.extend(children.values())
+            children.clear()
+            round_number = 2
+            recovering = False
+            (folder / 'producers-stopped').touch()
+            wait(lambda: (folder / 'routing-2.json').exists())
+            routing = json.loads((folder / 'routing-2.json').read_bytes())
+            connect(handover=True)
+            wait(lambda: (folder / 'restored').exists(), step)
+            assert all(directory(name).name.endswith('-2') for name in ('root', 'sink'))
         if config['mode'] == 'cancel':
             phase = 'CANCEL'
             (folder / 'cancel-request').touch()
@@ -129,9 +169,9 @@ def main():
             assert set(children) == {'root', 'sink'}
             for name, child in children.items():
                 assert child.returncode == 1
-                lines = (folder / name / 'runner.log').read_text().splitlines()
+                lines = (directory(name) / 'runner.log').read_text().splitlines()
                 assert len(lines) == 2 and lines[0] == 'RUNNER_WORKLOAD_START' and re.fullmatch('RUNNER_FAILED [A-Z_]+', lines[1])
-                assert not (folder / name / 'work' / 'outputs' / 'result').exists()
+                assert not (directory(name) / 'work' / 'outputs' / 'result').exists()
             print('STREAM_DAG_CANCELLED')
         else:
             phase = 'SECOND_CHECKPOINT'
@@ -144,7 +184,7 @@ def main():
             wait(lambda: set(children) == {'root', 'sink', 'report'} and all(p.poll() == 0 for p in children.values())
                  and all(s.completed for s in sources.values()), step)
             for name, expected in (('root', 14), ('sink', 23)):
-                work = folder / name / 'work'
+                work = directory(name) / 'work'
                 assert (work / 'stream-state').read_bytes() == str(expected).encode()
                 assert json.loads((work / 'outputs' / 'result').read_bytes()) == {'sum': expected}
                 assert (work / 'stream').is_dir()
@@ -153,9 +193,9 @@ def main():
             assert json.loads((work / 'inputs' / 'sink').read_bytes()) == {'sum': 23}
             assert json.loads((work / 'outputs' / 'report').read_bytes()) == {'sourceMode': 'SYNTHETIC', 'sum': 37, 'inputs': {'root': 14, 'sink': 23}}
             for name in children:
-                assert (folder / name / 'runner.log').read_bytes() == b'RUNNER_WORKLOAD_START\nRUNNER_RESULT_COMMITTED\n'
-            print('STREAM_DAG_PASS')
-        assert all((folder / name / 'runner-error.log').stat().st_size == 0 for name in children)
+                assert (directory(name) / 'runner.log').read_bytes() == b'RUNNER_WORKLOAD_START\nRUNNER_RESULT_COMMITTED\n'
+            print('STREAM_DAG_RECOVERED' if config['mode'] == 'recover' else 'STREAM_DAG_PASS')
+        assert all((directory(name) / 'runner-error.log').stat().st_size == 0 for name in children)
 
 
 if __name__ == '__main__':
@@ -166,15 +206,15 @@ if __name__ == '__main__':
         locations = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(error.__traceback__))
         print('STREAM_DAG_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + locations, flush=True)
         for name in children:
-            for line in (folder / name / 'runner.log').read_text().splitlines():
+            for line in (directory(name) / 'runner.log').read_text().splitlines():
                 if re.fullmatch('RUNNER_FAILED [A-Z_]+', line):
                     print(name + ' ' + line, flush=True)
         sys.exit(1)
     finally:
-        for child in children.values():
+        for child in list(children.values()) + retired:
             if child.poll() is None:
                 child.terminate()
-        for child in children.values():
+        for child in list(children.values()) + retired:
             try:
                 child.wait(timeout=5)
             except subprocess.TimeoutExpired:

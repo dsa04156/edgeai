@@ -112,3 +112,16 @@ API Pod 교체, root14/sink23/report37, 고정 S3파일6개와 sink 취소·자�
 시험은 통과했지만, 새 kind 게이트의 GitHub Actions 실행 결과는 아직 별도로 확인해야 한다.
 
 M7 전체 완료, 배포의 공개 STREAM 활성화, demo-multidevice, 그룹 checkpoint 복구와 M5 잔여/M8–M10은 남는다.
+
+## 새 STREAM kind 게이트 확인
+
+source `c152d4da616832da4d96196d5ebc36e57f4e29c7`의 CI37120638129는5 jobs와
+다운로드17개 결과JSON 모두 PASS/0이다. kind `115518Z-41a6b1c9`는 기존 BATCH/Remote/VD에
+추가한 실제 STREAM 게이트도 통과했다. packaged API commit-tag 이미지와 검증 Runner를 사용해
+AUTO/NODE DAG·상태9에서 API Pod 교체8.088초·같은 Runner2UID 유지·결과14/23/37·고정 S36개·
+sink 취소·소유 자원 회수를 확인했다. 총 RunnerPod8개이며 kind 클러스터
+`edgeai-ci-685594f200e7`도 삭제했다. 실행 디렉터리에 `kind-stream.json`을 보존했다.
+
+배포 `121607Z-1af97f19`에서 GitOps `ab68e2ab9313a570e6056a1e035bb2c30573f98b`의
+정확한3개 imageID·Ready·PVCBound·ArgoSynced·VD 활성화를 확인했다. aggregate health는
+공유 Ingress 때문에Progressing이다. 이 CI/배포는 후속 Device 조회·그룹 재시도 변경의 검증이 아니다.

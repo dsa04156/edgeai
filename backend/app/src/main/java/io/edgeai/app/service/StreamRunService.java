@@ -194,13 +194,24 @@ public class StreamRunService {
             for(var route:connected){var open=routes.open(route.id());
                 if(open.isPresent()){var g=open.get();var producer=producer(route,attempts,pins);var consumer=actor(attempts.get(route.consumerTaskId()));
                     stale |= g.fencedAt()!=null || !clock.instant().isBefore(g.leaseUntil()) || !g.producer().equals(producer) || !g.consumer().equals(consumer);
-                }else stale |= routes.lastGeneration(route.id())!=0;
+                }else{
+                    var old=routes.history(route.id(),1,0).stream().findFirst().orElse(null);
+                    stale |= old!=null && !retrySuccessor(route,old,attempts,pins);
+                }
             }
             if(stale){failures.add(new Failure(first.get().id(),"RUNTIME_LOST"));continue;}
             for(var route:connected)if(routes.open(route.id()).isEmpty())lifecycle.prepare(route.id(),UUID.randomUUID(),
                 producer(route,attempts,pins),actor(attempts.get(route.consumerTaskId())),config.brokerDigest(),config.leaseSeconds());
         }
         return List.copyOf(failures);
+    }
+    private boolean retrySuccessor(DataRoute route,RouteGeneration old,Map<UUID,TaskAttempt> attempts,Map<UUID,StreamRunRepository.DeviceBinding> pins){
+        if(old.closedAt()==null || !retrySuccessor(attempts.get(route.consumerTaskId()),old.consumer()))return false;
+        return route.deviceSource()?old.producer().equals(producer(route,attempts,pins)):retrySuccessor(attempts.get(route.sourceTaskId()),old.producer());
+    }
+    private boolean retrySuccessor(TaskAttempt current,RouteGeneration.Actor old){
+        return current.cause().equals("RETRY") && current.epoch()>old.epoch() && !current.id().equals(old.id())
+            && runtimes.byAttempt(old.id()).filter(r->r.desiredState().equals("STOPPED") && r.observedState().equals("TERMINATED")).isPresent();
     }
     private static RouteGeneration.Actor actor(TaskAttempt a){return new RouteGeneration.Actor(a.id(),a.epoch());}
     private static RouteGeneration.Actor producer(DataRoute route,Map<UUID,TaskAttempt> attempts,Map<UUID,StreamRunRepository.DeviceBinding> pins){

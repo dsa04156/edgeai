@@ -26,13 +26,16 @@ ADR0041/V25에서 공개 Run의 Device 세션 고정·route 생성·그룹 동�
 공개 실행은 별도 opt-in이며 운영 기본 STREAM501을 유지한다. 독립 다중 Runner 간 실제 데이터와
 BATCH 결과·취소는 Spring/PG/S3/TLS MQTT에서 검증했다. ADR0042의 공개 CA 번들·fsGroup 수정 뒤
 실제 Kubernetes TLS AUTO/NODE DAG·API 교체·취소·S3 결과를 통과했다. 후속 e93d9e1 CI·배포와
-완성 API 이미지 자체의 같은 실제 클러스터 시험도 통과했다. 새 STREAM kind/CI 게이트 확인·
-인접 Task 인계·운영 STREAM 배포와 다중 장치 데모는 남는다.
+완성 API 이미지 자체의 같은 실제 클러스터 시험도 통과했다. 후속 c152d4d의 STREAM kind/CI 게이트도 통과했다.
+그룹 인계 수용·운영 STREAM 배포와 다중 장치 데모는 남는다.
 현재 검증 범위는 [Kubernetes 진행 기록](docs/evidence/m7-kubernetes-stream.md)을 따른다.
 ADR0043은 장치 토큰으로 본인 Run 경로를 찾는 SDK/API를 실제 Spring·PG·TLS MQTT·S3·독립
 Runner와 연결했다. metadata 조회로 권한이나 journal을 전환하지 않으며 다음은 전체 그룹의
 안전한 재배정·checkpoint 인계와 장치의 명시적 재연결이다.
 [장치 조회 근거](docs/evidence/m7-device-route-discovery.md)의 로컬 검증과 후속 이미지 검증을 구분한다.
+ADR0044에서 계산 중 그룹의 동시 재시도 예약·전체 종료/회수 장벽·새 Attempt와 세대를 연결했다.
+실제 두 Runner의 외부 상태9 복원·Device journal 인계·결과37을 검증했다. 완료 허가 뒤 복구와
+Device 자동 재연결·공개 정책·Kubernetes 장애 수용은 [그룹 재시도 근거](docs/evidence/m7-group-retry.md)의 남은 범위를 따른다.
 새 검증 범위는 [공개 실행·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 따른다.
 복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.
 상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.

@@ -41,7 +41,8 @@ Python `BindingClient.device_routes`는 정확한 주체·JSON 타입·페이지
 선행 e93d9e1은 CI37118314544 5jobs/17JSON, 실제 GitOps ee44614 배포와 완성 API 이미지의
 Kubernetes AUTO/NODE DAG·API 교체·취소·S36개를 통과했다. 상세는
 [Kubernetes 기록](m7-kubernetes-stream.md)을 따른다. 이 근거는 이번 새 조회 API 이미지 검증이 아니다.
-새 STREAM kind 게이트 소스 c152d4d는 푸시했고 CI37120638129에서 실행 중이다.
+새 STREAM kind 게이트 소스 c152d4d는 CI37120638129 5jobs/17JSON과 실제 kind STREAM·배포를 통과했다.
+이번 Device 조회 API의 새 이미지 검증은 별도다.
 
 이 조회 API는 장치의 자동 reconnect/journal handover 또는 전체 그룹의 fence·물리 종료·
 새 Attempt/경로 세대·checkpoint 인계 orchestration을 구현하지 않는다. 공개 STREAM opt-in과

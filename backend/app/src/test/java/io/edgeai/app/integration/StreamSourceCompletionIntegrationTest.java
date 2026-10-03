@@ -58,6 +58,9 @@ class StreamSourceCompletionIntegrationTest {
     @Autowired DeviceStreamTokenService deviceTokens;@Autowired DataRouteService routes;@Autowired DataRouteRepository routeStore;
     @Autowired StreamCheckpointRepository checkpoints;@Autowired StreamExecutionRepository completions;
     @Autowired StreamAuthorityWorker worker;@Autowired MockMvc mvc;
+    @Autowired StreamRunService streamRuns;@Autowired WorkflowRepository workflowStore;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @MockitoBean RuntimeGateway gateway;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     private final JsonDocuments json=new JsonDocuments();
@@ -183,7 +186,7 @@ class StreamSourceCompletionIntegrationTest {
     private Map<String,Object> edge(String from,String to,String output,String input,String mode){
         return Map.of("fromTask",from,"toTask",to,"fromPort",output,"toPort",input,"mode",mode);
     }
-    private DagExecution dagFixture(boolean cancel)throws Exception{
+    private DagExecution dagFixture(boolean cancel,boolean recovery)throws Exception{
         var folder=Files.createDirectory(BROKER.root.resolve("dag-"+UUID.randomUUID()));Files.setPosixFilePermissions(folder,PosixFilePermissions.fromString("rwx------"));
         var definitions=new ArrayList<Object>();
         for(String name:List.of("root","sink","report"))definitions.add(Map.of("key",name,"serviceProfileVersionId",dagService(name).toString(),
@@ -200,22 +203,40 @@ class StreamSourceCompletionIntegrationTest {
             sources.put(name,Map.of("deviceId",device.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch()));
             inputs.add(Map.of("deviceId",device.id().toString(),"sourcePort","samples","toTask","root","toPort",name,"maxPayloadBytes",4096));
         }
-        var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
-            .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
-            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        UUID id=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));runIds.add(id);
+        UUID id;
+        if(recovery){
+            // Internal policy fixture until finalization recovery and automatic source reconnect are connected.
+            id=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(tx->{
+                var bindings=io.edgeai.app.support.StreamRunInput.parse(json.decode(json.canonical(inputs)));
+                var sessions=streamRuns.pin(bindings,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
+                var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),"sha256:"+"d".repeat(64),"AUTO",null,"{}",
+                    new RetryPolicy(2,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
+                assertThat(executions.create(run)).isTrue();executions.initialize(run,workflowStore.definitions(version.id()),Set.of());
+                streamRuns.configure(run,BUCKET,bindings,sessions);lifecycle.startRun(run.id(),BUCKET);return run.id();
+            });
+        }else{
+            var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
+                .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+            id=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));
+        }
+        runIds.add(id);
         var tasks=new TreeMap<String,UUID>();executions.tasks(id).forEach(t->tasks.put(t.key(),t.id()));
         assertThat(executions.attempts(tasks.get("report"))).isEmpty();
-        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",id.toString(),"mode",cancel?"cancel":"complete","sources",sources)));
+        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",id.toString(),"mode",recovery?"recover":cancel?"cancel":"complete","sources",sources)));
         return new DagExecution(id,tasks,folder);
     }
     private void publish(Path folder,String name,Object value)throws Exception{
         secret(folder,name+".tmp",json.canonical(value));Files.move(folder.resolve(name+".tmp"),folder.resolve(name),StandardCopyOption.ATOMIC_MOVE);
     }
+    private Path taskDirectory(DagExecution e,String name){
+        var history=executions.attempts(e.tasks().get(name));int number=history.isEmpty()?1:history.getFirst().number();
+        return e.folder().resolve(number==1?name:name+"-"+number);
+    }
     private void provision(DagExecution e)throws Exception{
         for(var entry:e.tasks().entrySet()){
             var attempts=executions.attempts(entry.getValue());if(attempts.isEmpty())continue;
-            var attempt=attempts.getFirst();var folder=e.folder().resolve(entry.getKey());if(Files.exists(folder.resolve("launch.json")))continue;
+            var attempt=attempts.getFirst();var folder=taskDirectory(e,entry.getKey());if(Files.exists(folder.resolve("launch.json")))continue;
             assertThat(attempt.state()).isEqualTo("DISPATCHING");
             if(entry.getKey().equals("report"))for(String parent:List.of("root","sink"))assertThat(runtimes.result(e.tasks().get(parent))).isPresent();
             Files.createDirectory(folder);Files.setPosixFilePermissions(folder,PosixFilePermissions.fromString("rwx------"));
@@ -224,7 +245,8 @@ class StreamSourceCompletionIntegrationTest {
             secret(folder,"claim",tokens.issue(runtimes.byAttempt(attempt.id()).orElseThrow()));secret(folder,"pod","source-pod-proof");
             publish(folder,"launch.json",Map.of("attemptId",attempt.id().toString(),"epoch",attempt.epoch(),"podUid",pod.podUid().toString()));
         }
-        if(Files.exists(e.folder().resolve("routing.json")))return;
+        int round=executions.attempts(e.tasks().get("root")).getFirst().number();String routing=round==1?"routing.json":"routing-"+round+".json";
+        if(Files.exists(e.folder().resolve(routing)))return;
         var records=routeStore.forRun(e.run(),20,0);assertThat(records).hasSize(3);
         if(records.stream().anyMatch(r->routeStore.open(r.id()).filter(g->g.state().equals("ACTIVE")).isEmpty()))return;
         var sources=new TreeMap<String,Object>();var taskRoutes=new TreeMap<String,List<String>>();taskRoutes.put("root",new ArrayList<>());taskRoutes.put("sink",new ArrayList<>());
@@ -233,17 +255,48 @@ class StreamSourceCompletionIntegrationTest {
             if(r.deviceSource())sources.put(r.consumerPort(),Map.of("generationId",g.id().toString(),"routeId",r.id().toString()));
             for(String name:taskRoutes.keySet())if(e.tasks().get(name).equals(r.consumerTaskId()) || e.tasks().get(name).equals(r.sourceTaskId()))taskRoutes.get(name).add(g.id().toString());
         }
-        publish(e.folder(),"routing.json",Map.of("sources",sources,"tasks",taskRoutes));
+        publish(e.folder(),routing,Map.of("sources",sources,"tasks",taskRoutes));
     }
-    private void dagProbe(boolean cancel)throws Exception{
-        var e=dagFixture(cancel);provision(e);
+    private void dagProbe(boolean cancel)throws Exception{dagProbe(cancel,false);}
+    private void dagProbe(boolean cancel,boolean recovery)throws Exception{
+        var e=dagFixture(cancel,recovery);provision(e);
         var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/stream_dag_probe.py",e.folder().toString())
             .redirectOutput(e.folder().resolve("probe.log").toFile()).redirectError(e.folder().resolve("probe-error.log").toFile());
         builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));var child=builder.start();
         try{
-            long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(100);boolean cancelled=false;
+            long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(100);boolean cancelled=false,failed=false,stopped=false,retried=false,restored=false;
+            var oldCheckpoints=new HashMap<String,StreamCheckpoint>();
             while(child.isAlive() && System.nanoTime()<end){
                 provision(e);
+                if(recovery && !failed && Files.exists(e.folder().resolve("recovery-request"))){
+                    lifecycle.observeFailure(executions.attempts(e.tasks().get("sink")).getFirst().id(),"RUNTIME_LOST");failed=true;
+                    // The Run fence has committed: a concurrent old publisher can no longer advance this snapshot.
+                    for(String name:List.of("root","sink"))oldCheckpoints.put(name,checkpoints.latest(e.tasks().get(name)).orElseThrow());
+                    for(String name:oldCheckpoints.keySet())assertThat(executions.task(e.tasks().get(name)).orElseThrow().state()).isEqualTo("RETRY_WAIT");
+                }
+                if(recovery && failed && !stopped && Files.exists(e.folder().resolve("producers-stopped"))){
+                    for(String name:oldCheckpoints.keySet()){
+                        var previous=oldCheckpoints.get(name);var r=runtimes.byAttempt(previous.attemptId()).orElseThrow();
+                        jdbc.update("UPDATE edgeai.runtime_command SET completed=true WHERE runtime_id=? AND kind='CREATE'",r.id());
+                        lifecycle.confirmStopped(previous.attemptId());
+                    }
+                    stopped=true;
+                }
+                if(stopped && !retried)retried=lifecycle.retryTask(e.tasks().get("root"));
+                if(retried && !restored){
+                    restored=true;
+                    for(String name:oldCheckpoints.keySet()){
+                        var attempt=executions.attempts(e.tasks().get(name)).getFirst();
+                        var current=checkpoints.byAttemptSerial(attempt.id(),oldCheckpoints.get(name).request().serial()+1).orElse(null);
+                        if(current==null){restored=false;break;}
+                        // Inspect the immutable handover entry even if a subsequent ACK has already advanced latest.
+                        assertThat(current.handoverFromId()).isEqualTo(oldCheckpoints.get(name).id());
+                        assertThat(current.revision()).isEqualTo(oldCheckpoints.get(name).revision());
+                        assertThat(((Map<?,?>)json.decode(current.summaryJson())).get("stateSha256"))
+                            .isEqualTo(((Map<?,?>)json.decode(oldCheckpoints.get(name).summaryJson())).get("stateSha256"));
+                    }
+                    if(restored)Files.writeString(e.folder().resolve("restored"),"");
+                }
                 if(cancel && !cancelled && Files.exists(e.folder().resolve("cancel-request"))){
                     for(String name:List.of("root","sink")){
                         assertThat(checkpoints.latest(e.tasks().get(name))).isPresent();assertThat(runtimes.result(e.tasks().get(name))).isEmpty();
@@ -256,8 +309,12 @@ class StreamSourceCompletionIntegrationTest {
             }
             assertThat(child.isAlive()).as("Actual multi-runner probe deadline").isFalse();
             assertThat(child.exitValue()).as("Actual multi-runner probe: %s",Files.readString(e.folder().resolve("probe.log"))).isZero();
-            assertThat(Files.readString(e.folder().resolve("probe.log"))).isEqualTo(cancel?"STREAM_DAG_CANCELLED\n":"STREAM_DAG_PASS\n");
+            assertThat(Files.readString(e.folder().resolve("probe.log"))).isEqualTo(recovery?"STREAM_DAG_RECOVERED\n":cancel?"STREAM_DAG_CANCELLED\n":"STREAM_DAG_PASS\n");
             assertThat(Files.size(e.folder().resolve("probe-error.log"))).isZero();
+            if(recovery){
+                assertThat(failed && stopped && retried && restored).isTrue();
+                for(String name:List.of("root","sink"))assertThat(executions.attempts(e.tasks().get(name))).hasSize(2);
+            }
             if(cancel){
                 assertThat(cancelled).isTrue();
                 for(String name:List.of("root","sink")){
@@ -277,7 +334,7 @@ class StreamSourceCompletionIntegrationTest {
                     assertThat(result.outputs()).hasSize(1);var output=result.outputs().getFirst();var artifact=output.artifact();
                     assertThat(artifact.bucket()).isEqualTo(BUCKET);assertThat(artifact.versionId()).isNotBlank().isNotEqualTo("null");
                     try(var bytes=MINIO.getObject(GetObjectArgs.builder().bucket(BUCKET).object(artifact.objectKey()).versionId(artifact.versionId()).build())){
-                        byte[] actual=bytes.readAllBytes();assertThat(actual).isEqualTo(Files.readAllBytes(e.folder().resolve(name).resolve("work/outputs").resolve(output.port())));
+                        byte[] actual=bytes.readAllBytes();assertThat(actual).isEqualTo(Files.readAllBytes(taskDirectory(e,name).resolve("work/outputs").resolve(output.port())));
                         assertThat(actual.length).isEqualTo(artifact.bytes());
                         assertThat(HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(actual))).isEqualTo(artifact.sha256());
                     }
@@ -287,7 +344,7 @@ class StreamSourceCompletionIntegrationTest {
                 assertThat(root.grantedAt()).isNotNull().isEqualTo(sink.grantedAt());
             }
             until(()->routeStore.forRun(e.run(),20,0).stream().noneMatch(r->routeStore.open(r.id()).isPresent()));
-            for(var r:routeStore.forRun(e.run(),20,0))assertThat(routeStore.history(r.id(),20,0)).hasSize(1).allMatch(g->g.closedAt()!=null);
+            for(var r:routeStore.forRun(e.run(),20,0))assertThat(routeStore.history(r.id(),20,0)).hasSize(recovery?2:1).allMatch(g->g.closedAt()!=null);
         }finally{
             if(child.isAlive()){
                 child.descendants().forEach(ProcessHandle::destroy);child.destroy();
@@ -297,6 +354,7 @@ class StreamSourceCompletionIntegrationTest {
     }
     @Test void independentRunnersComputeTaskToTaskStreamAndReleaseBatchFromFixedS3Results()throws Exception{dagProbe(false);}
     @Test void cancellingLiveSinkStopsIndependentStreamRunnersAndNeverReleasesBatch()throws Exception{dagProbe(true);}
+    @Test void realGroupRetryRestoresBothIndependentRunnersAndHandsOverBothDeviceJournals()throws Exception{dagProbe(false,true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
         while(!condition.getAsBoolean() && System.nanoTime()<end)Thread.sleep(20);assertThat(condition.getAsBoolean()).as("Actual stream completion boundary reached").isTrue();}
 }
