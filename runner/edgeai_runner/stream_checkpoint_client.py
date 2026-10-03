@@ -215,7 +215,16 @@ class CheckpointClient:
         return self.receipt(value['checkpoint'],snapshot,previous_id)
 
     def latest(self, *, timeout=1):
-        value=self._post('latest',{'generationIds':self.generation_ids.copy()},timeout)
+        return self._latest_response(self._post('latest',{'generationIds':self.generation_ids.copy()},timeout))
+
+    def handover(self, execution_sha256, *, timeout=1):
+        sha(execution_sha256)
+        value=self._latest_response(self._post('handover',{'generationIds':self.generation_ids.copy(),
+                                  'executionSha256':execution_sha256},timeout))
+        require(value['checkpoint'] is not None and value['checkpoint']['executionSha256'] == execution_sha256)
+        return value
+
+    def _latest_response(self, value):
         require(type(value) is dict)
         if value.get('checkpoint') is None:
             fields(value,'checkpoint')
@@ -266,14 +275,16 @@ class CheckpointClient:
         except (ValueError, TypeError, KeyError, OverflowError, RecursionError, JournalError):
             raise CheckpointError('Invalid checkpoint snapshot') from None
 
-    def recover(self, directory, inputs, outputs, limits, execution_sha256, *, guard, timeout=1):
-        """Explicit new-volume recovery under unchanged Attempt and route authority.
+    def recover(self, directory, inputs, outputs, limits, execution_sha256, *, guard, timeout=1, handover=False):
+        """Explicit new-volume recovery under the authenticated current authority.
 
         No missing checkpoint, old local journal or new generation is silently used.
+        Changed scope requires handover=True and a server-verified replacement.
         Recheck authenticated latest after storage I/O, before creating the journal.
         """
-        require(callable(guard));guard();sha(execution_sha256)
-        value=self.latest(timeout=timeout);guard();receipt=value['checkpoint']
+        require(callable(guard) and type(handover) is bool);guard();sha(execution_sha256)
+        value=self.handover(execution_sha256,timeout=timeout) if handover else self.latest(timeout=timeout)
+        guard();receipt=value['checkpoint']
         require(receipt is not None and receipt['executionSha256'] == execution_sha256)
         require(receipt['summary']['manifest'] == json.loads(manifest(inputs,outputs,limits)))
         snapshot=self.download(value,guard=guard,timeout=timeout)

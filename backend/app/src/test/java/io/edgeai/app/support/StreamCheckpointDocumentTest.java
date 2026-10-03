@@ -2,6 +2,7 @@ package io.edgeai.app.support;
 
 import io.edgeai.domain.stream.*;
 import io.edgeai.domain.stream.StreamBrokerGateway.Permission;
+import io.edgeai.domain.storage.VerifiedArtifact;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -60,5 +61,37 @@ class StreamCheckpointDocumentTest {
         }
         frame.clear();frame.putAll(copy);output.put("received",2);
         assertThatThrownBy(()->verify(json.canonical(example))).isInstanceOf(IllegalArgumentException.class);
+    }
+    @Test @SuppressWarnings("unchecked") void handoverRewritesOnlyBindingsAndSerialWhilePreservingSealedStateAndPendingFrames()throws Exception {
+        String original=json.canonical(example);var summary=verify(original);var q=request(original.getBytes(StandardCharsets.UTF_8));
+        UUID task=permissions.getFirst().route().consumerTaskId(),nextAttempt=UUID.randomUUID();
+        var source=new StreamCheckpoint(UUID.randomUUID(),permissions.getFirst().route().runId(),task,own,UUID.randomUUID(),3,UUID.randomUUID(),UUID.randomUUID(),
+            q,summary.revision(),summary.json(),new VerifiedArtifact("fixture-only",q.content(task,own).objectKey(),"fixture-version",q.sha256(),q.bytes(),StreamCheckpoint.MEDIA_TYPE),Instant.now(),null);
+        var current=permissions.stream().map(p->{var g=p.generation();var actor=new RouteGeneration.Actor(nextAttempt,4);
+            return new Permission(p.route(),new RouteGeneration(UUID.randomUUID(),g.routeId(),g.generation()+1,
+                g.producer().id().equals(own)?actor:g.producer(),g.consumer().id().equals(own)?actor:g.consumer(),g.brokerDigest(),g.policyDigest(),g.requestDigest(),
+                g.createdAt(),g.updatedAt(),g.leaseUntil(),g.activatedAt(),null,null,null));}).toList();
+        Path target=directory.resolve("new.json");
+        var rebound=StreamCheckpointDocument.rebind(directory.resolve("snapshot.json"),source,permissions,current,nextAttempt,target);
+        var next=(Map<String,Object>)json.decode(Files.readString(target));
+        assertThat(next.get("serial").toString()).isEqualTo("4");assertThat(next.get("stateBase64")).isEqualTo(example.get("stateBase64"));
+        assertThat(next.get("revision")).isEqualTo(example.get("revision"));assertThat(next.get("executionSha256")).isEqualTo(example.get("executionSha256"));
+        var oldRows=(List<Map<String,Object>>)example.get("routes");var newRows=(List<Map<String,Object>>)next.get("routes");
+        for(int i=0;i<oldRows.size();i++){
+            var oldRow=new TreeMap<>(oldRows.get(i));var newRow=new TreeMap<>(newRows.get(i));
+            var oldFrames=(List<Map<String,Object>>)oldRow.remove("frames");var newFrames=(List<Map<String,Object>>)newRow.remove("frames");
+            assertThat(newRow).isEqualTo(oldRow);assertThat(newFrames).hasSize(oldFrames.size());
+            for(int n=0;n<oldFrames.size();n++){
+                var oldFrame=new TreeMap<>(oldFrames.get(n));var newFrame=new TreeMap<>(newFrames.get(n));
+                assertThat(newFrame.remove("generation").toString()).isEqualTo("4");oldFrame.remove("generation");
+                assertThat(json.canonical(newFrame.remove("producer"))).isEqualTo(json.canonical(Map.of("kind","TASK_ATTEMPT","attemptId",nextAttempt.toString(),"epoch",4)));
+                oldFrame.remove("producer");assertThat(newFrame).isEqualTo(oldFrame);
+            }
+        }
+        assertThat(rebound.request().previousId()).isEqualTo(source.id());assertThat(rebound.summary().revision()).isEqualTo(1);
+        assertThat(Files.readString(directory.resolve("snapshot.json"))).isEqualTo(original);
+        Files.writeString(directory.resolve("snapshot.json"),original+"\n");
+        assertThatThrownBy(()->StreamCheckpointDocument.rebind(directory.resolve("snapshot.json"),source,permissions,current,nextAttempt,directory.resolve("invalid.json")))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 }

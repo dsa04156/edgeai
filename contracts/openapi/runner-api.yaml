@@ -16,6 +16,8 @@ paths:
     $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1checkpoints~1commit
   /internal/v1/attempts/{attemptId}/streams/checkpoints/latest:
     $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1checkpoints~1latest
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/handover:
+    $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1checkpoints~1handover
   /internal/v1/attempts/{attemptId}/streams/heartbeat:
     $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1heartbeat
   /internal/v1/attempts/{attemptId}/streams:

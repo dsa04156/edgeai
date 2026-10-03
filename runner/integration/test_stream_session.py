@@ -76,9 +76,10 @@ class SessionApi:
                         self.send_response(status);self.send_header('Content-Length','0');self.end_headers();return
                     operation=self.path.rsplit('/',1)[1];owner.checkpoint_requests.append((operation,data))
                     now=document()['serverTime'];status=200
-                    if operation=='latest':
+                    if operation in ('latest','handover'):
                         value={'checkpoint':owner.checkpoint_latest}
                         if owner.checkpoint_latest:value['download']={'url':owner.url+'/checkpoint-object?versionId='+owner.checkpoint_latest['versionId'],'expiresAt':now}
+                        if operation=='handover' and (not owner.checkpoint_latest or data.get('executionSha256')!=owner.checkpoint_latest['executionSha256']):status=409
                     elif operation=='uploads':
                         q=data['checkpoint'];latest=owner.checkpoint_latest
                         if latest and latest['serial']==q['serial'] and latest['sha256']==q['sha256']:value={'checkpoint':latest}
@@ -166,11 +167,11 @@ class StreamSessionTest(unittest.TestCase):
         for link in self.links.values():link.close(force=True)
         for journal in self.journals.values():journal.close()
 
-    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False, restore_latest=False):
+    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False, restore_latest=False, handover_latest=False):
         checkpoint=CheckpointClient(self.client,POD,list(GENERATIONS.values()),storage_ca_file=self.broker.ca) if automatic_checkpoint else None
         self.session=Session(self.client,POD,INPUTS,OUTPUTS,command,self.directory,{'mode':'zip'},
                              limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability,
-                             checkpoint_client=checkpoint,restore_latest=restore_latest)
+                             checkpoint_client=checkpoint,restore_latest=restore_latest,handover_latest=handover_latest)
         return self.session
 
     def setup_flow(self, **options):
@@ -367,8 +368,9 @@ class StreamSessionTest(unittest.TestCase):
         latest=self.api.checkpoint_latest
         self.assertTrue(any(r['frames'] for r in self.api.checkpoint_objects[latest['versionId']].document()['routes']))
         session.close();shutil.rmtree(self.directory);self.directory.mkdir(mode=0o700)
-        session=self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True)
+        session=self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True,handover_latest=True)
         self.assertEqual(b'9',session.journal.checkpoint().state)
+        self.assertTrue(any(op=='handover' for op,_ in self.api.checkpoint_requests))
         self.assertIsNone(session.processor.workload)
         self.emit(A,b'2');self.emit(B,b'3')
         eventually(self.pump,lambda:bool(self.journals['sink'].pending()))

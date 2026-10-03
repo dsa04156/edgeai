@@ -15,6 +15,7 @@ import static io.edgeai.app.support.WorkflowInput.*;
 /** One frame at a time: never materialize the full 72 MiB checkpoint in the API heap. */
 public final class StreamCheckpointDocument {
     public record Summary(long revision,String json){}
+    public record Rebound(StreamCheckpoint.Request request,Summary summary){}
     private final MessageDigest canonical;
     private final JsonDocuments json=new JsonDocuments();
     private final JsonMapper mapper=JsonMapper.builder(JsonFactory.builder().streamReadConstraints(StreamReadConstraints.builder()
@@ -23,6 +24,10 @@ public final class StreamCheckpointDocument {
     private final Map<String,Permission> permissions=new HashMap<>();
     private final Map<String,Object> bindings=new HashMap<>();
     private int routeCount,maxFrames,maxBuffer,maxState;
+    private OutputStream replacement;
+    private MessageDigest replacementDigest;
+    private Map<String,Object> replacementBindings;
+    private long replacementSerial,replacementBytes;
     private StreamCheckpointDocument(List<Permission> routes){
         try{canonical=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
         for(var p:routes){
@@ -38,6 +43,25 @@ public final class StreamCheckpointDocument {
             check(Files.size(file)==request.bytes());
             return new StreamCheckpointDocument(routes).read(file,request,attempt);
         }catch(IOException|RuntimeException e){throw new IllegalArgumentException("Invalid stream checkpoint document");}
+    }
+    /** Verify the sealed source while rewriting only binding identities and serial. */
+    public static Rebound rebind(Path source,StreamCheckpoint checkpoint,List<Permission> previous,
+            List<Permission> current,UUID attempt,Path destination){
+        var reader=new StreamCheckpointDocument(previous);var target=new StreamCheckpointDocument(current);
+        check(reader.permissions.keySet().equals(target.permissions.keySet()));
+        check(checkpoint.request().serial()<9007199254740991L);
+        reader.replacementBindings=target.bindings;reader.replacementSerial=checkpoint.request().serial()+1;
+        try(var output=Files.newOutputStream(destination,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
+            check(Files.size(source)==checkpoint.request().bytes());
+            reader.replacement=output;reader.replacementDigest=MessageDigest.getInstance("SHA-256");
+            var verified=reader.read(source,checkpoint.request(),checkpoint.attemptId());
+            check(JSON.canonical(JSON.decode(verified.json())).equals(JSON.canonical(JSON.decode(checkpoint.summaryJson()))));
+            output.flush();
+            var request=new StreamCheckpoint.Request(checkpoint.id(),reader.replacementSerial,
+                HexFormat.of().formatHex(reader.replacementDigest.digest()),reader.replacementBytes,checkpoint.request().executionSha256(),
+                current.stream().map(p->p.generation().id()).toList());
+            return new Rebound(request,verify(destination,request,current,attempt));
+        }catch(IOException|NoSuchAlgorithmException e){throw new IllegalArgumentException("Checkpoint handover file unavailable");}
     }
     private Summary read(Path file,StreamCheckpoint.Request request,UUID attempt)throws IOException {
         try(var p=mapper.createParser(file)){
@@ -55,7 +79,14 @@ public final class StreamCheckpointDocument {
                 (permission.generation().consumer().id().equals(attempt)?inputs:outputs).add(bindings.get(id));});
             check(inputs.size()<=16 && outputs.size()<=16);
             check(json.canonical(inputs).equals(json.canonical(manifest.get("inputs"))) && json.canonical(outputs).equals(json.canonical(manifest.get("outputs"))));
-            emitField("manifest",manifest);emit(",");
+            if(replacement==null)emitField("manifest",manifest);
+            else{
+                var mapped=new TreeMap<String,Object>();manifest.forEach((k,v)->mapped.put((String)k,v));
+                for(String direction:List.of("inputs","outputs"))mapped.put(direction,((List<?>)manifest.get(direction)).stream()
+                    .map(v->replacementBindings.get(((Map<?,?>)v).get("routeId"))).toList());
+                emitReplacement("\"manifest\":"+json.canonical(manifest),"\"manifest\":"+json.canonical(mapped));
+            }
+            emit(",");
             long revision=number(field(p,"revision",32,2),0,request.serial());emitField("revision",revision);emit(",\"routes\":[");
             name(p,"routes");check(p.currentToken()==JsonToken.START_ARRAY);
             var seen=new HashSet<String>();var cursors=new ArrayList<Object>();
@@ -80,7 +111,14 @@ public final class StreamCheckpointDocument {
                     if("END".equals(frame.get("kind"))){check(terminal && payload.length==0 && frame.get("mediaType")==null);endSeen=true;}
                     else check("DATA".equals(frame.get("kind")) && permission.route().mediaType().equals(frame.get("mediaType")));
                     String encoded=json.canonical(frame);check(encoded.length()<=524288);bytes+=encoded.length();check(bytes<=maxBuffer/routeCount);
-                    if(count++>0)emit(",");emit(encoded);
+                    if(count++>0)emit(",");
+                    if(replacement==null)emit(encoded);
+                    else{
+                        var mapped=new TreeMap<String,Object>();frame.forEach((k,v)->mapped.put((String)k,v));
+                        var bindingNext=(Map<?,?>)replacementBindings.get(identity);
+                        mapped.put("generation",bindingNext.get("generation"));mapped.put("producer",bindingNext.get("producer"));
+                        emitReplacement(encoded,json.canonical(mapped));
+                    }
                 }
                 emit("],");long received=number(field(p,"received",32,2),committed,9007199254740991L);emitField("received",received);emit(",");
                 String identity=text(field(p,"routeId",36,2),36);check(permissions.containsKey(identity) && seen.add(identity));
@@ -90,7 +128,9 @@ public final class StreamCheckpointDocument {
                 cursors.add(Map.of("routeId",identity,"received",received,"committed",committed,"ended",terminal));
             }
             check(seen.size()==routeCount);emit("],");
-            long serial=number(field(p,"serial",32,2),0,9007199254740991L);check(serial==request.serial());emitField("serial",serial);emit(",");
+            long serial=number(field(p,"serial",32,2),0,9007199254740991L);check(serial==request.serial());
+            if(replacement==null)emitField("serial",serial);else emitReplacement("\"serial\":"+serial,"\"serial\":"+replacementSerial);
+            emit(",");
             Object state=field(p,"stateBase64",1398104,2);byte[] stateBytes=blob(state,maxState);emitField("stateBase64",state);emit("}");
             check(p.nextToken()==JsonToken.END_OBJECT && p.nextToken()==null);
             check(HexFormat.of().formatHex(canonical.digest()).equals(request.sha256()));
@@ -117,7 +157,15 @@ public final class StreamCheckpointDocument {
         byte[] bytes=Base64.getDecoder().decode(encoded);check(bytes.length<=maximum && Base64.getEncoder().encodeToString(bytes).equals(encoded));return bytes;
     }
     private static byte[] hash(byte[] value){try{return MessageDigest.getInstance("SHA-256").digest(value);}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
-    private void emit(String value){canonical.update(value.getBytes(StandardCharsets.US_ASCII));}
+    private void emit(String value){emitReplacement(value,value);}
+    private void emitReplacement(String original,String next){
+        canonical.update(original.getBytes(StandardCharsets.US_ASCII));
+        if(replacement!=null){
+            byte[] bytes=next.getBytes(StandardCharsets.US_ASCII);replacementBytes+=bytes.length;check(replacementBytes<=StreamCheckpoint.MAX_BYTES);
+            replacementDigest.update(bytes);
+            try{replacement.write(bytes);}catch(IOException e){throw new UncheckedIOException(e);}
+        }
+    }
     private void emitField(String name,Object value){emit("\""+name+"\":"+json.canonical(value));}
     private static void check(boolean condition){if(!condition)throw new IllegalArgumentException("Invalid stream checkpoint document");}
 }

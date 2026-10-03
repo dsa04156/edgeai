@@ -5,6 +5,7 @@ import io.edgeai.app.config.RunnerPrincipal;
 import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.app.service.*;
 import io.edgeai.app.support.JsonDocuments;
+import io.edgeai.app.support.StreamCheckpointDocument;
 import io.edgeai.domain.profile.ProfileIdentity;
 import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
@@ -63,13 +64,16 @@ class StreamCheckpointIntegrationTest {
         return pods.get(r.attemptId());});}
     @AfterEach void cleanup(){for(var id:runIds)runs.cancelRun(id,"{}");}
     @AfterAll static void stop()throws Exception{STORAGE.close();}
-    @SuppressWarnings("unchecked") private Execution execution()throws Exception {
+    private Execution execution()throws Exception {return execution(false);}
+    @SuppressWarnings("unchecked") private Execution execution(boolean retry)throws Exception {
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
         spec.put("inputs",Map.of("a",Map.of("mediaType","application/json","maxBytes",4096,"required",false),"b",Map.of("mediaType","application/json","maxBytes",4096,"required",false)));
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key","checkpoint-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
         var workflow=workflows.create(json.canonical(Map.of("key","checkpoint-"+UUID.randomUUID(),"displayName","Checkpoint fixture"))).value();
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",List.of(Map.of("key","sum","serviceProfileVersionId",profile.id().toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
-        var run=runs.create(UUID.randomUUID().toString(),json.canonical(Map.of("workflowVersionId",version.id().toString(),"parameters",Map.of(),"execution",Map.of("mode","AUTO")))).value();runIds.add(run.id());
+        var input=new TreeMap<String,Object>(Map.of("workflowVersionId",version.id().toString(),"parameters",Map.of(),"execution",Map.of("mode","AUTO")));
+        if(retry)input.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",600,"retryOn",List.of("WORKLOAD_FAILED")));
+        var run=runs.create(UUID.randomUUID().toString(),json.canonical(input)).value();runIds.add(run.id());
         var task=runs.detail(run.id()).tasks().getFirst();var attempt=runs.taskDetail(task.id()).attempts().getFirst();
         var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(attempt.id(),pod);
         lifecycle.submitted(attempt.id(),pod.jobUid());lifecycle.claim(attempt.id(),1,pod);
@@ -103,7 +107,8 @@ class StreamCheckpointIntegrationTest {
         q.put("previousCheckpointId",previous==null?null:previous.toString());q.put("serial",value.get("serial"));q.put("sha256",sha(bytes));q.put("bytes",bytes.length);
         q.put("executionSha256",value.get("executionSha256"));q.put("generationIds",e.permissions().stream().map(p->p.generation().id().toString()).toList());return q;
     }
-    private Map<String,Object> body(Execution e){return new TreeMap<>(Map.of("epoch",1,"podUid",e.pod().podUid().toString()));}
+    private long epoch(Execution e){return e.permissions().getFirst().generation().consumer().epoch();}
+    private Map<String,Object> body(Execution e){return new TreeMap<>(Map.of("epoch",epoch(e),"podUid",e.pod().podUid().toString()));}
     private String commitBody(Execution e,Map<String,Object> q,String version){var body=body(e);body.put("checkpoint",q);body.put("versionId",version);return json.canonical(body);}
     private Reply send(Execution e,String operation,Object value,String podToken,boolean bearer)throws Exception {
         var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/internal/v1/attempts/"+e.attempt()+"/streams/checkpoints/"+operation))
@@ -128,7 +133,132 @@ class StreamCheckpointIntegrationTest {
         }
     }
     private String key(Execution e,Map<String,Object> q){return "tasks/"+e.task()+"/attempts/"+e.attempt()+"/stream-checkpoint/"+q.get("sha256");}
-    private RunnerPrincipal principal(Execution e){return new RunnerPrincipal(e.attempt(),1,e.pod());}
+    private RunnerPrincipal principal(Execution e){return new RunnerPrincipal(e.attempt(),epoch(e),e.pod());}
+    private Map<String,Object> query(Execution e){var value=body(e);value.put("generationIds",e.permissions().stream().map(p->p.generation().id().toString()).toList());return value;}
+    private Map<String,Object> handoverBody(Execution e){var value=query(e);value.put("executionSha256","a".repeat(64));return value;}
+    private StreamCheckpoint seal(Execution e)throws Exception{
+        byte[] bytes=snapshot(e);var q=request(e,bytes,null);String version=upload(e,q,bytes);
+        assertThat(send(e,"commit",commitBody(e,q,version)).status()).isEqualTo(201);
+        return checkpoints.latest(e.task()).orElseThrow();
+    }
+    private Execution transition(Execution source,boolean retry)throws Exception{
+        UUID attempt=source.attempt();RuntimePod pod=source.pod();long epoch=epoch(source);
+        if(retry){
+            jdbc.update("UPDATE edgeai.runtime_command SET completed=true,lease_owner=NULL,lease_until=NULL WHERE kind='CREATE' AND runtime_id=(SELECT id FROM edgeai.runtime_instance WHERE attempt_id=?)",attempt);
+            lifecycle.fail(attempt,epoch,pod.podUid(),"WORKLOAD_FAILED");assertThat(lifecycle.retryTask(source.task())).isFalse();
+            lifecycle.confirmStopped(attempt);
+            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);boolean ready=false;
+            while(!(ready=lifecycle.retryTask(source.task())) && System.nanoTime()<until)Thread.sleep(20);
+            assertThat(ready).isTrue();var next=executions.attempts(source.task()).getFirst();attempt=next.id();epoch=next.epoch();
+            pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-next-node");pods.put(attempt,pod);
+            lifecycle.submitted(attempt,pod.jobUid());lifecycle.claim(attempt,epoch,pod);
+        }
+        var permissions=new ArrayList<Permission>();
+        for(var p:source.permissions()){
+            var g=p.generation();routes.fence(g.id(),"REPLACED");
+            routes.revoked(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));
+            var next=routes.prepare(p.route().id(),UUID.randomUUID(),g.producer(),new RouteGeneration.Actor(attempt,epoch),g.brokerDigest(),120);
+            next=routes.activate(new RouteGeneration.BrokerReceipt(next.id(),next.brokerDigest(),next.policyDigest()));
+            permissions.add(new Permission(p.route(),next));
+        }
+        return new Execution(source.run(),source.task(),attempt,pod,List.copyOf(permissions));
+    }
+    @Test void newAttemptReceivesServerReboundSnapshotAndActualPythonContinuesFromNineToFourteen()throws Exception{
+        var source=execution(true);var original=seal(source);var next=transition(source,true);
+        assertThat(next.task()).isEqualTo(source.task());assertThat(next.attempt()).isNotEqualTo(source.attempt());assertThat(epoch(next)).isEqualTo(2);
+        assertThat(send(next,"latest",query(next)).status()).isEqualTo(409);
+        var folder=Files.createTempDirectory(directory,"handover-client-");
+        Files.writeString(folder.resolve("claim"),tokens.issue(runtimes.byAttempt(next.attempt()).orElseThrow()));
+        Files.writeString(folder.resolve("pod"),"checkpoint-pod-proof");
+        for(String name:List.of("claim","pod"))Files.setPosixFilePermissions(folder.resolve(name),PosixFilePermissions.fromString("rw-------"));
+        Files.writeString(folder.resolve("request.json"),json.canonical(Map.of("origin","http://127.0.0.1:"+port,"runId",next.run().toString(),
+            "attemptId",next.attempt().toString(),"epoch",epoch(next),"podUid",next.pod().podUid().toString(),"generationIds",query(next).get("generationIds"),
+            "sourceId",original.id().toString(),"sourceSerial",original.request().serial())));
+        var child=new ProcessBuilder("python3",Path.of("src/test/fixtures/stream_checkpoint_handover_probe.py").toAbsolutePath().toString(),folder.toString()).redirectErrorStream(true).start();
+        try{
+            assertThat(child.waitFor(15,TimeUnit.SECONDS)).isTrue();assertThat(child.exitValue()).isZero();
+            assertThat(new String(child.getInputStream().readAllBytes(),StandardCharsets.UTF_8).strip()).isEqualTo("STREAM_CHECKPOINT_HANDOVER_PASS");
+        }finally{if(child.isAlive()){child.destroyForcibly();child.waitFor();}}
+        var latest=checkpoints.latest(next.task()).orElseThrow();assertThat(latest.attemptId()).isEqualTo(next.attempt());assertThat(latest.revision()).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.stream_checkpoint WHERE task_id=?",Integer.class,next.task())).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.stream_checkpoint WHERE task_id=? AND handover_from_id=?",Integer.class,next.task(),original.id())).isEqualTo(1);
+        assertThat(send(source,"latest",query(source)).status()).isIn(401,409);
+    }
+    @Test void concurrentGenerationHandoverSealsOneSnapshotAndKeepsTheSameCalculation()throws Exception{
+        var source=execution();var original=seal(source);var next=transition(source,false);
+        assertThat(send(next,"latest",query(next)).status()).isEqualTo(409);
+        try(var pool=Executors.newFixedThreadPool(2)){
+            var first=pool.submit(()->send(next,"handover",handoverBody(next)));var second=pool.submit(()->send(next,"handover",handoverBody(next)));
+            var a=first.get(15,TimeUnit.SECONDS);var b=second.get(15,TimeUnit.SECONDS);
+            assertThat(a.status()).isEqualTo(200);assertThat(b.status()).isEqualTo(200);
+            assertThat(a.body().get("checkpoint")).isEqualTo(b.body().get("checkpoint"));
+        }
+        var latest=checkpoints.latest(next.task()).orElseThrow();assertThat(latest.handoverFromId()).isEqualTo(original.id());
+        assertThat(latest.request().serial()).isEqualTo(original.request().serial()+1);assertThat(latest.revision()).isEqualTo(original.revision());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.stream_checkpoint WHERE task_id=?",Integer.class,next.task())).isEqualTo(2);
+        assertThat(send(next,"handover",handoverBody(next)).status()).isEqualTo(200);
+    }
+    @Test void handoverRejectsMissingStateChangedExecutionAndUnauthenticatedProducer()throws Exception{
+        var source=execution();assertThat(send(source,"handover",handoverBody(source)).status()).isEqualTo(409);
+        var original=seal(source);var next=transition(source,false);
+        var changed=handoverBody(next);changed.put("executionSha256","f".repeat(64));
+        assertThat(send(next,"handover",changed).status()).isEqualTo(409);
+        assertThat(send(next,"handover",handoverBody(next),"incorrect-proof",true).status()).isEqualTo(401);
+        assertThat(send(next,"handover",handoverBody(next),"checkpoint-pod-proof",false).status()).isEqualTo(401);
+        assertThat(checkpoints.latest(source.task()).orElseThrow().id()).isEqualTo(original.id());
+    }
+    @Test void aNewDeviceSessionCannotImplicitlyReuseThePreviousSensorSequenceHistory()throws Exception{
+        var source=execution();var original=seal(source);var previous=source.permissions().getFirst();var g=previous.generation();
+        routes.fence(g.id(),"REPLACED");routes.revoked(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));
+        var session=devices.openSession(previous.route().sourceDeviceId(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
+        var current=routes.prepare(previous.route().id(),UUID.randomUUID(),new RouteGeneration.Actor(session.id(),session.epoch()),g.consumer(),g.brokerDigest(),120);
+        current=routes.activate(new RouteGeneration.BrokerReceipt(current.id(),current.brokerDigest(),current.policyDigest()));
+        var next=new Execution(source.run(),source.task(),source.attempt(),source.pod(),List.of(new Permission(previous.route(),current),source.permissions().getLast()));
+        var reply=send(next,"handover",handoverBody(next));assertThat(reply.status()).isEqualTo(409);
+        assertThat(reply.body().get("code")).isEqualTo("DEVICE_STREAM_HANDOVER_REQUIRED");
+        assertThat(checkpoints.latest(source.task()).orElseThrow().id()).isEqualTo(original.id());
+    }
+    @Test @SuppressWarnings("unchecked") void databaseHandoverConstraintsKeepStateCursorsLimitsAndCurrentBindingsImmutable()throws Exception{
+        var source=execution(true);var original=seal(source);var next=transition(source,true);
+        var sourceFile=directory.resolve("sealed.json");storage.downloadFile(original.artifact(),sourceFile);
+        var transformed=StreamCheckpointDocument.rebind(sourceFile,original,source.permissions(),next.permissions(),next.attempt(),directory.resolve("rebound.json"));
+        var r=runtimes.byAttempt(next.attempt()).orElseThrow();var tx=new TransactionTemplate(transactions);
+        for(String mutation:List.of("missing-marker","serial","state","cursor","limits","binding","valid")){
+            var summary=(Map<String,Object>)json.decode(transformed.summary().json());var q=transformed.request();
+            if(mutation.equals("state"))summary.put("stateSha256","f".repeat(64));
+            if(mutation.equals("cursor"))((List<Map<String,Object>>)summary.get("routes")).getFirst().put("ended",true);
+            var manifest=(Map<String,Object>)summary.get("manifest");
+            if(mutation.equals("limits"))((Map<String,Object>)manifest.get("limits")).put("max_frames",4096);
+            if(mutation.equals("binding"))((List<Map<String,Object>>)manifest.get("inputs")).getFirst().put("generation",999);
+            if(mutation.equals("serial"))q=new StreamCheckpoint.Request(q.previousId(),q.serial()+1,q.sha256(),q.bytes(),q.executionSha256(),q.generationIds());
+            var fixture=new StreamCheckpoint(UUID.randomUUID(),r.runId(),r.taskId(),r.attemptId(),r.id(),r.epoch(),next.pod().podUid(),original.serviceProfileVersionId(),q,
+                original.revision(),json.canonical(summary),new VerifiedArtifact("fixture-only",q.content(r.taskId(),r.attemptId()).objectKey(),"database-constraint-fixture",q.sha256(),q.bytes(),StreamCheckpoint.MEDIA_TYPE),
+                Instant.now(),mutation.equals("missing-marker")?null:original.id());
+            tx.executeWithoutResult(s->{s.setRollbackOnly();
+                if(mutation.equals("valid"))checkpoints.insert(fixture);
+                else assertThatThrownBy(()->checkpoints.insert(fixture)).as(mutation).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            });
+            assertThat(checkpoints.latest(source.task()).orElseThrow().id()).isEqualTo(original.id());
+        }
+        assertThat(send(next,"handover",handoverBody(next)).status()).isEqualTo(200);
+    }
+    @Test void cancellationDuringHandoverStorageReadCannotSealRewrittenSnapshot()throws Exception{
+        var source=execution();var original=seal(source);var next=transition(source,false);
+        var read=new CountDownLatch(1);var release=new CountDownLatch(1);
+        ArtifactFiles boundary=new ArtifactFiles(){
+            public void downloadFile(VerifiedArtifact a,Path p){storage.downloadFile(a,p);read.countDown();try{
+                if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("Fixture wait timed out");
+            }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}}
+            public String uploadFile(ArtifactContent c,Path p){return storage.uploadFile(c,p);}
+        };
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore);
+        try(var pool=Executors.newSingleThreadExecutor()){
+            var pending=pool.submit(()->wrapped.handover(principal(next),json.canonical(handoverBody(next))));
+            try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(next.run(),"{}");}finally{release.countDown();}
+            assertThatThrownBy(()->pending.get(10,TimeUnit.SECONDS)).hasCauseInstanceOf(ControlPlaneException.class);
+        }
+        assertThat(checkpoints.latest(source.task()).orElseThrow().id()).isEqualTo(original.id());
+    }
     @Test void actualHttpSdkS3AndDbCommitReplayLatestAndServerRecreation()throws Exception {
         var e=execution();byte[] bytes=snapshot(e);var q=request(e,bytes,null);String version=upload(e,q,bytes);
         var committed=send(e,"commit",commitBody(e,q,version));assertThat(committed.status()).isEqualTo(201);
@@ -141,7 +271,7 @@ class StreamCheckpointIntegrationTest {
             var downloaded=client.send(HttpRequest.newBuilder(URI.create((String)grant.get("url"))).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             assertThat(downloaded.statusCode()).isEqualTo(200);assertThat(downloaded.body()).isEqualTo(bytes);
         }
-        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions);
+        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore);
         assertThat(recreated.commit(principal(e),commitBody(e,q,version)).value().id()).isEqualTo(stored.id());
         assertThat(checkpoints.latest(e.task()).orElseThrow().summaryJson()).doesNotContain("\"stateBase64\"","\"frames\"");
     }
@@ -225,7 +355,7 @@ class StreamCheckpointIntegrationTest {
             public VerifiedArtifact verify(ArtifactContent c,String v){var verified=storage.verify(c,v);read.countDown();
                 try{if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("Fixture wait timed out");}catch(InterruptedException x){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}return verified;}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.commit(principal(e),commitBody(e,q,version)));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(e.run(),"{}");}finally{release.countDown();}
@@ -245,7 +375,14 @@ class StreamCheckpointIntegrationTest {
             admin.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());admin.setBucketVersioning(SetBucketVersioningArgs.builder().bucket(bucket)
                 .config(new VersioningConfiguration(VersioningConfiguration.Status.ENABLED,null,null,null)).build());
         }catch(Exception e){throw new IllegalStateException("Real checkpoint storage fixture unavailable; private details suppressed");}}
-        public void close()throws Exception{try{for(var v:versions)admin.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(v.getKey()).versionId(v.getValue()).build());
+        public void close()throws Exception{try{
+            var owned=new ArrayList<Map.Entry<String,String>>();
+            for(var object:admin.listObjects(ListObjectsArgs.builder().bucket(bucket).includeVersions(true).recursive(true).build())){
+                var value=object.get();assertThat(value.isDir()).isFalse();assertThat(value.versionId()).isNotBlank();
+                owned.add(Map.entry(value.objectName(),value.versionId()));
+            }
+            for(var value:owned)admin.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(value.getKey()).versionId(value.getValue()).build());
+            assertThat(admin.listObjects(ListObjectsArgs.builder().bucket(bucket).includeVersions(true).recursive(true).build()).iterator().hasNext()).isFalse();
             admin.removeBucket(RemoveBucketArgs.builder().bucket(bucket).build());}finally{admin.close();Files.deleteIfExists(key);Files.deleteIfExists(root);}}
     }
 }

@@ -1,10 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0035/V23 서버 검증 checkpoint 인계와 명시적 SDK/Session 복원을 연결했다.
+새 Attempt·경로 세대에 state/커서/END를 보존하며 serial만 증가시킨다. 실제 Spring/PG/MinIO13개에서
+독립 모델9→14·동시 인계·취소 경합·Device Session 변경 거절·DB 불변 제약을 검증했다.
+단위89개·PostgreSQL153개·S3/Remote/VD29개·Runner92개·HTTPS/MQTT42개도 PASS다.
+실제 Spring/PG/TLS broker22개와 PC/모바일·Swagger10개·DB 중단/복구도 통과했다.
+상세는 docs/evidence/m7-stream-checkpoint-handover.md다. Device/인접 Task journal 전환과
+SERVICE/Runner·공개 STREAM 종단은 남으며 M5 잔여/M7–M10 미완료를 유지한다.
 ADR0034 인증 latest·고정 S3 다운로드·새 볼륨 Session 복원을 연결했다.
 실제 HTTP12개·TLS MQTT 복원/소켓 정리3개·Spring/PG/MinIO7개를 검증했다.
 전체 Runner91개·HTTPS/MQTT42개·Spring/PG/TLS broker22개 회귀도 PASS다.
 동일 Attempt/경로에서 상태9→14와 미확인 출력/END를 복원하며 손상·기한 만료·이력 변경은 거절한다.
+소스58277da의 CI37097769723 5 jobs/결과JSON17개·실제kind 및 GitOps3f94339 배포도 확인했다.
+052409Z-2316f084에서 정확한3개 imageID·Ready·PVCBound·ArgoSynced·VD 활성화는 PASS이며 aggregate health는Progressing이다.
 상세는 docs/evidence/m7-stream-checkpoint-recovery.md다. 새 Attempt/세대 인계와 공개 STREAM은 남는다.
 ADR0033 인증 checkpoint client·Session 자동 publisher를 연결했다. 실제 HTTP/SQLite8개,
 실제 HTTPS/MQTT39개·Runner87개와 실제 Spring/PG/S3/Python publisher7개를 로컬 검증했다.

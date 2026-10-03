@@ -42,4 +42,16 @@ TLS MQTT/계산 Session 시험의 API와 S3 응답은 명시적 fixture다. Spri
 실제 SDK publisher/복원이지만 Pod 신원과 broker 활성화는 fixture이며 전체 Session은 아니다.
 이 둘을 실제 Kubernetes STREAM 종단으로 합쳐 판정하지 않는다. 동일 Attempt·binding의
 새 볼륨 복원이며 새 Pod 신원·Attempt·generation 인계, 운영 broker/SERVICE/Runner·공개 실행,
-다중 장치 수용과 M5 잔여/M8–M10은 계속 남는다. 이 변경의 원격 CI/배포는 별도 확인한다.
+다중 장치 수용과 M5 잔여/M8–M10은 계속 남는다.
+
+## 원격 CI 확인
+
+소스 `58277dad45d16ccb4c95386fd384c415ea6432a6`의 GitHub Actions `37097769723`은5 jobs 모두
+success다. 내려받은 결과JSON17개를 직접 열어 모두 PASS/0임을 확인했다. 실제 Runner 컨테이너
+91개·97.634초, HTTPS/MQTT42개·64.132초이며 플랫폼·저장소·DB/브라우저 회귀도 포함한다.
+`20261003T050056Z-13612c25`의 실제 kind에서 BATCH/Retry/Offload/TLS Remote/VD와 고정 S3
+결과20+5개를 검증했고 소유 클러스터 `edgeai-ci-5ab2015e721f` 삭제 로그도 확인했다.
+GitOps는 `3f94339`에 이미지를 고정했다. 이는 공개 STREAM 종단이나 후속 ADR0035의 원격 검증이 아니다.
+실제 배포 `20261003T052409Z-2316f084`는 해당 GitOps revision·API/dashboard/MinIO의 정확한
+3개 imageID·Ready·PVC Bound·Argo Synced 및 VD 실행 활성화를 확인했다.
+aggregate health는 기존 공유 Ingress 상태 때문에 Progressing이며 Healthy라고 판정하지 않는다.

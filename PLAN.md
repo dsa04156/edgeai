@@ -206,3 +206,9 @@ ADR0034는 인증 latest·고정 S3 다운로드·권한/이력 재검사와 명
 연결했다. 실제 TLS MQTT에서9→14 계산 재개·출력/END 중복 방지와 실제 Spring/PG/MinIO의
 SDK 복원을 검증했다. [복원 증거](docs/evidence/m7-stream-checkpoint-recovery.md)를 따른다.
 동일 Attempt/세대 범위이며 새 Attempt 인계와 공개 실행의 전체 수용은 계속 남는다.
+
+ADR0035/V23은 서버가 최신 확정본을 새 Attempt·경로 세대로 인계하고 SDK가 새 볼륨으로
+복원하는 경로를 연결했다. 실제 Spring/PG/S3에서 이전 종료·권한 회수 조건, 동시 인계,
+취소 경합·DB 불변 제약과 독립 계산 프로세스의9→14 재개를 검증했다.
+[인계 증거](docs/evidence/m7-stream-checkpoint-handover.md)를 따른다. Device/인접 Task의
+journal 전환, SERVICE/Runner·공개 STREAM·실제 Kubernetes 다중 장치 수용은 남는다.

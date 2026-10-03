@@ -278,7 +278,7 @@ paths:
       description: 현재 Runner/Pod와 전체 경로의 유효한 generationIds를 확인하고 Task의 최신 불변 receipt 및
         고정 S3 version 다운로드 권한을 반환한다. 확정본이 없으면 checkpoint는 null이며 download는 없다.
         파일을 받은 뒤 크기·SHA-256·실행 설정·정확한 binding을 확인해야 한다. 조회만으로 새 Attempt나
-        세대에 복원 권한을 부여하지 않으며 SDK의 현재 복원은 동일 binding에서만 가능하다.
+        세대에 복원 권한을 부여하지 않는다. 현재 배정과 확정본의 Attempt·세대가 다르면409이며 명시적 handover가 필요하다.
         GET 캐시·URL에 신원 정보를 남기지 않도록 POST 본문을 사용하며 lease는 연장하지 않는다.
       security: [{runnerClaim: [], podIdentity: []}]
       parameters:
@@ -300,6 +300,38 @@ paths:
         '404': {description: 요청한 스트림 세대가 없음}
         '409': {description: 취소·만료·다른 주체 또는 전체 경로와 세대 집합 불일치}
         '413': {description: 요청 JSON 256KiB 초과}
+        '503': {description: DB·Kubernetes·S3 일시 장애}
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/handover:
+    post:
+      operationId: handoverStreamCheckpoint
+      summary: 이전 체크포인트를 현재 Attempt와 경로 세대로 인계
+      description: 현재 Runner/Pod와 전체 활성 경로를 인증하고 이전 세대의 broker 권한 회수를 확인한다.
+        Attempt가 바뀌면 이전 Runtime의 실제 종료 확인도 필요하다. 서버가 최신 고정 S3 파일의 내용을 검증하고
+        계산 상태·입력 순번·미확인 출력·END를 유지한 채 경로 식별자와 snapshot serial만 변경한다.
+        새 고정 S3 version을 검증하고 현재 권한을 다시 확인한 뒤 불변 체크포인트를 확정한다.
+        이미 현재 배정으로 확정되었으면 같은 최신 receipt를 반환한다. 실행 digest 변경·Device 세션 교체는 거절한다.
+        이 API는 Run을 시작하거나 경로를 전환하는 명령이 아니며 제어 서버가 준비한 현재 경로의 상태 인계에 사용한다.
+      security: [{runnerClaim: [], podIdentity: []}]
+      parameters:
+      - {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckpointHandoverRequest'}
+      responses:
+        '200':
+          description: '현재 배정으로 확정된 receipt와 고정 version 다운로드 권한. 확정본 없음은409이며 null을 반환하지 않는다. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckpointDownloadResponse'}
+        '400': {description: 잘못된 입력 또는 손상된 원본 체크포인트}
+        '401': {description: Runner claim 또는 Pod 신원 인증 실패}
+        '403': {description: 내부 Runner 경로 비활성 또는 권한 거절}
+        '404': {description: 요청한 스트림 세대가 없음}
+        '409': {description: 확정본 없음·이전 종료/권한 회수 미완료·취소/만료·실행 규격/경로/Device 세션 변경}
+        '413': {description: 요청 JSON 256KiB 초과}
+        '429': {description: 체크포인트 검증 동시 처리 한도 초과}
         '503': {description: DB·Kubernetes·S3 일시 장애}
 components:
   securitySchemes:
@@ -368,6 +400,15 @@ components:
         epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
         podUid: {type: string, format: uuid}
         generationIds: {$ref: '#/components/schemas/CheckpointGenerations'}
+    CheckpointHandoverRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, podUid, generationIds, executionSha256]
+      properties:
+        epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
+        podUid: {type: string, format: uuid}
+        generationIds: {$ref: '#/components/schemas/CheckpointGenerations'}
+        executionSha256: {$ref: '#/components/schemas/CheckpointHash'}
     CheckpointManifestBinding:
       type: object
       additionalProperties: false
@@ -469,18 +510,20 @@ components:
         required: [checkpoint]
         properties:
           checkpoint: {type: 'null'}
-      - type: object
-        additionalProperties: false
-        required: [checkpoint, download]
-        properties:
-          checkpoint: {$ref: '#/components/schemas/CheckpointReceipt'}
-          download:
-            type: object
-            additionalProperties: false
-            required: [url, expiresAt]
-            properties:
-              url: {type: string, format: uri}
-              expiresAt: {type: string, format: date-time}
+      - {$ref: '#/components/schemas/CheckpointDownloadResponse'}
+    CheckpointDownloadResponse:
+      type: object
+      additionalProperties: false
+      required: [checkpoint, download]
+      properties:
+        checkpoint: {$ref: '#/components/schemas/CheckpointReceipt'}
+        download:
+          type: object
+          additionalProperties: false
+          required: [url, expiresAt]
+          properties:
+            url: {type: string, format: uri}
+            expiresAt: {type: string, format: date-time}
     DeviceBindingRequest:
       type: object
       additionalProperties: false

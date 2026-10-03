@@ -34,7 +34,8 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 [Session 자동 저장](docs/evidence/m7-stream-checkpoint-publisher.md)은 같은 후보 재시도와 인증된 확정 응답 적용을 연결합니다.
 [인증된 새 볼륨 복원](docs/evidence/m7-stream-checkpoint-recovery.md)은 서버 latest의 고정 S3 파일을
 검증하고 동일 Attempt·경로의 상태와 미확인 출력/END를 이어갑니다.
-새 Attempt/generation 전환, 운영 broker·SERVICE/Runner 실행 연결·
+[서버 검증 인계](docs/evidence/m7-stream-checkpoint-handover.md)는 이전 실행 종료와 경로 권한 회수를 확인하고
+계산 상태를 새 Attempt·세대의 고정 S3 파일로 옮깁니다. Device·인접 Task journal 전환, 운영 broker·SERVICE/Runner 실행 연결·
 공개 스트리밍 실행은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.

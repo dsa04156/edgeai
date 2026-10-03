@@ -51,7 +51,7 @@ class CheckpointFixture:
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 owner.calls.append((self.path,dict(self.headers),body))
                 status=owner.status
-                if self.path.endswith('/latest'):
+                if self.path.endswith(('/latest','/handover')):
                     value={'checkpoint':owner.latest}
                     if owner.latest is not None:value['download']={'url':owner.url+'/object?versionId='+owner.version,'expiresAt':owner.now()}
                 elif self.path.endswith('/uploads'):
@@ -274,6 +274,19 @@ class StreamCheckpointClientTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'expired'):
             self.client.recover(self.root/'recovered',[A,B],[OUT],Limits(max_frames=9),'a'*64,guard=guard)
         self.assertFalse((self.root/'recovered').exists())
+
+    def test_explicit_handover_requires_current_actor_receipt_and_exact_execution(self):
+        with self.assertRaises(CheckpointError):self.client.handover('a'*64)
+        self.publish();receipt=self.client.handover('a'*64)['checkpoint']
+        path,_,body=self.api.calls[-1]
+        self.assertTrue(path.endswith('/handover'));self.assertEqual('a'*64,body['executionSha256'])
+        self.assertEqual(self.generations,body['generationIds'])
+        with self.assertRaises(CheckpointError):self.client.handover('b'*64)
+        with self.client.recover(self.root/'handover',[A,B],[OUT],Limits(max_frames=9),'a'*64,guard=lambda:None,handover=True) as journal:
+            self.assertEqual(b'9',journal.checkpoint().state)
+            self.assertEqual(receipt['sha256'],journal.db.execute('SELECT digest FROM durability').fetchone()[0])
+        self.api.latest['attemptId']=POD
+        with self.assertRaises(CheckpointError):self.client.handover('a'*64)
 
 
 if __name__=='__main__':unittest.main()

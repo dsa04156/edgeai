@@ -7,7 +7,7 @@ import java.util.*;
 /** Immutable verified object identity and bounded control metadata; never raw stream data. */
 public record StreamCheckpoint(UUID id,UUID runId,UUID taskId,UUID attemptId,UUID runtimeId,long epoch,
         UUID producerPodUid,UUID serviceProfileVersionId,Request request,long revision,String summaryJson,
-        VerifiedArtifact artifact,Instant createdAt) {
+        VerifiedArtifact artifact,Instant createdAt,UUID handoverFromId) {
     public static final long MAX_BYTES=72L*1024*1024;
     public static final String MEDIA_TYPE="application/vnd.edgeai.stream-checkpoint+json";
     public record Request(UUID previousId,long serial,String sha256,long bytes,String executionSha256,List<UUID> generationIds) {

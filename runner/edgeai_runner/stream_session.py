@@ -33,7 +33,8 @@ def require(condition, code='STREAM_INVALID_SESSION'):
 class Session:
     def __init__(self, client, run_id, input_generations, output_generations, command,
                  directory, parameters=None, *, limits=Limits(), step_timeout=60,
-                 timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None, restore_latest=False):
+                 timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None,
+                 restore_latest=False, handover_latest=False):
         self.closed = False
         self.processor = self.link = self.journal = None
         self.publisher = None
@@ -60,6 +61,7 @@ class Session:
                     and checkpoint_client.generation_ids == sorted(identities),'STREAM_CHECKPOINT_SCOPE_MISMATCH')
         require(type(restore_latest) is bool and (not restore_latest or create is True and checkpoint_client is not None),
                 'STREAM_EXPLICIT_NEW_VOLUME_RECOVERY_REQUIRED')
+        require(type(handover_latest) is bool and (not handover_latest or restore_latest),'STREAM_EXPLICIT_HANDOVER_REQUIRED')
         directory = Path(directory)
         info = directory.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
@@ -88,7 +90,7 @@ class Session:
             if restore_latest:
                 self.journal=checkpoint_client.recover(directory/'journal',inputs,outgoing,limits,
                     execution_digest(command,parameters,input_ports,output_ports,step_timeout),
-                    guard=self._check,timeout=self._request_timeout())
+                    guard=self._check,timeout=self._request_timeout(),handover=handover_latest)
                 # Transfer the bootstrap guard to Link's live assignment owner on
                 # this same thread, before any MQTT or model step may run.
                 self._check()
