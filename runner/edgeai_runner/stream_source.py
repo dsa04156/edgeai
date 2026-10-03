@@ -11,10 +11,11 @@ import stat
 import threading
 import time
 
-from edgeai_runner.stream_assignment import AssignmentUnavailable, BindingClient
+from edgeai_runner.stream_assignment import AssignmentError, AssignmentUnavailable, BindingClient
 from edgeai_runner.stream_journal import Backpressure, Emission, Journal, Limits
-from edgeai_runner.stream_mqtt import Link
-from edgeai_runner.stream_protocol import Frame, _uuid
+from edgeai_runner.stream_mqtt import Link, MqttError
+from edgeai_runner.stream_protocol import Binding, Frame, Producer, _uuid
+from edgeai_runner import stream_source_completion as completion_intent
 
 
 class SourceError(RuntimeError):
@@ -28,7 +29,7 @@ def require(condition, code='STREAM_INVALID_DEVICE_SOURCE'):
 
 class DeviceSource:
     def __init__(self, client, run_id, generation_ids, directory, *, limits=Limits(),
-                 create=False, handover=False, timeout=3600, cancel=None):
+                 create=False, handover=False, timeout=3600, cancel=None, completion=True):
         self.closed = False
         self.link = self.journal = None
         self.cancel = cancel or threading.Event()
@@ -40,6 +41,7 @@ class DeviceSource:
         require(len(set(generation_ids)) == len(generation_ids))
         require(type(handover) is bool and (not handover or create is False), 'STREAM_EXPLICIT_SOURCE_HANDOVER_REQUIRED')
         require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 86400)
+        require(type(completion) is bool)
         self.deadline = time.monotonic() + timeout
         self.client, self.run_id = client, run_id
         directory = Path(directory)
@@ -48,7 +50,25 @@ class DeviceSource:
                 'STREAM_PRIVATE_SOURCE_DIRECTORY_REQUIRED')
         self.assignments, self.sequence, self.next_at, self.retries = {}, {}, {}, {}
         self.heartbeats = 0
+        self.completion_enabled, self.completed = completion, False
+        self.intent = None
+        self.transport_stopped = False
+        self.recovery_probe = False
+        self.completion_next, self.completion_retries, self.completion_done = {}, {}, set()
+        self.directory = directory
         try:
+            previous = completion_intent.read(directory, run_id, client.actor, limits)
+            if previous is not None:
+                require(completion and not create, 'STREAM_EXPLICIT_COMPLETION_RECOVERY_REQUIRED')
+                if not handover:
+                    require(set(generation_ids) == {r['generationId'] for r in previous['routes']}, 'STREAM_SOURCE_SCOPE_MISMATCH')
+                    outputs = [Binding(b['routeId'],b['generation'],Producer.parse(b['producer'])) for b in previous['manifest']['outputs']]
+                    self.journal = Journal(directory/'journal', [], outputs, limits, guard=self._check_owner)
+                    completion_intent.verify(previous, self.journal)
+                    self._set_intent(previous)
+                    self.transport_stopped = True
+                    self.recovery_probe = True
+                    return  # Only authenticated completion polling; never recreate an expired MQTT lease.
             for identity in generation_ids:
                 self._check()
                 a = client.fetch(identity, timeout=self._request_timeout())
@@ -68,13 +88,20 @@ class DeviceSource:
             self.link = Link.from_assignments(self.journal, list(self.assignments.values()))
             # Also check cancellation at both ends of every local transaction.
             self.journal.authority_guard = self._check
+            if previous is not None:
+                self._capture_completion()  # Explicit, authenticated generation handover preserves terminal cursors.
         except BaseException:
             self.close()
             raise
 
-    def _check(self):
+    def _check_owner(self):
         require(not self.closed and not self.cancel.is_set(), 'STREAM_SOURCE_CANCELLED')
         require(time.monotonic() < self.deadline, 'STREAM_SOURCE_TIMEOUT')
+
+    def _check(self):
+        self._check_owner()
+        if self.transport_stopped:
+            return
         for assignment in self.assignments.values():
             assignment.remaining()
 
@@ -92,6 +119,90 @@ class DeviceSource:
         self._check()
         return self.journal.usage()[0] == 0 and all(row[0] for row in self.journal.db.execute('SELECT ended FROM route'))
 
+    def _set_intent(self, value):
+        self.intent = value
+        for row in value['routes']:
+            self.completion_next[row['generationId']] = self.completion_retries[row['generationId']] = 0
+
+    def _capture_completion(self):
+        if self.completion_enabled and self.intent is None and self.settled:
+            self._set_intent(completion_intent.write(self.directory,self.run_id,self.client.actor,self.assignments,self.journal))
+
+    def _stop_transport(self):
+        if not self.transport_stopped:
+            if self.link is not None:
+                self.link.close(force=True)
+            self.transport_stopped = True
+            self.journal.authority_guard = self._check_owner
+
+    def _resume_transport(self):
+        # A persisted intent may still be WAITING after an explicit process restart.
+        # Fetch fresh authority only then; ordinary expiry never revives this Link.
+        current = {}
+        try:
+            for row in self.intent['routes']:
+                self._check_owner()
+                a = self.client.fetch(row['generationId'],timeout=max(.01,min(1.,(self.deadline-time.monotonic())/4)))
+                require(a.run_id == self.run_id and a.direction == 'PRODUCER'
+                        and a.binding == self.journal.outputs[row['routeId']], 'STREAM_SOURCE_SCOPE_MISMATCH')
+                current[a.generation_id] = replace(a,deadline=min(self.deadline,a.deadline))
+        except AssignmentError:
+            # A grant and peer route closure may race this fresh lookup. Poll the
+            # same durable intent again; it cannot grant data-plane authority.
+            return
+        first = next(iter(current.values()))
+        require(all(a.connection == first.connection for a in current.values()), 'STREAM_SOURCE_BROKER_MISMATCH')
+        self.assignments = current
+        self.transport_stopped = False
+        try:
+            self._check()
+            self.journal.authority_guard = None
+            self.link = Link.from_assignments(self.journal,list(current.values()))
+        except (AssignmentError,MqttError):
+            # Fresh authority may expire before Link construction. Preserve only
+            # the terminal intent, so an already-issued grant can still be read.
+            self._stop_transport()
+            self._check_owner()
+            return
+        self.journal.authority_guard = self._check
+        for identity in current:
+            self.sequence[identity] = self.next_at[identity] = self.retries[identity] = 0
+        self.recovery_probe = False
+
+    def _complete(self, *, force=False):
+        self._check_owner()
+        pending = [r for r in self.intent['routes'] if r['generationId'] not in self.completion_done]
+        if not pending:
+            self.completed = True
+            self._stop_transport()
+            return
+        row = min(pending,key=lambda r:(self.completion_next[r['generationId']],r['generationId']))
+        identity = row['generationId']
+        if not force and time.monotonic() < self.completion_next[identity]:
+            return
+        timeout = max(.01,min(1.,(self.deadline-time.monotonic())/4))
+        if not self.transport_stopped:
+            # Keep network polling short enough to service live bilateral heartbeats.
+            timeout = max(.01,min(timeout,min(a.deadline-time.monotonic() for a in self.assignments.values())/4))
+        try:
+            reply = self.client.complete(identity,row['sequence'],timeout=timeout)
+        except AssignmentUnavailable:
+            self._check_owner()
+            self.completion_retries[identity] += 1
+            delay = min(1.,.05*2**min(self.completion_retries[identity],5))
+        else:
+            self._check_owner()
+            self.completion_retries[identity] = 0
+            if reply.state == 'FINALIZE':
+                self.completion_done.add(identity)
+            elif self.recovery_probe:
+                self._resume_transport()
+            delay = .1
+        self.completion_next[identity] = time.monotonic()+delay
+        if len(self.completion_done) == len(self.intent['routes']):
+            self.completed = True
+            self._stop_transport()
+
     def emit(self, emissions, state=None):
         """Persist adapter state and at most one new sample per route atomically.
 
@@ -100,6 +211,7 @@ class DeviceSource:
         """
         try:
             self._check()
+            require(self.intent is None, 'STREAM_SOURCE_TERMINAL')
             require(type(emissions) in (list, tuple) and 1 <= len(emissions) <= len(self.assignments))
             require(all(type(e) is Emission for e in emissions))
             require(len({e.route_id for e in emissions}) == len(emissions))
@@ -142,10 +254,27 @@ class DeviceSource:
 
     def step(self):
         try:
-            self._check()
-            self._heartbeat()
-            self._check()
-            self.link.step(.001)
+            self._check_owner()
+            if self.completed:
+                return
+            if self.intent is not None:
+                self._complete()
+                if self.completed or self.transport_stopped:
+                    return
+            try:
+                self._check()
+                self._heartbeat()
+                self._check()
+                self.link.step(.001)
+            except (AssignmentError,MqttError):
+                if self.intent is None:
+                    raise
+                self._stop_transport()
+                self._complete(force=True)
+                return
+            self._capture_completion()
+            if self.intent is not None:
+                self._complete()
         except BaseException:
             self.close()
             raise

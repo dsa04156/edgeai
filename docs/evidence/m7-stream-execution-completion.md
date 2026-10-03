@@ -70,3 +70,7 @@ ArgoSynced·VD활성화를 확인했다. 공유 Ingress로 aggregate health는 P
 
 DeviceSource 완료 대기와 공개 provisioning·동시 시작·봉인된 최종 상태 복구·운영 TLS·UI·
 실제 Kubernetes 다중 장치 수용, M5 잔여와 M8–M10은 계속 남아 있다.
+
+후속 ADR0039에서 DeviceSource 완료 대기를 연결했다. 이 서버 코드46e24ad의 CI37106385090과
+GitOps32a01b4·실제 배포080101Z-08722655도 검증했다. 새 SDK의 검증 및 선행 서버 CI/배포 범위는
+[DeviceSource 완료 검증](m7-device-source-completion.md)을 따른다.

@@ -196,6 +196,16 @@ media_type)], state=adapter_cursor_bytes)`는 샘플·순번·adapter 상태를 
 자동 재시작으로 대체하지 않는다. `settled`는 END의 처리 확인이며 플랫폼 Run 성공을 뜻하지 않는다.
 자세한 실제/fixture 범위는 [Device source 검증](../docs/evidence/m7-device-source-handover.md)을 따른다.
 
+기본값은 서버 공동 완료 대기다. END를 보낸 뒤 `while not source.completed: source.step()`으로
+진행한다. WAITING 동안 heartbeat를 유지하고 모든 송신 경로의 FINALIZE를 받으면 MQTT를 닫는다.
+`completed`는 스트림 그룹의 종료 허가이며 최종 파일 결과 저장 성공은 별도다.
+0700 source 디렉터리의 0600 `completion.json`은 종료 순번과 범위만 보존하며 자격·샘플·허가는
+저장하지 않는다. 같은 볼륨 재시작은 서버 허가를 다시 조회하고, 이미 닫힌 경로에 재연결하지
+않고 끝낼 수 있다. 서버가 WAITING이면 현재 배정을 새로 받아 heartbeat를 재개한다.
+기존 전달 계층만 시험하는 경우에만 `completion=False`를 명시한다.
+[완료 설계](../docs/adr/0039-device-source-completion.md)와
+[실제 Spring/S3 통합 범위](../docs/evidence/m7-device-source-completion.md)를 따른다.
+
 ## SERVICE 스트림 실행 owner
 
 `contracts/profiles/service-stream.example.json`은 지속 계산과 최종 파일 생성을 구분한다.
@@ -209,6 +219,8 @@ Runner는 인증 배정의 NEW/RESTORE/HANDOVER를 따르고, 마지막 END/ACK�
 성공 결과를 만들지 않는다. 제어 API/저장소 TLS의 사설 CA는 컨테이너 신뢰 저장소 또는
 Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다.
 
-현재 배정·완료 서버 경로와 공개 STREAM은 미연결이다. 이 예제를 공개 Run으로 실행할 수
-있다는 뜻은 아니다. [실행 설계](../docs/adr/0037-service-stream-runner-execution.md)와
-[검증 범위](../docs/evidence/m7-service-stream-runner.md)를 따른다.
+인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작과
+허가 후 Runner 재시작의 최종 상태 복구는 남아 있어 공개 STREAM은 아직501이다.
+[실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
+[Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
+[서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.

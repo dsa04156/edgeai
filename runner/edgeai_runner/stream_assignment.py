@@ -151,6 +151,13 @@ class Heartbeat:
     assignment: Assignment
 
 
+@dataclass(frozen=True)
+class Completion:
+    generation_id: str
+    sequence: int
+    state: str
+
+
 def _token(path, maximum, *, projected=False):
     try:
         flags = os.O_RDONLY if projected else os.O_RDONLY | os.O_NOFOLLOW
@@ -207,7 +214,25 @@ class BindingClient:
         except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
             raise AssignmentError('Invalid stream heartbeat response') from None
 
-    def _request(self, generation_id, sequence=None, *, timeout=5):
+    def complete(self, generation_id, sequence, *, timeout=5):
+        """Re-read a durable Device completion grant, including after route closure.
+
+        This never grants MQTT authority or extends an assignment lease.
+        """
+        require(self.actor.kind == 'DEVICE_SESSION', 'Device completion requires a Device Session')
+        require(type(sequence) is int and 1 <= sequence <= 9007199254740991, 'Invalid stream completion sequence')
+        encoded, _ = self._request(generation_id, sequence, operation='complete', timeout=timeout)
+        try:
+            require(0 < len(encoded) <= MAX_RESPONSE, 'Invalid stream completion response')
+            value = json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+            require(type(value) is dict and set(value) == {'state', 'generationId', 'sequence'}, 'Invalid stream completion response')
+            require(value['state'] in ('WAITING', 'FINALIZE') and value['generationId'] == generation_id
+                    and type(value['sequence']) is int and value['sequence'] == sequence, 'Invalid stream completion acknowledgement')
+            return Completion(generation_id, sequence, value['state'])
+        except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
+            raise AssignmentError('Invalid stream completion response') from None
+
+    def _request(self, generation_id, sequence=None, *, operation=None, timeout=5):
         require(type(timeout) in (int, float) and .01 <= timeout <= 5, 'Invalid stream request timeout')
         try:
             _uuid(generation_id)
@@ -218,7 +243,8 @@ class BindingClient:
             if self.pod_uid is not None:
                 body['podUid'] = self.pod_uid
                 headers['X-EdgeAI-Pod-Token'] = _token(self.pod_token_file, 16384, projected=True)
-            request = urllib.request.Request(self.url + ('/heartbeat' if sequence is not None else ''), data=json.dumps(body).encode(), headers=headers, method='POST')
+            suffix = '/complete' if operation == 'complete' else '/heartbeat' if sequence is not None else ''
+            request = urllib.request.Request(self.url + suffix, data=json.dumps(body).encode(), headers=headers, method='POST')
             started = time.monotonic()
             with self.http.open(request, timeout=timeout) as response:
                 require(response.status == 200 and response.headers.get_content_type() == 'application/json'

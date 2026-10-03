@@ -43,7 +43,9 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 생성을 구분하고, 외부 체크포인트와 서버 완료 허가 후 결과를 만듭니다. Runner 소비 경로를
 검증했습니다. 후속 [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는
 경로 고정과 참여자별 종료 확인을 영속화하고 허가 전 Result 확정을 막습니다.
-DeviceSource 완료 대기·공개 실행 생성·최종 상태 복구·실제 Kubernetes 스트림 종단은 남아 있습니다.
+[DeviceSource 공동 완료](docs/evidence/m7-device-source-completion.md)는 실제 Spring/PG/S3/TLS MQTT의
+종료·결과 저장과 경로 회수 후 장치 재시작을 연결합니다. 공개 실행 생성·Runner 최종 상태 복구·
+실제 Kubernetes 스트림 종단은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -108,7 +110,7 @@ bash scripts/test-profiles-stack.sh compose # 실제 Profile/Device/Workflow/Swa
 bash scripts/test-node-inventory.sh <context> # 기존 context는 변경하지 않고 실제 Node 목록만 읽음
 bash scripts/test-storage.sh      # MinIO 실행 필요; 고유 probe bucket만 생성·제거
 bash scripts/test-runtime-storage.sh # 실제 MinIO 버전·SHA-256·변조 거절
-bash scripts/test-runtime-results.sh # PostgreSQL + MinIO: 결과·취소 경합·공개 Remote BATCH/worker/장애
+bash scripts/test-runtime-results.sh # PostgreSQL + MinIO + Mosquitto/Paho: 결과·Remote/VD·스트림 공동 완료
 bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 HTTP fixture
 bash scripts/test-stream.sh       # 고정 Paho Python 의존성 + 실제 Mosquitto: 다중 입력·복구·ACL·TLS
 bash scripts/test-stream-broker.sh # 실제 PostgreSQL + Mosquitto dynamic security: 권한 수명·세대 전환

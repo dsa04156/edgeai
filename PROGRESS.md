@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0039 DeviceSource의 서버 공동 완료 대기·영속 종료 의도·같은 볼륨 재시작을 연결했다.
+실제 Spring/PG/S3/TLS MQTT에서 두 장치·독립 계산·외부 checkpoint·공동 허가·Result 저장과
+경로 회수 뒤 장치 재시작2개, 전체 Runner107개·저장소32개·기존 broker23개·HTTPS/MQTT66개가 통과했다.
+API/S3는 격리 loopback이며 Pod 신원/이미 시작한 runtime 경계는 fixture다.
+상세: docs/evidence/m7-device-source-completion.md. 공개 STREAM501과 M5 잔여/M7–M10 미완료 유지.
+선행46e24ad CI37106385090은5 jobs/결과JSON17개·실제kind PASS이며 GitOps32a01b4·
+080101Z-08722655에서 정확한3개imageID·Ready·PVCBound·ArgoSynced·VD활성화를 확인했다.
+aggregate health는 공유Ingress로Progressing이다. 이번 DeviceSource 코드의 CI/배포는 별도다.
+다음은 허가 뒤 Runner 최종 상태 복구, 공개 route 생성·그룹 동시 시작·운영 TLS·UI·Kubernetes 수용이다.
+
 ADR0038/V24의 서버 실행 배정·경로 고정·Task/Device 구성 요소 공동 완료 허가를 구현했다.
 SERVICE live 포트와 모든 경로를 확인하며, 그룹 전체의 최신 END/처리 확인 순번이 일치해야
 Result를 확정할 수 있다. peer 완료/경로 회수 뒤의 허가 재조회·동시 보고·취소·불변 이력을 검증했다.

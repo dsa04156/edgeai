@@ -82,7 +82,15 @@ jobs:
         run: bash scripts/collect-evidence.sh runtime-storage bash scripts/test-runtime-storage.sh
       - name: Start PostgreSQL for real storage-to-result transactions
         run: bash scripts/dev-up.sh
+      - name: Prepare real stream broker and SDK for storage completion tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mosquitto mosquitto-clients
+          python3 -m venv .tools/stream-venv
+          .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
       - name: Verify real S3 content and atomic PostgreSQL Result commit
+        env:
+          EDGEAI_STREAM_PYTHON: ${{ github.workspace }}/.tools/stream-venv/bin/python
         run: bash scripts/collect-evidence.sh runtime-results bash scripts/test-runtime-results.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

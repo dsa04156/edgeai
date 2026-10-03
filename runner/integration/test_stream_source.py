@@ -2,13 +2,17 @@
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import socket
 import ssl
+import subprocess
+import sys
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from test_stream_mqtt import Broker, eventually
 from test_stream_assignment import GENERATION, POD, document
@@ -24,6 +28,8 @@ class DeviceApi:
         self.binding=A;self.duration=2;self.deadline=time.monotonic()+self.duration
         self.sequence=7;self.calls=[];self.status=None;self.peer_alive=True;self.drop=False
         self.foreign_run=False;self.max_bytes=4096
+        self.completion_state='WAITING';self.completion_calls=[];self.completion_status=None
+        self.drop_completion=False;self.on_completion=None;self.paths=[]
         owner=self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_): pass
@@ -31,6 +37,23 @@ class DeviceApi:
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 sequence=body.get('sequence');owner.calls.append(sequence)
                 expected=f'/internal/v1/devices/{A.producer.device_id}/sessions/{A.producer.id}/streams'
+                owner.paths.append(self.path)
+                if self.path==expected+'/complete':
+                    valid=(self.headers.get('Authorization')=='Bearer fixture-device' and not self.headers.get('X-EdgeAI-Pod-Token')
+                           and set(body)=={'epoch','generationId','sequence'} and body['epoch']==A.producer.epoch
+                           and body['generationId']==GENERATION and type(sequence) is int and sequence>0)
+                    status=401 if not valid else owner.completion_status
+                    if owner.completion_state!='FINALIZE' and time.monotonic()>=owner.deadline:status=409
+                    if status:
+                        self.send_response(status);self.send_header('Content-Length','0');self.end_headers();return
+                    owner.completion_calls.append(body)
+                    if owner.on_completion:owner.on_completion()
+                    if owner.drop_completion:
+                        owner.drop_completion=False;self.connection.shutdown(socket.SHUT_RDWR);self.connection.close();return
+                    value={'state':owner.completion_state,'generationId':GENERATION,'sequence':sequence}
+                    wire=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json')
+                    self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(wire)))
+                    self.end_headers();self.wfile.write(wire);return
                 valid=(self.path==expected+('/heartbeat' if sequence is not None else '')
                        and self.headers.get('Authorization')=='Bearer fixture-device'
                        and not self.headers.get('X-EdgeAI-Pod-Token') and body.get('epoch')==A.producer.epoch
@@ -78,6 +101,7 @@ class StreamSourceTest(unittest.TestCase):
         self.addCleanup(lambda:self.source.close() if self.source else None)
 
     def open(self,**options):
+        options.setdefault('completion',False)  # Historical transport-only fixture; completion cases opt in below.
         self.source=DeviceSource(self.client,POD,[GENERATION],self.directory,**options)
         return self.source
 
@@ -167,6 +191,117 @@ class StreamSourceTest(unittest.TestCase):
         self.api.foreign_run=True
         with self.assertRaisesRegex(SourceError,'STREAM_SOURCE_SCOPE_MISMATCH'):self.open(create=True)
         self.assertFalse((self.directory/'journal').exists())
+
+    def end(self):
+        self.source.emit([Emission(A.route_id,b'',None,'END')],b'last-offset')
+        eventually(self.pump,lambda:bool(self.sink.pending()));self.consume()
+        eventually(self.pump,lambda:self.source.intent is not None)
+
+    def test_completion_waits_with_heartbeats_and_lost_grant_survives_route_fence(self):
+        source=self.open(create=True,completion=True);self.end()
+        self.assertFalse(source.completed);self.assertTrue(source.settled)
+        start=source.heartbeats;deadline=self.api.deadline
+        eventually(self.pump,lambda:time.monotonic()>deadline+.1,5)
+        self.assertGreater(source.heartbeats,start);self.assertFalse(source.completed)
+        self.api.completion_state='FINALIZE';self.api.drop_completion=True
+        self.api.on_completion=lambda:setattr(self.api,'status',409)
+        eventually(source.step,lambda:source.completed)
+        self.assertTrue(source.link.closed);self.assertTrue(source.transport_stopped)
+        self.assertEqual({1},{v['sequence'] for v in self.api.completion_calls})
+        self.assertEqual(0o600,(self.directory/'completion.json').stat().st_mode&0o777)
+        for secret in (b'fixture-device',self.broker.credentials['source-a'].read_bytes(),b'last-offset'):
+            self.assertNotIn(secret,(self.directory/'completion.json').read_bytes())
+
+    def test_waiting_restart_resumes_current_heartbeat_before_grant(self):
+        source=self.open(create=True,completion=True);self.end();source.close()
+        source=self.open(completion=True);self.assertIsNone(source.link);self.assertFalse(source.completed)
+        deadline=self.api.deadline
+        eventually(self.pump,lambda:time.monotonic()>deadline+.1,5)
+        self.assertGreater(source.heartbeats,0);self.assertFalse(source.completed)
+        self.api.completion_state='FINALIZE';eventually(source.step,lambda:source.completed)
+
+    def test_granted_restart_never_fetches_or_reopens_closed_transport(self):
+        source=self.open(create=True,completion=True);self.end();source.close()
+        self.api.completion_state='FINALIZE';self.api.status=409;count=len(self.api.paths)
+        source=self.open(completion=True);self.assertFalse(source.completed)
+        eventually(source.step,lambda:source.completed)
+        self.assertIsNone(source.link);self.assertEqual(b'last-offset',source.checkpoint().state)
+        self.assertTrue(all(path.endswith('/complete') for path in self.api.paths[count:]))
+
+    def test_restart_lease_expires_between_fresh_fetch_and_link_creation(self):
+        source=self.open(create=True,completion=True);self.end();source.close()
+        self.api.deadline=time.monotonic()+.5
+        source=self.open(completion=True);create=Link.from_assignments
+        def delayed_creation(journal,assignments):
+            time.sleep(max(0,max(a.deadline for a in assignments)-time.monotonic())+.02)
+            self.api.completion_state='FINALIZE'
+            return create(journal,assignments)
+        with patch('edgeai_runner.stream_source.Link.from_assignments',side_effect=delayed_creation):
+            source.step()
+        self.assertFalse(source.closed);self.assertTrue(source.transport_stopped)
+        self.assertIsNone(source.link);self.assertFalse(source.completed)
+        eventually(source.step,lambda:source.completed)
+        self.assertIsNone(source.link)
+
+    def test_terminal_intent_does_not_override_server_rejection_or_cancellation(self):
+        source=self.open(create=True,completion=True);self.end();source.close()
+        self.api.completion_status=409;source=self.open(completion=True)
+        with self.assertRaises(AssignmentError):source.step()
+        self.assertTrue(source.closed);self.assertFalse(source.completed)
+        self.api.completion_status=None;self.api.completion_state='FINALIZE';source=self.open(completion=True)
+        self.api.on_completion=source.cancel.set
+        with self.assertRaisesRegex(SourceError,'STREAM_SOURCE_CANCELLED'):source.step()
+        self.assertTrue(source.closed);self.assertFalse(source.completed)
+
+    def test_corrupt_intent_is_rejected_before_network_or_journal_changes(self):
+        source=self.open(create=True,completion=True);self.end();source.close();count=len(self.api.paths)
+        path=self.directory/'completion.json';value=json.loads(path.read_bytes());value['routes'][0]['sequence']+=1
+        path.write_text(json.dumps(value))
+        from edgeai_runner.stream_source_completion import CompletionError
+        with self.assertRaises(CompletionError):self.open(completion=True)
+        self.assertEqual(count,len(self.api.paths))
+
+    def test_waiting_completion_does_not_promote_an_expired_peer(self):
+        source=self.open(create=True,completion=True);self.end();self.api.peer_alive=False
+        with self.assertRaises((AssignmentError,SourceError,MqttError)):
+            eventually(source.step,lambda:source.completed,5)
+        self.assertTrue(source.closed);self.assertFalse(source.completed);self.assertTrue(source.link.closed)
+
+    def test_sigkill_after_terminal_report_recovers_grant_without_mqtt(self):
+        code='''import sys,time
+from pathlib import Path
+from test_stream_journal import A
+from test_stream_assignment import POD,GENERATION
+from edgeai_runner.stream_assignment import BindingClient
+from edgeai_runner.stream_source import DeviceSource
+from edgeai_runner.stream_journal import Emission
+url,token,ca,directory=sys.argv[1:]
+client=BindingClient(url,A.producer,token,ca_file=ca)
+with DeviceSource(client,POD,[GENERATION],Path(directory),create=True,timeout=20) as source:
+ source.emit([Emission(A.route_id,b'4','application/json')],b'offset1')
+ source.emit([Emission(A.route_id,b'',None,'END')],b'offset2')
+ while True:source.step();time.sleep(.005)
+'''
+        self.api.duration=8;self.api.deadline=time.monotonic()+8
+        sdk=Path(__file__).resolve().parents[1]
+        env={**os.environ,'PYTHONPATH':os.pathsep.join(str(p) for p in (sdk,sdk/'tests',sdk/'integration'))}
+        child=subprocess.Popen([sys.executable,'-c',code,self.api.url,str(self.root/'device.token'),str(self.broker.ca),str(self.directory)],
+                               env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        try:
+            def consume():
+                self.assertIsNone(child.poll(),'Source child exited before terminal report')
+                self.link.step(.001)
+                if self.sink.pending():self.consume()
+            eventually(consume,lambda:bool(self.api.completion_calls),8)
+            child.kill();self.assertEqual(-9,child.wait(5));self.assertEqual(b'',child.stderr.read())
+        finally:
+            if child.poll() is None:child.kill();child.wait(5)
+            child.stderr.close()
+        self.api.completion_state='FINALIZE';self.api.status=409;count=len(self.api.paths)
+        source=self.open(completion=True);eventually(source.step,lambda:source.completed)
+        self.assertIsNone(source.link);self.assertEqual(b'offset2',source.checkpoint().state)
+        self.assertEqual(2,source.checkpoint().output_sequences[A.route_id])
+        self.assertTrue(all(path.endswith('/complete') for path in self.api.paths[count:]))
 
 
 if __name__=='__main__':unittest.main()

@@ -217,5 +217,33 @@ class StreamAssignmentTest(unittest.TestCase):
         api.status=200
         self.assertEqual(A,client.fetch(GENERATION,timeout=.25).binding)
 
+    def test_actual_device_completion_request_replay_and_exact_grant(self):
+        _,token,api=self.fixture({'state':'WAITING','generationId':GENERATION,'sequence':3})
+        client=BindingClient(api.url,A.producer,token,allow_http_loopback=True)
+        self.assertEqual('WAITING',client.complete(GENERATION,3).state)
+        api.value['state']='FINALIZE';self.assertEqual('FINALIZE',client.complete(GENERATION,3).state)
+        self.assertEqual(api.calls[0][2],api.calls[1][2])
+        self.assertEqual({'epoch':A.producer.epoch,'generationId':GENERATION,'sequence':3},api.calls[0][2])
+        self.assertTrue(api.calls[0][0].endswith('/streams/complete'))
+        self.assertNotIn('x-edgeai-pod-token',api.calls[0][1])
+        count=len(api.calls)
+        for sequence in (0,-1,True,9007199254740992,'3'):
+            with self.assertRaises(AssignmentError):client.complete(GENERATION,sequence)
+        self.assertEqual(count,len(api.calls))
+        for value in ({'state':'FINALIZE','generationId':POD,'sequence':3},
+                      {'state':'FINALIZE','generationId':GENERATION,'sequence':True},
+                      {'state':'READY','generationId':GENERATION,'sequence':3},
+                      {'state':'FINALIZE','generationId':GENERATION,'sequence':4},
+                      {'state':'FINALIZE','generationId':GENERATION,'sequence':3,'extra':1}):
+            api.value=value
+            with self.assertRaises(AssignmentError):client.complete(GENERATION,3)
+        api.raw=b'{"state":"WAITING","state":"FINALIZE"}'
+        with self.assertRaises(AssignmentError):client.complete(GENERATION,3)
+        api.status=503
+        with self.assertRaises(AssignmentUnavailable):client.complete(GENERATION,3)
+        api.status=409
+        with self.assertRaises(AssignmentError) as error:client.complete(GENERATION,3)
+        self.assertNotIsInstance(error.exception,AssignmentUnavailable)
+
 
 if __name__ == '__main__':unittest.main()

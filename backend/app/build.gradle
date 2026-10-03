@@ -36,6 +36,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/StreamBrokerIntegrationTest.class'
     exclude '**/StreamBindingIntegrationTest.class'
     exclude '**/StreamCheckpointIntegrationTest.class'
+    exclude '**/StreamSourceCompletionIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -48,13 +49,14 @@ tasks.register('storageIntegrationTest', Test) {
 }
 
 tasks.register('runtimeArtifactIntegrationTest', Test) {
-    description = 'Requires both real PostgreSQL and versioned S3; verifies atomic Result commits across the storage boundary.'
+    description = 'Requires real PostgreSQL, versioned S3, Mosquitto and the Python stream SDK; verifies Result and stream completion.'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/RuntimeArtifactIntegrationTest.class'
     include '**/VDTaskArtifactIntegrationTest.class'
     include '**/RemoteWorkerIntegrationTest.class'
     include '**/StreamCheckpointIntegrationTest.class'
+    include '**/StreamSourceCompletionIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 

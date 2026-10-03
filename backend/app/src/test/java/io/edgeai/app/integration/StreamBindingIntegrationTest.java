@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StreamBindingIntegrationTest {
     private static final String DIGEST="sha256:"+UUID.randomUUID().toString().replace("-","").repeat(2);
     private static final String NAMESPACE="stream-api-"+UUID.randomUUID();
-    private static final Fixture BROKER=new Fixture();
+    private static final StreamBrokerFixture BROKER=new StreamBrokerFixture();
     private static StreamAuthorityWorker runningWorker;
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p){
         p.add("edgeai.stream.broker-url",()->"ssl://localhost:"+BROKER.port);p.add("edgeai.stream.broker-digest",()->DIGEST);
@@ -269,17 +269,4 @@ class StreamBindingIntegrationTest {
         assertThat(reply.statusCode()).isEqualTo(200);assertThat(reply.headers().firstValue("Cache-Control").orElse("")).contains("no-store");return document(reply.body());
     }
     private void until(java.util.function.BooleanSupplier condition)throws Exception {long deadline=System.nanoTime()+Duration.ofSeconds(15).toNanos();while(!condition.getAsBoolean() && System.nanoTime()<deadline)Thread.sleep(30);assertThat(condition.getAsBoolean()).isTrue();}
-    private static final class Fixture implements AutoCloseable {
-        final Path root;final Process process;final int port;
-        Fixture(){try{
-            root=Files.createTempDirectory("edgeai-stream-http-");root.toFile().deleteOnExit();
-            for(String name:List.of("device.key","runner.key")){byte[] key=new byte[32];new java.security.SecureRandom().nextBytes(key);Files.writeString(root.resolve(name),HexFormat.of().formatHex(key));Files.setPosixFilePermissions(root.resolve(name),java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));}
-            process=new ProcessBuilder("python3","src/test/fixtures/stream_broker.py",root.toString()).redirectError(root.resolve("fixture-error.log").toFile()).start();
-            var reader=process.inputReader();long deadline=System.nanoTime()+Duration.ofSeconds(30).toNanos();while(!reader.ready() && process.isAlive() && System.nanoTime()<deadline)Thread.sleep(20);
-            if(!reader.ready()){process.destroy();throw new IllegalStateException("Isolated stream broker unavailable");}port=Integer.parseInt(reader.readLine());
-        }catch(Exception e){throw new IllegalStateException("Stream HTTP fixture startup failed; private details suppressed");}}
-        String file(String name){return root.resolve(name).toString();}
-        public void close()throws Exception {process.destroy();if(!process.waitFor(5,TimeUnit.SECONDS)){process.destroyForcibly();assertThat(process.waitFor(5,TimeUnit.SECONDS)).isTrue();}
-            try(var paths=Files.walk(root)){for(var path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}}
-    }
 }

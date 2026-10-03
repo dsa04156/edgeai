@@ -39,7 +39,7 @@ def run(root):
     source_root = root/'device-source';source_root.mkdir(mode=0o700)
     old = config['generationId'];consumer = task.fetch(old)
     phase = 'old-generation-delivery-without-processing-ack'
-    with DeviceSource(device,config['runId'],[old],source_root,create=True,timeout=30) as source, \
+    with DeviceSource(device,config['runId'],[old],source_root,create=True,timeout=30,completion=False) as source, \
             Journal(root/'uncommitted-consumer',[consumer.binding],[],create=True) as inbox:
         link = Link.from_assignments(inbox,[consumer])
         try:
@@ -62,12 +62,12 @@ def run(root):
     except AssignmentError: pass
     phase = 'explicit-source-handover'
     try:
-        DeviceSource(device,config['runId'],[current],source_root)
+        DeviceSource(device,config['runId'],[current],source_root,completion=False)
         raise AssertionError('Implicit handover unexpectedly opened')
     except JournalError: pass
     session_root=root/'new-consumer';session_root.mkdir(mode=0o700)
     # No input was committed in the old generation; replay begins at sequence1.
-    with DeviceSource(device,config['runId'],[current],source_root,handover=True,timeout=30) as source, \
+    with DeviceSource(device,config['runId'],[current],source_root,handover=True,timeout=30,completion=False) as source, \
             Session(task,config['runId'],{'input':current},{},[sys.executable,str(ROOT/'runner/examples/stream_sum.py')],
                     session_root,create=True,timeout=30) as session:
         assert source.checkpoint()==saved and source.journal.snapshot_serial==serial+1
@@ -88,7 +88,7 @@ def run(root):
         secret=next(iter(source.assignments.values())).connection.secret.encode()
         assert all(secret not in p.read_bytes() for p in (source_root/'journal').iterdir())
     phase = 'same-generation-restart'
-    with DeviceSource(device,config['runId'],[current],source_root,handover=True) as source:
+    with DeviceSource(device,config['runId'],[current],source_root,handover=True,completion=False) as source:
         assert source.settled and source.checkpoint().state==b'adapter-offset-5'
         assert source.journal.snapshot_serial==final_serial
 
