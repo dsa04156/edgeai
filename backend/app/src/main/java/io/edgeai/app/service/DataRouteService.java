@@ -124,6 +124,29 @@ public class DataRouteService {
         if(g.fencedAt()!=null || !now(g).isBefore(g.leaseUntil()) || (active && g.activatedAt()==null))throw conflict("STREAM_GENERATION_FENCED");
         String reason=invalid(routes.route(g.routeId(),false).orElseThrow(),g.producer(),g.consumer(),false);if(reason!=null)throw conflict(reason);
     }
+    /** Lock every Device before Run; retry if route membership changed while acquiring locks. */
+    @Transactional
+    public List<StreamBrokerGateway.Permission> authorizeTask(UUID taskId,List<UUID> generationIds,StreamBrokerGateway.Principal caller){
+        var initial=routes.forTask(taskId,33);
+        if(initial.isEmpty() || initial.size()>32 || generationIds.size()!=initial.size() || new HashSet<>(generationIds).size()!=generationIds.size())
+            throw conflict("STREAM_CHECKPOINT_ROUTES_CHANGED");
+        var runId=initial.getFirst().runId();var run=executions.run(runId,false).orElseThrow();
+        if(run.vdId()!=null)vds.find(run.vdId(),true).orElseThrow();
+        initial.stream().map(DataRoute::sourceDeviceId).filter(Objects::nonNull).distinct().sorted()
+            .forEach(id->devices.find(id,true).orElseThrow());
+        executions.run(runId,true).orElseThrow();
+        var current=routes.forTask(taskId,33);
+        if(!initial.equals(current))throw conflict("STREAM_CHECKPOINT_ROUTES_CHANGED");
+        var expected=new HashSet<>(current.stream().map(DataRoute::id).toList());
+        var result=new ArrayList<StreamBrokerGateway.Permission>();
+        for(var id:generationIds.stream().sorted().toList()){
+            var g=get(id);
+            if(!expected.remove(g.routeId()))throw conflict("STREAM_CHECKPOINT_ROUTES_CHANGED");
+            result.add(authorize(id,caller));
+        }
+        if(!expected.isEmpty())throw conflict("STREAM_CHECKPOINT_ROUTES_CHANGED");
+        return List.copyOf(result);
+    }
     public record Heartbeat(StreamBrokerGateway.Permission permission,long sequence){}
     /** The surrounding transaction authenticates the caller and holds all authority locks. */
     @Transactional

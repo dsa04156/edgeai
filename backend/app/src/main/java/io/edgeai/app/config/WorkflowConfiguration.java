@@ -12,4 +12,5 @@ class WorkflowConfiguration {
     @Bean OffloadRepository offloadRepository(JdbcTemplate jdbc) { return new JdbcOffloadRepository(jdbc); }
     @Bean TelemetryRepository telemetryRepository(JdbcTemplate jdbc) { return new JdbcTelemetryRepository(jdbc); }
     @Bean DataRouteRepository dataRouteRepository(JdbcTemplate jdbc) { return new JdbcDataRouteRepository(jdbc); }
+    @Bean StreamCheckpointRepository streamCheckpointRepository(JdbcTemplate jdbc) { return new JdbcStreamCheckpointRepository(jdbc); }
 }

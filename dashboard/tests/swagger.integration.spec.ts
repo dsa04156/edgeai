@@ -47,6 +47,24 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   expect(response.request().headers()["x-csrf-token"]).toBeTruthy();
   expect((await response.json()).key).toBe(key);
   expect((await page.request.get(`${api}/api/v1/profiles/DEVICE/${key}/versions/1.0.0`)).status()).toBe(200);
+  await page.goto(`${api}/swagger-ui/index.html?contract=streams`);
+  await expect(page.locator(".opblock")).toHaveCount(7);
+  expect(await (await page.request.get(`${api}/stream-openapi.yaml`)).text()).toBe(await readFile("../contracts/openapi/stream-api.yaml", "utf8"));
+  const checkpoints = [
+    ["uploadStreamCheckpoint", "현재 Runner 체크포인트의 S3 업로드 권한 요청", "PUT 성공만으로"],
+    ["commitStreamCheckpoint", "S3 파일을 검증하고 체크포인트를 원자적으로 확정", "입력·출력 위치"],
+    ["latestStreamCheckpoint", "현재 Task의 최신 확정 체크포인트와 다운로드 권한 조회", "고정 S3 version"],
+  ];
+  for (const [id, summary, description] of checkpoints) {
+    const op = page.locator(`#operations-default-${id}`);
+    await expect(op.locator(".opblock-summary-description")).toHaveText(summary);
+    await op.locator(".opblock-summary-control").click();
+    await expect(op.locator(".opblock-description-wrapper").filter({ hasText: description })).toBeVisible();
+    await expect(op.locator(".response-col_status").filter({ hasText: /^409$/ })).toBeVisible();
+    await op.locator(".opblock-summary-control").click();
+  }
+  await page.screenshot({ path: testInfo.outputPath("stream-checkpoint-swagger.png"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
   expect(errors).toEqual([]);
   expect(externalRequests).toEqual([]);

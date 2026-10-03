@@ -3,6 +3,7 @@ import io.edgeai.app.config.RunnerPrincipal;
 import io.edgeai.app.service.RunnerApiService;
 import io.edgeai.app.service.RuntimeTelemetryService;
 import io.edgeai.app.service.StreamBindingService;
+import io.edgeai.app.service.StreamCheckpointService;
 import io.edgeai.app.exception.ControlPlaneException;
 import org.springframework.beans.factory.ObjectProvider;
 import java.util.Map;
@@ -19,7 +20,13 @@ public class RunnerController {
     private final RunnerApiService service;
     private final RuntimeTelemetryService telemetry;
     private final ObjectProvider<StreamBindingService> streams;
-    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry,ObjectProvider<StreamBindingService> streams){this.service=service;this.telemetry=telemetry;this.streams=streams;}
+    private final StreamCheckpointService checkpoints;
+    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry,ObjectProvider<StreamBindingService> streams,StreamCheckpointService checkpoints){this.service=service;this.telemetry=telemetry;this.streams=streams;this.checkpoints=checkpoints;}
+    @PostMapping("/streams/checkpoints/uploads") public ResponseEntity<String> checkpointUpload(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.upload(principal,body));}
+    @PostMapping("/streams/checkpoints/commit") public ResponseEntity<String> checkpointCommit(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
+        var value=checkpoints.commit(principal,body);return response(value.created()?201:200,Map.of("checkpoint",StreamCheckpointService.receipt(value.value())));
+    }
+    @PostMapping("/streams/checkpoints/latest") public ResponseEntity<String> checkpointLatest(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.latest(principal,body));}
     @PostMapping("/streams") public ResponseEntity<String> streams(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
         var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
         return response(200,bindings.runner(principal,body));

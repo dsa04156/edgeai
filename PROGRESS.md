@@ -1,9 +1,18 @@
 # 진행 상태
 
 [STATUS]
+ADR0032/V22 인증 checkpoint API·불변 DB 이력·실제 S3 내용 검증을 연결했다.
+실제 HTTP/PG/S3 6개에서 동시 확정·정상 후속 갱신·변조·취소 경합·최신 고정 version을 검증했다.
+단위88개·OpenAPI/패키징·기존 PostgreSQL·S3/Remote/VD 회귀를 통과했다. 상세는
+docs/evidence/m7-stream-checkpoint-api.md다. 자동 Session 저장·새 Attempt/세대 인계와
+운영 broker·공개 STREAM 실행·실제 Kubernetes 다중 장치 종단은 남는다.
+서버 연결의 실제 TLS broker22개·DB153개·S3/Remote/VD22개·PC/모바일10개 및 DB 장애/복구도 PASS다.
+새 서버 커밋의 CI/배포는 후속 확인 대상이다. 앞선 SDK a4e87c7의 CI37093274029는5 jobs/
+결과JSON17개 및 실제kind를 통과했다. GitOps73b6f11·040416Z-7679f70f에서 정확한
+imageID/Ready/PVCBound/ArgoSynced·VD 활성화를 확인했으며 aggregate health는Progressing이다.
 ADR0031 외부 checkpoint SDK·전송 frontier를 구현했다. 실제 TLS MQTT/Session과 S3 고정 version의
 볼륨 삭제/복원·9→14 재개·SIGKILL rollback을 검증했다. 현재 동일 binding 복원이며
-인증된 checkpoint API/DB 확정·새 Attempt/generation 전환은 남는다.
+인증된 checkpoint API/DB 확정은 후속 ADR0032로 연결했고 새 Attempt/generation 전환은 남는다.
 상세: docs/evidence/m7-stream-checkpoint.md. 공개 STREAM501과 M5/M7–M10 미완료를 유지한다.
 M6 VD는 실제 자식 Task/Result·수명·CI·배포·PC/모바일 결과 화면까지 검증 완료했다.
 현재는 M7 다중 장치·스트리밍의 첫 구성 요소 작업 중이며 공개 STREAM 실행은 아직501이다.

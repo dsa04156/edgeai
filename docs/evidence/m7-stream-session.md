@@ -59,3 +59,9 @@ Session은 처리 도중 발생한 예외에서도 취소·전체 timeout을 일
 반환한다. 기한 전의 다른 오류와 BaseException 신호는 원래대로 전파한다.
 수정 후 실제 HTTPS/MQTT 전체36개는 20261003T024959Z-d0d98edf에서 PASS/0,
 51.523초를 확인했다. 신규 CI·이미지·배포 검증은 별도로 추적한다.
+
+source `922bbfee`의 [CI37091238069](https://github.com/dsa04156/edgeai/actions/runs/37091238069)는
+후속 확인에서5 jobs/결과JSON17개 모두 PASS/0이었다. 실제 컨테이너 Runner70개,
+HTTPS/MQTT36개와 기존 실제 kind의 Runtime/Remote/VD 수용을 통과했다.
+`20261003T032725Z-1e6bedd2`에서 GitOps `64d601d`의 API/dashboard/MinIO 정확한 imageID,
+Ready·PVC Bound·Argo Synced·VD 활성화를 확인했다. aggregate health는 기존 Progressing이다.

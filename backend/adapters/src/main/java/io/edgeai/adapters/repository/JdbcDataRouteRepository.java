@@ -24,6 +24,10 @@ public final class JdbcDataRouteRepository implements DataRouteRepository {
     public Optional<DataRoute> route(UUID id,boolean lock){return jdbc.query("SELECT * FROM edgeai.data_route WHERE id=?"+(lock?" FOR UPDATE":""),ROUTE,id).stream().findFirst();}
     public Optional<DataRoute> input(UUID run,UUID task,String port){return jdbc.query("SELECT * FROM edgeai.data_route WHERE run_id=? AND consumer_task_id=? AND consumer_port=?",ROUTE,run,task,port).stream().findFirst();}
     public List<DataRoute> forRun(UUID run,int limit,int offset){return jdbc.query("SELECT * FROM edgeai.data_route WHERE run_id=? ORDER BY created_at,id LIMIT ? OFFSET ?",ROUTE,run,limit,offset);}
+    public List<DataRoute> forTask(UUID task,int limit){
+        if(limit<1 || limit>33)throw new IllegalArgumentException("Invalid Task route page");
+        return jdbc.query("SELECT * FROM edgeai.data_route WHERE source_task_id=? OR consumer_task_id=? ORDER BY id LIMIT ?",ROUTE,task,task,limit);
+    }
     public void create(DataRoute r){jdbc.update("""
         INSERT INTO edgeai.data_route(id,run_id,source_task_id,source_device_id,source_profile_version_id,source_mode,source_port,consumer_task_id,consumer_port,media_type,max_payload_bytes,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)

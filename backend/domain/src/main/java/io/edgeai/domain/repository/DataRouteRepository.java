@@ -9,6 +9,7 @@ public interface DataRouteRepository {
     Optional<DataRoute> route(UUID id,boolean lock);
     Optional<DataRoute> input(UUID runId,UUID taskId,String port);
     List<DataRoute> forRun(UUID runId,int limit,int offset);
+    List<DataRoute> forTask(UUID taskId,int limit);
     void create(DataRoute route);
     Optional<RouteGeneration> generation(UUID id);
     Optional<RouteGeneration> open(UUID routeId);

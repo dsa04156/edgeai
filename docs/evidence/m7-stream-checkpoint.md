@@ -1,7 +1,8 @@
 # M7 외부 체크포인트 SDK·전송 확정 범위 검증
 
 2026-10-03 KST. [ADR0031](../adr/0031-stream-portable-checkpoint.md)의 범위다.
-공개 STREAM·새 Attempt/generation 전환·인증된 checkpoint API/DB 확정은 미구현이다.
+이 SDK 검증 시점에는 공개 STREAM·새 Attempt/generation 전환·인증된 checkpoint API/DB 확정이
+미구현이었다. 후속 [인증 서버 검증](m7-stream-checkpoint-api.md)은 별도 증거를 따른다.
 
 | 시험 | 실행 ID | 결과 |
 |---|---|---|
@@ -39,3 +40,16 @@
 않았다. Snapshot의 producer를 파일만 보고 바꾸지 않으며 다른 binding restore는 거절한다.
 현재 REST/Swagger/DDL 변경은 없다. 기존 V1–V21 migration을 변경하지 않는다.
 신규 CI·정확한 이미지 배포 결과는 후속 확인 대상으로 남긴다.
+
+## SDK CI·실제 배포 확인
+
+source `a4e87c7`의 [CI37093274029](https://github.com/dsa04156/edgeai/actions/runs/37093274029)는
+5 jobs 모두 success다. 다운로드한 runner/storage/platform/images의 result.json17개 모두
+PASS/0을 직접 확인했다. 실제 Runner 컨테이너79개(91.452초), HTTPS/MQTT38개(56.621초)와
+실제 kind의 BATCH·재시작·retry/offload·TLS Remote·VD Task 경로를 통과했다.
+kind 시험은 고정 S3 artifact20+5개를 검사했고 전용 `edgeai-ci-0be338306d37`을 삭제했다.
+
+GitOps `73b6f11`과 `20261003T040416Z-7679f70f`에서 API/dashboard/MinIO3개 imageID가
+정확히 source a4e87c7 digest와 일치하고 Ready·PVC Bound·Argo Synced·VD 활성화를 확인했다.
+공유 Ingress status 제한으로 Argo aggregate health는 Progressing이다.
+이 결과는 portable SDK 커밋의 검증이며 후속 ADR0032 서버 변경의 CI 결과는 아니다.

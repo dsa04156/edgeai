@@ -35,6 +35,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/RemoteWorkerIntegrationTest.class'
     exclude '**/StreamBrokerIntegrationTest.class'
     exclude '**/StreamBindingIntegrationTest.class'
+    exclude '**/StreamCheckpointIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -53,6 +54,7 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     include '**/RuntimeArtifactIntegrationTest.class'
     include '**/VDTaskArtifactIntegrationTest.class'
     include '**/RemoteWorkerIntegrationTest.class'
+    include '**/StreamCheckpointIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 

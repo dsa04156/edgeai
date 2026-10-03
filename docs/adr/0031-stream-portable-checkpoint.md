@@ -3,6 +3,9 @@
 상태: SDK·실제 SQLite/TLS MQTT/S3 구성 요소 구현. 인증된 체크포인트 API/DB 이력과
 새 Attempt·generation 전환 수용은 후속이며 공개 STREAM 실행은 계속501이다.
 
+후속 서버 확정 API/DB 연결은 [ADR0032](0032-stream-verified-checkpoint-api.md)를 따른다.
+아래는 SDK 도입 시점의 결정과 경계다.
+
 ## 저장 단위
 
 `edgeai.stream-checkpoint/v1`은 최대72MiB의 canonical ASCII JSON이다. 계산 revision/state,

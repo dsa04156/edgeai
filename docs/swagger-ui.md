@@ -72,3 +72,13 @@ ADR0020의 VD Task 실행 연결에서는 Run의 VD 정책·필수 vdId·Ready/�
 비활성503·미준비/부적합409를 설명한다. Run/Attempt의 vdId와 Result의 vdRuntimeId를 공개하며,
 공유 VD 자원 기반 자동 전환은 거절한다. operation 수는39개다. 내부 poll 계약0.3은 배정 재전송,
 실제 프로세스 종료 acknowledgement, 미시작 확인, DRAIN 중 STOP까지 보고할 의무를 명시한다.
+
+## M7 내부 스트림·체크포인트 API
+
+`/swagger-ui/index.html?contract=streams`는 별도 `/stream-openapi.yaml` 원본을 렌더한다.
+Device/Runner의 배정·양쪽 heartbeat4개와 체크포인트 업로드 권한·확정·최신 조회3개,
+총7개 operation의 한국어 역할·입력·오류를 제공한다. 내부 경로에는 관리 CSRF를 자동으로
+추가하지 않으며 Device token 또는 Runner claim/Pod 신원을 사용한다.
+체크포인트는 S3 PUT → 고정 version의 commit → 정확한 receipt 확인 순서를 설명한다.
+공개 STREAM 실행과 새 Attempt/세대 복원은 아직 지원하지 않음을 문서에 표시한다.
+원본/패키징 byte 대조와 PC·모바일 렌더 검사는 기존 CI 계약/브라우저 경로에 포함한다.

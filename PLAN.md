@@ -190,3 +190,9 @@ ADR0031의 portable checkpoint·별도 snapshot serial·외부 확인 전 ACK/�
 원본 볼륨 삭제·손상된 최신 version 거절·확정 중 SIGKILL을 검증했다.
 [체크포인트 증거](docs/evidence/m7-stream-checkpoint.md)를 따른다. 다음은 현재 producer
 재검사를 포함한 인증 API/영속 metadata, 새 Attempt/generation handover와 자동 저장 연결이다.
+
+ADR0032/V22는 인증된 uploads/commit/latest와 불변 checkpoint metadata를 연결한다.
+실제 HTTP/SDK/PG/S3 6개에서 동시 확정·정상 serial 갱신·변조·취소 경합을 검증했고
+OpenAPI/단위88개·기존 PostgreSQL·S3/Remote/VD 회귀를 통과했다.
+[서버 확정 증거](docs/evidence/m7-stream-checkpoint-api.md)를 따른다. 다음은 Session 자동
+업로드/인증된 receipt 적용·새 Attempt/세대 인계와 SERVICE/Runner 운영 실행 연결이다.

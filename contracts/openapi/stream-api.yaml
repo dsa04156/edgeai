@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: EdgeAI authenticated stream bindings
   version: 0.1.0
-  description: M7 내부 배정·생존 확인 계약. MQTT 비밀번호/세션 토큰은 로그·일반 metadata에 저장하지 않는다. SDK는
+  description: M7 내부 배정·생존 확인·체크포인트 확정 계약. MQTT 비밀번호/세션 토큰·서명 URL은 로그·일반 metadata에 저장하지 않는다. SDK는
     monotonic 기한을 적용한다. 공개 STREAM 실행은 후속 연결이다.
 servers:
 - url: /
@@ -201,6 +201,106 @@ paths:
           description: 스트림 배정 비활성
         '503':
           description: DB/Kubernetes/자격 설정 일시 장애
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/uploads:
+    post:
+      operationId: uploadStreamCheckpoint
+      summary: 현재 Runner 체크포인트의 S3 업로드 권한 요청
+      description: 현재 Runner/Pod·전체 입출력 경로의 ACTIVE 세대·lease와 이전 확정본을 확인한다.
+        checkpoint에는 SDK가 만든 정규 JSON의 serial·SHA-256·크기·실행 설정 해시를 보낸다.
+        응답의 upload.url에 upload.headers를 그대로 사용해 파일을 PUT하고 x-amz-version-id를 보관한다.
+        PUT 성공만으로 처리 확인이나 출력 전송을 진행하면 안 된다. commit 확정 응답이 필요하다.
+        이미 같은 최신 체크포인트가 확정되었다면 upload 대신 checkpoint를 반환한다.
+        서명 URL은 비공개이며 이 요청은 lease를 연장하지 않는다.
+      security: [{runnerClaim: [], podIdentity: []}]
+      parameters:
+      - {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckpointUploadRequest'}
+      responses:
+        '200':
+          description: '업로드 권한 또는 이미 확정된 최신 receipt. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckpointUploadResponse'}
+        '400': {description: JSON 필드·중복 generation·해시·크기·정수 한도 오류}
+        '401': {description: Runner claim 또는 Pod 신원 인증 실패}
+        '403': {description: 내부 Runner 경로 비활성 또는 권한 거절}
+        '404': {description: 요청한 스트림 세대가 없음}
+        '409': {description: 주체·세대·lease가 유효하지 않거나 이전 확정본 불일치. 새 Attempt/세대 전환은 STREAM_CHECKPOINT_HANDOVER_REQUIRED}
+        '413': {description: 요청 JSON 256KiB 초과}
+        '503': {description: DB·Kubernetes·S3 일시 장애}
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/commit:
+    post:
+      operationId: commitStreamCheckpoint
+      summary: S3 파일을 검증하고 체크포인트를 원자적으로 확정
+      description: uploads에 보낸 checkpoint와 실제 PUT 응답의 versionId를 보낸다.
+        서버는 고정 S3 version의 실제 바이트·SHA-256·미디어 유형과 SDK 문서의 전체 경로·프레임·상태를 검증한다.
+        저장소 읽기 동안 DB 잠금을 유지하지 않으며 확정 직전에 현재 주체·전체 세대·취소·기한을 재검사한다.
+        입력·출력 위치와 계산 revision은 후퇴할 수 없다. 계산 revision이 같으면 상태를 바꿀 수 없다.
+        최초 검증된 version을 불변 DB 이력으로 저장한다. 같은 최신 요청의 재전송은 같은 receipt를 반환하며
+        다른 versionId로 교체하지 않는다. 더 최신 확정본이 생긴 뒤 이전 요청을 재전송하면 409다.
+        SDK는 인증된 응답의 serial·sha256을 후보와 대조한 뒤에만 처리 확인과 출력 전송을 허용한다.
+        새 Attempt/세대 인계와 공개 STREAM 실행은 아직 지원하지 않는다.
+      security: [{runnerClaim: [], podIdentity: []}]
+      parameters:
+      - {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckpointCommitRequest'}
+      responses:
+        '201':
+          description: '고정 S3 version과 검증된 metadata를 새로 확정. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckpointReceiptResponse'}
+        '200':
+          description: '동일한 최신 요청의 멱등 재전송. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckpointReceiptResponse'}
+        '400': {description: 형식·문서·실제 파일 해시/크기/미디어 유형 불일치. INVALID_RUNNER_REQUEST 또는 ARTIFACT_INVALID}
+        '401': {description: Runner claim 또는 Pod 신원 인증 실패}
+        '403': {description: 내부 Runner 경로 비활성 또는 권한 거절}
+        '404': {description: 요청한 스트림 세대가 없음}
+        '409': {description: 취소·만료·주체 교체·불완전한 세대 집합·이전 확정본 충돌·커서/상태 후퇴·미지원 인계}
+        '413': {description: 요청 JSON 256KiB 초과. 체크포인트 파일은 최대 72MiB이며 S3에 직접 업로드}
+        '429': {description: STREAM_CHECKPOINT_BUSY — 동시 검증 한도 초과. 같은 후보로 재시도}
+        '503': {description: DB·Kubernetes·S3 일시 장애. 결과 불명확 시 같은 요청을 재전송}
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/latest:
+    post:
+      operationId: latestStreamCheckpoint
+      summary: 현재 Task의 최신 확정 체크포인트와 다운로드 권한 조회
+      description: 현재 Runner/Pod와 전체 경로의 유효한 generationIds를 확인하고 Task의 최신 불변 receipt 및
+        고정 S3 version 다운로드 권한을 반환한다. 확정본이 없으면 checkpoint는 null이며 download는 없다.
+        파일을 받은 뒤 크기·SHA-256·실행 설정·정확한 binding을 확인해야 한다. 조회만으로 새 Attempt나
+        세대에 복원 권한을 부여하지 않으며 SDK의 현재 복원은 동일 binding에서만 가능하다.
+        GET 캐시·URL에 신원 정보를 남기지 않도록 POST 본문을 사용하며 lease는 연장하지 않는다.
+      security: [{runnerClaim: [], podIdentity: []}]
+      parameters:
+      - {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckpointLatestRequest'}
+      responses:
+        '200':
+          description: '최신 receipt 및 고정 version 다운로드 권한 또는 미확정 null. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckpointLatestResponse'}
+        '400': {description: 필드·정수·세대 집합 형식 오류}
+        '401': {description: Runner claim 또는 Pod 신원 인증 실패}
+        '403': {description: 내부 Runner 경로 비활성 또는 권한 거절}
+        '404': {description: 요청한 스트림 세대가 없음}
+        '409': {description: 취소·만료·다른 주체 또는 전체 경로와 세대 집합 불일치}
+        '413': {description: 요청 JSON 256KiB 초과}
+        '503': {description: DB·Kubernetes·S3 일시 장애}
 components:
   securitySchemes:
     deviceSession:
@@ -215,6 +315,172 @@ components:
       in: header
       name: X-EdgeAI-Pod-Token
   schemas:
+    CheckpointCounter:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+    CheckpointHash:
+      type: string
+      pattern: '^[a-f0-9]{64}$'
+    CheckpointGenerations:
+      type: array
+      minItems: 1
+      maxItems: 32
+      uniqueItems: true
+      items: {type: string, format: uuid}
+      description: 해당 Task 전체 입출력 경로의 현재 ACTIVE generation ID. 일부만 전달할 수 없음
+    CheckpointCandidate:
+      type: object
+      additionalProperties: false
+      required: [previousCheckpointId, serial, sha256, bytes, executionSha256, generationIds]
+      properties:
+        previousCheckpointId:
+          type: [string, 'null']
+          format: uuid
+          description: 이전 서버 확정 receipt ID. 최초 요청만 null
+        serial: {$ref: '#/components/schemas/CheckpointCounter'}
+        sha256: {$ref: '#/components/schemas/CheckpointHash'}
+        bytes: {type: integer, minimum: 1, maximum: 75497472}
+        executionSha256: {$ref: '#/components/schemas/CheckpointHash'}
+        generationIds: {$ref: '#/components/schemas/CheckpointGenerations'}
+    CheckpointUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, podUid, checkpoint]
+      properties:
+        epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
+        podUid: {type: string, format: uuid}
+        checkpoint: {$ref: '#/components/schemas/CheckpointCandidate'}
+    CheckpointCommitRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, podUid, checkpoint, versionId]
+      properties:
+        epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
+        podUid: {type: string, format: uuid}
+        checkpoint: {$ref: '#/components/schemas/CheckpointCandidate'}
+        versionId: {type: string, minLength: 1, maxLength: 1024}
+    CheckpointLatestRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, podUid, generationIds]
+      properties:
+        epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
+        podUid: {type: string, format: uuid}
+        generationIds: {$ref: '#/components/schemas/CheckpointGenerations'}
+    CheckpointManifestBinding:
+      type: object
+      additionalProperties: false
+      required: [routeId, generation, producer]
+      properties:
+        routeId: {type: string, format: uuid}
+        generation: {type: integer, minimum: 1, maximum: 9007199254740991}
+        producer: {$ref: '#/components/schemas/Producer'}
+    CheckpointSummary:
+      type: object
+      additionalProperties: false
+      required: [manifest, revision, routes, stateSha256, stateBytes]
+      description: 프레임·상태 원문·자격 정보가 없는 최대 64KiB 검증 metadata
+      properties:
+        revision: {$ref: '#/components/schemas/CheckpointCounter'}
+        stateSha256: {$ref: '#/components/schemas/CheckpointHash'}
+        stateBytes: {type: integer, minimum: 0, maximum: 1048576}
+        manifest:
+          type: object
+          additionalProperties: false
+          required: [version, inputs, outputs, limits]
+          properties:
+            version: {const: 1}
+            inputs:
+              type: array
+              maxItems: 16
+              items: {$ref: '#/components/schemas/CheckpointManifestBinding'}
+            outputs:
+              type: array
+              maxItems: 16
+              items: {$ref: '#/components/schemas/CheckpointManifestBinding'}
+            limits:
+              type: object
+              additionalProperties: false
+              required: [max_frames, max_buffer_bytes, max_state_bytes]
+              properties:
+                max_frames: {type: integer, minimum: 1, maximum: 4096}
+                max_buffer_bytes: {type: integer, minimum: 1, maximum: 67108864}
+                max_state_bytes: {type: integer, minimum: 1, maximum: 1048576}
+        routes:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [routeId, received, committed, ended]
+            properties:
+              routeId: {type: string, format: uuid}
+              received: {$ref: '#/components/schemas/CheckpointCounter'}
+              committed: {$ref: '#/components/schemas/CheckpointCounter'}
+              ended: {type: boolean}
+    CheckpointReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, runId, taskId, attemptId, epoch, serviceProfileVersionId, previousCheckpointId, serial, revision, sha256, bytes, executionSha256, generationIds, versionId, summary, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        runId: {type: string, format: uuid}
+        taskId: {type: string, format: uuid}
+        attemptId: {type: string, format: uuid}
+        epoch: {type: integer, minimum: 1, maximum: 9007199254740991}
+        serviceProfileVersionId: {type: string, format: uuid}
+        previousCheckpointId: {type: [string, 'null'], format: uuid}
+        serial: {$ref: '#/components/schemas/CheckpointCounter'}
+        revision: {$ref: '#/components/schemas/CheckpointCounter'}
+        sha256: {$ref: '#/components/schemas/CheckpointHash'}
+        bytes: {type: integer, minimum: 1, maximum: 75497472}
+        executionSha256: {$ref: '#/components/schemas/CheckpointHash'}
+        generationIds: {$ref: '#/components/schemas/CheckpointGenerations'}
+        versionId: {type: string, minLength: 1, maxLength: 1024}
+        summary: {$ref: '#/components/schemas/CheckpointSummary'}
+        createdAt: {type: string, format: date-time}
+    CheckpointReceiptResponse:
+      type: object
+      additionalProperties: false
+      required: [checkpoint]
+      properties:
+        checkpoint: {$ref: '#/components/schemas/CheckpointReceipt'}
+    CheckpointUploadResponse:
+      oneOf:
+      - {$ref: '#/components/schemas/CheckpointReceiptResponse'}
+      - type: object
+        additionalProperties: false
+        required: [upload]
+        properties:
+          upload:
+            type: object
+            additionalProperties: false
+            required: [url, headers, expiresAt]
+            properties:
+              url: {type: string, format: uri}
+              headers: {type: object, additionalProperties: {type: string}}
+              expiresAt: {type: string, format: date-time}
+    CheckpointLatestResponse:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required: [checkpoint]
+        properties:
+          checkpoint: {type: 'null'}
+      - type: object
+        additionalProperties: false
+        required: [checkpoint, download]
+        properties:
+          checkpoint: {$ref: '#/components/schemas/CheckpointReceipt'}
+          download:
+            type: object
+            additionalProperties: false
+            required: [url, expiresAt]
+            properties:
+              url: {type: string, format: uri}
+              expiresAt: {type: string, format: date-time}
     DeviceBindingRequest:
       type: object
       additionalProperties: false
