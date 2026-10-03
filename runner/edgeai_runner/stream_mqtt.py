@@ -4,7 +4,7 @@ Broker topic ACLs must be provisioned from authenticated DataRoute assignments. 
 adapter does not create them or infer bindings from messages. QoS1 is only transport;
 application watermarks release durable output after the consumer commits its state.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import ipaddress
 import os
 from pathlib import Path
@@ -161,6 +161,27 @@ class Link:
             if hasattr(self, 'client'):
                 self.close(force=True)
             raise MqttError('Stream assignment expired') from None
+
+    def refresh(self, assignments):
+        """Replace only live, identical authority snapshots, atomically on the step thread.
+
+        A full set is required; identity, routes, broker credentials and wire limits
+        cannot change in a live Link. Shorter VD/drain deadlines are respected too.
+        """
+        self._check_authority()
+        if type(assignments) not in (list, tuple) or len(assignments) != len(self._assignments) or not self._assignments:
+            raise MqttError('Invalid refreshed stream assignments')
+        next_assignments = {}
+        for assignment in assignments:
+            if type(assignment) is not Assignment:
+                raise MqttError('Invalid refreshed stream assignment')
+            old = self._assignments.get(assignment.binding.route_id)
+            if old is None or assignment.binding.route_id in next_assignments or assignment.clock is not old.clock or replace(assignment, deadline=old.deadline) != old:
+                raise MqttError('Stream authority changed during refresh')
+            assignment.remaining()
+            next_assignments[assignment.binding.route_id] = assignment
+        self._check_authority()  # Validation time cannot revive an expired old lease.
+        self._assignments = next_assignments
 
     def _connected(self, client, userdata, flags, reason_code, properties):
         self._check_authority()

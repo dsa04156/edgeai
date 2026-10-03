@@ -124,6 +124,24 @@ public class DataRouteService {
         if(g.fencedAt()!=null || !now(g).isBefore(g.leaseUntil()) || (active && g.activatedAt()==null))throw conflict("STREAM_GENERATION_FENCED");
         String reason=invalid(routes.route(g.routeId(),false).orElseThrow(),g.producer(),g.consumer(),false);if(reason!=null)throw conflict(reason);
     }
+    public record Heartbeat(StreamBrokerGateway.Permission permission,long sequence){}
+    /** The surrounding transaction authenticates the caller and holds all authority locks. */
+    @Transactional
+    public Heartbeat heartbeat(UUID id,StreamBrokerGateway.Principal caller,long sequence){
+        if(sequence<0 || sequence>9007199254740991L)throw new IllegalArgumentException("Invalid heartbeat sequence");
+        var permission=authorize(id,caller);var g=permission.generation();var h=routes.heartbeat(id);
+        boolean producer=caller.equals(permission.producer());long previous=h.sequence(producer);
+        if(sequence==0 || sequence==previous)return new Heartbeat(permission,previous);
+        if(sequence!=previous+1)throw conflict("STREAM_HEARTBEAT_SEQUENCE");
+        var now=now(g);
+        if(now.isBefore(h.producerSeen()))now=h.producerSeen();if(now.isBefore(h.consumerSeen()))now=h.consumerSeen();
+        if(!now.isBefore(g.leaseUntil()))throw conflict("STREAM_GENERATION_FENCED");
+        var next=h.observe(producer,sequence,now);routes.observe(next);
+        var oldest=next.producerSeen().isBefore(next.consumerSeen())?next.producerSeen():next.consumerSeen();
+        var until=oldest.plus(next.windowMicros(),ChronoUnit.MICROS);
+        if(until.isAfter(g.leaseUntil()))routes.renew(id,until,now);
+        return new Heartbeat(new StreamBrokerGateway.Permission(permission.route(),get(id)),sequence);
+    }
     private String invalid(DataRoute r,Actor producer,Actor consumer,boolean running){
         var run=executions.run(r.runId(),false).orElseThrow();if(!Set.of("PENDING","RUNNING").contains(run.state()))return "CANCELLED";
         if(!currentAttempt(r.consumerTaskId(),consumer,running))return "CONSUMER_CHANGED";

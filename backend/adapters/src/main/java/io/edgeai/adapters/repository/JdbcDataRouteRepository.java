@@ -52,6 +52,11 @@ public final class JdbcDataRouteRepository implements DataRouteRepository {
         g.brokerDigest(),g.policyDigest(),g.requestDigest(),time(g.createdAt()),time(g.updatedAt()),time(g.leaseUntil()));}
     public void activate(UUID id,Instant now){jdbc.update("UPDATE edgeai.route_generation SET activated_at=?,updated_at=? WHERE id=? AND activated_at IS NULL AND fenced_at IS NULL",time(now),time(now),id);}
     public void renew(UUID id,Instant until,Instant now){jdbc.update("UPDATE edgeai.route_generation SET lease_until=?,updated_at=? WHERE id=? AND fenced_at IS NULL",time(until),time(now),id);}
+    public RouteHeartbeat heartbeat(UUID id){return jdbc.queryForObject("SELECT * FROM edgeai.route_heartbeat WHERE generation_id=?",
+        (r,n)->new RouteHeartbeat(r.getObject("generation_id",UUID.class),r.getLong("window_micros"),r.getLong("producer_sequence"),r.getLong("consumer_sequence"),
+            instant(r,"producer_seen"),instant(r,"consumer_seen")),id);}
+    public void observe(RouteHeartbeat h){jdbc.update("UPDATE edgeai.route_heartbeat SET producer_sequence=?,consumer_sequence=?,producer_seen=?,consumer_seen=? WHERE generation_id=?",
+        h.producerSequence(),h.consumerSequence(),time(h.producerSeen()),time(h.consumerSeen()),h.generationId());}
     public void fence(UUID id,String reason,Instant now){jdbc.update("UPDATE edgeai.route_generation SET fenced_at=?,fence_reason=?,updated_at=? WHERE id=? AND fenced_at IS NULL",time(now),reason,time(now),id);}
     public void closed(UUID id,Instant now){jdbc.update("UPDATE edgeai.route_generation SET closed_at=?,updated_at=? WHERE id=? AND fenced_at IS NOT NULL AND closed_at IS NULL",time(now),time(now),id);}
 }

@@ -61,10 +61,12 @@ API/Dashboard/MinIO의 정확한 imageID·Ready, PVC Bound, Argo Synced를 확�
 인증 배정 소스 `337abb3`을 main에 push했다. CI37080508316의 scaffold/runner/storage는
 success이며 내려받은 scaffold 결과JSON9개가 모두 PASS/0이다. 실제 broker/배정은
 `20261003T000548Z-ceeddf2d`이고 XML의 새 배정5개·실패/skip0을 확인했다.
-현재 images job은 실제 Kubernetes 수용을 실행 중이다. 전체 CI·새 이미지 배포 완료 판정은 보류한다.
+후속 확인에서5 jobs/JSON17개·실제kind를 모두 통과했다. 정확한 source337 이미지·Ready/PVC·
+ArgoSynced는20261003T004753Z-3cf42e14에서 확인했다. SDK766의 별도 CI·배포와 최신
+heartbeat 검증은 [후속 기록](m7-stream-heartbeat.md)을 따른다.
 
 `EDGEAI_STREAM_BINDINGS_ENABLED`와 stream worker는 기본 비활성이다. 배정은 기존 ACTIVE 세대의
-현재 유효기간을 조회할 뿐 생성/갱신하지 않는다. SDK의 lease 준수·양쪽 생존 확인/갱신,
+현재 유효기간을 조회할 뿐 생성/갱신하지 않는다. SDK의 lease 준수·양쪽 생존 확인/갱신은 후속 로컬 검증을 통과했다.
 운영 broker·실제 Runner/SERVICE의 스트림 인터페이스, checkpoint/새 Pod 복원,
 공개 실행 API/화면과 실제 Kubernetes 다중 장치 수용은 남아 있다. 공개 STREAM 실행501을 유지한다.
 

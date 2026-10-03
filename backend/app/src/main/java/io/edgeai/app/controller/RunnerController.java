@@ -25,6 +25,10 @@ public class RunnerController {
         return response(200,bindings.runner(principal,body));
     }
     @PostMapping("/claim") public ResponseEntity<String> claim(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,service.claim(principal,body));}
+    @PostMapping("/streams/heartbeat") public ResponseEntity<String> heartbeat(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
+        var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");
+        return response(200,bindings.runnerHeartbeat(principal,body));
+    }
     @PostMapping("/uploads") public ResponseEntity<String> uploads(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,service.uploads(principal,body));}
     @PostMapping("/commit") public ResponseEntity<String> commit(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
         var result=service.commit(principal,body);var value=result.value();

@@ -20,6 +20,8 @@ public interface DataRouteRepository {
     void prepare(DataRoute route,RouteGeneration generation);
     void activate(UUID id,Instant now);
     void renew(UUID id,Instant until,Instant now);
+    RouteHeartbeat heartbeat(UUID generationId);
+    void observe(RouteHeartbeat heartbeat);
     void fence(UUID id,String reason,Instant now);
     void closed(UUID id,Instant now);
 }

@@ -32,6 +32,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends mosquitto
+          python3 -m venv .tools/stream-venv
+          .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
+          export EDGEAI_STREAM_PYTHON="$PWD/.tools/stream-venv/bin/python"
           bash scripts/collect-evidence.sh stream-broker bash scripts/test-stream-broker.sh
       - run: bash scripts/collect-evidence.sh infra bash scripts/test-infra.sh
       - run: pnpm --filter @edgeai/dashboard exec playwright install --with-deps chromium

@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: EdgeAI authenticated stream bindings
   version: 0.1.0
-  description: M7 내부 배정 계약. MQTT 비밀번호/세션 토큰은 로그·일반 metadata에 저장하지 않는다. 실제 SDK lease
-    준수·갱신과 공개 STREAM 실행은 후속 연결이다.
+  description: M7 내부 배정·생존 확인 계약. MQTT 비밀번호/세션 토큰은 로그·일반 metadata에 저장하지 않는다. SDK는
+    monotonic 기한을 적용한다. 공개 STREAM 실행은 후속 연결이다.
 servers:
 - url: /
 paths:
@@ -102,6 +102,105 @@ paths:
           description: 스트림 배정 비활성
         '503':
           description: DB/Kubernetes/자격 설정 일시 장애
+  /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/heartbeat:
+    post:
+      operationId: heartbeatDeviceStream
+      summary: 현재 Device 세션의 스트림 생존 확인 및 기한 갱신
+      description: 현재 인증된 주체의 다음 sequence만 생존 시각으로 기록한다. sequence 0은 현재 순번·배정을 읽으며,
+        같은 마지막 순번의 재전송은 생존 시각을 갱신하지 않는다. 건너뛰거나 오래된 순번은 409다. 기한은 양쪽 마지막 관측 중 더 오래된
+        시각+최초 고정 window(5–120초)까지만 연장한다. 한쪽 요청으로 다른 쪽의 부재를 숨길 수 없고 만료·취소·교체 뒤에는 갱신할
+        수 없다. Runner는 실제 Pod/runtime 및 VD lease·drain도 재검사한다. 응답 배정의 기한은 요청 경과 시간을
+        차감해 사용하고 이미 만료된 연결을 되살리지 않는다.
+      security:
+      - deviceSession: []
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: &id002
+          type: string
+          format: uuid
+      - name: sessionId
+        in: path
+        required: true
+        schema: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceHeartbeatRequest'
+      responses:
+        '200':
+          description: '현재 lease까지 유효한 비공개 배정. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Heartbeat'
+        '400':
+          description: JSON 형식/필드/epoch 오류
+        '401':
+          description: 현재 세션 토큰 또는 Runner/Pod 인증 실패
+        '403':
+          description: 스트림 인증 경로 비활성 또는 권한 거절
+        '404':
+          description: 세대가 없음
+        '409':
+          description: 이전 주체·다른 route·미활성/회수된 세대·만료·취소·설정 불일치·순번 불일치
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 배정 비활성
+        '503':
+          description: DB/Kubernetes/자격 설정 일시 장애
+  /internal/v1/attempts/{attemptId}/streams/heartbeat:
+    post:
+      operationId: heartbeatRunnerStream
+      summary: 현재 Runner/Pod의 스트림 생존 확인 및 기한 갱신
+      description: 현재 인증된 주체의 다음 sequence만 생존 시각으로 기록한다. sequence 0은 현재 순번·배정을 읽으며,
+        같은 마지막 순번의 재전송은 생존 시각을 갱신하지 않는다. 건너뛰거나 오래된 순번은 409다. 기한은 양쪽 마지막 관측 중 더 오래된
+        시각+최초 고정 window(5–120초)까지만 연장한다. 한쪽 요청으로 다른 쪽의 부재를 숨길 수 없고 만료·취소·교체 뒤에는 갱신할
+        수 없다. Runner는 실제 Pod/runtime 및 VD lease·drain도 재검사한다. 응답 배정의 기한은 요청 경과 시간을
+        차감해 사용하고 이미 만료된 연결을 되살리지 않는다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunnerHeartbeatRequest'
+      responses:
+        '200':
+          description: '현재 lease까지 유효한 비공개 배정. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Heartbeat'
+        '400':
+          description: JSON 형식/필드/epoch 오류
+        '401':
+          description: 현재 세션 토큰 또는 Runner/Pod 인증 실패
+        '403':
+          description: 스트림 인증 경로 비활성 또는 권한 거절
+        '404':
+          description: 세대가 없음
+        '409':
+          description: 이전 주체·다른 route·미활성/회수된 세대·만료·취소·설정 불일치·순번 불일치
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 배정 비활성
+        '503':
+          description: DB/Kubernetes/자격 설정 일시 장애
 components:
   securitySchemes:
     deviceSession:
@@ -123,7 +222,7 @@ components:
       - epoch
       - generationId
       properties:
-        epoch: &id002
+        epoch: &id003
           type: integer
           minimum: 1
           maximum: 9007199254740991
@@ -136,7 +235,7 @@ components:
       - podUid
       - generationId
       properties:
-        epoch: *id002
+        epoch: *id003
         podUid: *id001
         generationId: *id001
     Producer:
@@ -153,7 +252,7 @@ components:
             const: DEVICE_SESSION
           deviceId: *id001
           sessionId: *id001
-          epoch: *id002
+          epoch: *id003
       - type: object
         additionalProperties: false
         required:
@@ -164,7 +263,7 @@ components:
           kind:
             const: TASK_ATTEMPT
           attemptId: *id001
-          epoch: *id002
+          epoch: *id003
     Consumer:
       type: object
       additionalProperties: false
@@ -173,7 +272,7 @@ components:
       - epoch
       properties:
         attemptId: *id001
-        epoch: *id002
+        epoch: *id003
     Mqtt:
       type: object
       additionalProperties: false
@@ -239,7 +338,7 @@ components:
         generationId: *id001
         routeId: *id001
         runId: *id001
-        generation: *id002
+        generation: *id003
         direction:
           enum:
           - PRODUCER
@@ -263,3 +362,56 @@ components:
           format: date-time
         mqtt:
           $ref: '#/components/schemas/Mqtt'
+    DeviceHeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - epoch
+      - generationId
+      - sequence
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        generationId:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    RunnerHeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - epoch
+      - podUid
+      - generationId
+      - sequence
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        podUid: &id004
+          type: string
+          format: uuid
+        generationId: *id004
+        sequence:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    Heartbeat:
+      type: object
+      additionalProperties: false
+      required:
+      - sequence
+      - assignment
+      properties:
+        sequence:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        assignment:
+          $ref: '#/components/schemas/Binding'

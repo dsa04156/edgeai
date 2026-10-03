@@ -47,7 +47,8 @@ SDK8개/MQTT13개 로그에 warning/예외가 없었다.
 
 ## 남은 경계
 
-이 클라이언트는 lease 갱신/heartbeat·Runner 계산 프로세스 watchdog을 제공하지 않는다.
+이 초기 검증 당시에는 갱신이 없었다. 후속 [양쪽 heartbeat](m7-stream-heartbeat.md)에서 실제
+Spring→Python·양쪽 갱신·live Link refresh를 검증했다. Runner 계산 프로세스 watchdog은 남는다.
 journal의 로컬 ACK를 새 Pod에서도 복구 가능한 S3 checkpoint에 연결하는 작업도 남는다.
 운영 broker/TLS 설정, Device 입력·SERVICE 스트림 workload, 실제 Kubernetes 다중 장치 DAG,
 공개 실행/조회/Swagger/UI와 M8 부하·M9 운영·M10 실장비 수용은 별도다. 공개 STREAM501은 유지한다.

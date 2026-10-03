@@ -19,9 +19,11 @@ MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/�
 구성 요소별로 검증했습니다. [권한 worker](docs/evidence/m7-stream-worker.md)의 실제 DB/TLS broker
 자동 조정은 CI·배포까지 검증했습니다. 현재 Device 세션 토큰과 Runner/Pod 인증을 확인하는
 [스트림 배정 API](docs/evidence/m7-stream-bindings.md)를 실제 HTTP/DB/TLS broker로 로컬 검증했으며,
-SDK·Runner 처리 연결 전이므로 공개 STREAM은 아직501입니다.
-SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback도 [로컬 검증](docs/evidence/m7-stream-client.md)했습니다.
-실제 Runner 계산·lease 갱신·운영 broker·Spring→Python 종단 연결은 남아 있습니다.
+운영 Runner·다중 장치 실행 연결 전이므로 공개 STREAM은 아직501입니다.
+SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
+[양쪽 heartbeat 갱신](docs/evidence/m7-stream-heartbeat.md)을 구현했습니다. 실제 Spring→Python→TLS MQTT에서
+기한 갱신 뒤 계산·상태 저장·처리 확인을 검증했고, 한쪽 부재·재전송으로 기한이 늘어나지 않습니다.
+실제 Runner 계산 프로세스 감독·운영 broker·S3 checkpoint/새 Pod 복원·공개 스트리밍 실행은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -108,7 +110,8 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
 
 화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
-상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`을 표시하며 Device 세션 토큰과
+상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 배정 조회2개와 heartbeat2개를
+표시하며 순번·재전송·기한 갱신/거절 조건을 설명합니다. Device 세션 토큰과
 Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명합니다. 관리자가 Device의
 현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.
 배정은 `EDGEAI_STREAM_ENABLED=true`와 `EDGEAI_STREAM_BINDINGS_ENABLED=true`, 별도 장치 서명 키가

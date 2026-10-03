@@ -10,6 +10,8 @@ security:
 - runnerClaim: []
   podIdentity: []
 paths:
+  /internal/v1/attempts/{attemptId}/streams/heartbeat:
+    $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams~1heartbeat
   /internal/v1/attempts/{attemptId}/streams:
     $ref: ./stream-api.yaml#/paths/~1internal~1v1~1attempts~1{attemptId}~1streams
   /internal/v1/attempts/{attemptId}/claim:

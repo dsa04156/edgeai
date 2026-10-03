@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Real DB, Spring authentication/transactions, worker and TLS broker. Pod proof is an explicit
- * RuntimeGateway fixture; this is not actual Kubernetes TokenReview or Runner computation. */
+ * RuntimeGateway fixture; the Python probe computes with the SDK but does not claim Kubernetes execution. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={"edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.stream.enabled=true",
     "edgeai.stream.bindings-enabled=true","edgeai.stream.reconcile-ms=50"})
 @AutoConfigureMockMvc(print=MockMvcPrint.NONE)
@@ -140,6 +140,27 @@ class StreamBindingIntegrationTest {
         mvc.perform(post(devicePath(r.source())).header("Authorization","Bearer "+credential).contentType("application/json").content("x".repeat(16385))).andExpect(status().isPayloadTooLarge());
         mvc.perform(post(tokenPath(r.source())).with(user("manager")).with(csrf()).contentType("application/json").content("x".repeat(16385))).andExpect(status().isPayloadTooLarge());
     }
+    @Test void actualPythonSdkDiscoversSpringBindingsAndCommitsTlsMqttCalculation()throws Exception {
+        var r=route(8);var root=Files.createDirectory(BROKER.root.resolve("sdk-"+UUID.randomUUID()));
+        var request=new TreeMap<String,Object>(Map.of("origin","http://127.0.0.1:"+apiPort,"generationId",r.permission().generation().id().toString(),
+            "deviceId",r.source().device().id().toString(),"sessionId",r.source().session().id().toString(),"deviceEpoch",r.source().session().epoch(),
+            "attemptId",r.execution().attempt().toString(),"attemptEpoch",1,"podUid",r.execution().pod().podUid().toString()));
+        for(var entry:Map.of("request.json",json.canonical(request),"device.token",token(r.source()),
+                "runner.token",runnerTokens.issue(runtimes.byAttempt(r.execution().attempt()).orElseThrow()),"pod.token","pod-proof-fixture").entrySet()){
+            var path=root.resolve(entry.getKey());Files.writeString(path,entry.getValue());Files.setPosixFilePermissions(path,java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        }
+        String python=System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3");
+        var process=new ProcessBuilder(python,"-W","error::ResourceWarning","src/test/fixtures/stream_sdk_probe.py",root.toString())
+            .redirectOutput(root.resolve("probe.log").toFile()).redirectError(root.resolve("probe-error.log").toFile()).start();
+        try{
+            assertThat(process.waitFor(25,TimeUnit.SECONDS)).as("Actual Python SDK process completed").isTrue();
+            assertThat(process.exitValue()).as("Actual Python SDK probe status: %s",Files.readString(root.resolve("probe.log"))).isZero();
+            assertThat(Files.readString(root.resolve("probe.log")).equals("PASS actual Spring/Python TLS stream SDK calculation and processing acknowledgement\n")).as("SDK success marker without private output").isTrue();
+            assertThat(Files.size(root.resolve("probe-error.log"))).as("No SDK warnings or private error output").isZero();
+        }finally{
+            if(process.isAlive()){process.destroyForcibly();assertThat(process.waitFor(5,TimeUnit.SECONDS)).isTrue();}
+        }
+    }
     @Test void staleSessionAndCancelledRunCannotUsePreviouslyAuthenticatedPrincipals()throws Exception {
         var r=route(120);String old=token(r.source());devices.openSession(r.source().device().id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString())));
         device(r.source(),old,identity(r),401);
@@ -164,6 +185,41 @@ class StreamBindingIntegrationTest {
         until(()->!Instant.now().isBefore(r.permission().generation().leaseUntil()));device(r.source(),token,identity(r),409);
         assertThat(routeStore.generation(r.permission().generation().id()).orElseThrow().leaseUntil()).isEqualTo(r.permission().generation().leaseUntil());
         var q=route(120);String secret=token(q.source());devices.release(q.source().device().id());device(q.source(),secret,identity(q),401);
+    }
+    private Map<?,?> heartbeat(Route r,String token,long sequence,int expected)throws Exception {
+        var response=mvc.perform(post(devicePath(r.source())+"/heartbeat").header("Authorization","Bearer "+token)
+            .contentType("application/json").content(json.canonical(Map.of("epoch",1,"generationId",r.permission().generation().id().toString(),"sequence",sequence))))
+            .andExpect(status().is(expected)).andExpect(header().string("Cache-Control","no-store")).andReturn().getResponse().getContentAsString();
+        return response.isBlank()?Map.of():document(response);
+    }
+    private Object runnerHeartbeatBody(Route r,long sequence){return Map.of("epoch",1,"podUid",r.execution().pod().podUid().toString(),"generationId",r.permission().generation().id().toString(),"sequence",sequence);}
+    @Test void authenticatedHeartbeatReplaysAndRuntimeFailuresPreserveStoredObservation()throws Exception {
+        var r=route(120);var id=r.permission().generation().id();String secret=token(r.source());
+        assertThat(((Number)heartbeat(r,secret,0,200).get("sequence")).longValue()).isZero();
+        heartbeat(r,secret,1,200);var one=routeStore.heartbeat(id);heartbeat(r,secret,1,200);heartbeat(r,secret,3,409);
+        assertThat(routeStore.heartbeat(id)).isEqualTo(one);assertThat(routeStore.generation(id).orElseThrow().leaseUntil()).isEqualTo(r.permission().generation().leaseUntil());
+        var result=runner(r.execution(),"streams/heartbeat",runnerHeartbeatBody(r,1),200);
+        assertThat(((Number)result.get("sequence")).longValue()).isEqualTo(1);var both=routeStore.heartbeat(id);
+        assertThat(routeStore.generation(id).orElseThrow().leaseUntil()).isEqualTo(one.producerSeen().plusSeconds(120));
+        runner(r.execution(),"streams/heartbeat",runnerHeartbeatBody(r,1),200);assertThat(routeStore.heartbeat(id)).isEqualTo(both);
+        var foreignPod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
+        assertThatThrownBy(()->bindings.runnerHeartbeat(new RunnerPrincipal(r.execution().attempt(),1,foreignPod),
+            json.canonical(Map.of("epoch",1,"podUid",foreignPod.podUid().toString(),"generationId",id.toString(),"sequence",2))))
+            .isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThat(routeStore.heartbeat(id)).isEqualTo(both);
+        heartbeat(r,secret,2,200);heartbeat(r,secret,1,409);var previous=routeStore.heartbeat(id);
+        var other=route(120);heartbeat(r,token(other.source()),3,401);assertThat(routeStore.heartbeat(id)).isEqualTo(previous);
+        runs.cancelRun(r.execution().run(),"{}");heartbeat(r,secret,3,409);runner(r.execution(),"streams/heartbeat",runnerHeartbeatBody(r,2),409);
+        assertThat(routeStore.heartbeat(id)).isEqualTo(previous);
+    }
+    @Test void oneSidedHttpHeartbeatExpiresAndWorkerRevokesTheBrokerGeneration()throws Exception {
+        var r=route(5);String secret=token(r.source());var id=r.permission().generation().id();
+        heartbeat(r,secret,1,200);heartbeat(r,secret,2,200);
+        assertThat(routeStore.generation(id).orElseThrow().leaseUntil()).isEqualTo(r.permission().generation().leaseUntil());
+        until(()->routeStore.generation(id).orElseThrow().closedAt()!=null);
+        heartbeat(r,secret,3,409);runner(r.execution(),"streams/heartbeat",runnerHeartbeatBody(r,1),409);
+        assertThat(routeStore.generation(id).orElseThrow().fenceReason()).isEqualTo("LEASE_EXPIRED");
+        assertThat(routeStore.heartbeat(id).consumerSequence()).isZero();
     }
     private MqttClient client(Map<?,?> binding)throws Exception {
         var mqtt=(Map<?,?>)binding.get("mqtt");var store=KeyStore.getInstance(KeyStore.getDefaultType());store.load(null,null);

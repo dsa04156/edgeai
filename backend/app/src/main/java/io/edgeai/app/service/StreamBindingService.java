@@ -61,5 +61,24 @@ public class StreamBindingService {
         value.put("producer",producer);value.put("consumer",Map.of("attemptId",g.consumer().id().toString(),"epoch",g.consumer().epoch()));
         value.put("mediaType",route.mediaType());value.put("maxPayloadBytes",route.maxPayloadBytes());value.put("serverTime",now.toString());value.put("leaseUntil",until.toString());value.put("mqtt",mqtt);return value;
     }
+    @Transactional
+    public Object deviceHeartbeat(DeviceStreamPrincipal principal,String body){
+        var input=new DeviceInput(body,"epoch","generationId","sequence");if(input.number("epoch")!=principal.epoch())throw fenced();
+        var caller=new Principal("DEVICE",new Actor(principal.sessionId(),principal.epoch()));var id=input.uuid("generationId");
+        var permission=routes.authorize(id,caller);if(!principal.deviceId().equals(permission.route().sourceDeviceId()))throw fenced();
+        var heartbeat=routes.heartbeat(id,caller,input.number("sequence"));
+        return Map.of("sequence",heartbeat.sequence(),"assignment",response(heartbeat.permission(),caller,heartbeat.permission().generation().leaseUntil()));
+    }
+    @Transactional
+    public Object runnerHeartbeat(RunnerPrincipal principal,String body){
+        var input=RunnerInput.parse(body,principal,"generationId","sequence");var id=WorkflowInput.uuid(input.get("generationId"));
+        var caller=new Principal("TASK",new Actor(principal.attemptId(),principal.epoch()));
+        routes.authorize(id,caller);
+        // Pod, offload, runtime and VD lease authority must pass before observing liveness.
+        var until=runtimes.authorizeProducerUntil(principal.attemptId(),principal.epoch(),principal.podUid());
+        var heartbeat=routes.heartbeat(id,caller,RunnerInput.integer(input.get("sequence")));var permission=heartbeat.permission();
+        return Map.of("sequence",heartbeat.sequence(),"assignment",response(permission,caller,
+            until.isBefore(permission.generation().leaseUntil())?until:permission.generation().leaseUntil()));
+    }
     private static ControlPlaneException fenced(){return new ControlPlaneException(409,"STREAM_BINDING_FENCED","현재 장치·실행 주체와 스트림 세대·lease를 확인하세요.");}
 }

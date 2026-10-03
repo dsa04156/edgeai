@@ -241,6 +241,31 @@ class StreamMqttTest(unittest.TestCase):
             eventually(self.pump,lambda:False)
         self.assertEqual(1,len(source.outgoing()))
 
+    def test_live_refresh_preserves_identity_and_cannot_resurrect_expired_actual_socket(self):
+        self.broker.enable_tls()
+        now=[100.0];clock=lambda:now[0]
+        producer=Assignment.decode(json.dumps(self.assignment('source-a',duration=5)).encode(),A.producer,GENERATION,100.0,clock=clock)
+        consumer=Assignment.decode(json.dumps(self.assignment('processor',direction='CONSUMER')).encode(),OUT.producer,GENERATION,time.monotonic())
+        source,link=self.assigned_peer('source-a',producer);sink,_=self.assigned_peer('processor',consumer)
+        self.ready();connection=link.client.socket()
+        now[0]=103.0
+        refreshed=replace(producer,deadline=108.0)
+        for foreign in (replace(refreshed,generation_id=POD),replace(refreshed,run_id=GENERATION),
+                        replace(refreshed,max_payload_bytes=2048),replace(refreshed,consumer_epoch=2),
+                        replace(refreshed,connection=replace(refreshed.connection,secret='other')),
+                        replace(refreshed,clock=lambda:100.0)):
+            with self.assertRaisesRegex(MqttError,'authority changed'):link.refresh([foreign])
+        self.assertEqual(producer,link._assignments[A.route_id])
+        link.refresh([refreshed]);now[0]=106.0
+        self.emit('source-a',A,b'8');eventually(self.pump,lambda:len(sink.pending())==1)
+        sink.commit(0,sink.pending(),b'8');eventually(self.pump,lambda:not source.outgoing())
+        self.assertIs(connection,link.client.socket());self.assertEqual(b'8',sink.checkpoint().state)
+        # A runtime drain may shorten authority; it is never ignored for a longer old deadline.
+        link.refresh([replace(refreshed,deadline=107.0)]);now[0]=107.0
+        with self.assertRaisesRegex(MqttError,'expired'):link.refresh([replace(refreshed,deadline=120.0)])
+        self.assertTrue(link.closed);self.assertEqual(-1,connection.fileno())
+        with self.assertRaises(MqttError):self.emit('source-a',A,b'9')
+
     def test_expiry_during_sqlite_commit_rolls_back_state_and_output_together(self):
         now=[100.0]
         assignment=Assignment.decode(json.dumps(self.assignment('source-a')).encode(),A.producer,GENERATION,100.0,clock=lambda:now[0])

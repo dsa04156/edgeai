@@ -168,8 +168,12 @@ ADR0025/V20 DB 권한 worker는 실제 스케줄러·DB/TLS broker14개 로컬 �
 ADR0026 인증 배정은 Device 세션 토큰과 기존 Runner/Pod 인증을 연결해 실제 HTTP/DB/TLS broker로
 로컬 검증했다. SDK의 lease 준수/갱신과 실제 Pod의 스트림 수용은 남았다.
 worker cd61529의 CI37077442217·실제kind와 GitOps2410f10 배포 검증도 통과했다.
-ADR0027 SDK의 배정 검증·monotonic lease·MQTT/journal guard는 로컬 실제 HTTPS/TLS MQTT와
-SQLite rollback까지 통과했다. 인증 배정337abb3의 CI37080508316은 진행 중이다.
-다음은 배정/SDK의 CI·배포, 실제 Spring→Python·lease 갱신·운영 broker·Runner/SERVICE 인터페이스,
+ADR0027 SDK의 배정 검증·monotonic lease·MQTT/journal guard와 인증 배정337abb3은 각각
+CI37082953978·CI37080508316의5 jobs/JSON17개·실제kind를 통과했다. source76651cd의 실제
+배포는 GitOps9171827·011108Z-5d82c84b에서 imageID/Ready/PVC/ArgoSynced를 확인했다.
+ADR0028/V21의 양쪽 heartbeat·순번 재전송/동시성·SDK live refresh와 실제 Spring→Python→TLS MQTT
+연결은 로컬 broker22개·PG153개·Runner60개·MQTT14개·계약/Swagger4개 검증을 통과했다.
+상세는 [heartbeat 검증](docs/evidence/m7-stream-heartbeat.md)이다. 새 heartbeat CI·배포는 별도다.
+다음은 운영 broker·Runner/SERVICE 인터페이스와 계산 프로세스 watchdog,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

@@ -123,8 +123,8 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
 시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
 종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
 
-`test-runner.sh`의58개에는 SDK8개·codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
-MQTT 통합은 별도13개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
+`test-runner.sh`의60개에는 SDK10개·codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
+MQTT 통합은 별도14개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
 다르며 후자는 아직 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
 [실제 검증 기록](../docs/evidence/m7-stream-transport.md).
 
@@ -134,5 +134,15 @@ MQTT 통합은 별도13개다. 같은 볼륨의 프로세스 복구와 S3 checkp
 step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을 검사해 만료한 socket을 닫고 쓰기를 거절하며,
 트랜잭션 도중 만료되면 전체 변경을 롤백한다. 이 조회는 lease를 연장하지 않는다.
 기존 저수준 `Link(journal, endpoint, client_id)`에는 인증 배정/lease 계약이 없으므로 운영 스트림
-실행의 대체 경로로 사용하지 않는다. 실제 Runner 프로세스 종료·lease 갱신은 후속 통합이다.
+실행의 대체 경로로 사용하지 않는다. 실제 Runner 계산 프로세스 watchdog은 후속 통합이다.
 [설계](../docs/adr/0027-stream-client-lease.md), [검증과 fixture 경계](../docs/evidence/m7-stream-client.md).
+
+`BindingClient.heartbeat(generation_id, sequence)`는 `{sequence, assignment}` 결과를 반환한다.
+처음에는 `sequence=0`으로 서버의 현재 순번을 읽고 다음 요청에 `+1`을 사용한다. 응답을 잃으면
+같은 순번을 재전송한다. 재전송과 0 조회는 생존 시각을 갱신하지 않는다. producer와 consumer가
+각자 새 순번으로 응답해야 양쪽 중 더 오래된 생존 시각+고정 window까지 기한이 늘어난다.
+`Link.refresh(assignments)`에는 모든 경로의 최신 배정을 전달한다. 호출은 `step`과 같은 스레드에서
+기존 기한 전에 완료해야 한다. 같은 주체·세대·broker·규격만 허용하며, 이미 만료된 연결은 새
+배정으로 되살릴 수 없다. VD drain으로 짧아진 기한도 적용한다. HTTP 조회 중에도 원래 기한은
+계속 흐르므로 갱신 루프는 충분한 여유를 둬야 한다. 자동 갱신 스케줄러나 계산 프로세스 종료를
+이 API 자체가 제공하는 것은 아니다. [설계와 검증](../docs/evidence/m7-stream-heartbeat.md).

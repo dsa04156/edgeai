@@ -167,4 +167,38 @@ class StreamAssignmentTest(unittest.TestCase):
         self.assertEqual([],api.calls)
 
 
+    def test_actual_heartbeat_http_resume_retry_scope_and_strict_acknowledgement(self):
+        root,token,api=self.fixture({'sequence':7,'assignment':document()})
+        client=BindingClient(api.url,A.producer,token,allow_http_loopback=True)
+        result=client.heartbeat(GENERATION,0)
+        self.assertEqual(7,result.sequence);self.assertEqual(A,result.assignment.binding)
+        api.value['sequence']=8
+        client.heartbeat(GENERATION,8);client.heartbeat(GENERATION,8)
+        self.assertEqual(api.calls[-2][2],api.calls[-1][2])
+        self.assertTrue(api.calls[-1][0].endswith('/streams/heartbeat'))
+        self.assertEqual({'epoch':A.producer.epoch,'generationId':GENERATION,'sequence':8},api.calls[-1][2])
+        self.assertTrue(api.calls[-1][1]['authorization']=='Bearer fixture-claim')
+        for sequence in (-1,True,9007199254740992,'8'):
+            with self.assertRaises(AssignmentError):client.heartbeat(GENERATION,sequence)
+        self.assertEqual(3,len(api.calls))
+        for value in ({'sequence':True,'assignment':document()},{'sequence':9,'assignment':document()},
+                      {'sequence':8,'assignment':document(),'extra':1},{'sequence':8},[],{'sequence':-1,'assignment':document()}):
+            api.value=value
+            with self.assertRaises(AssignmentError):client.heartbeat(GENERATION,8)
+        api.raw=b'{"sequence":8,"sequence":8,"assignment":{}}'
+        with self.assertRaises(AssignmentError):client.heartbeat(GENERATION,8)
+        api.status=409
+        with self.assertRaisesRegex(AssignmentError,'fenced'):client.heartbeat(GENERATION,8)
+
+    def test_actual_runner_heartbeat_requires_both_rotating_credentials(self):
+        root,token,api=self.fixture({'sequence':1,'assignment':document(direction='CONSUMER',username='processor')})
+        pod=root/'pod';pod.write_text('fixture-pod');pod.chmod(0o600)
+        client=BindingClient(api.url,OUT.producer,token,pod_uid=POD,pod_token_file=pod,allow_http_loopback=True)
+        self.assertEqual(1,client.heartbeat(GENERATION,1).sequence)
+        path,headers,body=api.calls[-1]
+        self.assertEqual(f'/internal/v1/attempts/{OUT.producer.id}/streams/heartbeat',path)
+        self.assertTrue(headers['x-edgeai-pod-token']=='fixture-pod')
+        self.assertEqual(POD,body['podUid']);self.assertEqual(1,body['sequence'])
+
+
 if __name__ == '__main__':unittest.main()

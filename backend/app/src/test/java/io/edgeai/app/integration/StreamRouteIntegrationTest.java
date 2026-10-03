@@ -39,6 +39,7 @@ class StreamRouteIntegrationTest {
     @TestConfiguration static class TimeConfiguration{@Bean @Primary TestClock streamClock(){return new TestClock();}}
     @Autowired TestClock clock;
     @Autowired ProfileService profiles;
+    @Autowired ProfileRepository streamProfiles;
     @Autowired WorkflowService workflows;
     @Autowired WorkflowRepository definitions;
     @Autowired DeviceService devices;
@@ -253,5 +254,72 @@ class StreamRouteIntegrationTest {
             });
             assertThat(job.get(10,TimeUnit.SECONDS).state()).isEqualTo("PREPARING");
         }
+    }
+    @Test void heartbeatExtendsOnlyTheOlderActorObservationAndReplaysAreReadOnly()throws Exception {
+        var f=fixture();running(f);var route=taskRoute(f);var g=activate(prepare(route,f.actors().get("source"),f.actors().get("sink")));
+        var p=new StreamBrokerGateway.Permission(route,g);var initial=routes.heartbeat(g.id());
+        assertThat(initial.windowMicros()).isEqualTo(60_000_000);assertThat(initial.producerSeen()).isEqualTo(g.createdAt());
+        assertThat(service.heartbeat(g.id(),p.producer(),0).sequence()).isZero();assertThat(routes.heartbeat(g.id())).isEqualTo(initial);
+        clock.offset.set(10);assertThat(service.heartbeat(g.id(),p.producer(),1).permission().generation().leaseUntil()).isEqualTo(g.leaseUntil());
+        var producerSeen=routes.heartbeat(g.id()).producerSeen();clock.offset.set(20);
+        var both=service.heartbeat(g.id(),p.consumer(),1).permission().generation();
+        assertThat(both.leaseUntil()).isEqualTo(producerSeen.plusSeconds(60));assertThat(both.leaseUntil()).isAfter(g.leaseUntil());
+        var observed=routes.heartbeat(g.id());clock.offset.set(25);
+        assertThat(service.heartbeat(g.id(),p.consumer(),1).permission().generation()).isEqualTo(both);
+        assertThat(service.heartbeat(g.id(),p.consumer(),0).sequence()).isEqualTo(1);assertThat(routes.heartbeat(g.id())).isEqualTo(observed);
+        clock.offset.set(30);var next=service.heartbeat(g.id(),p.producer(),2).permission().generation();
+        assertThat(next.leaseUntil()).isEqualTo(observed.consumerSeen().plusSeconds(60));
+        conflict("STREAM_HEARTBEAT_SEQUENCE",()->service.heartbeat(g.id(),p.producer(),1));
+        conflict("STREAM_HEARTBEAT_SEQUENCE",()->service.heartbeat(g.id(),p.producer(),4));
+        assertThatThrownBy(()->service.heartbeat(g.id(),p.producer(),-1)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->service.heartbeat(g.id(),p.producer(),9007199254740992L)).isInstanceOf(IllegalArgumentException.class);
+        clock.offset.set(85);conflict("STREAM_GENERATION_FENCED",()->service.heartbeat(g.id(),p.consumer(),2));
+        assertThat(routes.generation(g.id()).orElseThrow()).isEqualTo(next);
+    }
+    @Test void oneSidedHeartbeatCannotExtendOriginalLeaseOrReviveExpiredGeneration()throws Exception {
+        var f=fixture();running(f);var route=deviceRoute(f);
+        var g=activate(service.prepare(route.id(),UUID.randomUUID(),session(f),f.actors().get("device"),BROKER,5));
+        var p=new StreamBrokerGateway.Permission(route,g);
+        for(int i=1;i<=4;i++){clock.offset.set(i);assertThat(service.heartbeat(g.id(),p.producer(),i).permission().generation().leaseUntil()).isEqualTo(g.leaseUntil());}
+        var old=routes.heartbeat(g.id());clock.offset.set(6);
+        conflict("STREAM_GENERATION_FENCED",()->service.heartbeat(g.id(),p.producer(),5));
+        conflict("STREAM_GENERATION_FENCED",()->service.heartbeat(g.id(),p.consumer(),1));
+        conflict("STREAM_GENERATION_FENCED",()->service.heartbeat(g.id(),p.producer(),0));assertThat(routes.heartbeat(g.id())).isEqualTo(old);
+        assertThat(service.reconcile(g.id()).fenceReason()).isEqualTo("LEASE_EXPIRED");
+    }
+    @Test void concurrentIdenticalHeartbeatObservesOnceAndFreshServiceReadsDurableCounter()throws Exception {
+        var f=fixture();running(f);var route=taskRoute(f);var g=activate(prepare(route,f.actors().get("source"),f.actors().get("sink")));
+        var caller=new StreamBrokerGateway.Permission(route,g).producer();
+        try(var pool=Executors.newFixedThreadPool(8)){
+            var start=new CountDownLatch(1);var jobs=IntStream.range(0,8).mapToObj(i->pool.submit(()->{start.await();return service.heartbeat(g.id(),caller,1);})).toList();start.countDown();
+            for(var job:jobs)assertThat(job.get(15,TimeUnit.SECONDS).sequence()).isEqualTo(1);
+        }
+        var seen=routes.heartbeat(g.id());assertThat(seen.producerSequence()).isEqualTo(1);assertThat(seen.consumerSequence()).isZero();
+        var fresh=new DataRouteService(routes,executions,definitions,deviceRepository,vds,streamProfiles,clock);
+        assertThat(transaction(()->fresh.heartbeat(g.id(),caller,0)).sequence()).isEqualTo(1);assertThat(routes.heartbeat(g.id())).isEqualTo(seen);
+    }
+    @Test void heartbeatDatabaseEnforcesOneActorSequenceWindowAndRetainedHistory()throws Exception {
+        var f=fixture();running(f);var route=taskRoute(f);var g=activate(prepare(route,f.actors().get("source"),f.actors().get("sink")));
+        var p=new StreamBrokerGateway.Permission(route,g);service.heartbeat(g.id(),p.producer(),1);var old=routes.heartbeat(g.id());
+        for(var change:List.of("window_micros=5000000","producer_sequence=producer_sequence+2","producer_seen=producer_seen+interval '1 second'",
+                "producer_sequence=producer_sequence+1,consumer_sequence=consumer_sequence+1",
+                "producer_sequence=producer_sequence+1,producer_seen=producer_seen-interval '1 second'",
+                "producer_sequence=producer_sequence+1,producer_seen=producer_seen+interval '121 seconds'"))
+            invalid(()->jdbc.update("UPDATE edgeai.route_heartbeat SET "+change+" WHERE generation_id=?",g.id()));
+        invalid(()->jdbc.update("DELETE FROM edgeai.route_heartbeat WHERE generation_id=?",g.id()));
+        invalid(()->transaction(()->{jdbc.execute("TRUNCATE edgeai.route_heartbeat");return null;}));
+        assertThat(routes.heartbeat(g.id())).isEqualTo(old);
+        service.fence(g.id(),"CANCELLED");
+        invalid(()->jdbc.update("UPDATE edgeai.route_heartbeat SET producer_sequence=producer_sequence+1,producer_seen=? WHERE generation_id=?",java.sql.Timestamp.from(clock.instant()),g.id()));
+    }
+    @Test void heartbeatRejectsForeignReplacedAndCancelledActorsBeforeObservation()throws Exception {
+        var f=fixture();running(f);var route=deviceRoute(f);var g=activate(prepare(route,session(f),f.actors().get("device")));
+        var p=new StreamBrokerGateway.Permission(route,g);var old=routes.heartbeat(g.id());
+        conflict("STREAM_FOREIGN_ACTOR",()->service.heartbeat(g.id(),new StreamBrokerGateway.Principal("TASK",new Actor(UUID.randomUUID(),1)),1));
+        devices.openSession(f.device().id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString())));
+        conflict("PRODUCER_CHANGED",()->service.heartbeat(g.id(),p.producer(),1));assertThat(routes.heartbeat(g.id())).isEqualTo(old);
+        var q=fixture();running(q);var task=taskRoute(q);var current=activate(prepare(task,q.actors().get("source"),q.actors().get("sink")));
+        var permission=new StreamBrokerGateway.Permission(task,current);var previous=routes.heartbeat(current.id());executionApi.cancelRun(q.run().id(),"{}");
+        conflict("CANCELLED",()->service.heartbeat(current.id(),permission.consumer(),1));assertThat(routes.heartbeat(current.id())).isEqualTo(previous);
     }
 }

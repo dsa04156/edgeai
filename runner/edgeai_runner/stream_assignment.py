@@ -141,6 +141,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         raise AssignmentError('Stream discovery redirect rejected')
 
 
+@dataclass(frozen=True)
+class Heartbeat:
+    sequence: int
+    assignment: Assignment
+
+
 def _token(path, maximum, *, projected=False):
     try:
         flags = os.O_RDONLY if projected else os.O_RDONLY | os.O_NOFOLLOW
@@ -179,20 +185,41 @@ class BindingClient:
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect(), urllib.request.HTTPSHandler(context=context))
 
     def fetch(self, generation_id):
+        encoded, started = self._request(generation_id)
+        return Assignment.decode(encoded, self.actor, generation_id, started)
+
+    def heartbeat(self, generation_id, sequence):
+        require(type(sequence) is int and 0 <= sequence <= 9007199254740991, 'Invalid stream heartbeat sequence')
+        encoded, started = self._request(generation_id, sequence)
+        try:
+            require(0 < len(encoded) <= MAX_RESPONSE, 'Invalid stream heartbeat response')
+            value = json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+            require(type(value) is dict and set(value) == {'sequence', 'assignment'}, 'Invalid stream heartbeat response')
+            acknowledged = value['sequence']
+            require(type(acknowledged) is int and 0 <= acknowledged <= 9007199254740991
+                    and (sequence == 0 or sequence == acknowledged), 'Invalid stream heartbeat acknowledgement')
+            assignment = Assignment.decode(json.dumps(value['assignment']).encode(), self.actor, generation_id, started)
+            return Heartbeat(acknowledged, assignment)
+        except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
+            raise AssignmentError('Invalid stream heartbeat response') from None
+
+    def _request(self, generation_id, sequence=None):
         try:
             _uuid(generation_id)
             body = {'epoch': self.actor.epoch, 'generationId': generation_id}
+            if sequence is not None:
+                body['sequence'] = sequence
             headers = {'Authorization': 'Bearer ' + _token(self.token_file, 1024, projected=self.pod_uid is not None), 'Content-Type': 'application/json', 'Accept': 'application/json'}
             if self.pod_uid is not None:
                 body['podUid'] = self.pod_uid
                 headers['X-EdgeAI-Pod-Token'] = _token(self.pod_token_file, 16384, projected=True)
-            request = urllib.request.Request(self.url, data=json.dumps(body).encode(), headers=headers, method='POST')
+            request = urllib.request.Request(self.url + ('/heartbeat' if sequence is not None else ''), data=json.dumps(body).encode(), headers=headers, method='POST')
             started = time.monotonic()
             with self.http.open(request, timeout=5) as response:
                 require(response.status == 200 and response.headers.get_content_type() == 'application/json'
                         and 'no-store' in [v.strip().lower() for v in response.headers.get('Cache-Control', '').split(',')], 'Invalid stream discovery response')
                 encoded = response.read(MAX_RESPONSE + 1)
-            return Assignment.decode(encoded, self.actor, generation_id, started)
+            return encoded, started
         except urllib.error.HTTPError as error:
             status = error.code; error.close()
             if status in (401, 403, 404, 409):
