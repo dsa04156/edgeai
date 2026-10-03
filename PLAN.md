@@ -184,3 +184,9 @@ ADR0030 자동 Session은 실제 인증 배정·heartbeat 재개/재시도와 �
 Runner70개·실제 HTTPS/MQTT35개·Spring/DB/broker22개를 로컬 검증했다.
 [세션 검증](docs/evidence/m7-stream-session.md)의 공개 실행·외부 checkpoint 경계를 유지한다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.
+
+ADR0031의 portable checkpoint·별도 snapshot serial·외부 확인 전 ACK/출력 제한과 새 볼륨의
+동일 binding 복원을 구현했다. 실제 TLS MQTT/Session의9→14 재개, 실제 MinIO 고정 version,
+원본 볼륨 삭제·손상된 최신 version 거절·확정 중 SIGKILL을 검증했다.
+[체크포인트 증거](docs/evidence/m7-stream-checkpoint.md)를 따른다. 다음은 현재 producer
+재검사를 포함한 인증 API/영속 metadata, 새 Attempt/generation handover와 자동 저장 연결이다.

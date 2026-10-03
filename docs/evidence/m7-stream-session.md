@@ -54,7 +54,7 @@ source9af9688의 CI37090538441은 scaffold/storage 성공, runner 실패로 imag
 세션의 종료 원인이 호출 시점에 따라 달라지는 문제다.
 
 실제 hang 모델을 기동한 뒤 Processor 호출 안에서 기한을 넘기는 회귀 시험으로
-동일 오류를 재현했다(20261003T024855Z-627e38e1 FAIL/0이 아닌 exit1).
+동일 오류를 재현했다(20261003T024855Z-627e38e1 FAIL/exit1).
 Session은 처리 도중 발생한 예외에서도 취소·전체 timeout을 일관된 SessionError로
 반환한다. 기한 전의 다른 오류와 BaseException 신호는 원래대로 전파한다.
 수정 후 실제 HTTPS/MQTT 전체36개는 20261003T024959Z-d0d98edf에서 PASS/0,

@@ -27,7 +27,10 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 검증했습니다. 모델 재사용·출력 적체·로컬 상태 복원·기한 만료 종료를 포함합니다.
 [자동 세션 실행 루프](docs/evidence/m7-stream-session.md)는 인증 배정과 heartbeat 순번 재개·
 응답 유실/일시 오류 재시도·계산 정리를 연결하며 실제 Spring 인증 경로로 검증했습니다.
-운영 broker·SERVICE/Runner 실행 연결·S3 checkpoint/새 Pod 복원·공개 스트리밍 실행은 남아 있습니다.
+[외부 체크포인트 SDK](docs/evidence/m7-stream-checkpoint.md)는 확인 전 ACK/출력 제한과
+동일 binding의 새 볼륨 복원, 실제 S3 고정 버전·TLS MQTT/모델 재개를 검증했습니다.
+인증된 checkpoint API/DB 확정·새 Attempt/generation 전환, 운영 broker·SERVICE/Runner 실행 연결·
+공개 스트리밍 실행은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

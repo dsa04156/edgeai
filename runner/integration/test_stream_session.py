@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import socket
+import shutil
 import ssl
 import sys
 import tempfile
@@ -19,6 +20,7 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_journal import Emission, Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_session import Session, SessionError
+from edgeai_runner.stream_checkpoint import restore
 
 RUNNER = Path(__file__).resolve().parents[1]
 COMMAND = [sys.executable, str(RUNNER/'examples/stream_sum.py')]
@@ -108,9 +110,9 @@ class StreamSessionTest(unittest.TestCase):
         for link in self.links.values():link.close(force=True)
         for journal in self.journals.values():journal.close()
 
-    def open_session(self, *, create=True, command=COMMAND, timeout=20):
+    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL'):
         self.session=Session(self.client,POD,INPUTS,OUTPUTS,command,self.directory,{'mode':'zip'},
-                             limits=Limits(max_frames=6),create=create,timeout=timeout)
+                             limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability)
         return self.session
 
     def setup_flow(self, **options):
@@ -255,6 +257,26 @@ class StreamSessionTest(unittest.TestCase):
             Session(self.client,POD,{'a':GENERATIONS[OUT.route_id]},
                     {'sum':[GENERATIONS[A.route_id]]},COMMAND,self.directory,create=True)
         self.assertFalse((self.directory/'journal').exists())
+
+    def test_external_session_restores_real_model_after_volume_loss_and_resumes_from_nine(self):
+        session=self.setup_flow(durability='EXTERNAL');self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:session.journal.checkpoint().revision==1)
+        self.assertFalse(self.journals['sink'].pending())
+        snapshot=session.checkpoint();execution=session.processor.execution_sha256
+        session.confirm_checkpoint(snapshot.serial,snapshot.sha256)
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'9',self.consume_sink().payload)
+        session.close();shutil.rmtree(self.directory/'journal')
+        with restore(self.directory/'journal',snapshot,[A,B],[OUT],Limits(max_frames=6),
+                     expected_sha256=snapshot.sha256,execution_sha256=execution):
+            pass
+        session=self.open_session(create=False,durability='EXTERNAL')
+        self.emit(A,b'2');self.emit(B,b'3')
+        eventually(self.pump,lambda:session.journal.checkpoint().revision==2)
+        self.assertEqual(b'14',session.journal.checkpoint().state)
+        newer=session.checkpoint();session.confirm_checkpoint(newer.serial,newer.sha256)
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'14',self.consume_sink().payload)
 
 
 if __name__=='__main__':unittest.main()

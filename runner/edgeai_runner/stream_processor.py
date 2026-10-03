@@ -82,6 +82,7 @@ class Processor:
         checkpoint = self.journal.checkpoint()
         digest = hashlib.sha256(json_encode({'version': VERSION, 'command': list(self.command), 'parameters': self.parameters,
             'inputs': self.inputs, 'outputs': {p: list(r) for p, r in self.outputs.items()}, 'stepTimeout': step_timeout})).hexdigest().encode('ascii')
+        self.execution_sha256 = digest.decode('ascii')
         pin = self.journal.directory / 'processor.sha256'
         if create:
             require(checkpoint.revision == 0)

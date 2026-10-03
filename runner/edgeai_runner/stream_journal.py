@@ -2,7 +2,8 @@
 
 This is a data-plane journal, not the control-plane DataRoute repository. MQTT PUBACK
 never removes an outbox frame. Only a trusted consumer processing watermark does.
-Recovery requires the same volume and exact bindings; cross-Pod restore is separate.
+Reopening requires the same volume and exact bindings. Portable external snapshots
+and new-volume restore are implemented separately in stream_checkpoint.
 """
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -72,8 +73,11 @@ def manifest(inputs, outputs, limits):
 
 class Journal:
     """One owner/process/thread per private directory; create and recover are explicit."""
-    def __init__(self, directory, inputs, outputs, limits=Limits(), *, create=False):
+    def __init__(self, directory, inputs, outputs, limits=Limits(), *, create=False, durability='LOCAL'):
         require(type(limits) is Limits, 'Invalid stream journal limit')
+        require(durability in ('LOCAL', 'EXTERNAL'), 'Invalid stream durability')
+        self.durability = durability
+        self._clock_ready = False
         self.inputs = self._bindings(inputs)
         self.outputs = self._bindings(outputs)
         require(not self.inputs.keys() & self.outputs.keys(), 'Duplicate stream journal route')
@@ -127,6 +131,19 @@ class Journal:
                     os.close(parent)
             require(self.db.execute('SELECT manifest FROM checkpoint').fetchone() == (expected,),
                     'Stream journal binding or limits changed')
+            # Local format upgrade is additive. A pre-checkpoint journal can only
+            # reopen in LOCAL mode; enabling external durability needs explicit restore.
+            exists = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='durability'").fetchone()
+            require(create or exists or durability == 'LOCAL', 'Cannot promote a local journal implicitly')
+            with self._transaction():
+                self.db.execute('CREATE TABLE IF NOT EXISTS durability (id INTEGER PRIMARY KEY CHECK(id=1), '
+                                'mode TEXT NOT NULL, serial INTEGER NOT NULL, confirmed_serial INTEGER NOT NULL, digest TEXT)')
+                self.db.execute('CREATE TABLE IF NOT EXISTS frontier (route_id TEXT PRIMARY KEY REFERENCES route(id), sequence INTEGER NOT NULL)')
+                self.db.execute('INSERT OR IGNORE INTO durability VALUES (1,?,0,-1,NULL)', (durability,))
+                self.db.executemany('INSERT OR IGNORE INTO frontier VALUES (?,0)', [(r,) for r in (*self.inputs, *self.outputs)])
+                require(self.db.execute('SELECT mode FROM durability').fetchone() == (durability,),
+                        'Stream durability changed')
+            self._clock_ready = True
         except BaseException:
             self.close()
             raise
@@ -153,13 +170,18 @@ class Journal:
                                 [(r, 'IN') for r in self.inputs] + [(r, 'OUT') for r in self.outputs])
 
     @contextmanager
-    def _transaction(self):
+    def _transaction(self, *, advance=True):
         require(self.db is not None, 'Stream journal is closed')
         if self.authority_guard is not None:
             self.authority_guard()
         self.db.execute('BEGIN IMMEDIATE')
         try:
+            before = self.db.total_changes
             yield
+            if advance and self._clock_ready and self.db.total_changes != before:
+                serial = self.snapshot_serial
+                require(serial < MAX_COUNTER, 'Stream snapshot counter exhausted')
+                self.db.execute('UPDATE durability SET serial=? WHERE id=1', (serial + 1,))
             if self.authority_guard is not None:
                 self.authority_guard()
             self.db.commit()
@@ -189,6 +211,15 @@ class Journal:
 
     def usage(self):
         return self.db.execute('SELECT count(*),coalesce(sum(length(wire)),0) FROM frame').fetchone()
+
+    @property
+    def snapshot_serial(self):
+        return self.db.execute('SELECT serial FROM durability WHERE id=1').fetchone()[0]
+
+    def processing_sequences(self):
+        if self.durability == 'LOCAL':
+            return self.checkpoint().input_sequences
+        return dict(self.db.execute("SELECT f.route_id,f.sequence FROM frontier f JOIN route r ON r.id=f.route_id WHERE r.direction='IN'"))
 
     def _capacity(self):
         # Reserve both message and byte capacity for each input/output. A fast source
@@ -277,11 +308,12 @@ class Journal:
             self.db.execute('UPDATE checkpoint SET revision=?,state=? WHERE id=1', (revision + 1, state))
             return tuple(result)
 
-    def outgoing(self, limit=16):
+    def outgoing(self, limit=16, *, confirmed_only=False):
         require(type(limit) is int and 1 <= limit <= 256, 'Invalid replay limit')
+        guard = 'AND f.sequence<=(SELECT sequence FROM frontier WHERE route_id=r.id) ' if confirmed_only and self.durability == 'EXTERNAL' else ''
         rows = self.db.execute('SELECT wire FROM (SELECT f.wire,f.route_id,'
                                'row_number() OVER (PARTITION BY f.route_id ORDER BY f.sequence) AS position '
-                               'FROM frame f JOIN route r ON r.id=f.route_id WHERE r.direction=\'OUT\') '
+                               'FROM frame f JOIN route r ON r.id=f.route_id WHERE r.direction=\'OUT\' ' + guard + ') '
                                'ORDER BY position,route_id LIMIT ?', (limit,)).fetchall()
         return tuple(decode(wire) for wire, in rows)
 
@@ -293,6 +325,9 @@ class Journal:
         with self._transaction():
             produced, committed, _ = self._route(binding.route_id)
             require(sequence <= produced, 'Acknowledgement exceeds produced sequence')
+            if self.durability == 'EXTERNAL':
+                confirmed = self.db.execute('SELECT sequence FROM frontier WHERE route_id=?', (binding.route_id,)).fetchone()[0]
+                require(sequence <= confirmed, 'Acknowledgement exceeds external checkpoint')
             if sequence > committed:
                 self.db.execute('DELETE FROM frame WHERE route_id=? AND sequence<=?', (binding.route_id, sequence))
                 self.db.execute('UPDATE route SET committed=? WHERE id=?', (sequence, binding.route_id))

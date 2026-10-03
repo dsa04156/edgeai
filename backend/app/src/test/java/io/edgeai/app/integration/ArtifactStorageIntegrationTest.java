@@ -6,6 +6,7 @@ import io.minio.*;
 import io.minio.messages.VersioningConfiguration;
 import java.net.URI;
 import java.net.http.*;
+import java.nio.file.*;
 import java.security.MessageDigest;
 import java.time.*;
 import java.util.*;
@@ -81,6 +82,40 @@ class ArtifactStorageIntegrationTest {
         assertEquals(400,response.statusCode());
         var code = java.util.regex.Pattern.compile("<Code>([A-Za-z0-9]+)</Code>").matcher(new String(response.body(),java.nio.charset.StandardCharsets.UTF_8));
         assertEquals("XAmzContentChecksumMismatch", code.find() ? code.group(1) : "none");
+    }
+    @Test void streamCheckpointRestoresDeletedVolumeFromVerifiedPinnedS3Version(@org.junit.jupiter.api.io.TempDir Path directory) {
+        checkpointProbe("export",directory,null);
+        byte[] snapshot=checked(() -> Files.readAllBytes(directory.resolve("snapshot.json")));
+        String sha=checked(() -> HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(snapshot)));
+        var expected=new ArtifactContent(UUID.randomUUID(),UUID.randomUUID(),"stream-checkpoint",sha,snapshot.length,
+                                        "application/vnd.edgeai.stream-checkpoint+json");
+        String version=upload(store.upload(expected),expected.objectKey(),snapshot);
+        var verified=store.verify(expected,version);
+        // A later, equally long object with forged metadata cannot replace the pinned snapshot.
+        byte[] corrupt=snapshot.clone();corrupt[corrupt.length/2]^=1;
+        String wrong=put(expected.objectKey(),corrupt,expected.mediaType(),sha);
+        assertThrows(ArtifactVerificationException.class,()->store.verify(expected,wrong));
+        checked(()->{Files.delete(directory.resolve("snapshot.json"));return null;});
+        var downloaded=transfer(HttpRequest.newBuilder(store.download(verified).url()).GET().build());
+        assertEquals(200,downloaded.statusCode());assertArrayEquals(snapshot,downloaded.body());
+        checked(()->{Files.write(directory.resolve("downloaded.json"),downloaded.body());return null;});
+        checkpointProbe("restore",directory,sha);
+        assertFalse(Files.exists(directory.resolve("volume")));
+    }
+    private void checkpointProbe(String phase,Path directory,String sha) {
+        checked(()->{
+            Path fixture=Path.of("src/test/fixtures/stream_checkpoint_probe.py").toAbsolutePath();
+            var args=new ArrayList<>(List.of("python3",fixture.toString(),phase,directory.toString()));
+            if(sha!=null)args.add(sha);
+            var process=new ProcessBuilder(args).redirectErrorStream(true).start();
+            try {
+                if(!process.waitFor(15,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("Checkpoint probe timed out");
+                String result=new String(process.getInputStream().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
+                assertEquals(0,process.exitValue(),"Checkpoint probe failed; private output suppressed");
+                assertEquals("STREAM_CHECKPOINT_"+phase.toUpperCase(java.util.Locale.ROOT)+"_PASS",result.strip());
+            } finally { if(process.isAlive()){process.destroyForcibly();process.waitFor();} }
+            return null;
+        });
     }
     private ArtifactContent content(byte[] bytes) {
         String sha = checked(() -> HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)));

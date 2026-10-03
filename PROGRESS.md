@@ -1,6 +1,10 @@
 # 진행 상태
 
 [STATUS]
+ADR0031 외부 checkpoint SDK·전송 frontier를 구현했다. 실제 TLS MQTT/Session과 S3 고정 version의
+볼륨 삭제/복원·9→14 재개·SIGKILL rollback을 검증했다. 현재 동일 binding 복원이며
+인증된 checkpoint API/DB 확정·새 Attempt/generation 전환은 남는다.
+상세: docs/evidence/m7-stream-checkpoint.md. 공개 STREAM501과 M5/M7–M10 미완료를 유지한다.
 M6 VD는 실제 자식 Task/Result·수명·CI·배포·PC/모바일 결과 화면까지 검증 완료했다.
 현재는 M7 다중 장치·스트리밍의 첫 구성 요소 작업 중이며 공개 STREAM 실행은 아직501이다.
 frame/처리 확인·로컬 원자적 journal·MQTT 전달을 구현했고 실제 SQLite/프로세스·브로커·TLS 시험을

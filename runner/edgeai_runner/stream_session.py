@@ -13,6 +13,7 @@ import time
 
 from edgeai_runner.main import port_name
 from edgeai_runner.stream_assignment import AssignmentUnavailable, BindingClient
+from edgeai_runner.stream_checkpoint import capture, confirm
 from edgeai_runner.stream_journal import Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_processor import Processor
@@ -31,7 +32,7 @@ def require(condition, code='STREAM_INVALID_SESSION'):
 class Session:
     def __init__(self, client, run_id, input_generations, output_generations, command,
                  directory, parameters=None, *, limits=Limits(), step_timeout=60,
-                 timeout=3600, create=False, cancel=None):
+                 timeout=3600, create=False, cancel=None, durability='LOCAL'):
         self.closed = False
         self.processor = self.link = self.journal = None
         self.cancel = cancel or threading.Event()
@@ -74,7 +75,7 @@ class Session:
             self._check()
             self.journal = Journal(directory / 'journal',
                 [a.binding for a in self.assignments.values() if a.direction == 'CONSUMER'],
-                [a.binding for a in self.assignments.values() if a.direction == 'PRODUCER'], limits, create=create)
+                [a.binding for a in self.assignments.values() if a.direction == 'PRODUCER'], limits, create=create, durability=durability)
             self.link = Link.from_assignments(self.journal, list(self.assignments.values()))
             work = directory / 'workload'
             if create:
@@ -108,6 +109,15 @@ class Session:
     @property
     def settled(self):
         return self.processor.settled
+
+    def checkpoint(self):
+        self._check()
+        return capture(self.journal, self.processor.execution_sha256)
+
+    def confirm_checkpoint(self, serial, sha256):
+        """Caller must supply an authenticated, externally verified control-plane receipt."""
+        self._check()
+        confirm(self.journal, serial, sha256)
 
     def step(self):
         try:

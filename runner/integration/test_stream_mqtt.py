@@ -19,6 +19,7 @@ from edgeai_runner.stream_protocol import Frame
 from test_stream_journal import A, B, OUT, data
 from test_stream_assignment import DiscoveryFixture, GENERATION, POD, document
 from edgeai_runner.stream_assignment import Assignment, AssignmentError, BindingClient
+from edgeai_runner.stream_checkpoint import capture, confirm, restore
 import json
 
 
@@ -150,6 +151,41 @@ class StreamMqttTest(unittest.TestCase):
         journal = self.journals[actor]
         return journal.commit(journal.checkpoint().revision, [], b'',
                               [Emission(binding.route_id, payload, None if kind == 'END' else 'application/json', kind)])
+
+    def test_external_checkpoint_gates_actual_tls_publication_and_recovers_deleted_volume(self):
+        self.broker.enable_tls()
+        a,_=self.peer('source-a',[],[A]);b,_=self.peer('source-b',[],[B])
+        sink,_=self.peer('sink',[OUT],[])
+        processor=Journal(self.root/'processor',[A,B],[OUT],Limits(max_frames=6),create=True,durability='EXTERNAL')
+        self.journals['processor']=processor
+        self.links['processor']=Link(processor,self.broker.endpoint('processor'),'checkpoint-processor')
+        self.ready();self.emit('source-a',A,b'4');self.emit('source-b',B,b'5')
+        eventually(self.pump,lambda:len(processor.pending())==2)
+        processor.commit(0,processor.pending(),b'9',[Emission(OUT.route_id,b'9','application/json')])
+        stop=time.monotonic()+.8
+        eventually(self.pump,lambda:time.monotonic()>stop)
+        self.assertEqual((),sink.pending());self.assertEqual(1,len(a.outgoing()));self.assertEqual(1,len(b.outgoing()))
+        snapshot=capture(processor,'a'*64)
+        # This test supplies a trusted receipt fixture. Actual S3 versions are tested
+        # separately by ArtifactStorageIntegrationTest, not emulated by this callback.
+        confirm(processor,snapshot.serial,snapshot.sha256)
+        eventually(self.pump,lambda:bool(sink.pending()) and not a.outgoing() and not b.outgoing())
+        sink.commit(0,sink.pending(),b'9')
+        self.links['processor'].close(force=True);processor.close();shutil.rmtree(processor.directory)
+        processor=restore(self.root/'restored',snapshot,[A,B],[OUT],Limits(max_frames=6),
+                          expected_sha256=snapshot.sha256,execution_sha256='a'*64)
+        self.journals['processor']=processor
+        self.links['processor']=Link(processor,self.broker.endpoint('processor'),'checkpoint-restored')
+        self.ready()
+        eventually(self.pump,lambda:not processor.outgoing())
+        self.assertEqual(b'9',processor.checkpoint().state)
+        self.assertEqual(1,sink.checkpoint().revision)
+        self.emit('source-a',A,b'2');self.emit('source-b',B,b'3')
+        eventually(self.pump,lambda:len(processor.pending())==2)
+        processor.commit(1,processor.pending(),b'14',[Emission(OUT.route_id,b'14','application/json')])
+        newer=capture(processor,'a'*64);confirm(processor,newer.serial,newer.sha256)
+        eventually(self.pump,lambda:bool(sink.pending()))
+        self.assertEqual(b'14',sink.pending()[0].payload)
 
     def test_two_devices_actual_payload_join_result_and_end_cross_three_mqtt_routes(self):
         a, _ = self.peer('source-a', [], [A])

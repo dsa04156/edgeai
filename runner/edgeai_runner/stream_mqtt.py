@@ -298,11 +298,11 @@ class Link:
             self._socket_open = False
             self._retry_at = time.monotonic() + 0.5
         if self.ready and time.monotonic() >= self._publish_at:
-            for frame in self.journal.outgoing(16):
+            for frame in self.journal.outgoing(16, confirmed_only=True):
                 if self._assignments:
                     self._assignments[frame.binding.route_id].verify_frame(frame)
                 self._publish('frames', frame.binding, frame.encode())
-            for identity, sequence in self.journal.checkpoint().input_sequences.items():
+            for identity, sequence in self.journal.processing_sequences().items():
                 binding = self.journal.inputs[identity]
                 self._publish('acks', binding, Acknowledgement(binding, sequence).encode())
             self._publish_at = time.monotonic() + 0.25
