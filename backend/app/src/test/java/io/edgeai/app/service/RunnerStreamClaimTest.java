@@ -31,10 +31,11 @@ class RunnerStreamClaimTest {
         when(lifecycle.claim(attempt,1,pod)).thenReturn(new RuntimeLifecycleService.Assignment(runtime,spec,"{}",List.of()));
         var api=new RunnerApiService(lifecycle,runtimes,storage,mock(ArtifactCommitService.class),Clock.fixed(now,ZoneOffset.UTC));
         var json=new JsonDocuments();var response=(Map<?,?>)api.claim(principal,json.canonical(Map.of("epoch",1,"podUid",pod.podUid().toString())));
-        assertThat(response.get("stream")).isEqualTo(spec.stream());
+        var original=(Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+        assertThat(json.canonical(response.get("stream"))).isEqualTo(json.canonical(original.get("stream")));
         assertThat(response.get("command")).isEqualTo(spec.command());
-        // Exercise the actual Jackson HTTP representation, including long-valued limits.
-        var encoded=tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(response);
+        // RunnerController uses bounded canonical JSON, not Jackson's record serializer.
+        var encoded=json.boundedCanonical(response,262144);
         assertThat(encoded).contains("stream_sum.py","stream_result.py","maxBufferBytes","maxPayloadBytes","stepTimeoutSeconds");
         assertThat(((Map<?,?>)response.get("outputs")).keySet()).hasSize(1);
         verifyNoInteractions(storage);

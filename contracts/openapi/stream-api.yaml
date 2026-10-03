@@ -12,7 +12,7 @@ paths:
       operationId: assignStreamExecution
       summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
       description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
-        반환하고, 아직 준비 중이면 WAITING을 반환한다. recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
+        반환하고, 아직 준비 중이면 WAITING을 반환한다. 이미 공동 완료 허가가 있으면 경로 회수 후에도 FINALIZE와 확정 checkpointId·논리 route 포트를 반환한다. 이 경우 MQTT·계산을 다시 시작하지 않고 finalized 체크포인트 API로 최종 상태만 복구한다. READY의 recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
         연장하지 않는다. 공개 STREAM Run 생성은 아직 비활성이다.
       security:
       - runnerClaim: []
@@ -464,6 +464,50 @@ paths:
         '413': {description: 요청 JSON 256KiB 초과}
         '429': {description: 체크포인트 검증 동시 처리 한도 초과}
         '503': {description: DB·Kubernetes·S3 일시 장애}
+  /internal/v1/attempts/{attemptId}/streams/checkpoints/finalized:
+    post:
+      operationId: finalizedStreamCheckpoint
+      summary: 완료 허가된 현재 Runner의 최종 상태 다운로드 권한 조회
+      description: 현재 Attempt·epoch·Pod와 영속 공동 완료 허가를 확인하고 정확한 checkpointId의 고정 S3 version을 반환한다. 경로 회수 뒤에도 조회할 수 있지만 MQTT
+        배정이나 lease를 갱신하지 않는다. Runner는 크기·SHA-256·실행 설정·종료 커서를 검증하고 다운로드 뒤 이 API를 다시 호출하여 취소·만료를 확인한 후 최종 파일만 생성한다. 새로운
+        Attempt에 완료 허가를 인계하지 않으며 허가 전·취소·만료·다른 체크포인트는 거절한다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - name: attemptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StreamCompletionRequest'
+      responses:
+        '200':
+          description: '정확한 완료 checkpoint receipt와 고정 version 다운로드 권한. null은 반환하지 않는다. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckpointDownloadResponse'
+        '400':
+          description: 필드·checkpointId 형식 오류
+        '401':
+          description: Runner claim 또는 Pod 신원 인증 실패
+        '403':
+          description: 내부 Runner 경로 비활성 또는 권한 거절
+        '404':
+          description: 요청한 스트림 세대가 없음
+        '409':
+          description: 공동 완료 허가 없음·다른 체크포인트·취소·만료·실행 주체 변경
+        '413':
+          description: 요청 JSON 256KiB 초과
+        '503':
+          description: DB·Kubernetes·S3 일시 장애
 components:
   securitySchemes:
     deviceSession:
@@ -557,6 +601,71 @@ components:
         - inputs
         - outputs
         - recovery
+      - type: object
+        additionalProperties: false
+        properties:
+          state:
+            const: FINALIZE
+          runId:
+            type: string
+            format: uuid
+          taskId:
+            type: string
+            format: uuid
+          attemptId:
+            type: string
+            format: uuid
+          epoch:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+          checkpointId:
+            type: string
+            format: uuid
+          inputRoutes:
+            type: object
+            minProperties: 1
+            maxProperties: 16
+            propertyNames:
+              maxLength: 100
+              pattern: ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$
+            additionalProperties:
+              type: string
+              format: uuid
+            description: Immutable SERVICE input port to logical route ID; not an MQTT generation assignment.
+          outputRoutes:
+            type: object
+            maxProperties: 16
+            propertyNames:
+              maxLength: 100
+              pattern: ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$
+            additionalProperties:
+              type: array
+              minItems: 1
+              maxItems: 16
+              uniqueItems: true
+              items:
+                type: string
+                format: uuid
+            description: Immutable SERVICE output port to ordered logical route IDs; no data-plane authority.
+          generationIds:
+            type: array
+            minItems: 1
+            maxItems: 32
+            uniqueItems: true
+            items:
+              type: string
+              format: uuid
+        required:
+        - state
+        - runId
+        - taskId
+        - attemptId
+        - epoch
+        - checkpointId
+        - inputRoutes
+        - outputRoutes
+        - generationIds
     StreamCompletionRequest:
       type: object
       additionalProperties: false

@@ -26,14 +26,15 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** Actual Spring HTTP, PG, versioned MinIO, TLS broker, SDK and model process.
- * Only already-started Kubernetes Pod identity/provisioning is a fixture; public STREAM stays disabled. */
+/** Actual Spring/MinIO over TLS, PG, TLS broker, SDK, model and Runner finalizer.
+ * Pod provisioning/identity and peer-triggered route closure are fixtures; public STREAM stays disabled. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.stream.enabled=true",
     "edgeai.stream.bindings-enabled=true","edgeai.stream.reconcile-ms=50"})
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class StreamSourceCompletionIntegrationTest {
     private static final StreamBrokerFixture BROKER=new StreamBrokerFixture();
+    private static final StreamTlsProxy STORAGE_TLS=new StreamTlsProxy(BROKER,required("EDGEAI_STORAGE_URL"));
     private static final String DIGEST="sha256:"+"c".repeat(64);
     private static final String BUCKET="edgeai-source-"+UUID.randomUUID();
     private static final MinioClient MINIO=storage();
@@ -43,7 +44,7 @@ class StreamSourceCompletionIntegrationTest {
         p.add("edgeai.stream.broker-url",()->"ssl://localhost:"+BROKER.port);p.add("edgeai.stream.broker-digest",()->DIGEST);
         p.add("edgeai.stream.ca-file",()->BROKER.file("server.crt"));p.add("edgeai.stream.admin-password-file",()->BROKER.file("admin.password"));
         p.add("edgeai.stream.principal-key-file",()->BROKER.file("principal.key"));p.add("edgeai.stream.device-key-file",()->BROKER.file("device.key"));
-        p.add("edgeai.storage.endpoint",()->required("EDGEAI_STORAGE_URL"));p.add("edgeai.storage.runner-endpoint",()->required("EDGEAI_STORAGE_URL"));
+        p.add("edgeai.storage.endpoint",()->required("EDGEAI_STORAGE_URL"));p.add("edgeai.storage.runner-endpoint",()->STORAGE_TLS.origin);
         p.add("edgeai.storage.access-key",()->required("EDGEAI_MINIO_USER"));p.add("edgeai.storage.secret-key",()->required("EDGEAI_MINIO_PASSWORD"));
         p.add("edgeai.storage.bucket",()->BUCKET);
     }
@@ -56,14 +57,16 @@ class StreamSourceCompletionIntegrationTest {
     @MockitoBean RuntimeGateway gateway;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     private final JsonDocuments json=new JsonDocuments();
+    private StreamTlsProxy apiTls;
     private final Map<UUID,RuntimePod> pods=new ConcurrentHashMap<>();private final List<UUID> runIds=new ArrayList<>();
     private record Execution(UUID run,UUID task,UUID attempt,List<UUID> generations,Path folder){}
-    @BeforeEach void setup(){runningWorker=worker;when(gateway.authenticatePod(any(),any())).thenAnswer(c->{
+    @BeforeEach void setup(){apiTls=new StreamTlsProxy(BROKER,"http://127.0.0.1:"+port);runningWorker=worker;when(gateway.authenticatePod(any(),any())).thenAnswer(c->{
         RuntimeInstance r=c.getArgument(0);if(!"source-pod-proof".equals(c.getArgument(1)) || !pods.containsKey(r.attemptId()))
             throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);return pods.get(r.attemptId());});}
-    @AfterEach void cleanup()throws Exception{for(var id:runIds){
+    @AfterEach void cleanup()throws Exception{try{for(var id:runIds){
         if(!Set.of("SUCCEEDED","FAILED","CANCELLED").contains(executions.run(id,false).orElseThrow().state()))runs.cancelRun(id,"{}");}
-        until(()->runIds.stream().flatMap(id->routeStore.forRun(id,100,0).stream()).noneMatch(r->routeStore.open(r.id()).isPresent()));}
+        until(()->runIds.stream().flatMap(id->routeStore.forRun(id,100,0).stream()).noneMatch(r->routeStore.open(r.id()).isPresent()));
+        }finally{if(apiTls!=null)apiTls.close();}}
     @AfterAll static void stop()throws Exception{
         try{if(runningWorker!=null)runningWorker.close();
             var versions=new ArrayList<Map.Entry<String,String>>();
@@ -72,7 +75,7 @@ class StreamSourceCompletionIntegrationTest {
             for(var value:versions)MINIO.removeObject(RemoveObjectArgs.builder().bucket(BUCKET).object(value.getKey()).versionId(value.getValue()).build());
             assertThat(MINIO.listObjects(ListObjectsArgs.builder().bucket(BUCKET).includeVersions(true).recursive(true).build()).iterator().hasNext()).isFalse();
             MINIO.removeBucket(RemoveBucketArgs.builder().bucket(BUCKET).build());
-        }finally{MINIO.close();BROKER.close();}
+        }finally{MINIO.close();try{STORAGE_TLS.close();}finally{BROKER.close();}}
     }
     private static String required(String name){return Objects.requireNonNull(System.getenv(name),name+" is required");}
     private static MinioClient storage(){try{
@@ -85,6 +88,7 @@ class StreamSourceCompletionIntegrationTest {
         Files.setPosixFilePermissions(file,PosixFilePermissions.fromString("rw-------"));}
     @SuppressWarnings("unchecked") private Execution fixture(String mode)throws Exception{
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+        spec.put("command",List.of(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("../../runner/examples/stream_result.py").toAbsolutePath().normalize().toString()));
         var stream=(Map<String,Object>)spec.get("stream");stream.put("outputs",Map.of());
         stream.put("command",List.of(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("../../runner/examples/stream_sum.py").toAbsolutePath().normalize().toString()));
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
@@ -110,12 +114,13 @@ class StreamSourceCompletionIntegrationTest {
             ids.add(generation.id());sources.put(name,Map.of("deviceId",d.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch(),"generationId",generation.id().toString(),"routeId",route.id().toString()));
         }
         until(()->ids.stream().allMatch(id->routeStore.generation(id).orElseThrow().state().equals("ACTIVE")));
-        secret(folder,"request.json",json.canonical(Map.of("origin","http://127.0.0.1:"+port,"runId",run.id().toString(),"attemptId",attempt.id().toString(),"podUid",pod.podUid().toString(),"sources",sources,"stream",stream,"mode",mode)));
+        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",run.id().toString(),"attemptId",attempt.id().toString(),"podUid",pod.podUid().toString(),"sources",sources,"stream",stream,"mode",mode)));
         return new Execution(run.id(),task.id(),attempt.id(),ids,folder);
     }
     private void probe(Execution e,boolean cancel)throws Exception{
-        var child=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/stream_source_completion_probe.py",e.folder().toString())
-            .redirectOutput(e.folder().resolve("probe.log").toFile()).redirectError(e.folder().resolve("probe-error.log").toFile()).start();
+        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/stream_source_completion_probe.py",e.folder().toString())
+            .redirectOutput(e.folder().resolve("probe.log").toFile()).redirectError(e.folder().resolve("probe-error.log").toFile());
+        builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));var child=builder.start();
         try{
             until(()->Files.exists(e.folder().resolve("waiting")) || !child.isAlive());
             assertThat(Files.exists(e.folder().resolve("waiting"))).as("SDK terminal WAITING: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
@@ -125,10 +130,14 @@ class StreamSourceCompletionIntegrationTest {
             if(cancel)runs.cancelRun(e.run(),"{}");
             Files.writeString(e.folder().resolve("continue"),"");
             if(!cancel){
-                until(()->Files.exists(e.folder().resolve("committed")) || !child.isAlive());
-                assertThat(Files.exists(e.folder().resolve("committed"))).as("SDK Result: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
+                until(()->Files.exists(e.folder().resolve("granted")) || !child.isAlive());
+                assertThat(Files.exists(e.folder().resolve("granted"))).as("SDK grant: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
+                // Model a peer closing the completed component; the actual worker revokes broker authority.
+                for(var id:e.generations())routes.fence(id,"COMPLETED");
                 until(()->e.generations().stream().allMatch(id->routeStore.generation(id).orElseThrow().closedAt()!=null));
                 Files.writeString(e.folder().resolve("routes-closed"),"");
+                until(()->Files.exists(e.folder().resolve("committed")) || !child.isAlive());
+                assertThat(Files.exists(e.folder().resolve("committed"))).as("Runner Result: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
             }
             assertThat(child.waitFor(45,TimeUnit.SECONDS)).as("Actual SDK completion probe finished").isTrue();
             assertThat(child.exitValue()).as("SDK completion probe: %s",Files.readString(e.folder().resolve("probe.log"))).isZero();
@@ -141,7 +150,7 @@ class StreamSourceCompletionIntegrationTest {
                 for(var id:e.generations())assertThat(completions.device(id).orElseThrow().grantedAt()).isEqualTo(grant.grantedAt());}
         }finally{if(child.isAlive()){child.destroyForcibly();assertThat(child.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
     }
-    @Test void realSourcesWaitForVerifiedCheckpointThenRecoverGrantAfterResultAndRouteClosure()throws Exception{probe(fixture("complete"),false);}
+    @Test void realSourcesAndRunnerRecoverGrantedCheckpointAfterRouteClosureAndCommitActualResult()throws Exception{probe(fixture("complete"),false);}
     @Test void actualCancellationBetweenTerminalCheckpointAndTaskReportNeverGrantsSources()throws Exception{probe(fixture("cancel"),true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
         while(!condition.getAsBoolean() && System.nanoTime()<end)Thread.sleep(20);assertThat(condition.getAsBoolean()).as("Actual stream completion boundary reached").isTrue();}

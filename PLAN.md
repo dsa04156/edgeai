@@ -21,8 +21,10 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료
 대기·응답 유실/재시작과 실제 Spring/PG/S3/TLS broker의 종료·Result 확정을 연결했다.
-다음은 공개 route 생성·그룹별 동시 시작, 허가 뒤 Runner 재시작의 최종 상태 복구,
+ADR0040은 허가 뒤 현재 Runner 재시작의 최종 상태 복구를 실제 Spring/S3/TLS와 연결했다.
+다음은 공개 route 생성·그룹별 동시 시작, 인접 Task 인계,
 운영 TLS·API/UI·실제 Kubernetes 다중 장치 종단이다. 공개 STREAM501은 유지한다.
+복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.
 상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.
 장치 SDK의 실제/fixture 경계는 [완료 대기 검증](docs/evidence/m7-device-source-completion.md)을 따른다.
 M6 최종 판정과 한계는 [완료 감사](docs/evidence/m6-completion-audit.md)를 따른다.

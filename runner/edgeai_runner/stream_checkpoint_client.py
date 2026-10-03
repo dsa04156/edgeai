@@ -217,6 +217,13 @@ class CheckpointClient:
     def latest(self, *, timeout=1):
         return self._latest_response(self._post('latest',{'generationIds':self.generation_ids.copy()},timeout))
 
+    def finalized(self, checkpoint_id, *, timeout=1):
+        """Exact server-granted checkpoint, without MQTT assignment authority."""
+        _uuid(checkpoint_id)
+        value=self._latest_response(self._post('finalized',{'checkpointId':checkpoint_id},timeout))
+        require(value['checkpoint'] is not None and value['checkpoint']['id'] == checkpoint_id)
+        return value
+
     def handover(self, execution_sha256, *, timeout=1):
         sha(execution_sha256)
         value=self._latest_response(self._post('handover',{'generationIds':self.generation_ids.copy(),

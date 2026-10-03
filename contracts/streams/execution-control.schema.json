@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:edgeai:stream-execution-control:v1",
   "title": "Runner stream execution owner protocol",
-  "description": "Internal Runner and Device execution assignment/completion protocol. Server component implementation freezes complete route membership and grants connected components atomically after matching terminal checkpoint cursors and Device processing acknowledgements. Public STREAM Run creation remains disabled until provisioning, SDK ownership, recovery and Kubernetes acceptance are integrated. READY covers immutable SERVICE stream ports, with unique generation IDs, at most 16 output routes and 32 total routes. Grants are bound to the exact terminal checkpoint and survive peer finalization.",
+  "description": "Internal Runner and Device execution assignment/completion protocol. Server component implementation freezes complete route membership and grants connected components atomically after matching terminal checkpoint cursors and Device processing acknowledgements. Public STREAM Run creation remains disabled until provisioning, SDK ownership, recovery and Kubernetes acceptance are integrated. READY covers immutable SERVICE stream ports, with unique generation IDs, at most 16 output routes and 32 total routes. Grants are bound to the exact terminal checkpoint and survive peer finalization. FINALIZE resumes only a previously granted terminal checkpoint for the same current producer, using logical route maps and fixed-version checkpoint download without MQTT or model execution.",
   "$defs": {
     "executionRequest": {
       "type": "object",
@@ -109,6 +109,90 @@
             "inputs",
             "outputs",
             "recovery"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "const": "FINALIZE"
+            },
+            "runId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "taskId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attemptId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "epoch": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "checkpointId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "inputRoutes": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 16,
+              "propertyNames": {
+                "maxLength": 100,
+                "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "description": "Immutable SERVICE input port to logical route ID; not an MQTT generation assignment."
+            },
+            "outputRoutes": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "maxLength": 100,
+                "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+              },
+              "additionalProperties": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "description": "Immutable SERVICE output port to ordered logical route IDs; no data-plane authority."
+            },
+            "generationIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          "required": [
+            "state",
+            "runId",
+            "taskId",
+            "attemptId",
+            "epoch",
+            "checkpointId",
+            "inputRoutes",
+            "outputRoutes",
+            "generationIds"
           ]
         }
       ]

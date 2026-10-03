@@ -76,9 +76,12 @@ ADR0020의 VD Task 실행 연결에서는 Run의 VD 정책·필수 vdId·Ready/�
 ## M7 내부 스트림·체크포인트 API
 
 `/swagger-ui/index.html?contract=streams`는 별도 `/stream-openapi.yaml` 원본을 렌더한다.
-Device/Runner의 배정·양쪽 heartbeat4개와 체크포인트 업로드 권한·확정·최신 조회3개,
-총7개 operation의 한국어 역할·입력·오류를 제공한다. 내부 경로에는 관리 CSRF를 자동으로
+Device/Runner 배정·양쪽 heartbeat4개, 체크포인트 저장/조회/인계/최종 복구5개,
+실행 배정·Task/Device 공동 완료3개, 총12개 operation의 한국어 역할·입력·오류를 제공한다.
+내부 경로에는 관리 CSRF를 자동으로
 추가하지 않으며 Device token 또는 Runner claim/Pod 신원을 사용한다.
 체크포인트는 S3 PUT → 고정 version의 commit → 정확한 receipt 확인 순서를 설명한다.
-공개 STREAM 실행과 새 Attempt/세대 복원은 아직 지원하지 않음을 문서에 표시한다.
+FINALIZE 배정과 finalized 조회는 현재 producer의 영속 완료 허가를 요구하며 MQTT 권한을 재발급하지 않는다.
+허가된 고정 S3 version을 읽고 허가를 재확인하는 복구 순서와 취소/만료409를 설명한다.
+내부 checkpoint 인계와 공개 STREAM 실행·Kubernetes 전체 수용의 미완료 범위를 구분한다.
 원본/패키징 byte 대조와 PC·모바일 렌더 검사는 기존 CI 계약/브라우저 경로에 포함한다.

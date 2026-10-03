@@ -2,6 +2,8 @@
 
 2026-10-03 KST. [ADR0039](../adr/0039-device-source-completion.md).
 장치 SDK와 내부 서버를 연결한 구성 요소 검증이며 공개 STREAM501과 전체 M7 미완료를 유지한다.
+아래는 ADR0039 당시의 검증 기록이다. 후속 [ADR0040 검증](m7-finalizer-recovery.md)은 같은 시험을
+실제 API/S3 TLS와 Runner 최종 파일 실행까지 확장하고 claim 응답 변환 문제를 수정했다.
 
 | 검사 | 실행 ID | 결과 |
 |---|---|---|

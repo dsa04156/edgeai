@@ -18,7 +18,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 final class RunnerAuthenticationFilter extends OncePerRequestFilter {
     private static final int LIMIT=262144;
-    private static final Pattern PATH=Pattern.compile("/internal/v1/attempts/([a-fA-F0-9-]{36})/(claim|uploads|commit|fail|telemetry|streams(?:/heartbeat|/execution|/complete|/checkpoints/(?:uploads|commit|latest|handover))?)");
+    private static final Pattern PATH=Pattern.compile("/internal/v1/attempts/([a-fA-F0-9-]{36})/(claim|uploads|commit|fail|telemetry|streams(?:/heartbeat|/execution|/complete|/checkpoints/(?:uploads|commit|latest|handover|finalized))?)");
     private final RuntimeRepository runtimes;
     private final RunnerTokenService tokens;
     private final RuntimeGateway gateway;

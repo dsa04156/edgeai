@@ -31,6 +31,7 @@ public class StreamCheckpointService {
     private final DataRouteService routes;private final RuntimeLifecycleService lifecycle;
     private final DataRouteRepository routeStore;
     private final StreamExecutionRepository streamExecutions;
+    private final StreamExecutionService streamExecution;
     private final ArtifactStore storage;private final ArtifactFiles files;private final Clock clock;
     private final TransactionTemplate transaction;private final Semaphore verifiers=new Semaphore(2);
     private record Authority(RuntimeInstance runtime,UUID profile,List<Permission> permissions){}
@@ -38,12 +39,13 @@ public class StreamCheckpointService {
     private record HandoverPermit(Authority authority,StreamCheckpoint source,List<Permission> previous,boolean replay){}
     public StreamCheckpointService(StreamCheckpointRepository checkpoints,RuntimeRepository runtimes,ExecutionRepository executions,
             WorkflowRepository workflows,DataRouteService routes,RuntimeLifecycleService lifecycle,ArtifactStore storage,
-            ArtifactFiles files,Clock clock,PlatformTransactionManager transactions,DataRouteRepository routeStore,StreamExecutionRepository streamExecutions){
+            ArtifactFiles files,Clock clock,PlatformTransactionManager transactions,DataRouteRepository routeStore,StreamExecutionRepository streamExecutions,StreamExecutionService streamExecution){
         this.checkpoints=checkpoints;this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;
         this.routes=routes;this.lifecycle=lifecycle;this.storage=storage;this.files=files;this.clock=clock;
         this.transaction=new TransactionTemplate(transactions);
         this.routeStore=routeStore;
         this.streamExecutions=streamExecutions;
+        this.streamExecution=streamExecution;
     }
     public Object upload(RunnerPrincipal principal,String body){
         var input=RunnerInput.parse(body,principal,"checkpoint");var request=request(input.get("checkpoint"));
@@ -91,6 +93,9 @@ public class StreamCheckpointService {
             return current;
         });
         return download(value);
+    }
+    public Object finalized(RunnerPrincipal principal,String body){
+        return download(streamExecution.finalized(principal,body));
     }
     private Object download(StreamCheckpoint value){
         var result=new TreeMap<String,Object>();result.put("checkpoint",value==null?null:receipt(value));

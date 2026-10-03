@@ -168,13 +168,34 @@ class StreamExecutionIntegrationTest {
     @Test void lastDeviceAcknowledgementReleasesBothTasksAndGrantSurvivesPeerCompletion()throws Exception {
         var f=fixture();assigned(f);var source=checkpoint(f,"source",3,false);var sink=checkpoint(f,"sink",3,false);
         assertThat(state(complete(f,"source",source))).isEqualTo("WAITING");
+        var sinkPrincipal=f.principals().get("sink");
+        conflict("STREAM_COMPLETION_REQUIRED",()->service.finalized(sinkPrincipal,body(sinkPrincipal,"checkpointId",sink.id().toString())));
         var p=f.principals().get("source");conflict("STREAM_COMPLETION_REQUIRED",()->lifecycle.prepareCommit(p.attemptId(),1,p.podUid(),result()));
         assertThat(state(complete(f,"sink",sink))).isEqualTo("WAITING");assertThat(state(deviceComplete(f,0,3))).isEqualTo("FINALIZE");
         commit(f,"source");
         for(var g:f.generations().values()) {routes.fence(g.id(),"COMPLETED");routes.revoked(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));}
+        var finalization=(Map<?,?>)service.execution(sinkPrincipal,body(sinkPrincipal));
+        assertThat(finalization.get("state")).isEqualTo("FINALIZE");
+        assertThat(finalization.get("checkpointId")).isEqualTo(sink.id().toString());
+        assertThat(finalization.get("inputRoutes")).isEqualTo(Map.of("input",f.routes().get(1).id().toString()));
+        assertThat(finalization.get("generationIds")).isEqualTo(sink.request().generationIds().stream().map(UUID::toString).toList());
+        assertThat(service.finalized(sinkPrincipal,body(sinkPrincipal,"checkpointId",sink.id().toString())).id()).isEqualTo(sink.id());
+        conflict("STREAM_COMPLETION_CONFLICT",()->service.finalized(sinkPrincipal,body(sinkPrincipal,"checkpointId",source.id().toString())));
         assertThat(state(complete(f,"sink",sink))).isEqualTo("FINALIZE");commit(f,"sink");
         assertThat(executions.run(f.run(),false).orElseThrow().state()).isEqualTo("SUCCEEDED");
         assertThat(state(deviceComplete(f,0,3))).isEqualTo("FINALIZE");
+    }
+    @Test void finalizerRecoveryNeverOverridesCancellationOrProducerExpiry()throws Exception {
+        for(boolean cancel:List.of(false,true)) {
+            var f=fixture();assigned(f);var source=checkpoint(f,"source",3,false);var sink=checkpoint(f,"sink",3,false);
+            complete(f,"source",source);complete(f,"sink",sink);deviceComplete(f,0,3);
+            var p=f.principals().get("source");String query=body(p,"checkpointId",source.id().toString());
+            assertThat(service.finalized(p,query).id()).isEqualTo(source.id());
+            if(cancel)runs.cancelRun(f.run(),"{}");
+            else jdbc.update("UPDATE edgeai.runtime_instance SET expires_at=now() WHERE attempt_id=?",p.attemptId());
+            assertThatThrownBy(()->service.finalized(p,query)).isInstanceOf(ControlPlaneException.class);
+            assertThatThrownBy(()->service.execution(p,body(p))).isInstanceOf(ControlPlaneException.class);
+        }
     }
     @Test void outputEndWithoutFinalProcessingAckCannotBeReported()throws Exception {
         var f=fixture();assigned(f);var pending=checkpoint(f,"source",3,true);

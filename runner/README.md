@@ -219,8 +219,16 @@ Runner는 인증 배정의 NEW/RESTORE/HANDOVER를 따르고, 마지막 END/ACK�
 성공 결과를 만들지 않는다. 제어 API/저장소 TLS의 사설 CA는 컨테이너 신뢰 저장소 또는
 Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다.
 
+공동 완료 허가 후 재시작한 현재 Runner는 실행 배정의 FINALIZE와
+`streams/checkpoints/finalized`로 정확한 checkpoint를 조회한다. 논리 포트/실행 digest·한도·
+고정 S3 version·종료 커서를 검증하고 다운로드 후 허가를 재조회한다. 새 빈 작업 디렉터리에
+0600 상태 파일을 저장해 최종 파일 명령만 실행하며 MQTT·Session·지속 모델은 열지 않는다.
+같은 현재 Attempt/epoch/Pod/runtime에 한정하며 새 Attempt 전환이나 임의 기존 디렉터리 재사용은 아니다.
+[복구 설계](../docs/adr/0040-stream-finalizer-recovery.md)와
+[실제 Spring/S3/Runner 검증](../docs/evidence/m7-finalizer-recovery.md)을 따른다.
+
 인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작과
-허가 후 Runner 재시작의 최종 상태 복구는 남아 있어 공개 STREAM은 아직501이다.
+운영 TLS·실제 Kubernetes 스트림 수용은 남아 있어 공개 STREAM은 아직501이다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.

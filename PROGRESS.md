@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0040 현재 Runner의 공동 완료 허가 후 최종 상태 복구를 구현했다.
+역사적 논리 경로·정확한 고정 S3 체크포인트·다운로드 후 허가 재검증으로 MQTT 없이 최종 파일을 만든다.
+실제 Spring/PG/TLS API·MinIO·MQTT·장치 SDK·독립 Runner의 합14/Result와 취소를 검증했다.
+Pod 신원/provisioning·peer 회수 시작은 fixture이며 같은 Attempt/epoch/Pod/runtime에 한정한다.
+실제 STREAM claim400도 재현해 응답 record를 JSON map으로 변환하고 실제 변환기 회귀를 통과했다.
+전체 Runner108·TLS MQTT70·저장소32·서버 단위98·PG164·계약/MVC26·PC/모바일10 PASS.
+상세: docs/evidence/m7-finalizer-recovery.md.
+선행4d2ad11 CI37108841332의5 jobs/결과JSON17개 PASS와 GitOps d4b8044의 실제 배포를 확인했다.
+이번 복구 코드의 CI/배포와 공개 STREAM 활성화는 별도다. M5 잔여/M7–M10 미완료 유지.
+
+아래는 이전 단계의 검증 이력이다.
 ADR0039 DeviceSource의 서버 공동 완료 대기·영속 종료 의도·같은 볼륨 재시작을 연결했다.
 실제 Spring/PG/S3/TLS MQTT에서 두 장치·독립 계산·외부 checkpoint·공동 허가·Result 저장과
 경로 회수 뒤 장치 재시작2개, 전체 Runner107개·저장소32개·기존 broker23개·HTTPS/MQTT66개가 통과했다.

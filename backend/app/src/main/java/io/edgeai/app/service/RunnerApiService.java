@@ -3,6 +3,7 @@ package io.edgeai.app.service;
 import io.edgeai.app.config.RunnerPrincipal;
 import io.edgeai.app.support.RunnerInput;
 import io.edgeai.domain.repository.*;
+import io.edgeai.domain.runtime.StreamExecutionSpec;
 import io.edgeai.domain.storage.*;
 import java.time.*;
 import java.util.*;
@@ -33,8 +34,19 @@ public final class RunnerApiService {
             "command",assignment.spec().command(),"args",assignment.spec().args(),"parameters",JSON.decode(assignment.parametersJson()),"inputs",inputs,"outputs",outputs,
             "timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds()))));
         response.put("telemetry",Map.of("intervalSeconds",5));
-        if(assignment.spec().stream()!=null)response.put("stream",assignment.spec().stream());
+        if(assignment.spec().stream()!=null){
+            var stream=assignment.spec().stream();var limits=stream.limits();
+            response.put("stream",Map.of("command",stream.command(),"args",stream.args(),
+                "inputs",streamPorts(stream.inputs()),"outputs",streamPorts(stream.outputs()),
+                "stepTimeoutSeconds",stream.stepTimeoutSeconds(),"limits",Map.of("maxFrames",limits.maxFrames(),
+                    "maxBufferBytes",limits.maxBufferBytes(),"maxStateBytes",limits.maxStateBytes())));
+        }
         return response;
+    }
+    private static Map<String,Object> streamPorts(Map<String,StreamExecutionSpec.Port> ports){
+        var result=new TreeMap<String,Object>();
+        ports.forEach((name,port)->result.put(name,Map.of("mediaType",port.mediaType(),"maxPayloadBytes",port.maxPayloadBytes())));
+        return result;
     }
     public Object uploads(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");var outputs=RunnerInput.outputs(root.get("outputs"),false);

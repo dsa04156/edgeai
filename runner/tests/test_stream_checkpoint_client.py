@@ -51,7 +51,7 @@ class CheckpointFixture:
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 owner.calls.append((self.path,dict(self.headers),body))
                 status=owner.status
-                if self.path.endswith(('/latest','/handover')):
+                if self.path.endswith(('/latest','/handover','/finalized')):
                     value={'checkpoint':owner.latest}
                     if owner.latest is not None:value['download']={'url':owner.url+'/object?versionId='+owner.version,'expiresAt':owner.now()}
                 elif self.path.endswith('/uploads'):
@@ -114,6 +114,18 @@ class StreamCheckpointClientTest(unittest.TestCase):
         self.assertEqual(self.snapshot.sha256,receipt['sha256'])
         self.assertEqual(receipt,self.client.latest()['checkpoint'])
         self.assertEqual(receipt,self.client.upload(self.snapshot,None)['checkpoint'])
+
+    def test_finalized_download_requires_exact_receipt_and_never_sends_generation_authority(self):
+        self.api.latest=self.api.receipt(self.client.candidate(self.snapshot,None))
+        identity=self.api.latest['id']
+        self.assertEqual(self.api.latest,self.client.finalized(identity)['checkpoint'])
+        self.assertTrue(self.api.calls[-1][0].endswith('/checkpoints/finalized'))
+        self.assertEqual({'epoch':OUT.producer.epoch,'podUid':POD,'checkpointId':identity},self.api.calls[-1][2])
+        with self.assertRaises(CheckpointError):self.client.finalized(str(uuid.uuid4()))
+        self.api.latest=None
+        with self.assertRaises(CheckpointError):self.client.finalized(identity)
+        self.api.status=409
+        with self.assertRaises(CheckpointError):self.client.finalized(identity)
 
     def test_lost_commit_response_can_resume_same_candidate_in_new_client(self):
         version=self.client.put(self.snapshot,self.client.upload(self.snapshot,None)['upload'])

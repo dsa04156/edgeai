@@ -27,6 +27,7 @@ public class RunnerController {
         var value=checkpoints.commit(principal,body);return response(value.created()?201:200,Map.of("checkpoint",StreamCheckpointService.receipt(value.value())));
     }
     @PostMapping("/streams/checkpoints/latest") public ResponseEntity<String> checkpointLatest(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.latest(principal,body));}
+    @PostMapping("/streams/checkpoints/finalized") public ResponseEntity<String> checkpointFinalized(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.finalized(principal,body));}
     @PostMapping("/streams/checkpoints/handover") public ResponseEntity<String> checkpointHandover(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.handover(principal,body));}
     @PostMapping("/streams") public ResponseEntity<String> streams(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
         var bindings=streams.getIfAvailable();if(bindings==null)throw new ControlPlaneException(501,"STREAM_DISABLED","스트림 배정 기능이 비활성입니다.");

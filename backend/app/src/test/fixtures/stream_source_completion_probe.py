@@ -1,12 +1,14 @@
-"""Real DeviceSource -> TLS MQTT -> model -> Spring/PG/S3 completion and Result.
+"""Real DeviceSource -> TLS MQTT -> model -> Spring/PG/S3 -> Runner finalizer.
 
 The Java owner supplies already-running Pod identities. No completion/checkpoint
-reply or MQTT authority is fabricated here; HTTP is confined to isolated loopback.
+reply or MQTT authority is fabricated here. API and S3 use real test TLS proxies.
 """
 from contextlib import ExitStack
-import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -24,7 +26,7 @@ from edgeai_runner.stream_source import DeviceSource
 folder=Path(sys.argv[1]);config=json.loads((folder/'request.json').read_bytes())
 identity={'epoch':1,'podUid':config['podUid']}
 runner=BindingClient(config['origin'],Producer('TASK_ATTEMPT',config['attemptId'],1),folder/'claim',
-                     pod_uid=config['podUid'],pod_token_file=folder/'pod',allow_http_loopback=True)
+                     pod_uid=config['podUid'],pod_token_file=folder/'pod')
 base=config['origin']+'/internal/v1/attempts/'+config['attemptId']+'/'
 
 
@@ -38,7 +40,13 @@ def post(operation,body,expected=200):
             assert response.headers.get('Cache-Control')=='no-store'
             return json.loads(response.read(262145))
     except urllib.error.HTTPError as error:
-        status=error.code;error.close()
+        status=error.code
+        if status!=expected:
+            try:code=json.loads(error.read(8192)).get('code','')
+            except (ValueError,AttributeError):code=''
+            if not re.fullmatch('[A-Z_]+',str(code)):code='UNKNOWN'
+            print('CONTROL_REJECTED '+operation+' '+str(status)+' '+code,flush=True)
+        error.close()
         assert status==expected
         return None
 
@@ -57,12 +65,12 @@ def main():
         clients={};sources={};directories={}
         for name,value in config['sources'].items():
             client=BindingClient(config['origin'],Producer('DEVICE_SESSION',value['sessionId'],value['epoch'],value['deviceId']),
-                                 folder/(name+'.token'),allow_http_loopback=True)
+                                 folder/(name+'.token'))
             clients[name]=client
             directory=folder/('source-'+name);directory.mkdir(mode=0o700);directories[name]=directory
             sources[name]=stack.enter_context(DeviceSource(client,config['runId'],[value['generationId']],directory,create=True,timeout=90))
         generations=list(assigned['inputs'].values())
-        checkpoint=CheckpointClient(runner,config['runId'],generations,allow_http_loopback=True)
+        checkpoint=CheckpointClient(runner,config['runId'],generations)
         spec=config['stream'];limits=spec['limits']
         directory=folder/'consumer';directory.mkdir(mode=0o700)
         consumer=stack.enter_context(Session(runner,config['runId'],assigned['inputs'],{},spec['command']+spec['args'],directory,
@@ -104,16 +112,28 @@ def main():
             for source in sources.values():source.close()
             assert post('streams/complete',{**identity,'checkpointId':receipt['id']})=={'state':'FINALIZE','checkpointId':receipt['id']}
             consumer.close()
-            artifact=json.dumps({'sum':14},separators=(',',':')).encode()
-            manifest={'port':'result','bytes':len(artifact),'sha256':hashlib.sha256(artifact).hexdigest(),'mediaType':'application/json'}
-            grant=post('uploads',{**identity,'outputs':[manifest]})['outputs'][0]
-            request=urllib.request.Request(grant['url'],data=artifact,method='PUT',headers=grant['headers'])
-            with runner.http.open(request,timeout=5) as response:
-                assert response.status==200
-                version=response.headers['x-amz-version-id'];assert version and version!='null'
-            post('commit',{**identity,'outputs':[{**manifest,'versionId':version}]},201)
-            (folder/'committed').touch()
+            (folder/'granted').touch()
             wait(lambda:(folder/'routes-closed').exists())
+            assert post('streams/execution',identity)['state']=='FINALIZE'
+            assert post('claim',identity)['attemptId']==config['attemptId']
+            # A fresh work volume has neither a journal nor model state. The real
+            # Runner downloads the sealed S3 version, rechecks the grant and commits.
+            work=folder/'runner-work';work.mkdir(mode=0o700)
+            env=os.environ.copy()
+            env.update(EDGEAI_ATTEMPT_ID=config['attemptId'],EDGEAI_ATTEMPT_EPOCH='1',EDGEAI_POD_UID=config['podUid'],
+                EDGEAI_CONTROL_PLANE_URL=config['origin'],EDGEAI_CLAIM_FILE=str(folder/'claim'),
+                EDGEAI_POD_TOKEN_FILE=str(folder/'pod'),EDGEAI_WORK_DIR=str(work))
+            result=subprocess.run([sys.executable,'-W','error::ResourceWarning',str(repo/'runner'/'runner.py')],
+                env=env,capture_output=True,timeout=25)
+            if result.returncode:
+                for line in result.stdout.decode(errors='replace').splitlines():
+                    if re.fullmatch(r'RUNNER_FAILED [A-Z_]+',line):print(line,flush=True)
+                raise AssertionError('Actual Runner failed')
+            assert result.stderr==b''
+            assert result.stdout==b'RUNNER_WORKLOAD_START\nRUNNER_RESULT_COMMITTED\n'
+            assert (work/'stream-state').read_bytes()==b'14' and not (work/'stream').exists()
+            assert json.loads((work/'outputs'/'result').read_bytes())=={'sum':14}
+            (folder/'committed').touch()
             # There is no MQTT authority after Result/route closure. A durable intent
             # can only query the authenticated completion receipt, never open a Link.
             for name,value in config['sources'].items():

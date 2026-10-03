@@ -188,6 +188,7 @@ class StreamCheckpointIntegrationTest {
         assertThat(send(e,"commit",commitBody(e,q,version)).status()).isEqualTo(201);var sealed=checkpoints.latest(e.task()).orElseThrow();
         assertThat(sealed.artifact().versionId()).isEqualTo(version);assertThat(sealed.artifact().sha256()).isEqualTo(sha(bytes));
         report.put("checkpointId",sealed.id().toString());assertThat(((Map<?,?>)streamExecution.complete(principal,json.canonical(report))).get("state")).isEqualTo("WAITING");
+        assertThat(send(e,"finalized",report).status()).isEqualTo(409);
         var manifest=new ResultManifest(List.of(new ResultManifest.Output("result",9,"a".repeat(64),"application/json","unused-preparation-version")));
         assertThatThrownBy(()->lifecycle.prepareCommit(e.attempt(),1,e.pod().podUid(),manifest)).isInstanceOfSatisfying(ControlPlaneException.class,x->assertThat(x.code()).isEqualTo("STREAM_COMPLETION_REQUIRED"));
         byte[] later=snapshot(e,true,true);var uploadBody=body(e);uploadBody.put("checkpoint",request(e,later,sealed.id()));
@@ -200,6 +201,19 @@ class StreamCheckpointIntegrationTest {
         }
         assertThat(((Map<?,?>)streamExecution.complete(principal,json.canonical(report))).get("state")).isEqualTo("FINALIZE");
         assertThat(lifecycle.prepareCommit(e.attempt(),1,e.pod().podUid(),manifest).runtime().attemptId()).isEqualTo(e.attempt());
+        for(var p:e.permissions()) {var g=p.generation();routes.fence(g.id(),"COMPLETED");routes.revoked(new RouteGeneration.BrokerReceipt(g.id(),g.brokerDigest(),g.policyDigest()));}
+        assertThat(send(e,"latest",query(e)).status()).isEqualTo(409);
+        var download=send(e,"finalized",report);assertThat(download.status()).isEqualTo(200);
+        assertThat(((Map<?,?>)download.body().get("checkpoint")).get("id")).isEqualTo(sealed.id().toString());
+        try(var http=HttpClient.newHttpClient()) {
+            var grant=(Map<?,?>)download.body().get("download");
+            var object=http.send(HttpRequest.newBuilder(URI.create((String)grant.get("url"))).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(object.statusCode()).isEqualTo(200);assertThat(object.headers().firstValue("x-amz-version-id")).hasValue(version);
+            assertThat(object.body()).isEqualTo(bytes);
+        }
+        assertThat(send(e,"finalized",report,"checkpoint-pod-proof",false).status()).isEqualTo(401);
+        assertThat(send(e,"finalized",report,"wrong-pod-proof",true).status()).isEqualTo(401);
+        runs.cancelRun(e.run(),"{}");assertThat(send(e,"finalized",report).status()).isEqualTo(409);
     }
     @Test void newAttemptReceivesServerReboundSnapshotAndActualPythonContinuesFromNineToFourteen()throws Exception{
         var source=execution(true);var original=seal(source);var next=transition(source,true);
@@ -289,7 +303,7 @@ class StreamCheckpointIntegrationTest {
             }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}}
             public String uploadFile(ArtifactContent c,Path p){return storage.uploadFile(c,p);}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore,streamExecutions);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.handover(principal(next),json.canonical(handoverBody(next))));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(next.run(),"{}");}finally{release.countDown();}
@@ -309,7 +323,7 @@ class StreamCheckpointIntegrationTest {
             var downloaded=client.send(HttpRequest.newBuilder(URI.create((String)grant.get("url"))).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             assertThat(downloaded.statusCode()).isEqualTo(200);assertThat(downloaded.body()).isEqualTo(bytes);
         }
-        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions);
+        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
         assertThat(recreated.commit(principal(e),commitBody(e,q,version)).value().id()).isEqualTo(stored.id());
         assertThat(checkpoints.latest(e.task()).orElseThrow().summaryJson()).doesNotContain("\"stateBase64\"","\"frames\"");
     }
@@ -395,7 +409,7 @@ class StreamCheckpointIntegrationTest {
             public VerifiedArtifact verify(ArtifactContent c,String v){var verified=storage.verify(c,v);read.countDown();
                 try{if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("Fixture wait timed out");}catch(InterruptedException x){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}return verified;}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.commit(principal(e),commitBody(e,q,version)));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(e.run(),"{}");}finally{release.countDown();}

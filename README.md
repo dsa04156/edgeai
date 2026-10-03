@@ -44,8 +44,10 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 검증했습니다. 후속 [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는
 경로 고정과 참여자별 종료 확인을 영속화하고 허가 전 Result 확정을 막습니다.
 [DeviceSource 공동 완료](docs/evidence/m7-device-source-completion.md)는 실제 Spring/PG/S3/TLS MQTT의
-종료·결과 저장과 경로 회수 후 장치 재시작을 연결합니다. 공개 실행 생성·Runner 최종 상태 복구·
-실제 Kubernetes 스트림 종단은 남아 있습니다.
+종료·결과 저장과 경로 회수 후 장치 재시작을 연결합니다.
+[Runner 최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)는 현재 실행의 완료 허가를 확인하고
+MQTT 없이 S3 체크포인트에서 최종 파일을 생성합니다. 실제 Spring/S3/Runner를 연결했으며,
+공개 실행 생성·그룹 동시 시작·실제 Kubernetes 스트림 종단은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
@@ -132,8 +134,8 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
 
 화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
-상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 내부 API 11개를 표시합니다.
-배정 조회·heartbeat·체크포인트 저장/복원/인계·실행 배정·Task/Device 공동 완료의 역할과
+상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 내부 API 12개를 표시합니다.
+배정 조회·heartbeat·체크포인트 저장/복원/인계·완료 후 상태 복구·실행 배정·Task/Device 공동 완료의 역할과
 순번·재전송·기한 갱신/거절 조건을 설명합니다. Device 세션 토큰과
 Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명합니다. 관리자가 Device의
 현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.

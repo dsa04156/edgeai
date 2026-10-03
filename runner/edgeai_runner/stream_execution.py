@@ -9,8 +9,10 @@ import os
 
 from edgeai_runner.main import RunnerError, cancelled, integer, port_name
 from edgeai_runner.stream_assignment import BindingClient
-from edgeai_runner.stream_checkpoint_client import CheckpointClient
+from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointUnavailable
+from edgeai_runner.stream_checkpoint import state_bytes
 from edgeai_runner.stream_journal import Limits
+from edgeai_runner.stream_processor import execution_digest
 from edgeai_runner.stream_protocol import Producer, _uuid
 from edgeai_runner.stream_session import Session
 
@@ -59,6 +61,8 @@ def execute(runner, assignment):
         reply = runner.api('streams/execution',runner.identity)
         if type(reply) is dict and reply == {'state':'WAITING'}:
             cancelled.wait(min(.1,runner.timeout())); continue
+        if type(reply) is dict and reply.get('state') == 'FINALIZE':
+            return _write_state(runner,_finalized_state(runner,assignment,reply,client,limits))
         fields(reply,'state runId taskId attemptId epoch inputs outputs recovery')
         require(reply['state'] == 'READY' and all(reply[k] == assignment[k] for k in ('runId','taskId','attemptId','epoch')))
         require(reply['recovery'] in ('NEW','RESTORE','HANDOVER'))
@@ -114,6 +118,45 @@ def execute(runner, assignment):
             cancelled.wait(.005)
     finally:
         session.close()
+    return _write_state(runner,state)
+
+
+def _finalized_state(runner, assignment, reply, binding, limits):
+    fields(reply,'state runId taskId attemptId epoch checkpointId inputRoutes outputRoutes generationIds')
+    require(all(reply[k] == assignment[k] for k in ('runId','taskId','attemptId','epoch')))
+    require(type(reply['epoch']) is int)
+    _uuid(reply['checkpointId'])
+    spec=assignment['stream'];inputs=reply['inputRoutes'];outputs=reply['outputRoutes']
+    require(type(inputs) is dict and set(inputs) == set(spec['inputs']))
+    require(type(outputs) is dict and set(outputs) == set(spec['outputs']))
+    require(all(type(routes) is list and 1 <= len(routes) <= 16 for routes in outputs.values()))
+    incoming=list(inputs.values());outgoing=[route for routes in outputs.values() for route in routes]
+    for route in incoming+outgoing:_uuid(route)
+    require(len(outgoing) <= 16 and len(set(incoming+outgoing)) == len(incoming+outgoing))
+    client=CheckpointClient(binding,assignment['runId'],reply['generationIds'])
+    expected=execution_digest(spec['command']+spec['args'],assignment['parameters'],inputs,outputs,spec['stepTimeoutSeconds'])
+    while True:
+        runner.timeout()
+        try:
+            value=client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()))
+            receipt=value['checkpoint'];saved=receipt['summary']['manifest']
+            require(receipt['taskId'] == assignment['taskId'] and receipt['executionSha256'] == expected)
+            require(Limits(**saved['limits']) == limits)
+            require({b['routeId'] for b in saved['inputs']} == set(incoming)
+                    and {b['routeId'] for b in saved['outputs']} == set(outgoing))
+            snapshot=client.download(value,guard=runner.timeout,timeout=min(1,runner.timeout()))
+            doc=snapshot.document()
+            require(all(row['ended'] and row['received'] == row['committed'] > 0 and not row['frames'] for row in doc['routes']))
+            # Cancellation/fencing can happen during S3 I/O. Re-read the exact
+            # server grant before writing state or running any finalizer process.
+            require(client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()))['checkpoint'] == receipt)
+            runner.timeout()
+            return state_bytes(doc['stateBase64'],limits.max_state_bytes)
+        except CheckpointUnavailable:
+            cancelled.wait(min(.1,runner.timeout()))
+
+
+def _write_state(runner,state):
     runner.timeout()
     target = runner.work/'stream-state'
     fd = os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)

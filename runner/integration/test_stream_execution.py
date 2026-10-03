@@ -4,10 +4,12 @@ import json
 import os
 from pathlib import Path
 import signal
+import ssl
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import uuid
@@ -29,6 +31,8 @@ class StreamExecutionTest(unittest.TestCase):
         self.finalize = False; self.wrong_receipt = False; self.complete_calls = 0
         self.failure = None; self.artifact = None; self.commits = []; self.execution_calls = 0
         self.recovery = 'NEW'; self.unavailable = 0
+        self.hold_grant=False;self.granted=threading.Event();self.release_grant=threading.Event()
+        self.finalized_calls=0;self.finalized_status=None;self.reject_during_download=False;self.swap_final_routes=False
         profile = json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
         self.spec = profile['stream']; self.spec['command'] = [sys.executable,str(ROOT/'runner/examples/stream_sum.py')]
         self.spec['limits']['maxFrames'] = 12
@@ -40,8 +44,17 @@ class StreamExecutionTest(unittest.TestCase):
             def reply(self,status,value):
                 body=json.dumps(value).encode();self.send_response(status)
                 self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)))
+                self.send_header('Cache-Control','no-store')
                 self.end_headers();self.wfile.write(body)
             def do_POST(self):
+                if self.path.endswith('/checkpoints/finalized'):
+                    data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                    owner.finalized_calls+=1;latest=owner.api.checkpoint_latest
+                    valid=(self.headers.get('Authorization')=='Bearer fixture-claim' and self.headers.get('X-EdgeAI-Pod-Token')=='fixture-pod'
+                           and data=={'epoch':OUT.producer.epoch,'podUid':POD,'checkpointId':latest['id']})
+                    if not valid or not owner.finalize or owner.finalized_status:return self.reply(owner.finalized_status or 409,{})
+                    return self.reply(200,{'checkpoint':latest,'download':{'url':owner.api.url+'/checkpoint-object?versionId='+latest['versionId'],
+                        'expiresAt':latest['createdAt']}})
                 if self.path.rsplit('/',1)[1] not in ('claim','execution','complete','uploads','commit','fail') or '/checkpoints/' in self.path:
                     return super().do_POST()
                 data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -53,6 +66,11 @@ class StreamExecutionTest(unittest.TestCase):
                 if operation=='claim':return self.reply(200,owner.assignment)
                 if operation=='execution':
                     owner.execution_calls+=1
+                    if owner.recovery=='FINALIZE':
+                        return self.reply(200,{'state':'FINALIZE',**{k:owner.assignment[k] for k in ('runId','taskId','attemptId','epoch')},
+                            'inputRoutes':{'a':B.route_id,'b':A.route_id} if owner.swap_final_routes else {'a':A.route_id,'b':B.route_id},
+                            'outputRoutes':{'sum':[OUT.route_id]},'generationIds':owner.api.checkpoint_latest['generationIds'],
+                            'checkpointId':owner.api.checkpoint_latest['id']})
                     if owner.execution_calls==1:return self.reply(200,{'state':'WAITING'})
                     return self.reply(200,{'state':'READY',**{k:owner.assignment[k] for k in ('runId','taskId','attemptId','epoch')},
                         'inputs':INPUTS,'outputs':OUTPUTS,'recovery':owner.recovery})
@@ -65,8 +83,11 @@ class StreamExecutionTest(unittest.TestCase):
                         return self.reply(409,{})
                     if owner.unavailable:
                         owner.unavailable-=1;return self.reply(503,{})
-                    return self.reply(200,{'state':'FINALIZE' if owner.finalize else 'WAITING',
+                    if owner.finalize and owner.hold_grant:
+                        owner.granted.set();owner.release_grant.wait(8)
+                    try:return self.reply(200,{'state':'FINALIZE' if owner.finalize else 'WAITING',
                         'checkpointId':str(uuid.uuid4()) if owner.wrong_receipt else latest['id']})
+                    except (BrokenPipeError,ConnectionResetError,ssl.SSLEOFError):return
                 if operation=='uploads':
                     return self.reply(200,{'outputs':[{'port':'result','url':owner.api.url+'/artifact',
                         'headers':{'Content-Type':'application/json'}}]})
@@ -83,6 +104,9 @@ class StreamExecutionTest(unittest.TestCase):
                 owner.artifact=self.rfile.read(int(self.headers['Content-Length']))
                 self.send_response(200);self.send_header('x-amz-version-id','fixture-artifact-version')
                 self.send_header('Content-Length','0');self.end_headers()
+            def do_GET(self):
+                if owner.reject_during_download:owner.finalized_status=409
+                return super().do_GET()
         self.api.server.RequestHandlerClass=Handler
         for name,value in [('claim','fixture-claim'),('pod','fixture-pod')]:
             path=self.root/name;path.write_text(value);path.chmod(0o600)
@@ -95,6 +119,7 @@ class StreamExecutionTest(unittest.TestCase):
             self.links[actor]=Link(journal,self.broker.endpoint(actor),'runner-test-'+actor)
 
     def close(self):
+        self.release_grant.set()
         if self.process is not None:
             if self.process.poll() is None:self.process.send_signal(signal.SIGTERM)
             try:self.process.communicate(timeout=5)
@@ -196,6 +221,42 @@ class StreamExecutionTest(unittest.TestCase):
         self.recovery='RESTORE';self.finalize=True;self.start();self.finish(True)
         self.assertGreater(self.api.checkpoint_gets,0)
         self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
+
+
+    def finalizer_restart(self):
+        self.finalize=True;self.hold_grant=True;self.start();self.emit()
+        self.until(self.granted.is_set)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.process.kill();self.process.communicate(timeout=3);self.process=None
+        self.release_grant.set();self.hold_grant=False
+        for link in self.links.values():link.close(force=True)
+        self.links.clear();self.broker.stop();self.api.status=409
+        self.api.leases={identity:0 for identity in self.api.leases}
+        shutil.rmtree(self.root/'work');(self.root/'work').mkdir(mode=0o700)
+        self.recovery='FINALIZE'
+
+    def test_killed_after_grant_recovers_only_finalizer_without_broker_or_model(self):
+        self.finalizer_restart();calls=len(self.api.calls);self.start();self.finish(True)
+        self.assertEqual(calls,len(self.api.calls));self.assertEqual(2,self.finalized_calls)
+        self.assertFalse((self.root/'work/stream').exists())
+        self.assertEqual(b'14',(self.root/'work/stream-state').read_bytes())
+        self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
+        self.assertFalse(self.api.storage_credential_leak)
+
+    def test_finalizer_recovery_rejects_corrupt_fixed_version_without_creating_state(self):
+        self.finalizer_restart();self.api.checkpoint_corrupt_download=True;self.start();self.finish(False)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_finalizer_rechecks_cancellation_during_storage_read_before_writing_state(self):
+        self.finalizer_restart();self.reject_during_download=True;self.start();self.finish(False)
+        self.assertEqual(2,self.finalized_calls);self.assertGreater(self.api.checkpoint_gets,0)
+        self.assertIsNone(self.artifact);self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_finalizer_port_mapping_must_match_sealed_execution_digest(self):
+        self.finalizer_restart();self.swap_final_routes=True;self.start();self.finish(False)
+        self.assertEqual(0,self.api.checkpoint_gets);self.assertIsNone(self.artifact)
+        self.assertFalse((self.root/'work/stream-state').exists())
 
 
 if __name__=='__main__':unittest.main()
