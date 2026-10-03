@@ -45,6 +45,13 @@ Runner/VD는 이를 읽기 전용으로 마운트하고 인증서 검증을 유�
 사용한다. CA 교체는 새 이름으로 준비하며 기존 runtime이 종료될 때까지 기존 번들을 유지한다.
 VD는 이름을 실행 설정에 고정한다. 상세: [ADR0042](../../docs/adr/0042-runtime-tls-trust.md).
 
+같은 API에 추가 native HTTPS 포트를 열려면 `EDGEAI_API_TLS_ENABLED=true`, 별도 포트
+`EDGEAI_API_TLS_PORT`(기본18443), PEM 절대 경로 `EDGEAI_API_TLS_CERTIFICATE_FILE` 및
+`EDGEAI_API_TLS_PRIVATE_KEY_FILE`을 설정한다. 개인 키는 API만 읽게 마운트하고 클라이언트에는
+공개 CA를 전달한다. 기본은 비활성이며 현재 dev overlay의 자동 TLS/STREAM 활성화 설정은 아니다.
+인증/CSRF는 기본 API와 같고 인증서 변경은 Pod 재기동으로 반영한다.
+[설계·검증 범위](../../docs/adr/0048-native-api-tls-connector.md).
+
 `bash scripts/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
 검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
 빌드 이미지 자체는 `python3 scripts/test-stream-kubernetes.py --context <context> --api-image <API digest 또는 소스 commit tag>

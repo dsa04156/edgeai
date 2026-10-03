@@ -236,8 +236,9 @@ def main():
             result = subprocess.run(['node', 'scripts/bootstrap-artifact-bucket.mjs'], env=verify_env, capture_output=True, timeout=40)
             assert result.returncode == 0, 'TLS artifact bucket bootstrap failed; private output suppressed'
             api_origin = 'https://' + api + '.edgeai.svc:18443'
-            api_env = [env('EDGEAI_BIND_ADDRESS', '0.0.0.0'), env('EDGEAI_API_PORT', '18443'), env('EDGEAI_DB_HOST', db + '.edgeai.svc'), env('EDGEAI_DB_PORT', '5432'),
-                env('SERVER_SSL_ENABLED', 'true'), env('SERVER_SSL_CERTIFICATE', '/tmp/identity/server.crt'), env('SERVER_SSL_CERTIFICATE_PRIVATE_KEY', '/tmp/identity/server.key'),
+            api_env = [env('EDGEAI_BIND_ADDRESS', '0.0.0.0'), env('EDGEAI_API_PORT', '18080'), env('EDGEAI_DB_HOST', db + '.edgeai.svc'), env('EDGEAI_DB_PORT', '5432'),
+                env('EDGEAI_API_TLS_ENABLED', 'true'), env('EDGEAI_API_TLS_PORT', '18443'),
+                env('EDGEAI_API_TLS_CERTIFICATE_FILE', '/tmp/identity/server.crt'), env('EDGEAI_API_TLS_PRIVATE_KEY_FILE', '/tmp/identity/server.key'),
                 env('EDGEAI_KUBE_ENABLED', 'true'), env('EDGEAI_RUNTIME_ENABLED', 'true'), env('EDGEAI_RUNTIME_NAMESPACE', 'edgeai-runtimes'), env('EDGEAI_RUNTIME_CONTROL_PLANE_URL', api_origin),
                 env('EDGEAI_RUNTIME_CA_CONFIG_MAP', root + '-ca'), env('EDGEAI_KUBE_API_URL', 'https://kubernetes.default.svc'),
                 env('EDGEAI_KUBE_TOKEN_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/token'), env('EDGEAI_KUBE_CA_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'),
@@ -277,6 +278,7 @@ def main():
                 if '@' in api_image:
                     assert image_id.endswith('@' + api_image.split('@', 1)[1]), 'Actual API image differs from pinned digest'
                 snapshot.setdefault('apiPods', []).append({'uid': actual['metadata']['uid'], 'imageID': image_id, 'jarSha256': actual_hash})
+                snapshot['apiTlsMode'] = 'additional-native-connector'
                 return pod['metadata']['uid']
 
             api_uid = start_api()

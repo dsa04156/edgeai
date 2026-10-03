@@ -21,6 +21,8 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 ADR0047에서 공개 Run의 retry 정책을 그룹/최종 처리 복구에 연결했다. 공개 API·실서버6개·
 PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과했다. 새 CI/배포를 확인한다.
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).
+운영 연결을 위해 ADR0048에서 같은 API의 추가 HTTPS 포트를 구현·검증한다. 후속으로 영속 TLS
+브로커/S3·런타임 공개 CA·개인 키 준비와 운영 다중 장치 데모를 연결한다.
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료
 대기·응답 유실/재시작과 실제 Spring/PG/S3/TLS broker의 종료·Result 확정을 연결했다.

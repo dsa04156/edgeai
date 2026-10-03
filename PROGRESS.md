@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0048 같은 API 프로세스의 선택적 native HTTPS 포트를 추가했다. 실제 HTTP/HTTPS 인증·
+CSRF·신뢰/hostname2개와 전체 단위105개·PG190개 PASS. Kubernetes 스트림5개 시나리오도
+이 포트로 연결해 Pod17개·S3파일12개·API 교체9.207초·그룹/최종 처리 복구·정리를 검증했다.
+기본 비활성이며 운영 브로커·키/인증서·Runner 신뢰·데모 연결은 남는다.
+docs/evidence/m7-native-api-tls.md. 선행 공개 retry a29f6c9는 main에 푸시했고 CI37129406733 진행 중이다.
+
+아래는 실제 최종 처리 복구의 검증 이력이다.
 완료 허가 뒤 실제 Kubernetes sink Job 유실도 검증했다. sink만 새 Attempt/Pod에서 원본
 grant/checkpoint로 결과를 확정하고 이미 성공한 root Result·기존 경로/체크포인트 이력을 보존했다.
 계산 중 그룹 복구·AUTO/NODE·API 교체·취소 포함5개 시나리오/Pod17개/S3파일12개 PASS.

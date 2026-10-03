@@ -28,6 +28,11 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  api-tls:
+    enabled: ${EDGEAI_API_TLS_ENABLED:false}
+    port: ${EDGEAI_API_TLS_PORT:18443}
+    certificate-file: ${EDGEAI_API_TLS_CERTIFICATE_FILE:}
+    private-key-file: ${EDGEAI_API_TLS_PRIVATE_KEY_FILE:}
   stream:
     enabled: ${EDGEAI_STREAM_ENABLED:false}
     bindings-enabled: ${EDGEAI_STREAM_BINDINGS_ENABLED:false}
