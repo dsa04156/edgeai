@@ -10,8 +10,8 @@ patches:
   - path: vd-execution.yaml
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:efef59865dcd2a7e77d09f7f467ee6758f22dc3d9a28b8bb284e221e6dc647b8
+    digest: sha256:4777003510d061fd0c7b00ad8121640524711598f97d1aefd928da39b97205e5
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:9cfff366e5dd18e1e4102459796cce418d535cd0544e2ee495508f9cdccbfd58
+    digest: sha256:83ceded315835f170805fcd595b3654a230b8750633c40352b2d22460ccd00be
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:80d864786e1ae26c8c3b276691a5a64be0bf87a7b78ffcf12d4cb092613905a5
+    digest: sha256:c3aa73d312373823521d820bcdee8560644a507a451b16efc82d49fdf4d11e74
