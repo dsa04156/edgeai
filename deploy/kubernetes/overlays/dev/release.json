@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "a0fc80231eb54a2ae1d4ca7c1fc3c9abf417c627",
+  "sourceRevision": "ca56e2febbf46e5e9ffbb56cc7a68eedcf068580",
   "apiDigest": "sha256:54f9c8c466c81a3c93c8b24fa740ac24b01281ebb8b2f013e3b5811d846fe8ab",
   "dashboardDigest": "sha256:1e1bf5eb1ed449ab433f1296ed576722c88eddc9216e87cdf5cabf15b9cc3380",
-  "runnerDigest": "sha256:e7b78cbc17edd9adc0e3b9ad9b9a94fe0948294b4763190d8598844fe1ffb592",
-  "minioDigest": "sha256:c1ff1276340c2df772cc1777662581a64f63279c3f6ebc581e0ca6ed9873f4fb",
+  "runnerDigest": "sha256:addba1032bc7dc6783f2c58ab81965b70a06648c279b0cfbc914c26f9d45b4a2",
+  "minioDigest": "sha256:fca36951fcbfec3c2c1b7609a2d6d8a1ca5e1d897fb23e9f5dee8b8e9c64e7e7",
   "runtimeImagePlatforms": [
     "linux/amd64"
   ]
