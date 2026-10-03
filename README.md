@@ -141,11 +141,13 @@ Swagger의 **Try it out → Execute**로 API를 호출할 수 있으며, 쓰기 
 문서의 예시는 연습용이며 POST를 실행하면 실제 개발 DB에 Profile이 발행됩니다.
 
 화면은 `contracts/openapi/platform-api.yaml`을 빌드할 때 그대로 포함해 표시합니다.
-상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 내부 API 12개를 표시합니다.
+상단의 **스트림 배정 API**는 `contracts/openapi/stream-api.yaml`의 내부 API 13개를 표시합니다.
 배정 조회·heartbeat·체크포인트 저장/복원/인계·완료 후 상태 복구·실행 배정·Task/Device 공동 완료의 역할과
 순번·재전송·기한 갱신/거절 조건을 설명합니다. Device 세션 토큰과
 Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명합니다. 관리자가 Device의
 현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.
+Device 전용 경로 조회는 해당 Run에 고정된 본인 경로·최신 세대만 반환하며 전송 자격 발급과는 별개입니다.
+[Device 경로 조회](docs/evidence/m7-device-route-discovery.md)의 페이지·세션 교체·SDK 사용 범위를 따릅니다.
 배정은 `EDGEAI_STREAM_ENABLED=true`와 `EDGEAI_STREAM_BINDINGS_ENABLED=true`, 별도 장치 서명 키가
 필요합니다. [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는 구성 요소
 검증을 통과했습니다. 공개 실행에는 추가로 `EDGEAI_STREAM_RUNS_ENABLED=true`와 runtime 활성화가 필요합니다.

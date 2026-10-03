@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+ADR0043 Device 토큰의 본인 Run 경로·최신 세대 조회와 SDK를 추가했다.
+실제 HTTPS 조회 결과로 DeviceSource를 열고 송신해 독립 STREAM2개→BATCH 결과37·취소를 검증했다.
+단위101·실제 PG181·Runner110·실제 Source/DAG4·API/DB PC·모바일10·Swagger 내부13개 PASS다.
+새 조회 코드는 로컬 검증이며 이미지/CI/Kubernetes 수용은 별도다. 그룹 복구 자동화는 남는다.
+선행 e93d9e1의 전체 패키지 이미지 시험은 PASS이며 새 kind 게이트 c152d4d의 CI37120638129는 실행 중이다.
+상세: docs/evidence/m7-device-route-discovery.md. M5 잔여/M7–M10 전체 수용은 미완료다.
+
+아래는 선행 TLS·Kubernetes 검증 이력이다.
 ADR0042의 Runtime 공개 CA 번들 설정·VD 불변 참조와 Runner fsGroup 디렉터리 권한을 구현했다.
 실제 Kubernetes에서 mkdir0700→2700 상속을 재현하고, 새 소유 폴더만 명시적으로0700으로 맞췄다.
 단위101·실제 PG178·실제 저장소34·HTTPS/TLS MQTT71개를 로컬 검증했다.

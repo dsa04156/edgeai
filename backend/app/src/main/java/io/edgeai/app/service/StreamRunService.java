@@ -1,6 +1,7 @@
 package io.edgeai.app.service;
 
 import io.edgeai.app.support.*;
+import io.edgeai.app.config.DeviceStreamPrincipal;
 import io.edgeai.app.dto.StreamRouteResponse;
 import io.edgeai.domain.device.*;
 import io.edgeai.domain.execution.*;
@@ -49,6 +50,45 @@ public class StreamRunService {
             ((Map<?,?>)JSON.decode(profiles.find(t.serviceProfileVersionId()).orElseThrow().specJson())).containsKey("stream"));
     }
     public boolean managed(UUID run){return store.find(run).isPresent();}
+    /** Device-scoped metadata only. Reading never issues broker credentials or renews a lease. */
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public Object deviceRoutes(DeviceStreamPrincipal principal,String body){
+        var input=new DeviceInput(body,"epoch","runId","limit","offset");
+        if(input.number("epoch")!=principal.epoch())throw error(409,"STREAM_DEVICE_SCOPE_CHANGED","현재 장치 세션과 고정된 원본 세션을 확인하세요.");
+        long pageLimit=input.number("limit"),pageOffset=input.number("offset");
+        if(pageLimit<1 || pageLimit>100 || pageOffset>1000000)throw new IllegalArgumentException("Invalid device route page");
+        int limit=(int)pageLimit,offset=(int)pageOffset;UUID id=input.uuid("runId");
+        var device=devices.find(principal.deviceId(),false).orElseThrow();var session=devices.activeSession(device.id());
+        if(device.state()!=Device.State.ACTIVE || session.isEmpty() || !session.get().id().equals(principal.sessionId())
+            || session.get().epoch()!=principal.epoch() || device.sessionEpoch()!=principal.epoch())
+            throw error(409,"STREAM_DEVICE_SCOPE_CHANGED","현재 장치 세션과 고정된 원본 세션을 확인하세요.");
+        var owned=store.bindings(id).stream().filter(b->b.deviceId().equals(principal.deviceId())).toList();
+        if(owned.isEmpty())throw error(404,"STREAM_DEVICE_RUN_NOT_FOUND","이 장치에 배정된 스트림 실행이 없습니다.");
+        if(owned.stream().anyMatch(b->!b.sessionId().equals(principal.sessionId()) || b.epoch()!=principal.epoch()))
+            throw error(409,"STREAM_DEVICE_SCOPE_CHANGED","현재 장치 세션과 고정된 원본 세션을 확인하세요.");
+        var run=executions.run(id,false).orElseThrow();var ids=new HashSet<UUID>();owned.forEach(b->ids.add(b.routeId()));
+        var all=routes.forRun(id,StreamRunPlan.MAX_ROUTES+1,0);
+        if(all.size()>StreamRunPlan.MAX_ROUTES)throw new IllegalArgumentException("Too many stream routes");
+        var selected=all.stream().filter(r->ids.contains(r.id())).sorted(Comparator.comparing(r->r.id().toString())).toList();
+        if(selected.size()!=owned.size())throw new IllegalStateException("Incomplete immutable device bindings");
+        var items=new ArrayList<Object>();
+        for(var route:selected.stream().skip(offset).limit(limit).toList()){
+            if(!principal.deviceId().equals(route.sourceDeviceId()))throw new IllegalStateException("Foreign immutable device binding");
+            var generation=routes.history(route.id(),1,0).stream().findFirst().orElse(null);Object status=null;
+            if(generation!=null){
+                if(!generation.producer().equals(new RouteGeneration.Actor(principal.sessionId(),principal.epoch())))
+                    throw error(409,"STREAM_DEVICE_SCOPE_CHANGED","현재 장치 세션과 고정된 원본 세션을 확인하세요.");
+                status=Map.of("id",generation.id().toString(),"number",generation.generation(),"state",generation.state(),"leaseUntil",generation.leaseUntil().toString());
+            }
+            var row=new TreeMap<String,Object>();row.put("routeId",route.id().toString());row.put("sourcePort",route.sourcePort());
+            row.put("consumerTaskId",route.consumerTaskId().toString());row.put("consumerPort",route.consumerPort());row.put("sourceMode",route.sourceMode());
+            row.put("mediaType",route.mediaType());row.put("maxPayloadBytes",route.maxPayloadBytes());row.put("generation",status);items.add(row);
+        }
+        var result=new TreeMap<String,Object>();result.put("apiVersion","edgeai.device-routes/v1");result.put("runId",id.toString());result.put("runState",run.state());
+        result.put("deviceId",principal.deviceId().toString());result.put("sessionId",principal.sessionId().toString());result.put("epoch",principal.epoch());
+        result.put("items",items);result.put("limit",limit);result.put("offset",offset);result.put("nextOffset",offset+items.size()<selected.size()?offset+items.size():null);
+        return result;
+    }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public List<StreamRouteResponse> list(UUID id,int limit,int offset){
         WorkflowService.page(limit,offset);var run=executions.run(id,false).orElseThrow(()->error(404,"RUN_NOT_FOUND","실행 요청이 없습니다."));

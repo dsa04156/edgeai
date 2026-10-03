@@ -23,14 +23,17 @@ public class StreamBindingService {
     private final RuntimeLifecycleService runtimes;private final MosquittoStreamBroker broker;private final StreamConnectionSettings connection;
     private final String digest;private final Clock clock;
     private final StreamExecutionService execution;
+    private final StreamRunService runs;
     public StreamBindingService(DeviceRepository devices,DeviceStreamTokenService tokens,DataRouteService routes,RuntimeLifecycleService runtimes,
-            MosquittoStreamBroker broker,StreamConnectionSettings connection,@Value("${edgeai.stream.broker-digest}") String digest,Clock clock,StreamExecutionService execution){
+            MosquittoStreamBroker broker,StreamConnectionSettings connection,@Value("${edgeai.stream.broker-digest}") String digest,Clock clock,StreamExecutionService execution,StreamRunService runs){
         this.devices=devices;this.tokens=tokens;this.routes=routes;this.runtimes=runtimes;this.broker=broker;this.connection=connection;this.digest=digest;this.clock=clock;
         this.execution=execution;
+        this.runs=runs;
     }
     public Object execution(RunnerPrincipal principal,String body){return execution.execution(principal,body);}
     public Object complete(RunnerPrincipal principal,String body){return execution.complete(principal,body);}
     public Object deviceComplete(DeviceStreamPrincipal principal,String body){return execution.deviceComplete(principal,body);}
+    public Object deviceRoutes(DeviceStreamPrincipal principal,String body){return runs.deviceRoutes(principal,body);}
     @Transactional
     public Object deviceToken(UUID deviceId,UUID sessionId,String body){
         new DeviceInput(body);var device=devices.find(deviceId,true).orElseThrow(()->new ControlPlaneException(404,"DEVICE_NOT_FOUND","장치를 찾을 수 없습니다."));

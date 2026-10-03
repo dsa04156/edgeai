@@ -145,14 +145,25 @@ def run_case(name, placement, cancel=False):
     current['routes'] = allocated
     with ExitStack() as stack:
         owners = {}
+        discovered_routes = {}
+        current['deviceDiscovery'] = []
         for port, (device, session, token_file) in sources.items():
             route = device_routes[port]
             assert route['sourceMode'] == 'SYNTHETIC' and route['sourceSessionId'] == session['id']
             binding = BindingClient(origin, Producer('DEVICE_SESSION', session['id'], session['epoch'], device['id']), token_file)
+            page = binding.device_routes(active)
+            assert page['runState'] == 'RUNNING' and page['nextOffset'] is None and len(page['items']) == 1
+            discovered = page['items'][0]
+            assert discovered['routeId'] == route['id'] and discovered['generation']['id'] == route['generation']['id']
+            assert discovered['consumerTaskId'] == task_ids['root'] and discovered['consumerPort'] == port
+            assert discovered['generation']['state'] == 'ACTIVE' and discovered['sourceMode'] == 'SYNTHETIC'
+            discovered_routes[port] = discovered
+            current['deviceDiscovery'].append({'deviceId': device['id'], 'routeId': discovered['routeId'],
+                                               'generationId': discovered['generation']['id']})
             directory = work / (name + '-source-' + port)
             directory.mkdir(mode=0o700)
             directory.chmod(0o700)  # The driver owns this new directory on an fsGroup volume.
-            owners[port] = stack.enter_context(DeviceSource(binding, active, [route['generation']['id']], directory, create=True, timeout=600))
+            owners[port] = stack.enter_context(DeviceSource(binding, active, [discovered['generation']['id']], directory, create=True, timeout=600))
 
         def tick():
             for owner in owners.values():
@@ -160,7 +171,7 @@ def run_case(name, placement, cancel=False):
 
         def emit(a, b):
             for port, number in (('a', a), ('b', b)):
-                owners[port].emit([Emission(device_routes[port]['id'], str(number).encode(), 'application/json')])
+                owners[port].emit([Emission(discovered_routes[port]['routeId'], str(number).encode(), 'application/json')])
 
         emit(4, 5)
         phase = name + '-first'
@@ -190,7 +201,7 @@ def run_case(name, placement, cancel=False):
             save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 14, 'sink': 23}})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
             for port, owner in owners.items():
-                owner.emit([Emission(device_routes[port]['id'], b'', None, 'END')])
+                owner.emit([Emission(discovered_routes[port]['routeId'], b'', None, 'END')])
             phase = name + '-results'
             save('phase.json', {**current, 'phase': phase})
 

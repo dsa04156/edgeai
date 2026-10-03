@@ -29,6 +29,10 @@ BATCH 결과·취소는 Spring/PG/S3/TLS MQTT에서 검증했다. ADR0042의 공
 완성 API 이미지 자체의 같은 실제 클러스터 시험도 통과했다. 새 STREAM kind/CI 게이트 확인·
 인접 Task 인계·운영 STREAM 배포와 다중 장치 데모는 남는다.
 현재 검증 범위는 [Kubernetes 진행 기록](docs/evidence/m7-kubernetes-stream.md)을 따른다.
+ADR0043은 장치 토큰으로 본인 Run 경로를 찾는 SDK/API를 실제 Spring·PG·TLS MQTT·S3·독립
+Runner와 연결했다. metadata 조회로 권한이나 journal을 전환하지 않으며 다음은 전체 그룹의
+안전한 재배정·checkpoint 인계와 장치의 명시적 재연결이다.
+[장치 조회 근거](docs/evidence/m7-device-route-discovery.md)의 로컬 검증과 후속 이미지 검증을 구분한다.
 새 검증 범위는 [공개 실행·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 따른다.
 복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.
 상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.

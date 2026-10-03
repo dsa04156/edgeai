@@ -53,6 +53,7 @@ class StreamRunIntegrationTest {
     @Autowired ExecutionService runs;@Autowired ExecutionRepository executions;@Autowired RuntimeLifecycleService lifecycle;@Autowired RuntimeRepository runtimes;
     @Autowired StreamRunService streams;@Autowired StreamRunRepository store;@Autowired DataRouteRepository routes;@Autowired DataRouteService routeLifecycle;
     @Autowired StreamExecutionRepository completions;@Autowired JdbcTemplate jdbc;@Autowired MockMvc mvc;@Autowired PlatformTransactionManager transactions;
+    @Autowired DeviceStreamTokenService deviceTokens;
     private final JsonDocuments json=new JsonDocuments();
     private record Definition(UUID version,List<Map<String,Object>> inputs,List<Device> devices){}
     private String encode(Object value){return json.canonical(value);}
@@ -86,6 +87,11 @@ class StreamRunIntegrationTest {
     private String perform(MockHttpServletRequestBuilder r,int code)throws Exception{return mvc.perform(r.with(user("test")).with(csrf())).andExpect(status().is(code)).andReturn().getResponse().getContentAsString();}
     private String create(String key,Object value,int code)throws Exception{return perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(value)),code);}
     private UUID create(Definition d)throws Exception{return UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),request(d),201))).get("id"));}
+    private MockHttpServletRequestBuilder deviceRoutes(DeviceSession session,UUID run,int limit,int offset){
+        return post("/internal/v1/devices/"+session.deviceId()+"/sessions/"+session.id()+"/streams/routes")
+            .header("Authorization","Bearer "+deviceTokens.issue(session)).contentType("application/json")
+            .content(encode(Map.of("epoch",session.epoch(),"runId",run.toString(),"limit",limit,"offset",offset)));
+    }
     private Task task(UUID run,String name){return executions.tasks(run).stream().filter(t->t.key().equals(name)).findFirst().orElseThrow();}
     private TaskAttempt attempt(UUID run,String name){return executions.attempts(task(run,name).id()).getFirst();}
     private RuntimeLifecycleService.Assignment claim(UUID run,String name){var a=attempt(run,name);var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
@@ -224,6 +230,51 @@ class StreamRunIntegrationTest {
         assertThat(perform(get(path+"?limit=101"),400)).contains("INVALID_WORKFLOW");assertThat(perform(get("/api/v1/workflow-runs/"+UUID.randomUUID()+"/streams"),404)).contains("RUN_NOT_FOUND");
         claim(id,"source");claim(id,"sink");streams.prepare(id);
         String response=perform(get(path),200);assertThat(response).contains("PREPARING","SYNTHETIC","sourceSessionId","componentId").doesNotContain("password","mqtts://","Authorization","signedUrl");
+    }
+    @Test void deviceTokenDiscoversOnlyItsPinnedRoutesAndReadsPreparationWithoutRenewingAuthority()throws Exception{
+        var d=definition(false,false);UUID run=create(d);var session=deviceStore.activeSession(d.devices().getFirst().id()).orElseThrow();
+        var initial=mvc.perform(deviceRoutes(session,run,100,0)).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
+            .andExpect(jsonPath("$.apiVersion").value("edgeai.device-routes/v1")).andExpect(jsonPath("$.runId").value(run.toString()))
+            .andExpect(jsonPath("$.sessionId").value(session.id().toString())).andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].generation").isEmpty()).andExpect(jsonPath("$.nextOffset").isEmpty())
+            .andReturn().getResponse().getContentAsString();
+        assertThat(initial).doesNotContain("password","credential","token","mqtt","signedUrl",d.devices().get(1).id().toString());
+        assertThat(routes.forRun(run,20,0)).allMatch(r->routes.history(r.id(),20,0).isEmpty());
+        claim(run,"source");claim(run,"sink");streams.prepare(run);
+        var before=routes.forRun(run,20,0).stream().map(r->routes.history(r.id(),1,0).getFirst()).toList();
+        mvc.perform(deviceRoutes(session,run,100,0)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].generation.state").value("PREPARING"));
+        assertThat(routes.forRun(run,20,0).stream().map(r->routes.history(r.id(),1,0).getFirst()).toList()).isEqualTo(before);
+        var foreign=deviceStore.activeSession(device().id()).orElseThrow();
+        mvc.perform(deviceRoutes(foreign,run,100,0)).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("STREAM_DEVICE_RUN_NOT_FOUND"));
+        mvc.perform(deviceRoutes(session,UUID.randomUUID(),100,0)).andExpect(status().isNotFound());
+    }
+    @Test void deviceRoutePagesPreserveFanoutAndDoNotExposeOtherSources()throws Exception{
+        var source=device();var spec=service(List.of("input"),false,false);
+        var d=new Definition(version(Map.of("a",spec,"b",spec),List.of()),List.of(input(source,"a","input"),input(source,"b","input")),List.of(source));
+        UUID run=create(d);var session=deviceStore.activeSession(source.id()).orElseThrow();var found=new ArrayList<String>();
+        for(int offset=0;offset<2;offset++){
+            var page=(Map<?,?>)json.decode(mvc.perform(deviceRoutes(session,run,1,offset)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1)).andReturn().getResponse().getContentAsString());
+            found.add((String)((Map<?,?>)((List<?>)page.get("items")).getFirst()).get("routeId"));
+            assertThat(page.get("nextOffset")==null?null:page.get("nextOffset").toString()).isEqualTo(offset==0?"1":null);
+        }
+        assertThat(found).doesNotHaveDuplicates().isSorted();
+        mvc.perform(deviceRoutes(session,run,1,2)).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0)).andExpect(jsonPath("$.nextOffset").isEmpty());
+        for(int limit:List.of(0,101))mvc.perform(deviceRoutes(session,run,limit,0)).andExpect(status().isBadRequest());
+        mvc.perform(deviceRoutes(session,run,100,1000001)).andExpect(status().isBadRequest());
+    }
+    @Test void deviceRouteDiscoveryRejectsManagementIdentityAndRotatedOrForeignSession()throws Exception{
+        var d=definition(false,false);UUID run=create(d);var session=deviceStore.activeSession(d.devices().getFirst().id()).orElseThrow();
+        var path="/internal/v1/devices/"+session.deviceId()+"/sessions/"+session.id()+"/streams/routes";
+        mvc.perform(post(path).with(user("manager")).with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header("Authorization","Bearer "+deviceTokens.issue(session))).andExpect(status().isUnauthorized());
+        var wrong=encode(Map.of("epoch",session.epoch()+1,"runId",run.toString(),"limit",100,"offset",0));
+        mvc.perform(deviceRoutes(session,run,100,0).content(wrong)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("STREAM_DEVICE_SCOPE_CHANGED"));
+        devices.openSession(session.deviceId(),encode(Map.of("bootId",UUID.randomUUID().toString())));
+        mvc.perform(deviceRoutes(session,run,100,0)).andExpect(status().isUnauthorized());
+        var next=deviceStore.activeSession(session.deviceId()).orElseThrow();
+        mvc.perform(deviceRoutes(next,run,100,0)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("STREAM_DEVICE_SCOPE_CHANGED"));
     }
     @Test void provisioningAndDevicePinsAreImmutableAndCannotBeRetrofittedOntoBatchRuns()throws Exception{
         UUID id=create(definition(false,false));var pin=store.bindings(id).getFirst();

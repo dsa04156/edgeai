@@ -183,6 +183,13 @@ checkpoint_client=checkpoints, restore_latest=True)`를 사용하면 인증 late
 
 ## Device 송신과 소비 경로 전환
 
+Run 생성자가 전달한 `run_id`로 `client.device_routes(run_id, limit=100, offset=0)`를 호출하면
+현재 Device 세션에 고정된 경로와 최신 세대를 조회한다. `nextOffset`이 있으면 다음 페이지를
+읽는다. 준비 전 generation은null이며, 필요한 전체 경로가 ACTIVE인지 확인한 뒤 DeviceSource를
+연다. SDK가 실제 배정 API에서 전송 자격과 기한을 다시 확인하므로 조회 응답의 leaseUntil만으로
+송신하지 않는다. 종료된 Run/세대도 읽을 수 있고 이 호출은 lease를 연장하거나 journal을 바꾸지 않는다.
+세션을 교체하면 이전 Run을 승계할 수 없다. [조회 계약·검증](../docs/evidence/m7-device-route-discovery.md).
+
 `stream_source.DeviceSource`는 같은 Device Session의 `BindingClient`, Run과 generation ID 목록을
 받아 인증 배정·heartbeat·TLS MQTT·LOCAL 송신 journal을 관리한다. 0700 디렉터리를 준비하고
 처음에는 `create=True`, 같은 볼륨 재시작은 기본값으로 연다. `emit([Emission(route_id, payload,

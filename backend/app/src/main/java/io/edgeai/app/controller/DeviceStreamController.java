@@ -18,6 +18,8 @@ public class DeviceStreamController {
     public ResponseEntity<String> token(@PathVariable UUID deviceId,@PathVariable UUID sessionId,@RequestBody String body){return response(service().deviceToken(deviceId,sessionId,body));}
     @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams")
     public ResponseEntity<String> binding(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().device(principal,body));}
+    @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/routes")
+    public ResponseEntity<String> routes(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().deviceRoutes(principal,body));}
     @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/heartbeat")
     public ResponseEntity<String> heartbeat(@AuthenticationPrincipal DeviceStreamPrincipal principal,@RequestBody String body){return response(service().deviceHeartbeat(principal,body));}
     @PostMapping("/internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/complete")

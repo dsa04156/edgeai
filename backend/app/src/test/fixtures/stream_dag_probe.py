@@ -67,12 +67,21 @@ def main():
     routing = json.loads((folder / 'routing.json').read_bytes())
     with ExitStack() as stack:
         sources = {}
+        discovered_routes = {}
         for name, value in config['sources'].items():
             client = BindingClient(config['origin'], Producer('DEVICE_SESSION', value['sessionId'], value['epoch'], value['deviceId']),
                                    folder / (name + '.token'))
+            discovered = client.device_routes(config['runId'])
+            assert discovered['runState'] == 'RUNNING' and discovered['nextOffset'] is None
+            assert len(discovered['items']) == 1
+            route = discovered['items'][0]
+            discovered_routes[name] = route
+            assert route['routeId'] == routing['sources'][name]['routeId']
+            assert route['generation']['id'] == routing['sources'][name]['generationId']
+            assert route['generation']['state'] == 'ACTIVE' and route['sourceMode'] == 'SYNTHETIC'
             directory = folder / ('source-' + name)
             directory.mkdir(mode=0o700)
-            sources[name] = stack.enter_context(DeviceSource(client, config['runId'], [routing['sources'][name]['generationId']],
+            sources[name] = stack.enter_context(DeviceSource(client, config['runId'], [route['generation']['id']],
                                                              directory, create=True, timeout=100))
         checkpoints = {}
         for name in ('root', 'sink'):
@@ -95,7 +104,7 @@ def main():
 
         def emit(a, b):
             for name, number in (('a', a), ('b', b)):
-                sources[name].emit([Emission(routing['sources'][name]['routeId'], str(number).encode(), 'application/json')])
+                sources[name].emit([Emission(discovered_routes[name]['routeId'], str(number).encode(), 'application/json')])
 
         phase = 'FIRST_CHECKPOINT'
         emit(4, 5)
@@ -130,7 +139,7 @@ def main():
             # Root emits cumulative totals 9 and 14. Sink sums those to 23.
             wait(lambda: checkpointed({'root': 14, 'sink': 23}), step)
             for name, source in sources.items():
-                source.emit([Emission(routing['sources'][name]['routeId'], b'', None, 'END')])
+                source.emit([Emission(discovered_routes[name]['routeId'], b'', None, 'END')])
             phase = 'RESULTS'
             wait(lambda: set(children) == {'root', 'sink', 'report'} and all(p.poll() == 0 for p in children.values())
                  and all(s.completed for s in sources.values()), step)

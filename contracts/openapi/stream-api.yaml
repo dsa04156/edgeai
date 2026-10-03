@@ -3,7 +3,7 @@ info:
   title: EdgeAI authenticated stream bindings
   version: 0.1.0
   description: M7 내부 배정·생존 확인·체크포인트·공동 완료 계약. MQTT 비밀번호/세션 토큰·서명 URL은 로그·일반 metadata에 저장하지 않는다. SDK는
-    monotonic 기한을 적용한다. 공개 STREAM 실행은 후속 연결이다.
+    monotonic 기한을 적용한다. 공개 STREAM 실행은 별도 opt-in이며 기본 비활성이다.
 servers:
 - url: /
 paths:
@@ -13,7 +13,7 @@ paths:
       summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
       description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
         반환하고, 아직 준비 중이면 WAITING을 반환한다. 이미 공동 완료 허가가 있으면 경로 회수 후에도 FINALIZE와 확정 checkpointId·논리 route 포트를 반환한다. 이 경우 MQTT·계산을 다시 시작하지 않고 finalized 체크포인트 API로 최종 상태만 복구한다. READY의 recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
-        연장하지 않는다. 공개 STREAM Run 생성은 아직 비활성이다.
+        연장하지 않는다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이다.
       security:
       - runnerClaim: []
         podIdentity: []
@@ -508,6 +508,56 @@ paths:
           description: 요청 JSON 256KiB 초과
         '503':
           description: DB·Kubernetes·S3 일시 장애
+  /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/routes:
+    post:
+      operationId: discoverDeviceStreamRoutes
+      summary: 현재 Device 세션에 고정된 Run 경로·세대 조회
+      description: 현재 장치 세션 토큰으로 해당 Run에 고정된 본인 장치의 경로만 UUID 문자열 오름차순으로 조회한다. 세대 준비 전에는 generation이 null이며 준비·활성·닫힌
+        최신 세대의 메타데이터를 읽을 수 있다. MQTT 자격 증명이나 lease 사용 권한을 발급하지 않고 세대 생성·기한 갱신·journal 인계도 수행하지 않는다. SDK는 실제 전송 전에 streams
+        배정 API에서 현재 자격을 다시 확인해야 한다. Run을 만든 관리 클라이언트가 runId를 전달하며 장치가 전체 Run을 열람하는 API가 아니다. Run이 성공·실패·취소된 뒤에도 동일
+        현재 세션은 읽을 수 있다. 세션 교체 뒤 이전 Run의 고정 세션은 승계하지 않는다. 각 페이지는 읽기 시점의 일관된 스냅샷이며 페이지 간 세대 상태는 달라질 수 있다.
+      security:
+      - deviceSession: []
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRoutesRequest'
+      responses:
+        '200':
+          description: '본인 경로의 읽기 전용 메타데이터. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRoutesResponse'
+        '400':
+          description: 본문 필드·UUID·epoch·페이지 범위 오류
+        '401':
+          description: 현재 장치 세션 토큰 인증 실패. 관리 계정·Runner 토큰은 허용하지 않음
+        '404':
+          description: 해당 장치에 고정된 Run 경로가 없음. 존재하지 않는 Run과 다른 장치의 Run을 구분하지 않음
+        '409':
+          description: 요청 epoch 또는 Run에 고정된 장치 세션과 현재 세션이 다름
+        '413':
+          description: 본문 크기 제한 초과
+        '501':
+          description: 스트림 내부 기능 비활성
+        '503':
+          description: DB 일시 장애
 components:
   securitySchemes:
     deviceSession:
@@ -1113,3 +1163,154 @@ components:
           maximum: 9007199254740991
         assignment:
           $ref: '#/components/schemas/Binding'
+    DeviceRoutesRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - epoch
+      - runId
+      - limit
+      - offset
+      properties:
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        runId:
+          type: string
+          format: uuid
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+    DeviceRouteGeneration:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - number
+      - state
+      - leaseUntil
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        state:
+          enum:
+          - PREPARING
+          - ACTIVE
+          - FENCED
+          - CLOSED
+        leaseUntil:
+          type: string
+          format: date-time
+          description: 메타데이터 기준 시각. 이 값만으로 전송 권한을 얻을 수 없음
+    DeviceRouteMetadata:
+      type: object
+      additionalProperties: false
+      required:
+      - routeId
+      - sourcePort
+      - consumerTaskId
+      - consumerPort
+      - sourceMode
+      - mediaType
+      - maxPayloadBytes
+      - generation
+      properties:
+        routeId:
+          type: string
+          format: uuid
+        sourcePort:
+          type: string
+          minLength: 1
+          maxLength: 128
+        consumerTaskId:
+          type: string
+          format: uuid
+        consumerPort:
+          type: string
+          minLength: 1
+          maxLength: 128
+        sourceMode:
+          enum:
+          - LIVE
+          - REPLAY
+          - SYNTHETIC
+        mediaType:
+          type: string
+          maxLength: 127
+        maxPayloadBytes:
+          type: integer
+          minimum: 1
+          maximum: 262144
+        generation:
+          oneOf:
+          - $ref: '#/components/schemas/DeviceRouteGeneration'
+          - type: 'null'
+    DeviceRoutesResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - apiVersion
+      - runId
+      - runState
+      - deviceId
+      - sessionId
+      - epoch
+      - items
+      - limit
+      - offset
+      - nextOffset
+      properties:
+        apiVersion:
+          const: edgeai.device-routes/v1
+        runId:
+          type: string
+          format: uuid
+        runState:
+          enum:
+          - PENDING
+          - RUNNING
+          - CANCELLING
+          - CANCELLED
+          - FAILED
+          - SUCCEEDED
+        deviceId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        epoch:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/DeviceRouteMetadata'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        nextOffset:
+          oneOf:
+          - type: integer
+            minimum: 1
+            maximum: 1000000
+          - type: 'null'
+          description: 다음 페이지 시작 위치. 마지막 페이지는 null

@@ -199,6 +199,50 @@ class BindingClient:
         encoded, started = self._request(generation_id, timeout=timeout)
         return Assignment.decode(encoded, self.actor, generation_id, started)
 
+    def device_routes(self, run_id, *, limit=100, offset=0, timeout=5):
+        """Read only this pinned Device Session's route metadata, without granting authority.
+
+        A generation returned here still requires fetch() and a current lease.
+        Callers explicitly decide when to close a source and hand over its journal.
+        """
+        require(self.actor.kind == 'DEVICE_SESSION', 'Device route discovery requires a Device Session')
+        require(type(limit) is int and 1 <= limit <= 100 and type(offset) is int and 0 <= offset <= 1000000,
+                'Invalid device route page')
+        encoded, _ = self._request(run_id, operation='routes', page=(limit, offset), timeout=timeout)
+        try:
+            require(0 < len(encoded) <= MAX_RESPONSE, 'Invalid device route response')
+            value = json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+            require(type(value) is dict and set(value) == {'apiVersion', 'runId', 'runState', 'deviceId', 'sessionId',
+                    'epoch', 'items', 'limit', 'offset', 'nextOffset'}, 'Invalid device route response')
+            require(value['apiVersion'] == 'edgeai.device-routes/v1' and value['runId'] == run_id
+                    and value['deviceId'] == self.actor.device_id and value['sessionId'] == self.actor.id
+                    and type(value['epoch']) is int and value['epoch'] == self.actor.epoch, 'Foreign device route scope')
+            require(value['runState'] in ('PENDING', 'RUNNING', 'CANCELLING', 'CANCELLED', 'FAILED', 'SUCCEEDED'))
+            require(type(value['limit']) is int and value['limit'] == limit and type(value['offset']) is int and value['offset'] == offset)
+            require(type(value['items']) is list and len(value['items']) <= limit)
+            following = value['nextOffset']
+            require(following is None or type(following) is int and len(value['items']) == limit
+                    and following == offset + limit and following <= 1000000, 'Invalid next device route page')
+            identities = []
+            for row in value['items']:
+                require(type(row) is dict and set(row) == {'routeId', 'sourcePort', 'consumerTaskId', 'consumerPort',
+                        'sourceMode', 'mediaType', 'maxPayloadBytes', 'generation'})
+                _uuid(row['routeId']); _uuid(row['consumerTaskId']); identities.append(row['routeId'])
+                text(row['sourcePort'], 128); text(row['consumerPort'], 128)
+                require(row['sourceMode'] in ('LIVE', 'REPLAY', 'SYNTHETIC') and MEDIA_TYPE.fullmatch(text(row['mediaType'], 127)))
+                require(type(row['maxPayloadBytes']) is int and 1 <= row['maxPayloadBytes'] <= 262144)
+                generation = row['generation']
+                if generation is not None:
+                    require(type(generation) is dict and set(generation) == {'id', 'number', 'state', 'leaseUntil'})
+                    _uuid(generation['id'])
+                    require(type(generation['number']) is int and 1 <= generation['number'] <= 9007199254740991)
+                    require(generation['state'] in ('PREPARING', 'ACTIVE', 'FENCED', 'CLOSED'))
+                    instant(generation['leaseUntil'])
+            require(identities == sorted(set(identities)), 'Duplicate or unordered device routes')
+            return value
+        except (ValueError, TypeError, KeyError, OverflowError, RecursionError, StreamProtocolError):
+            raise AssignmentError('Invalid device route response') from None
+
     def heartbeat(self, generation_id, sequence, *, timeout=5):
         require(type(sequence) is int and 0 <= sequence <= 9007199254740991, 'Invalid stream heartbeat sequence')
         encoded, started = self._request(generation_id, sequence, timeout=timeout)
@@ -232,7 +276,7 @@ class BindingClient:
         except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
             raise AssignmentError('Invalid stream completion response') from None
 
-    def _request(self, generation_id, sequence=None, *, operation=None, timeout=5):
+    def _request(self, generation_id, sequence=None, *, operation=None, page=None, timeout=5):
         require(type(timeout) in (int, float) and .01 <= timeout <= 5, 'Invalid stream request timeout')
         try:
             _uuid(generation_id)
@@ -244,6 +288,10 @@ class BindingClient:
                 body['podUid'] = self.pod_uid
                 headers['X-EdgeAI-Pod-Token'] = _token(self.pod_token_file, 16384, projected=True)
             suffix = '/complete' if operation == 'complete' else '/heartbeat' if sequence is not None else ''
+            if operation == 'routes':
+                require(self.actor.kind == 'DEVICE_SESSION')
+                body = {'epoch': self.actor.epoch, 'runId': generation_id, 'limit': page[0], 'offset': page[1]}
+                suffix = '/routes'
             request = urllib.request.Request(self.url + suffix, data=json.dumps(body).encode(), headers=headers, method='POST')
             started = time.monotonic()
             with self.http.open(request, timeout=timeout) as response:

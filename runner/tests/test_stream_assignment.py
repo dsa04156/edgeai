@@ -63,6 +63,13 @@ class DiscoveryFixture:
 
 
 class StreamAssignmentTest(unittest.TestCase):
+    def routes(self):
+        return {'apiVersion':'edgeai.device-routes/v1','runId':POD,'runState':'RUNNING',
+                'deviceId':A.producer.device_id,'sessionId':A.producer.id,'epoch':A.producer.epoch,
+                'limit':100,'offset':0,'nextOffset':None,'items':[{'routeId':A.route_id,'sourcePort':'samples',
+                'consumerTaskId':OUT.producer.id,'consumerPort':'a','sourceMode':'SYNTHETIC','mediaType':'application/json',
+                'maxPayloadBytes':4096,'generation':{'id':GENERATION,'number':1,'state':'ACTIVE','leaseUntil':'2020-01-01T00:00:00Z'}}]}
+
     def decode(self, value, *, actor=A.producer, started=None, clock=time.monotonic):
         return Assignment.decode(json.dumps(value).encode(),actor,GENERATION,clock() if started is None else started,clock=clock)
 
@@ -131,6 +138,41 @@ class StreamAssignmentTest(unittest.TestCase):
         token.chmod(0o644)
         with self.assertRaises(AssignmentError):client.fetch(GENERATION)
         self.assertEqual(2,len(api.calls))
+
+    def test_device_routes_use_only_device_credentials_and_do_not_turn_metadata_into_a_lease(self):
+        value=self.routes();root,token,api=self.fixture(value)
+        client=BindingClient(api.url,A.producer,token,allow_http_loopback=True)
+        self.assertEqual(value,client.device_routes(POD))
+        path,headers,body=api.calls[-1]
+        self.assertTrue(path.endswith('/streams/routes'))
+        self.assertEqual({'epoch':A.producer.epoch,'runId':POD,'limit':100,'offset':0},body)
+        self.assertEqual('Bearer fixture-claim',headers['authorization'])
+        self.assertNotIn('x-edgeai-pod-token',headers)
+        # Expired/closed metadata is readable; only fetch() can grant current transport authority.
+        api.value['items'][0]['generation']['state']='CLOSED'
+        self.assertEqual('CLOSED',client.device_routes(POD)['items'][0]['generation']['state'])
+        api.value.update(limit=1,offset=1,nextOffset=2)
+        self.assertEqual(2,client.device_routes(POD,limit=1,offset=1)['nextOffset'])
+        api.value.update(items=[],offset=2,nextOffset=None)
+        self.assertEqual([],client.device_routes(POD,limit=1,offset=2)['items'])
+
+    def test_device_route_discovery_rejects_foreign_scope_ambiguous_pages_and_unexpected_credentials(self):
+        root,token,api=self.fixture(self.routes());client=BindingClient(api.url,A.producer,token,allow_http_loopback=True)
+        mutations=[lambda v:v.update(runId=GENERATION),lambda v:v.update(deviceId=POD),lambda v:v.update(sessionId=POD),
+            lambda v:v.update(epoch=True),lambda v:v.update(nextOffset=100),lambda v:v.update(offset=True),
+            lambda v:v['items'].append(v['items'][0]),lambda v:v['items'][0].update(mqtt={'password':'fixture-unexpected'}),
+            lambda v:v['items'][0].update(maxPayloadBytes=True),lambda v:v['items'][0]['generation'].update(number=0),
+            lambda v:v['items'][0]['generation'].update(state='UNKNOWN')]
+        for i,change in enumerate(mutations):
+            with self.subTest(case=i):
+                api.value=self.routes();change(api.value)
+                with self.assertRaises(AssignmentError):client.device_routes(POD)
+        for kwargs in ({'limit':True},{'offset':-1},{'limit':101},{'offset':1000001}):
+            with self.assertRaises(AssignmentError):client.device_routes(POD,**kwargs)
+        api.raw=b'{"runId":1,"runId":2}'
+        with self.assertRaises(AssignmentError):client.device_routes(POD)
+        api.raw=None;api.value=self.routes();api.cache='public'
+        with self.assertRaises(AssignmentError):client.device_routes(POD)
 
     def test_actual_runner_http_uses_rotating_projected_pod_identity(self):
         root,token,api=self.fixture(document(direction='CONSUMER',username='processor'))

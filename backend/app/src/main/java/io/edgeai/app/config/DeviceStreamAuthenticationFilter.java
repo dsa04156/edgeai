@@ -16,7 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 final class DeviceStreamAuthenticationFilter extends OncePerRequestFilter {
     private static final int LIMIT=16384;
-    private static final Pattern PATH=Pattern.compile("/internal/v1/devices/([a-fA-F0-9-]{36})/sessions/([a-fA-F0-9-]{36})/streams(?:/heartbeat|/complete)?");
+    private static final Pattern PATH=Pattern.compile("/internal/v1/devices/([a-fA-F0-9-]{36})/sessions/([a-fA-F0-9-]{36})/streams(?:/heartbeat|/complete|/routes)?");
     private final DeviceRepository devices;private final DeviceStreamTokenService tokens;
     DeviceStreamAuthenticationFilter(DeviceRepository devices,DeviceStreamTokenService tokens){this.devices=devices;this.tokens=tokens;}
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)throws ServletException,IOException {
