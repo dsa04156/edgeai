@@ -1,5 +1,6 @@
 package io.edgeai.app.service;
 
+import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.domain.execution.*;
 import io.edgeai.domain.repository.*;
 import io.edgeai.domain.stream.RouteGeneration;
@@ -22,7 +23,29 @@ public class StreamOffloadService {
         this.checkpoints=checkpoints;this.completions=completions;this.operations=operations;
     }
     public List<OffloadMember> plan(WorkflowRun run,UUID selected,UUID target,Instant now){
-        if(target==null || !streams.managed(run.id()))throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","스트리밍 체크포인트 전환은 공개 STREAM의 NODE 대상으로 요청하세요.");
+        if(target==null)throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","스트리밍 체크포인트 전환은 공개 STREAM의 NODE 대상으로 요청하세요.");
+        return plan(run,selected,target,List.of(),now);
+    }
+    public record AutomaticPlan(List<OffloadMember> members,Instant eligibleSince){
+        public AutomaticPlan{members=List.copyOf(members);}
+    }
+    /** An incomplete group/checkpoint is an ordinary deferred decision, with no writes or fencing. */
+    public Optional<AutomaticPlan> automaticPlan(WorkflowRun run,UUID selected,List<String> excluded,OffloadPolicy policy,Instant now){
+        if(excluded.isEmpty())throw new IllegalArgumentException("Automatic stream transfer requires excluded nodes");
+        try{
+            var members=plan(run,selected,null,excluded,now);Instant eligible=Instant.MIN;
+            for(var member:members){
+                var a=executions.attempt(member.sourceAttemptId()).orElseThrow();
+                var history=operations.forTask(member.taskId());
+                if(history.stream().filter(o->!o.trigger().equals("MANUAL")).count()>=policy.maxTransfers())return Optional.empty();
+                var warmup=a.updatedAt().plusSeconds(policy.minRunningSeconds());if(warmup.isAfter(eligible))eligible=warmup;
+                for(var operation:history){var cooldown=operation.updatedAt().plusSeconds(policy.cooldownSeconds());if(cooldown.isAfter(eligible))eligible=cooldown;}
+            }
+            return Optional.of(new AutomaticPlan(members,eligible));
+        }catch(ControlPlaneException unavailable){return Optional.empty();}
+    }
+    private List<OffloadMember> plan(WorkflowRun run,UUID selected,UUID target,List<String> excluded,Instant now){
+        if(!streams.managed(run.id()))throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","공개 STREAM 실행의 체크포인트 전환만 지원합니다.");
         var plan=streams.plan(run);var ids=plan.componentTasks(selected);var connected=plan.componentRoutes(selected);
         if(connected.isEmpty())throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","연결된 STREAM 그룹이 필요합니다.");
         var result=new ArrayList<OffloadMember>();var current=new HashMap<UUID,TaskAttempt>();
@@ -49,7 +72,7 @@ public class StreamOffloadService {
             if(!generations.equals(new HashSet<>(cp.request().generationIds())))
                 throw error(409,"STREAM_CHECKPOINT_STALE","현재 경로 세대의 체크포인트를 기다린 뒤 전환하세요.");
             result.add(new OffloadMember(task.id(),a.id(),null,cp.id(),task.id().equals(selected)?target:a.nodeId(),
-                task.id().equals(selected)?List.of():a.excludedNodeNames()));current.put(task.id(),a);
+                task.id().equals(selected)?excluded:a.excludedNodeNames()));current.put(task.id(),a);
         }
         if(result.stream().map(m->runtimes.byAttempt(m.sourceAttemptId()).orElseThrow().namespace()).distinct().count()!=1)
             throw error(409,"OFFLOAD_SOURCE_CHANGED","그룹 실행 namespace가 다릅니다.");

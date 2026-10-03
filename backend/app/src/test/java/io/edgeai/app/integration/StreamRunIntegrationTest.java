@@ -123,7 +123,7 @@ class StreamRunIntegrationTest {
         var offload=new TreeMap<String,Object>();offload.put("cpuPercent",80);offload.put("memoryPercent",null);offload.put("latencyMicros",null);
         offload.putAll(Map.of("consecutiveSamples",2,"maxSampleAgeSeconds",30,"maxGapSeconds",10,"minRunningSeconds",10,
             "cooldownSeconds",10,"maxTransfers",1,"drainTimeoutSeconds",30,"startTimeoutSeconds",30));
-        body.put("offload",offload);rejected(d,body,409);
+        body.put("offload",offload);create(UUID.randomUUID().toString(),body,201);
     }
     private void finishPhysical(UUID run,String name){
         var a=attempt(run,name);var r=runtimes.byAttempt(a.id()).orElseThrow();

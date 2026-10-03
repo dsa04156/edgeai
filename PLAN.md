@@ -18,14 +18,21 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0052/V28에서 공개 STREAM 자동 전환을 연결한다. 모든 구성원의 체크포인트·대기 시간·
+전환 예산을 확인하고 선택 작업만 방문 노드를 제외한 AUTO로 옮긴다. Runner 측정도 스트리밍
+계산부터 최종 처리까지 이어간다. 실제 PG206·Runner111·TLS MQTT90·서버8·UI40을 로컬
+검증했다. Pod 신원/배치와 서비스 지연 입력은 서버 시험의 fixture이며 실제 Kubernetes
+자원 부하에 따른 자동 전환·새 이미지 CI/배포는 다음 게이트다.
+[자동 전환 근거](docs/evidence/m7-stream-automatic-offload.md).
 ADR0051/V27의 공개 STREAM 그룹 노드 전환을 연결했다. 전체 종료/회수 장벽·고정 체크포인트,
 같은 Task/새 OFFLOAD Attempt와 실제 독립 Runner의 상태 인계를 로컬 검증했다.
 전체 PG197·실서버7·단위105·UI40 및 계약 검증을 통과했다. 실제 Kubernetes의 다른 노드 전환·
 대기 중 API 재시작/재전송·취소·늦은 producer 차단도 검증했다. 기존 장애 복구를 포함한 전체7개,
 실제 Runner Pod24개·고정 S3파일15개 PASS다. d3797d6 CI37137184323의5jobs/17JSON과
 GitOps4263ecb 실제 이미지·V27 배포/기존 데이터 보존, 완성 이미지의 새 전환2개도 통과했다.
-새7개 기본 게이트의 CI 수용은
-[전환 근거](docs/evidence/m7-stream-group-offload.md)의 다음 범위다.
+983ef6d의 CI37139978354도7개 기본 게이트·24Pods/S315·5jobs/17JSON을 통과했고,
+GitOps2f11f3e의 정확한 이미지·Ready/PVC·ArgoSynced·기존 파일 보존을 확인했다.
+상세는 [전환 근거](docs/evidence/m7-stream-group-offload.md)를 따른다.
 ADR0047에서 공개 Run의 retry 정책을 그룹/최종 처리 복구에 연결했다. 공개 API·실서버6개·
 PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과했다. 새 CI/배포를 확인한다.
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).

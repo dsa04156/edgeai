@@ -95,8 +95,14 @@ class StreamSourceCompletionIntegrationTest {
     private void secret(Path folder,String name,String value)throws Exception{var file=folder.resolve(name);Files.writeString(file,value);
         Files.setPosixFilePermissions(file,PosixFilePermissions.fromString("rw-------"));}
     private WorkflowRun publicRun(UUID version,List<Object> inputs,boolean retry)throws Exception{
+        return publicRun(version,inputs,retry,false);
+    }
+    private WorkflowRun publicRun(UUID version,List<Object> inputs,boolean retry,boolean automatic)throws Exception{
         var body=new TreeMap<String,Object>(Map.of("workflowVersionId",version.toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs));
         if(retry)body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        if(automatic){var policy=new TreeMap<String,Object>(Map.of("latencyMicros",1000,"consecutiveSamples",2,"maxSampleAgeSeconds",30,
+            "maxGapSeconds",10,"minRunningSeconds",10,"cooldownSeconds",20,"maxTransfers",1,"drainTimeoutSeconds",60,"startTimeoutSeconds",60));
+            policy.put("cpuPercent",null);policy.put("memoryPercent",null);body.put("offload",policy);}
         var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
             .contentType("application/json").content(json.canonical(body)))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -208,6 +214,7 @@ class StreamSourceCompletionIntegrationTest {
         String python=System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3");
         spec.put("command",List.of(python,Path.of("../../runner/examples/"+(name.equals("report")?"stream_report":"stream_result")+".py").toAbsolutePath().normalize().toString()));
         if(name.equals("report")){
+            spec.put("recovery",Map.of("mode","RESTART"));
             var input=Map.of("mediaType","application/json","maxBytes",1048576,"required",true);
             spec.put("inputs",Map.of("root",input,"sink",input));
             spec.put("outputs",Map.of("report",Map.of("mediaType","application/json","maxBytes",1048576)));
@@ -224,7 +231,7 @@ class StreamSourceCompletionIntegrationTest {
     private Map<String,Object> edge(String from,String to,String output,String input,String mode){
         return Map.of("fromTask",from,"toTask",to,"fromPort",output,"toPort",input,"mode",mode);
     }
-    private DagExecution dagFixture(boolean cancel,boolean recovery)throws Exception{
+    private DagExecution dagFixture(boolean cancel,boolean recovery,boolean automatic)throws Exception{
         var folder=Files.createDirectory(BROKER.root.resolve("dag-"+UUID.randomUUID()));Files.setPosixFilePermissions(folder,PosixFilePermissions.fromString("rwx------"));
         var definitions=new ArrayList<Object>();
         for(String name:List.of("root","sink","report"))definitions.add(Map.of("key",name,"serviceProfileVersionId",dagService(name).toString(),
@@ -241,11 +248,11 @@ class StreamSourceCompletionIntegrationTest {
             sources.put(name,Map.of("deviceId",device.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch()));
             inputs.add(Map.of("deviceId",device.id().toString(),"sourcePort","samples","toTask","root","toPort",name,"maxPayloadBytes",4096));
         }
-        UUID id=publicRun(version.id(),inputs,recovery).id();
+        UUID id=publicRun(version.id(),inputs,recovery,automatic).id();
         runIds.add(id);
         var tasks=new TreeMap<String,UUID>();executions.tasks(id).forEach(t->tasks.put(t.key(),t.id()));
         assertThat(executions.attempts(tasks.get("report"))).isEmpty();
-        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",id.toString(),"mode",recovery?"recover":cancel?"cancel":"complete","sources",sources)));
+        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",id.toString(),"mode",recovery?"recover":cancel?"cancel":"complete","sources",sources,"automatic",automatic)));
         return new DagExecution(id,tasks,folder);
     }
     private void publish(Path folder,String name,Object value)throws Exception{
@@ -263,6 +270,9 @@ class StreamSourceCompletionIntegrationTest {
             if(entry.getKey().equals("report"))for(String parent:List.of("root","sink"))assertThat(runtimes.result(e.tasks().get(parent))).isPresent();
             Files.createDirectory(folder);Files.setPosixFilePermissions(folder,PosixFilePermissions.fromString("rwx------"));
             var node=attempt.nodeId()==null?null:nodeStore.find(attempt.nodeId()).orElseThrow();
+            // Explicit scheduler fixture; the Runner's HTTPS claim/telemetry/checkpoints are real.
+            if(!attempt.excludedNodeNames().isEmpty())node=nodeStore.list(1000,0).stream()
+                .filter(n->n.status(Instant.now()).equals("READY") && !attempt.excludedNodeNames().contains(n.name())).findFirst().orElseThrow();
             var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),node==null?UUID.randomUUID():node.id(),node==null?"fixture-node":node.name());pods.put(attempt.id(),pod);
             lifecycle.submitted(attempt.id(),pod.jobUid()); // The actual Runner performs the HTTP claim.
             secret(folder,"claim",tokens.issue(runtimes.byAttempt(attempt.id()).orElseThrow()));secret(folder,"pod","source-pod-proof");
@@ -285,7 +295,10 @@ class StreamSourceCompletionIntegrationTest {
         dagProbe(cancel,recovery,false);
     }
     private void dagProbe(boolean cancel,boolean recovery,boolean offload)throws Exception{
-        var e=dagFixture(cancel,recovery);provision(e);
+        dagProbe(cancel,recovery,offload,false);
+    }
+    private void dagProbe(boolean cancel,boolean recovery,boolean offload,boolean automatic)throws Exception{
+        var e=dagFixture(cancel,recovery,automatic);provision(e);
         var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/stream_dag_probe.py",e.folder().toString())
             .redirectOutput(e.folder().resolve("probe.log").toFile()).redirectError(e.folder().resolve("probe-error.log").toFile());
         builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));var child=builder.start();
@@ -297,14 +310,22 @@ class StreamSourceCompletionIntegrationTest {
                 provision(e);
                 if(recovery && !failed && Files.exists(e.folder().resolve("recovery-request"))){
                     if(offload){
-                        target=UUID.randomUUID();nodes.recordSnapshot(List.of(new io.edgeai.domain.node.ExecutionNode(target,"transfer-"+target,
-                            "amd64","linux","READY","4","4Gi","{}",Instant.now())),Instant.now());
+                        if(target==null){target=UUID.randomUUID();nodes.recordSnapshot(List.of(new io.edgeai.domain.node.ExecutionNode(target,"transfer-"+target,
+                            "amd64","linux","READY","4","4Gi","{}",Instant.now())),Instant.now());}
+                        if(automatic){
+                            var decision=offloads.evaluate(e.tasks().get("root"),BUCKET);
+                            if(decision.isEmpty()){Thread.sleep(20);continue;}
+                            operation=decision.get().id();assertThat(decision.get().trigger()).isEqualTo("LATENCY");
+                            assertThat(decision.get().excludedNodeNames()).containsExactly("fixture-node");
+                            assertThat(decision.get().decisionJson()).contains("1200","WORKLOAD","eligibleSince");
+                        }else{
                         var a=executions.attempts(e.tasks().get("root")).getFirst();
                         var response=mvc.perform(post("/api/v1/tasks/"+e.tasks().get("root")+"/offload").with(user("test")).with(csrf())
                             .header("Idempotency-Key",UUID.randomUUID().toString()).contentType("application/json")
                             .content(json.canonical(Map.of("sourceAttemptId",a.id().toString(),"targetNodeId",target.toString(),"drainTimeoutSeconds",60,"startTimeoutSeconds",60))))
                             .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
                         operation=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));
+                        }
                     }else lifecycle.observeFailure(executions.attempts(e.tasks().get("sink")).getFirst().id(),"RUNTIME_LOST");
                     failed=true;
                     // The Run fence has committed: a concurrent old publisher can no longer advance this snapshot.
@@ -404,6 +425,7 @@ class StreamSourceCompletionIntegrationTest {
     @Test void cancellingLiveSinkStopsIndependentStreamRunnersAndNeverReleasesBatch()throws Exception{dagProbe(true);}
     @Test void realGroupRetryAutomaticallyReconnectsSameDeviceOwnersAndRestoresBothRunners()throws Exception{dagProbe(false,true);}
     @Test void publicNodeOffloadRestoresActualGroupCheckpointsAndReconnectsSameDeviceOwners()throws Exception{dagProbe(false,true,true);}
+    @Test void runnerMeasurementsAutomaticallyTransferActualGroupStateAndReconnectSameDeviceOwners()throws Exception{dagProbe(false,true,true,true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
         while(!condition.getAsBoolean() && System.nanoTime()<end)Thread.sleep(20);assertThat(condition.getAsBoolean()).as("Actual stream completion boundary reached").isTrue();}
 }

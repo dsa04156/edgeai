@@ -13,7 +13,7 @@ paths:
       summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
       description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
         반환하고, 아직 준비 중이면 WAITING을 반환한다. 이미 공동 완료 허가가 있으면 경로 회수 후에도 FINALIZE와 확정 checkpointId·논리 route 포트를 반환한다. 이 경우 MQTT·계산을 다시 시작하지 않고 finalized 체크포인트 API로 최종 상태만 복구한다. READY의 recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
-        연장하지 않는다. 명시적인 최종 처리 재시도는 이전 실행의 물리 종료와 경로 회수 후에만 배정되며 checkpointActor로 원본 체크포인트 실행 주체를 표시한다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이고 공개 retry 정책은 아직 지원하지 않는다.
+        연장하지 않는다. 명시적인 최종 처리 재시도는 이전 실행의 물리 종료와 경로 회수 후에만 배정되며 checkpointActor로 원본 체크포인트 실행 주체를 표시한다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이다. 공개 retry 및 자동 offload의 그룹 복구 조건은 관리 API의 Run 정책을 따른다.
       security:
       - runnerClaim: []
         podIdentity: []

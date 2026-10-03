@@ -79,11 +79,13 @@ public class RuntimeLifecycleService {
     }
 
     @Transactional(readOnly=true)
-    public void validateAutomaticOffload(UUID versionId) {
-        validateDag(versionId);
-        for(var definition:workflows.definitions(versionId))
-            if(!ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson()).recoveryMode().equals("RESTART"))
-                throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","자동 전환은 모든 SERVICE가 recovery.mode=RESTART를 선언해야 합니다.");
+    public void validateAutomaticOffload(UUID versionId,boolean stream) {
+        validateDag(versionId,stream);
+        for(var definition:workflows.definitions(versionId)){
+            var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
+            if(!spec.recoveryMode().equals("RESTART") && !(stream && spec.stream()!=null && spec.recoveryMode().equals("CHECKPOINT")))
+                throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","자동 전환은 일반 SERVICE의 RESTART 또는 STREAM의 CHECKPOINT 복구 선언이 필요합니다.");
+        }
     }
 
     @Transactional

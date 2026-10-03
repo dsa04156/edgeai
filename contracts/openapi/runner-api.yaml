@@ -172,6 +172,7 @@ paths:
         sequence/observedAt은 증가해야 하며 동일 sequence/동일 내용만 재전송할 수 있습니다.
         관측은 서버 시각 기준 과거60초·미래5초 이내입니다. 최신64개만 보관합니다.
         Run 잠금 안에서 현재 producer를 확인하며 취소·전환·완료 후 보고를 거절합니다.
+        STREAM 계산부터 최종 파일 처리까지 같은 Attempt의 표본 sequence를 이어갑니다.
       parameters:
       - name: attemptId
         in: path

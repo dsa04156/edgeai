@@ -211,8 +211,9 @@ Remote 활성화·제공자·파일 설정은 [Remote 실행 문서](docs/remote
 활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.
 Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허용 기간·오류를 지정합니다.
 재시도는 같은 Task에서 새 Attempt/epoch를 만들며 상세 계약은 Swagger RetryPolicy를 따릅니다.
-실행 중인 작업을 선택하면 **실행 위치 전환**에서 NODE 또는 Remote를 요청할 수 있습니다. SERVICE에
-`recovery.mode=RESTART`가 선언되어야 하며, 이전 실행을 종료한 뒤 고정 입력으로 다시 시작합니다.
+실행 중인 작업을 선택하면 **실행 위치 전환**에서 NODE 또는 Remote를 요청할 수 있습니다. 일반 SERVICE는
+`recovery.mode=RESTART`를 선언하고 이전 실행 종료 뒤 고정 입력으로 다시 시작합니다. CHECKPOINT
+STREAM은 NODE 전환을 지원하며 연결된 그룹 전체가 외부 체크포인트에서 재개합니다.
 전환 상태는 Task 상세와 `GET /api/v1/operations/{operationId}`에서 확인합니다.
 전환 성공은 새 실행 시작을 의미하며 결과 성공은 별도로 확인합니다([ADR 0007](docs/adr/0007-running-offload.md)).
 최신 Runner의 측정은 선택한 작업의 **실행 측정**에서 확인합니다. CPU·메모리의 제한이 없거나 측정하지
@@ -223,7 +224,7 @@ STREAM은 기본 비활성501이며 운영 broker·TLS·runtime·bindings를 설
 활성 세션은 Run에 고정되며 같은 그룹은 모든 BATCH 선행 결과를 받은 뒤 함께 배정됩니다.
 AUTO/NODE에서 선택적인 `retry`를 설정하면 계산 중에는 연결된 그룹 전체를 재시도하고,
 완료 허가 뒤에는 실패한 작업의 최종 처리만 복구합니다. 장치는 같은 세션·송신 볼륨을 유지해야 합니다.
-최대 횟수는 최초 실행을 포함하며 전환·REMOTE/VD는 아직 거절합니다.
+최대 재시도 횟수는 최초 실행을 포함합니다. STREAM의 REMOTE/VD 실행은 아직 거절합니다.
 [공개 재시도 계약과 검증 범위](docs/evidence/m7-public-stream-retry.md)를 확인하세요.
 실행 상세의 **스트림 경로 조회**로 실제 경로·고정 세션·출처·세대 상태를 확인합니다.
 연결 ACTIVE와 작업/Result 성공은 별도 상태입니다([ADR0041](docs/adr/0041-public-stream-runs.md)).
@@ -241,10 +242,13 @@ AUTO/NODE에서 선택적인 `retry`를 설정하면 계산 중에는 연결된 
 로컬 개발용 인증·MQTT 설정은 운영 배포 구성이 아닙니다. 운영 identity/RBAC/TLS 및 실제 장비 검증은 후속 단계입니다.
 
 자동 전환은 Run 생성의 선택적인 `offload` 정책으로 켭니다. Workflow 화면에서도 CPU/메모리 사용률·
-서비스 지연 기준과 연속 표본·대기 시간·전환 한도를 설정할 수 있습니다. 재시작 가능한 SERVICE만
-허용하며 최초 NODE 지정 이후에도 다른 호환 노드로 이동할 수 있습니다. 이전 노드를 제외하고
+서비스 지연 기준과 연속 표본·대기 시간·전환 한도를 설정할 수 있습니다. 일반 작업은 RESTART,
+STREAM 작업은 CHECKPOINT 선언이 필요합니다. 최초 NODE 지정 이후에도 다른 호환 노드로 이동할 수 있습니다. 이전 노드를 제외하고
 Kubernetes가 새 위치를 선택합니다. 작업 상세에서 결정에 쓴 정책·측정과 전환 이력을 확인합니다.
 미수집·오래된·누락 표본은 판단에 쓰지 않습니다. [ADR0009](docs/adr/0009-automatic-offload-policy.md).
+STREAM 자동 전환은 모든 구성원의 현재 체크포인트·대기 시간·전환 예산을 확인합니다. 함께 재개하는
+작업도 횟수를 사용하며 선택된 작업 외의 배치 정책은 유지합니다. 새 기능의 로컬/실제 Kubernetes
+검증 범위는 [ADR0052와 실행 근거](docs/evidence/m7-stream-automatic-offload.md)를 확인하세요.
 
 
 ## 가상 장치 등록·원본 연결·실행 (M6)

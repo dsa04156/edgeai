@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from edgeai_runner.telemetry import Sampler, own_cgroup
 
@@ -139,8 +140,11 @@ class Runner:
         self.http = urllib.request.build_opener(NoRedirect())
         self.deadline = time.monotonic() + 30
         self.identity = {"epoch": self.epoch, "podUid": self.pod}
+        self.fenced_metrics = threading.Event()
 
     def timeout(self, maximum=15):
+        if self.fenced_metrics.is_set():
+            raise RunnerError("FENCED")
         if cancelled.is_set():
             raise RunnerError("CANCELLED")
         remaining = self.deadline - time.monotonic()
@@ -229,34 +233,12 @@ class Runner:
         if state_file is not None:
             env['EDGEAI_STATE_FILE'] = str(state_file)
         process = None
-        stop_metrics, fenced_metrics = threading.Event(), threading.Event()
-        metrics_thread = None
-        def measurements(interval):
-            sampler = Sampler(self.work, own_cgroup())
-            while not stop_metrics.wait(interval):
-                try:
-                    sample = sampler.sample()
-                    if sample is not None:
-                        self.api("telemetry", {**self.identity, **sample}, max_attempts=1, request_timeout=2)
-                except RunnerError as error:
-                    if error.code == "FENCED":
-                        fenced_metrics.set()
-                        return
-                except Exception:
-                    # Optional measurement must not replace the workload's result/failure path.
-                    pass
         try:
             supervised = os.environ.get("EDGEAI_VD_SUPERVISED") == "true"
             process = subprocess.Popen(command, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=not supervised,
                 process_group=0 if supervised else None)
-            if "telemetry" in assignment:
-                interval = integer(assignment["telemetry"]["intervalSeconds"], 1, 60)
-                metrics_thread = threading.Thread(target=measurements, args=(interval,), daemon=True)
-                metrics_thread.start()
             while process.poll() is None:
-                if fenced_metrics.is_set():
-                    raise RunnerError("FENCED")
                 self.timeout()
                 cancelled.wait(0.05)
             if process.returncode != 0:
@@ -264,7 +246,6 @@ class Runner:
         except OSError:
             raise RunnerError("WORKLOAD_FAILED") from None
         finally:
-            stop_metrics.set()
             if process is not None:
                 try:
                     os.killpg(process.pid, signal.SIGTERM)
@@ -280,6 +261,35 @@ class Runner:
                 except ProcessLookupError:
                     pass
                 process.wait()
+
+    @contextmanager
+    def measurements(self, assignment):
+        """One sequence spans stream calculation and finalization for this Attempt."""
+        stop_metrics = threading.Event()
+        metrics_thread = None
+        def measurements(interval):
+            sampler = Sampler(self.work, own_cgroup())
+            while not stop_metrics.wait(interval):
+                try:
+                    sample = sampler.sample()
+                    if sample is not None:
+                        self.api("telemetry", {**self.identity, **sample}, max_attempts=1, request_timeout=2)
+                except RunnerError as error:
+                    if error.code == "FENCED":
+                        self.fenced_metrics.set()
+                        return
+                except Exception:
+                    # Optional measurement must not replace the workload's result/failure path.
+                    pass
+        try:
+            if "telemetry" in assignment:
+                interval = integer(assignment["telemetry"]["intervalSeconds"], 1, 60)
+                metrics_thread = threading.Thread(target=measurements, args=(interval,), daemon=True)
+                metrics_thread.start()
+            yield
+            self.timeout()
+        finally:
+            stop_metrics.set()
             if metrics_thread is not None:
                 metrics_thread.join(timeout=3)
 
@@ -348,16 +358,17 @@ class Runner:
         fd = os.open(self.work / "outputs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             print("RUNNER_WORKLOAD_START", flush=True)
-            state_file = None
-            if 'stream' in assignment:
-                from edgeai_runner.stream_execution import execute
-                try:
-                    state_file = execute(self, assignment)
-                except Exception:
-                    # Preserve cancellation/deadline disposition across SDK layers.
-                    self.timeout()
-                    raise
-            self.workload(assignment, state_file=state_file)
+            with self.measurements(assignment):
+                state_file = None
+                if 'stream' in assignment:
+                    from edgeai_runner.stream_execution import execute
+                    try:
+                        state_file = execute(self, assignment)
+                    except Exception:
+                        # Preserve cancellation/deadline disposition across SDK layers.
+                        self.timeout()
+                        raise
+                self.workload(assignment, state_file=state_file)
             committed = []
             for manifest, stream in self.outputs(assignment, fd):
                 grants = self.api("uploads", {**self.identity, "outputs": [manifest]})["outputs"]

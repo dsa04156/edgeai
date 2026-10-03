@@ -13,6 +13,7 @@ import threading
 import time
 import unittest
 import uuid
+from datetime import datetime, timezone
 
 from test_stream_mqtt import Broker
 from test_stream_session import SessionApi, A, B, OUT, POD, INPUTS, OUTPUTS
@@ -34,6 +35,7 @@ class StreamExecutionTest(unittest.TestCase):
         self.hold_grant=False;self.granted=threading.Event();self.release_grant=threading.Event()
         self.finalized_calls=0;self.finalized_status=None;self.reject_during_download=False;self.swap_final_routes=False
         self.checkpoint_actor=None
+        self.telemetry=[];self.telemetry_status=200;self.metric_sequence=0
         profile = json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
         self.spec = profile['stream']; self.spec['command'] = [sys.executable,str(ROOT/'runner/examples/stream_sum.py')]
         self.spec['limits']['maxFrames'] = 12
@@ -57,7 +59,7 @@ class StreamExecutionTest(unittest.TestCase):
                     if not valid or not owner.finalize or owner.finalized_status:return self.reply(owner.finalized_status or 409,{})
                     return self.reply(200,{'checkpoint':latest,'download':{'url':owner.api.url+'/checkpoint-object?versionId='+latest['versionId'],
                         'expiresAt':latest['createdAt']}})
-                if self.path.rsplit('/',1)[1] not in ('claim','execution','complete','uploads','commit','fail') or '/checkpoints/' in self.path:
+                if self.path.rsplit('/',1)[1] not in ('claim','execution','complete','uploads','commit','fail','telemetry') or '/checkpoints/' in self.path:
                     return super().do_POST()
                 data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if self.headers.get('Authorization') != 'Bearer fixture-claim' or self.headers.get('X-EdgeAI-Pod-Token') != 'fixture-pod':
@@ -66,6 +68,9 @@ class StreamExecutionTest(unittest.TestCase):
                     return self.reply(409,{})
                 operation=self.path.rsplit('/',1)[1]
                 if operation=='claim':return self.reply(200,owner.assignment)
+                if operation=='telemetry':
+                    owner.telemetry.append((data,(owner.root/'work/stream-state').exists()))
+                    return self.reply(owner.telemetry_status,{'sequence':data['sequence']})
                 if operation=='execution':
                     owner.execution_calls+=1
                     if owner.recovery=='FINALIZE':
@@ -162,6 +167,43 @@ class StreamExecutionTest(unittest.TestCase):
         out,err=self.process.communicate();self.assertEqual(0 if success else 1,self.process.returncode,(out,err))
         self.assertEqual(b'',err)
         for secret in (b'fixture-claim',b'fixture-pod',b'stateBase64'):self.assertNotIn(secret,out)
+
+    def measured(self, predicate):
+        # Controlled workload metric file; the real Runner reads and transmits it over HTTPS.
+        # Actual cgroup resource limits and placement require the Kubernetes acceptance gate.
+        self.metric_sequence+=1
+        temporary=self.root/'work/telemetry.tmp'
+        temporary.write_text(json.dumps({'sequence':self.metric_sequence,'observedAt':datetime.now(timezone.utc).isoformat(),'latencyMicros':1200}))
+        temporary.replace(self.root/'work/telemetry.json')
+        return predicate()
+
+    def test_measurements_span_live_stream_and_finalization_with_one_sequence(self):
+        self.assignment['telemetry']={'intervalSeconds':1}
+        self.assignment['command']=[sys.executable,'-c',
+            'import time,runpy;time.sleep(2.2);runpy.run_path('+repr(str(ROOT/'runner/examples/stream_result.py'))+',run_name="__main__")']
+        self.start()
+        self.until(lambda:self.measured(lambda:len(self.telemetry)>=2))
+        self.assertTrue(all(not final for _,final in self.telemetry));self.assertIsNone(self.artifact)
+        self.emit();self.until(lambda:self.measured(lambda:self.complete_calls>0))
+        self.finalize=True
+        self.until(lambda:self.measured(lambda:self.process.poll() is not None));self.finish(True)
+        self.assertTrue(any(final for _,final in self.telemetry))
+        sequences=[sample['sequence'] for sample,_ in self.telemetry]
+        self.assertEqual(list(range(1,len(sequences)+1)),sequences)
+        self.assertTrue(all(sample['latencyMicros']==1200 for sample,_ in self.telemetry))
+        self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
+
+    def test_stream_measurement_fence_stops_calculation_without_result(self):
+        self.assignment['telemetry']={'intervalSeconds':1};self.telemetry_status=401
+        self.start();self.until(lambda:self.measured(lambda:self.process.poll() is not None));self.finish(False)
+        self.assertTrue(self.telemetry);self.assertIsNone(self.artifact);self.assertEqual([],self.commits)
+        self.assertIsNone(self.failure)
+
+    def test_unavailable_measurement_endpoint_does_not_fail_stream_result(self):
+        self.assignment['telemetry']={'intervalSeconds':1};self.telemetry_status=503
+        self.start();self.until(lambda:self.measured(lambda:len(self.telemetry)>=2))
+        self.emit();self.finalize=True;self.finish(True)
+        self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
 
     def test_real_runner_waits_for_sealed_last_ack_and_server_barrier_then_writes_artifact(self):
         self.consume=False;self.start();self.emit()

@@ -1,6 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0052/V28 STREAM 자동 전환: 공개 opt-in·그룹 전체 체크포인트/대기/예산과 현재 producer
+검증, 선택 작업 AUTO/방문 노드 제외·peer 배치 유지, 판단 근거와 불변 그룹 계획을 연결했다.
+Runner 측정이 스트리밍 계산부터 최종 처리까지 같은 sequence로 이어진다. 최종 PG206,
+Runner111·TLS MQTT90·실제 서버8/전체 저장소38·단위105·UI40·계약/MVC26 PASS. 서버 시험의 Pod 배치·신원·종료 및 지연 입력은
+명시적 fixture다. 실제 Kubernetes 부하→자동 전환·새 이미지 CI/배포는 후속이다.
+docs/evidence/m7-stream-automatic-offload.md. M5 잔여/M7–M10 전체 미완료 유지.
+
+선행983ef6d CI37139978354는5jobs/원시JSON17개·STREAM7/24Pods/S315와 기존kind22Run,
+VD4·영속TLS·배포데모까지 PASS(175446Z-e64ecd31). GitOps2f11f3e의 정확한3imageID,
+Ready/PVCBound/ArgoSynced(175428Z-8b049df9)와 기존10파일/두PVC(175446Z-4cbb74fc) 보존도 확인했다.
+Argo aggregate health의 기존 공유Ingress Progressing은 유지한다.
+
+아래는 수동 그룹 전환 검증 이력이다.
 ADR0051/V27 STREAM 그룹 NODE 전환: 전체 경로/producer 차단→전체 종료/회수→새 OFFLOAD
 Attempt·checkpoint 인계, peer 기존 AUTO/NODE 유지·그룹 claim 성공을 구현했다. 실제 DB197·
 독립 Runner/서버7·실제 저장소37·단위105·UI40·계약·실API/Swagger PC모바일10·DB 장애/복구 PASS.

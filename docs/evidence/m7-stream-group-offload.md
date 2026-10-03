@@ -2,6 +2,14 @@
 
 2026-10-04 KST. [ADR0051](../adr/0051-stream-group-offload.md), V27.
 
+후속983ef6d의 CI37139978354도 성공했다. `20261003T175446Z-e64ecd31`에서5jobs와
+원시JSON17개·PG197·Runner111/MQTT87, 실제 kind의 새7개 STREAM/24Pods/S315를
+확인했다. 기존22Run/S320·VD4/S35·영속 broker 새 Pod/동일PVC·TLS MinIO·배포 데모3개/
+8Pods/S36도 통과했고 소유 kind `edgeai-ci-8c4b60d23a8c`만 삭제됐다.
+GitOps2f11f3e의 정확한 API/dashboard/MinIO imageID·Ready·PVCBound·ArgoSynced는
+`20261003T175428Z-8b049df9`, 기존10파일/두PVC 보존은`20261003T175446Z-4cbb74fc`다.
+아래 기록의 새7개 CI 대기는 이 결과로 해소했다. 자동 전환은 [별도 근거](m7-stream-automatic-offload.md)를 따른다.
+
 | 검사 | 실행 ID | 결과 |
 |---|---|---|
 | 공개 STREAM·기존 Offload 실제 PostgreSQL | 20261003T161217Z-cbb7d359 | 45개, 실패/오류/skip0 |

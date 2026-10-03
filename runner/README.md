@@ -56,8 +56,10 @@ claim 응답의 telemetry.intervalSeconds가 있을 때 Runner는 실행 중 cgr
 메모리 사용량·제한을 읽어 내부 telemetry API로 보낸다. CPU/메모리 통계는 Runner와 workload가
 속한 cgroup의 값이다. cgroup 미지원·측정 불가·무제한 quota는 null이며 Node 잔여량이나 GPU/NPU
 사용량으로 해석하지 않는다. 프로덕션 sampler는 자기 cgroup membership을 해석하고 host root로 대체하지 않는다.
+STREAM도 계산 시작부터 최종 파일 생성까지 측정하며 한 Attempt의 표본 sequence를 이어간다.
+측정 권한이 차단되면 스트리밍 계산도 종료한다. [STREAM 자동 전환 검증 범위](../docs/evidence/m7-stream-automatic-offload.md).
 
-workload에는 `EDGEAI_TELEMETRY_FILE`도 전달한다. 서비스가 직접 측정한 지연을 보고하려면
+파일 생성 workload에는 `EDGEAI_TELEMETRY_FILE`도 전달한다. 서비스가 직접 측정한 지연을 보고하려면
 다음 형태의 JSON을 임시 파일에 쓴 뒤 해당 경로로 원자적으로 rename한다.
 
 ```json

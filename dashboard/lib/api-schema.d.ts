@@ -366,7 +366,7 @@ export interface paths {
         put?: never;
         /**
          * 검증된 DAG 버전 발행
-         * @description SERVICE Profile 버전을 참조하는 1–128개 task와 최대 512개 dependency를 발행합니다. 순환·없는 task·중복 입력 포트·잘못된 Profile 종류는 거절합니다. 배열 순서가 다른 같은 내용은 재발행으로 처리합니다. 발행 후 DAG와 자식 정의는 수정·삭제할 수 없습니다. 포트 타입·이미지 실행 호환성은 실행 계층에서 검증합니다. STREAM 정의는 보관할 수 있으나 STREAM 실행은 M7 후속 범위입니다.
+         * @description SERVICE Profile 버전을 참조하는 1–128개 task와 최대 512개 dependency를 발행합니다. 순환·없는 task·중복 입력 포트·잘못된 Profile 종류는 거절합니다. 배열 순서가 다른 같은 내용은 재발행으로 처리합니다. 발행 후 DAG와 자식 정의는 수정·삭제할 수 없습니다. 포트 타입·이미지 실행 호환성은 실행 계층에서 검증합니다. STREAM 실행은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE 정책으로 요청할 수 있습니다.
          */
         post: operations["publishWorkflowVersion"];
         delete?: never;
@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM 자동 offload·REMOTE/VD 정책은 409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM 자동 offload는 현재 그룹 전체의 체크포인트가 확정되고 완료 허가 전일 때 적용합니다. 구성원 모두의 대기 시간·전환 한도를 확인하고, 그룹 전체의 종료와 권한 회수 뒤 새 Attempt에 상태를 인계합니다. 선택된 작업만 방문한 노드를 제외한 AUTO로 바꾸며 다른 구성원의 배치 정책은 보존합니다. STREAM REMOTE/VD 정책은409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -1048,7 +1048,7 @@ export interface components {
             retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
         } & unknown;
         /**
-         * @description 명시적으로 활성화하는 작업별 자동 재시작 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 모든 SERVICE는 recovery.mode=RESTART여야 합니다. 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있습니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 기존 실행 노드는 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+         * @description 명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE/VD 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는 CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
          * @example {
          *       "cpuPercent": 90,
          *       "memoryPercent": 90,
@@ -1074,11 +1074,11 @@ export interface components {
             maxSampleAgeSeconds: number;
             /** @description 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음 */
             maxGapSeconds: number;
-            /** @description 현재 Attempt 시작 후 대기. 이 시각 이후 표본만 사용 */
+            /** @description 현재 Attempt 시작 후 대기. STREAM은 그룹 모두의 대기 완료 이후 표본만 사용 */
             minRunningSeconds: number;
-            /** @description 이전 수동/자동 전환 완료 후 대기. 이후 새 표본만 사용 */
+            /** @description 이전 수동/자동 전환 완료 후 대기. STREAM은 그룹 모두의 대기 완료 이후 새 표본만 사용 */
             cooldownSeconds: number;
-            /** @description 작업별 자동 전환 횟수. 수동과 합친 전체 8회 제한도 적용 */
+            /** @description 작업별 자동 전환 횟수. STREAM은 함께 재시작하는 모든 구성원의 예산을 소비하며 수동과 합친 전체 8회 제한도 적용 */
             maxTransfers: number;
             drainTimeoutSeconds: number;
             startTimeoutSeconds: number;

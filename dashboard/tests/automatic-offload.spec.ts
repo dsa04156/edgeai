@@ -5,6 +5,7 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
   const workflowId = "11111111-1111-4111-8111-111111111111", versionId = "22222222-2222-4222-8222-222222222222";
   const runId = "33333333-3333-4333-8333-333333333333", taskId = "44444444-4444-4444-8444-444444444444";
   const now = "2026-10-02T10:00:00Z";
+  const peerId = "55555555-5555-4555-8555-555555555555", peerNode = "66666666-6666-4666-8666-666666666666";
   let policy: Record<string, number | null> | null = null;
   let posts = 0; const keys: string[] = [];
   await page.route("**/api/control-plane/**", async route => {
@@ -20,14 +21,17 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
     }
     let body: unknown;
     if (path === "csrf") body = { token: "fixture" };
-    else if (path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
+    else if (path === "profiles/SERVICE") body = { items: [], nextOffset: null };
+    else if (path === "nodes") body = { items: [{ id: peerNode, name: "peer-worker", status: "READY", architecture: "amd64", operatingSystem: "linux" }], nextOffset: null };
     else if (path === "workflows") body = { items: [{ id: workflowId, key: "automatic-fixture", displayName: "자동 전환 시험", createdAt: now }], nextOffset: null };
     else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "automatic-fixture", displayName: "자동 전환 시험" }, versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag: { tasks: [], dependencies: [] }, createdAt: now }], nextOffset: null };
     else if (path === "workflow-runs") body = { items: posts > 1 ? [run] : [], nextOffset: null };
-    else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
+    else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task, { ...task, id: peerId, key: "sink" }] };
     else if (path === `tasks/${taskId}/results`) body = { taskId, items: [] };
     else if (path === `tasks/${taskId}`) body = { task, telemetry: null, attempts: [{ id: taskId, taskId, state: "RUNNING", mode: "AUTO", cause: "OFFLOAD", number: 2, epoch: 2 }],
       offloads: [{ id: runId, kind: "TASK_OFFLOAD", taskId, sourceAttemptId: versionId, targetAttemptId: taskId, targetNodeId: null, trigger: "MEMORY", state: "SUCCEEDED", excludedNodeNames: ["old-worker"],
+        members: [{ taskId, sourceAttemptId: versionId, targetAttemptId: taskId, checkpointId: versionId, targetNodeId: null, excludedNodeNames: ["old-worker"] },
+          { taskId: peerId, sourceAttemptId: peerId, targetAttemptId: peerId, checkpointId: peerId, targetNodeId: peerNode, excludedNodeNames: [] }],
         decision: { policy, evaluatedAt: now, eligibleSince: now, samples: [{ sequence: 3, memoryBytes: 950, memoryLimitBytes: 1000 }, { sequence: 2 }, { sequence: 1 }] } }] };
     else return route.fulfill({ status: 404, json: {} });
     await route.fulfill({ status: 200, json: body });
@@ -55,6 +59,9 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
   await page.getByRole("button", { name: "analyze", exact: true }).click();
   const history = page.getByRole("region", { name: "실행 위치 전환", exact: true });
   await expect(history).toContainText("메모리 사용률 기준 충족"); await expect(history).toContainText("다른 호환 노드 자동 배치");
+  await history.getByText("함께 전환하는 스트리밍 작업 2개", { exact: true }).click();
+  await expect(history).toContainText("analyze · 자동 배치"); await expect(history).toContainText("sink · peer-worker");
+  await expect(history).toContainText(`체크포인트 ${peerId}`);
   await history.getByText("자동 판단 근거 · 측정 3개", { exact: true }).click();
   await expect(history).toContainText("제외 노드: old-worker"); await expect(history.getByLabel("자동 전환 판단 근거")).toContainText('"memoryBytes": 950');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -12,11 +12,12 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 
 repo = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(repo / 'runner'))
 from edgeai_runner.stream_assignment import AssignmentError, BindingClient
-from edgeai_runner.stream_checkpoint_client import CheckpointClient
+from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointUnavailable
 from edgeai_runner.stream_journal import Emission
 from edgeai_runner.stream_protocol import Producer
 from edgeai_runner.stream_source import SourceError
@@ -111,7 +112,10 @@ def main():
 
         def checkpointed(expected):
             for name, state in expected.items():
-                value = checkpoints[name].latest()['checkpoint']
+                try:
+                    value = checkpoints[name].latest()['checkpoint']
+                except CheckpointUnavailable:
+                    return False  # Poll again within wait()'s existing deadline; rejection/fencing still fails.
                 if value is None or value['summary']['stateSha256'] != hashlib.sha256(str(state).encode()).hexdigest():
                     return False
             return True
@@ -131,8 +135,18 @@ def main():
             owners = dict(sources)
             source_checkpoints = {name:s.checkpoint() for name,s in sources.items()}
             (folder / 'recovery-request').touch()
+            metric_sequence = 0
 
             def fenced_sources():
+                nonlocal metric_sequence
+                if config.get('automatic'):
+                    # Controlled workload latency input, independently read and sent by the real Runner.
+                    # This acceptance covers transport/decision/state handover; real cgroup placement is a Kubernetes gate.
+                    metric_sequence += 1
+                    target = directory('root') / 'work'
+                    metric = target / 'telemetry.tmp'
+                    metric.write_text(json.dumps({'sequence': metric_sequence, 'observedAt': datetime.now(timezone.utc).isoformat(), 'latencyMicros': 1200}))
+                    metric.replace(target / 'telemetry.json')
                 for source in sources.values():
                     source.step()
                     assert not source.completed and not source.closed

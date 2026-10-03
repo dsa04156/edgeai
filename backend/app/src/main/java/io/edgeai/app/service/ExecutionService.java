@@ -62,13 +62,13 @@ public class ExecutionService {
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
         var dag=storedDag(version.dagJson());
         boolean stream=!streamInputs.isEmpty() || streams.streaming(dag);
-        var sessions=stream?streams.pin(streamInputs,mode,offload!=null):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
+        var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         if(vdId!=null)lifecycle.validateVDRequest(vdId,versionId,runtimeNamespace);
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
-        if(offload!=null)lifecycle.validateAutomaticOffload(versionId);
+        if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
         var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,workflows.definitions(versionId),stream?Set.of():dag.roots());

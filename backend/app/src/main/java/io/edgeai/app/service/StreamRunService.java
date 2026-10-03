@@ -100,10 +100,9 @@ public class StreamRunService {
     }
     /** Called before inserting a new Run; locks are retained by the creation transaction. */
     @Transactional
-    public Map<UUID,DeviceSession> pin(List<StreamRunInput> inputs,String mode,boolean offload){
+    public Map<UUID,DeviceSession> pin(List<StreamRunInput> inputs,String mode){
         if(!enabled)throw error(501,"STREAM_NOT_IMPLEMENTED","공개 STREAM 실행 설정과 운영 연결이 아직 활성화되지 않았습니다.");
         if(!Set.of("AUTO","NODE").contains(mode))throw error(409,"STREAM_EXECUTION_POLICY_UNSUPPORTED","현재 공개 STREAM은 AUTO 또는 NODE 실행을 사용하세요.");
-        if(offload)throw error(409,"STREAM_RECOVERY_UNSUPPORTED","현재 STREAM 자동 실행 위치 전환 정책은 지원하지 않습니다. 장애 재시도 정책을 사용하세요.");
         var result=new HashMap<UUID,DeviceSession>();
         for(var id:inputs.stream().map(StreamRunInput::deviceId).distinct().sorted().toList()){
             var device=devices.find(id,true).orElseThrow(()->error(404,"DEVICE_NOT_FOUND","스트림 원본 장치가 없습니다."));

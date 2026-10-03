@@ -126,7 +126,8 @@ public class OffloadService {
         if(trigger.isEmpty())return Optional.empty();
         var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
         var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
-        if(!spec.recoveryMode().equals("RESTART"))return Optional.empty();
+        boolean stream=spec.stream()!=null && spec.recoveryMode().equals("CHECKPOINT");
+        if(!stream && !spec.recoveryMode().equals("RESTART"))return Optional.empty();
         var excluded=new TreeSet<String>();
         for(var previous:executions.attempts(taskId))runtimes.byAttempt(previous.id()).ifPresent(r->{if(r.nodeName()!=null)excluded.add(r.nodeName());});
         if(excluded.isEmpty() || excluded.size()>16)return Optional.empty();
@@ -138,13 +139,21 @@ public class OffloadService {
             if(page.size()<1000)break;
         }
         if(!alternative)return Optional.empty();
+        List<OffloadMember> members=List.of();
+        if(stream){
+            var plan=streamOffload.automaticPlan(run,taskId,List.copyOf(excluded),policy,now);
+            if(plan.isEmpty())return Optional.empty();
+            members=plan.get().members();if(plan.get().eligibleSince().isAfter(eligible))eligible=plan.get().eligibleSince();
+            trigger=policy.trigger(samples,now,eligible);if(trigger.isEmpty())return Optional.empty();
+        }
         var evidence=new TreeMap<String,Object>();evidence.put("policy",JSON.decode(run.offloadPolicyJson()));evidence.put("evaluatedAt",now.toString());
         evidence.put("eligibleSince",eligible.toString());evidence.put("samples",samples.stream().map(OffloadService::measurement).toList());
         var id=UUID.randomUUID();var operation=new OffloadOperation(id,taskId,run.id(),attempt.id(),null,null,id,
             JSON.digest("edgeai-automatic-offload-v1",Map.of("sourceAttemptId",attempt.id().toString(),"evidence",evidence)),namespace,"DRAINING",null,
-            now.plusSeconds(policy.drainTimeoutSeconds()),policy.startTimeoutSeconds(),null,now,now,trigger.get(),List.copyOf(excluded),JSON.canonical(evidence));
+            now.plusSeconds(policy.drainTimeoutSeconds()),policy.startTimeoutSeconds(),null,now,now,trigger.get(),List.copyOf(excluded),JSON.canonical(evidence),null,members);
         if(!operations.create(operation))throw new IllegalStateException("Automatic operation identity collision");
-        runtimes.offload(runtime.id(),now);return Optional.of(operation);
+        if(stream)streamOffload.fence(operation,now);else runtimes.offload(runtime.id(),now);
+        return Optional.of(operation);
     }
     private static Map<String,Object> measurement(io.edgeai.domain.runtime.RuntimeTelemetry s) {
         var m=new TreeMap<String,Object>();m.put("attemptId",s.attemptId().toString());m.put("sequence",s.sequence());m.put("observedAt",s.observedAt().toString());
