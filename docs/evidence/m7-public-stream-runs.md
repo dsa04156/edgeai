@@ -42,6 +42,8 @@ Run/route/runtime를 직접 SQL로 심거나 시험에서 generation을 수동 �
 내부 Runner/Device 요청과 S3 전송은 실제 TLS다. 관리 Run 생성은 MockMvc다.
 Kubernetes Pod 생성/신원과 완료한 peer의 경로 회수 시작은 여전히 명시적 fixture다.
 따라서 다중 실제 Runner 간 데이터 전달·Kubernetes 전체 수용을 이 시험으로 대체하지 않는다.
+후속 [다중 Runner DAG 시험](m7-stream-dag.md)은 실제 독립 Runner 사이의 STREAM 데이터와
+BATCH 하위 실행을 추가했다. 위 단일 Runner 복구 시험의 경계와 실제 Kubernetes 잔여 범위는 유지한다.
 
 ## 검증 중 발견한 항목
 

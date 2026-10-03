@@ -2,7 +2,7 @@
 
 The authenticated control plane supplies route generations and recovery intent. It
 must durably grant FINALIZE for this exact terminal checkpoint before file work runs.
-The public orchestrator has not enabled this protocol yet.
+Public STREAM runs use this protocol when explicitly enabled by the deployment.
 """
 import hashlib
 import os

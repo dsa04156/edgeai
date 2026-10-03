@@ -2,7 +2,8 @@
 
 2026-10-03 KST에 Notion 전체 설계/API/ERD/실행 지시를 다시 조회했다. 수정 시각은
 [기존 출처](sources.md)의 2026-10-01과 같았다. 이 문서는 다음 구현의 수용 범위이며
-STREAM 구현 또는 검증 완료 기록이 아니다. 현재 공개 STREAM Run은 계속501을 반환한다.
+전체 STREAM 수용 완료 기록이 아니다. [ADR0041](adr/0041-public-stream-runs.md) 이후 공개 STREAM
+Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. 기본 비활성 환경은501을 반환한다.
 
 ## 원문에서 요구하는 동작
 
@@ -26,7 +27,8 @@ STREAM 구현 또는 검증 완료 기록이 아니다. 현재 공개 STREAM Run
 
 현재 BATCH는 검증된 선행 S3 결과를 다음 작업의 고정 입력으로 전달한다. Device 등록·session
 관측과 VD source binding은 관리 경로이며 센서 payload를 실행 입력으로 전달하는 경로가 아니다.
-Run의 실행 정책은 전체 DAG 기본값이고, STREAM edge는 발행할 수 있지만 실행은 거절한다.
+Run의 실행 정책은 전체 DAG 기본값이다. 공개 STREAM 실행은 현재 Device session을 고정하고
+같은 스트림 그룹을 함께 배정한다. 그룹 복구 연결 전까지 retry/offload/REMOTE/VD는 거절한다.
 따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
 
 ## 구현 전에 정할 계약과 검증
@@ -79,4 +81,6 @@ broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
 배정 조회에 연결했고 실제 HTTP/DB/TLS broker 시험을 통과했다. Pod 신원은 명시적 fixture다.
 후속 ADR0027/0028의 SDK lease·heartbeat는 CI·배포까지 검증했다. ADR0029 지속 계산
 프로세스·watchdog·journal은 실제 TLS MQTT와 Spring 인증 probe로 로컬 검증했다.
-운영 broker·SERVICE/Runner 실행 연결·S3 checkpoint/새 Pod 복원·공개 실행 수용은 계속 남는다.
+이후 SERVICE/Runner 실행, S3 체크포인트 저장·동일 Attempt 새 볼륨 복원, 서버 검증 인계,
+Task/Device 공동 완료와 공개 Run 연결은 [검증 목록](verification-matrix.md)에 각각 기록했다.
+운영 TLS broker·실제 Kubernetes 다중 작업 종단, 인접 작업을 포함한 그룹 복구 및 실장비 수용은 남는다.

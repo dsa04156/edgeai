@@ -36,8 +36,8 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 [인증된 새 볼륨 복원](docs/evidence/m7-stream-checkpoint-recovery.md)은 서버 latest의 고정 S3 파일을
 검증하고 동일 Attempt·경로의 상태와 미확인 출력/END를 이어갑니다.
 [서버 검증 인계](docs/evidence/m7-stream-checkpoint-handover.md)는 이전 실행 종료와 경로 권한 회수를 확인하고
-계산 상태를 새 Attempt·세대의 고정 S3 파일로 옮깁니다. 장치 세션 교체·인접 Task journal 전환, 운영 broker·SERVICE/Runner 실행 연결·
-공개 스트리밍 실행은 남아 있습니다.
+계산 상태를 새 Attempt·세대의 고정 S3 파일로 옮깁니다. 장치 세션 교체·인접 Task journal을 포함한
+그룹 복구와 운영 broker 수용은 남아 있습니다.
 [Device 송신 journal 인계](docs/evidence/m7-device-source-handover.md)는 같은 장치 세션의 미확인
 샘플·순번을 보존하며 실제 broker 권한 회수 뒤 새 경로로 재전송하고 계산을 이어갑니다.
 [SERVICE·Runner 스트림 실행](docs/evidence/m7-service-stream-runner.md)은 지속 계산과 최종 파일
@@ -48,7 +48,9 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 종료·결과 저장과 경로 회수 후 장치 재시작을 연결합니다.
 [Runner 최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)는 현재 실행의 완료 허가를 확인하고
 MQTT 없이 S3 체크포인트에서 최종 파일을 생성합니다. 실제 Spring/S3/Runner를 연결했으며,
-공개 실행 생성·그룹 동시 시작·실제 Kubernetes 스트림 종단은 남아 있습니다.
+공개 실행 생성·그룹 동시 배정은 ADR0041에서 연결했으며 실제 Kubernetes 스트림 종단은 남아 있습니다.
+[다중 Runner DAG](docs/evidence/m7-stream-dag.md)는 두 장치→독립 STREAM Runner 두 개→고정 S3
+결과→BATCH Runner의 실제 데이터 계산과 중간 작업 취소를 검증했습니다. Pod 생성·신원은 시험용 대역입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.
