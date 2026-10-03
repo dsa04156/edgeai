@@ -3,6 +3,9 @@
 2026-10-04 KST. ADR0048의 추가 HTTPS를 운영 연결에 사용할 수 있도록 전용 브로커·신원과
 Kustomize 컴포넌트를 준비한다. 배포 API의 STREAM 활성화와 다중 장치 데모는 후속 게이트다.
 
+후속 [ADR0050](0050-deployed-multidevice-demo.md)에서 dev 활성화·기존 데이터 보존과 실제 배포
+데모를 검증했다. 아래의 활성화 전 설명은 이 결정 당시의 준비 경계다.
+
 ## 신원과 복구
 
 `scripts/bootstrap-stream-secrets.py --context <context>`는 기존 소유 namespace `edgeai`와
