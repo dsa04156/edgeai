@@ -27,7 +27,15 @@ producer UID·NODE 노드UID를 대조했다. 실제 DB Run 상태는 AUTO/NODE=
 aggregate Argo health는 공유 Ingress의 상태 때문에Progressing이며 실제 서비스 Ready/Synced와 구분한다.
 
 영속 기반269c548과 컴포넌트/데모82392650d2be147e6e4df03cdae2a740c6bc3ed6은 main에 푸시했다.
-추가한 신원·영속 broker·MinIO TLS·배포 데모의 전체 kind 게이트는 CI37134164748에서 진행 중이다.
+추가한 신원·영속 broker·MinIO TLS·배포 데모의 전체 kind 게이트 CI37134164748은 실패했다.
+runner/storage/scaffold 성공, images 실패, gitops skipped이며 다운로드한 원시JSON17개는16PASS/1FAIL이다.
+kind155414Z-f373933f에서 기존 BATCH/Retry/Offload/TLSRemote·S320개, VD·S35개, STREAM5개·
+S312개까지 통과했고 추가 영속 broker 검사는 새 Pod가Pending인 채 종료됐다. 소유 kind 클러스터
+edgeai-ci-ca804128cd4f를 삭제한 로그도 확인했다. 기존 배포 이미지는 갱신하지 않았다.
+
+새 PVC의 존재만 기다리고 즉시Bound를 assert하던 검사 결함을 발견했다. Bound까지 기다리도록
+수정하고, kind 실패 진단에 Pod condition reason과 PVC phase/condition을 추가했다. 실패 로그에는
+PVC 단계가 없어 그 시점의 정확한 할당 상태는 확인할 수 없다. 수정 후 새 클러스터 CI에서 확인한다.
 실제 로컬 클러스터 검증을 새 CI 성공으로 대체하지 않는다. M5 잔여/M7–M10 전체 수용은 미완료다.
 
 운영 인증서·파생 키·기존 데이터는 새 fixture 데이터로 바꾸지 않는다. 새 MinIO 기동 시험만

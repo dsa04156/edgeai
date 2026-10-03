@@ -238,7 +238,7 @@ def main():
                 'immutable': True, 'data': {'mosquitto.conf': broker_config}})
             kcall(['-n', 'edgeai', 'create', '-f', 'deploy/kubernetes/components/stream/broker.yaml'])
             output = call([str(ROOT / '.tools/stream-venv/bin/python'), 'scripts/test-stream-platform-broker.py',
-                '--context', context, '--report', '.tools/kind-stream-broker.json'], env=env, timeout=300)
+                '--context', context, '--report', '.tools/kind-stream-broker.json'], env=env, timeout=300, label='Persistent TLS broker acceptance')
             print(output.strip(), flush=True)
             print(call(['python3', 'scripts/test-stream-minio-tls.py', '--context', context, '--minio-image', images['minio'],
                 '--report', '.tools/kind-stream-minio-tls.json'], env=env, timeout=300).strip(), flush=True)
@@ -270,9 +270,16 @@ def main():
                 try:
                     status = json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-o', 'json']))
                     safe = [{'name': p['metadata']['name'], 'phase': p['status'].get('phase'),
+                             'conditions': [{'type': c['type'], 'status': c['status'], 'reason': c.get('reason')}
+                                            for c in p['status'].get('conditions', [])],
                              'containers': [{'name': c['name'], 'ready': c['ready'], 'restartCount': c['restartCount'],
                                              'waitingReason': c.get('state', {}).get('waiting', {}).get('reason')} for c in p['status'].get('containerStatuses', [])]} for p in status['items']]
                     print('kind final Pod status: ' + json.dumps(safe), flush=True)
+                    claims = json.loads(kcall(['-n', 'edgeai', 'get', 'pvc', '-o', 'json']))['items']
+                    print('kind final PVC status: ' + json.dumps([{'name': c['metadata']['name'],
+                        'phase': c.get('status', {}).get('phase'), 'storageClass': c['spec'].get('storageClassName'),
+                        'conditions': [{'type': v['type'], 'status': v['status'], 'reason': v.get('reason')}
+                                       for v in c.get('status', {}).get('conditions', [])]} for c in claims]), flush=True)
                 except Exception:
                     print('kind status unavailable; no sensitive diagnostics collected', flush=True)
                 call([str(binary), 'delete', 'cluster', '--name', name, '--kubeconfig', env['KUBECONFIG']], env=env, timeout=120, label='Owned kind cluster cleanup')

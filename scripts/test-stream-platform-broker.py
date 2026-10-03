@@ -48,8 +48,10 @@ def main():
     assert owner['spec']['replicas'] == 1
     pinned = 'sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408'
     assert owner['spec']['template']['spec']['containers'][0]['image'].endswith('@' + pinned)
-    claim = wait(lambda: read('pvc', 'data-edgeai-mqtt-0'))
-    assert claim['status']['phase'] == 'Bound'
+    def bound_claim():
+        value = read('pvc', 'data-edgeai-mqtt-0')
+        return value if value and value.get('status', {}).get('phase') == 'Bound' else None
+    claim = wait(bound_claim)
     def ready(previous=None):
         pod = read('pod', 'edgeai-mqtt-0')
         if not pod or pod['metadata'].get('deletionTimestamp') or pod['metadata']['uid'] == previous:
