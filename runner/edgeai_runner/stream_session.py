@@ -14,6 +14,7 @@ import time
 from edgeai_runner.main import port_name
 from edgeai_runner.stream_assignment import AssignmentUnavailable, BindingClient
 from edgeai_runner.stream_checkpoint import capture, confirm
+from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointPublisher
 from edgeai_runner.stream_journal import Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_processor import Processor
@@ -32,9 +33,10 @@ def require(condition, code='STREAM_INVALID_SESSION'):
 class Session:
     def __init__(self, client, run_id, input_generations, output_generations, command,
                  directory, parameters=None, *, limits=Limits(), step_timeout=60,
-                 timeout=3600, create=False, cancel=None, durability='LOCAL'):
+                 timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None):
         self.closed = False
         self.processor = self.link = self.journal = None
+        self.publisher = None
         self.cancel = cancel or threading.Event()
         require(isinstance(client, BindingClient) and client.actor.kind == 'TASK_ATTEMPT')
         _uuid(run_id)
@@ -52,6 +54,10 @@ class Session:
             _uuid(identity)
         require(len(identities) <= 32 and len(set(identities)) == len(identities))
         require(sum(map(len, outputs.values())) <= 16)
+        if checkpoint_client is not None:
+            require(durability == 'EXTERNAL' and isinstance(checkpoint_client,CheckpointClient)
+                    and checkpoint_client.client is client and checkpoint_client.run_id == run_id
+                    and checkpoint_client.generation_ids == sorted(identities),'STREAM_CHECKPOINT_SCOPE_MISMATCH')
         directory = Path(directory)
         info = directory.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
@@ -84,6 +90,8 @@ class Session:
                 {port: self.assignments[identity].binding.route_id for port, identity in input_generations.items()},
                 {port: [self.assignments[identity].binding.route_id for identity in ids] for port, ids in outputs.items()},
                 parameters, step_timeout=step_timeout, create=create, cancel=self.cancel)
+            if checkpoint_client is not None:
+                self.publisher=CheckpointPublisher(checkpoint_client,self.journal,self.processor.execution_sha256,self._check)
         except BaseException:
             self.close()
             raise
@@ -119,38 +127,46 @@ class Session:
         self._check()
         confirm(self.journal, serial, sha256)
 
+    def _heartbeat(self):
+        identity = min(self.next_at, key=lambda key: (self.next_at[key], self.assignments[key].deadline, key))
+        if time.monotonic() < self.next_at[identity]:
+            return None
+        sequence = self.sequence[identity]
+        try:
+            reply = self.client.heartbeat(identity, sequence, timeout=self._request_timeout())
+        except AssignmentUnavailable:
+            self._check()
+            self.retries[identity] += 1
+            backoff = min(1., .05 * 2 ** min(self.retries[identity], 5))
+            self.next_at[identity] = time.monotonic() + min(backoff, self._request_timeout())
+            # Same sequence is retried: a response may have been lost after commit.
+            return False
+        self._check()
+        current = dict(self.assignments)
+        current[identity] = self._bounded(reply.assignment)
+        self.processor.refresh(list(current.values()))
+        self.assignments = current
+        require(reply.sequence < 9007199254740991, 'STREAM_HEARTBEAT_EXHAUSTED')
+        self.sequence[identity] = reply.sequence + 1
+        self.retries[identity] = 0
+        self.heartbeats += 1
+        # Sequence0 only resumes the counter. Record our first real observation
+        # immediately, then schedule against the current conservative lease.
+        self.next_at[identity] = time.monotonic() + (0 if sequence == 0 else min(1., current[identity].remaining() / 4))
+        return True
+
     def step(self):
         try:
             self._check()
-            # MQTT, computation and control all share the owner thread. An independent
-            # WorkloadProcess watchdog still fences computation if HTTP itself stalls.
+            # The independent WorkloadProcess watchdog still fences computation
+            # when control or storage I/O blocks the owning thread.
             self.processor.step()
-            identity = min(self.next_at, key=lambda key: (self.next_at[key], self.assignments[key].deadline, key))
-            if time.monotonic() < self.next_at[identity]:
-                return
-            sequence = self.sequence[identity]
-            try:
-                reply = self.client.heartbeat(identity, sequence, timeout=self._request_timeout())
-            except AssignmentUnavailable:
+            healthy=self._heartbeat()
+            checkpointed=healthy is not False and self.publisher is not None
+            if checkpointed:
+                self.publisher.step(timeout=self._request_timeout())
                 self._check()
-                self.retries[identity] += 1
-                backoff = min(1., .05 * 2 ** min(self.retries[identity], 5))
-                self.next_at[identity] = time.monotonic() + min(backoff, self._request_timeout())
-                # Same sequence is retried: a response may have been lost after commit.
-                return
-            self._check()
-            current = dict(self.assignments)
-            current[identity] = self._bounded(reply.assignment)
-            self.processor.refresh(list(current.values()))
-            self.assignments = current
-            require(reply.sequence < 9007199254740991, 'STREAM_HEARTBEAT_EXHAUSTED')
-            self.sequence[identity] = reply.sequence + 1
-            self.retries[identity] = 0
-            self.heartbeats += 1
-            # Sequence0 only resumes the counter. Record our first real observation
-            # immediately, then schedule against the current conservative lease.
-            self.next_at[identity] = time.monotonic() + (0 if sequence == 0 else min(1., current[identity].remaining() / 4))
-            self.processor.step()
+            if healthy or checkpointed:self.processor.step()
         except BaseException as failure:
             # The deadline can pass inside MQTT, HTTP or a model step after the
             # initial check. Report the owning session's terminal reason consistently.

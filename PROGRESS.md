@@ -1,10 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0033 인증 checkpoint client·Session 자동 publisher를 연결했다. 실제 HTTP/SQLite8개,
+실제 HTTPS/MQTT39개·Runner87개와 실제 Spring/PG/S3/Python publisher7개를 로컬 검증했다.
+실제 Spring/PG/TLS broker·Session 회귀22개도042847Z-5b966d84에서 PASS다.
+응답 유실·503·같은 볼륨 재시작·확정 전 ACK/출력 보류를 확인했다.
+상세는 docs/evidence/m7-stream-checkpoint-publisher.md다. 새 Attempt/세대 handover와
+운영 Runner/공개 STREAM 연결·실제 Kubernetes 다중 장치 종단은 남는다.
 ADR0032/V22 인증 checkpoint API·불변 DB 이력·실제 S3 내용 검증을 연결했다.
 실제 HTTP/PG/S3 6개에서 동시 확정·정상 후속 갱신·변조·취소 경합·최신 고정 version을 검증했다.
 단위88개·OpenAPI/패키징·기존 PostgreSQL·S3/Remote/VD 회귀를 통과했다. 상세는
-docs/evidence/m7-stream-checkpoint-api.md다. 자동 Session 저장·새 Attempt/세대 인계와
+docs/evidence/m7-stream-checkpoint-api.md다. 자동 Session 저장은 후속 ADR0033이며 새 Attempt/세대 인계와
 운영 broker·공개 STREAM 실행·실제 Kubernetes 다중 장치 종단은 남는다.
 서버 연결의 실제 TLS broker22개·DB153개·S3/Remote/VD22개·PC/모바일10개 및 DB 장애/복구도 PASS다.
 새 서버 커밋의 CI/배포는 후속 확인 대상이다. 앞선 SDK a4e87c7의 CI37093274029는5 jobs/

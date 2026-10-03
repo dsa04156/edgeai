@@ -145,6 +145,25 @@ class StreamCheckpointIntegrationTest {
         assertThat(recreated.commit(principal(e),commitBody(e,q,version)).value().id()).isEqualTo(stored.id());
         assertThat(checkpoints.latest(e.task()).orElseThrow().summaryJson()).doesNotContain("\"stateBase64\"","\"frames\"");
     }
+    @Test void actualPythonClientVerifiesAuthenticatedReceiptAfterRealS3Upload()throws Exception {
+        var e=execution();byte[] bytes=snapshot(e);var q=request(e,bytes,null);
+        var folder=Files.createTempDirectory(directory,"client-");Files.write(folder.resolve("snapshot.json"),bytes);
+        var credential=folder.resolve("claim");Files.writeString(credential,tokens.issue(runtimes.byAttempt(e.attempt()).orElseThrow()));
+        Files.setPosixFilePermissions(credential,PosixFilePermissions.fromString("rw-------"));
+        var pod=folder.resolve("pod");Files.writeString(pod,"checkpoint-pod-proof");Files.setPosixFilePermissions(pod,PosixFilePermissions.fromString("rw-------"));
+        Files.writeString(folder.resolve("request.json"),json.canonical(Map.of("origin","http://127.0.0.1:"+port,"runId",e.run().toString(),
+            "attemptId",e.attempt().toString(),"podUid",e.pod().podUid().toString(),"generationIds",q.get("generationIds"))));
+        var child=new ProcessBuilder("python3",Path.of("src/test/fixtures/stream_checkpoint_client_probe.py").toAbsolutePath().toString(),folder.toString()).redirectErrorStream(true).start();
+        try{
+            assertThat(child.waitFor(15,TimeUnit.SECONDS)).isTrue();assertThat(child.exitValue()).isZero();
+            assertThat(new String(child.getInputStream().readAllBytes(),StandardCharsets.UTF_8).strip()).isEqualTo("STREAM_CHECKPOINT_CLIENT_PASS");
+            var receipt=(Map<?,?>)json.decode(Files.readString(folder.resolve("receipt.json")));
+            assertThat(receipt.get("id")).isEqualTo(checkpoints.latest(e.task()).orElseThrow().id().toString());
+        }finally{
+            if(child.isAlive()){child.destroyForcibly();child.waitFor();}
+            if(Files.exists(folder.resolve("version.txt")))STORAGE.versions.add(Map.entry(key(e,q),Files.readString(folder.resolve("version.txt"))));
+        }
+    }
     @Test void actualSdkAdvanceRejectsStaleReceiptAndKeepsFirstVerifiedVersion()throws Exception {
         var e=execution();byte[] bytes=snapshot(e);var q=request(e,bytes,null);String version=upload(e,q,bytes);
         String duplicate=upload(e,q,bytes);

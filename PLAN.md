@@ -196,3 +196,8 @@ ADR0032/V22는 인증된 uploads/commit/latest와 불변 checkpoint metadata를 
 OpenAPI/단위88개·기존 PostgreSQL·S3/Remote/VD 회귀를 통과했다.
 [서버 확정 증거](docs/evidence/m7-stream-checkpoint-api.md)를 따른다. 다음은 Session 자동
 업로드/인증된 receipt 적용·새 Attempt/세대 인계와 SERVICE/Runner 운영 실행 연결이다.
+
+ADR0033은 Session에 단계별 인증 checkpoint publisher를 연결했다. 실제 HTTP/SQLite8개,
+Runner87개·HTTPS/MQTT39개·실제 Spring/PG/S3/Python publisher7개를 통과했다.
+[자동 저장 증거](docs/evidence/m7-stream-checkpoint-publisher.md)를 따른다. 다음은 현재 기한·취소
+보호를 유지한 새 Attempt/세대 인계와 SERVICE/Runner·운영 broker·공개 STREAM 종단이다.

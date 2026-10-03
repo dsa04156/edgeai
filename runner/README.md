@@ -146,3 +146,24 @@ step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을
 배정으로 되살릴 수 없다. VD drain으로 짧아진 기한도 적용한다. HTTP 조회 중에도 원래 기한은
 계속 흐르므로 갱신 루프는 충분한 여유를 둬야 한다. 자동 갱신 스케줄러나 계산 프로세스 종료를
 이 API 자체가 제공하는 것은 아니다. [설계와 검증](../docs/evidence/m7-stream-heartbeat.md).
+
+## 자동 세션과 외부 체크포인트
+
+`stream_session.Session`은 인증 배정·자동 heartbeat·MQTT·지속 계산 프로세스/watchdog를
+소유한다. 포트별 generation ID와 Run은 인증된 제어 배정에서 받아야 한다.
+`durability='EXTERNAL'`은 서버 확정 전 입력 처리 ACK와 출력을 보류한다.
+
+같은 `BindingClient`, Run과 전체 입력/출력 generation ID로 `CheckpointClient`를 만든 뒤
+`Session(..., durability='EXTERNAL', checkpoint_client=checkpoints)`에 전달하면 `step()`이
+latest → uploads → S3 PUT → commit을 자동 수행한다. 저장소 사설 CA는
+`CheckpointClient(..., storage_ca_file=...)`로 지정한다. 원격 통신은 검증된 TLS를 요구하며
+`allow_http_loopback=True`는127.0.0.1 시험 전용이다. API 자격은 S3에 전달하지 않는다.
+
+Session은 같은 SQLite 후보로 오류/응답 유실을 재시도하고 인증된 receipt를 대조한 뒤에만
+확인 위치를 전진시킨다. 같은 볼륨에서 재시작하면 서버 latest와 로컬 확인본/후보를 대조한다.
+다른 최신 상태·빈 볼륨·새 Attempt/세대로 자동 복원하지 않는다. 권한이 만료되면 모델을 종료한다.
+`checkpoint_client`를 생략한 EXTERNAL 모드는 호출자가 신뢰된 서버 receipt를 확인하여
+`confirm_checkpoint`를 호출해야 한다. S3 PUT 성공만 전달하면 안 된다.
+로컬 `settled`는 Task/Run의 성공이 아니며 세션은 종료 명령까지 heartbeat를 유지한다.
+[자동 저장 설계](../docs/adr/0033-stream-automatic-checkpoint-publisher.md)와
+[실제 검증 및 남은 연결](../docs/evidence/m7-stream-checkpoint-publisher.md)을 따른다.

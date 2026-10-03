@@ -1,6 +1,8 @@
 """Actual HTTPS/MQTT/session loop; the control-plane responses are explicit fixtures."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import base64
+import hashlib
 from pathlib import Path
 import socket
 import shutil
@@ -20,7 +22,8 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_journal import Emission, Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_session import Session, SessionError
-from edgeai_runner.stream_checkpoint import restore
+from edgeai_runner.stream_checkpoint import Snapshot, MEDIA_TYPE, restore
+from edgeai_runner.stream_checkpoint_client import CheckpointClient
 
 RUNNER = Path(__file__).resolve().parents[1]
 COMMAND = [sys.executable, str(RUNNER/'examples/stream_sum.py')]
@@ -39,12 +42,54 @@ class SessionApi:
         self.drop_after_apply = False
         self.peer_alive = True
         self.foreign_run = False
+        self.checkpoint_status=None;self.checkpoint_latest=None;self.checkpoint_objects={}
+        self.checkpoint_drop=False;self.checkpoint_requests=[];self.storage_credential_leak=False
         owner = self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
                 pass
+            def do_PUT(self):
+                owner.storage_credential_leak |= bool(self.headers.get('Authorization') or self.headers.get('X-EdgeAI-Pod-Token'))
+                snapshot=Snapshot(self.rfile.read(int(self.headers['Content-Length'])))
+                owner.checkpoint_objects[snapshot.sha256]=snapshot
+                self.send_response(200);self.send_header('x-amz-version-id',snapshot.sha256)
+                self.send_header('Content-Length','0');self.end_headers()
             def do_POST(self):
                 data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                if '/streams/checkpoints/' in self.path:
+                    valid=(self.headers.get('Authorization')=='Bearer fixture-claim' and self.headers.get('X-EdgeAI-Pod-Token')=='fixture-pod'
+                           and data.get('podUid')==POD and data.get('epoch')==OUT.producer.epoch
+                           and self.path.startswith(f'/internal/v1/attempts/{OUT.producer.id}/streams/checkpoints/'))
+                    status=401 if not valid else 409 if any(time.monotonic()>=v for v in owner.leases.values()) else owner.checkpoint_status
+                    if status:
+                        self.send_response(status);self.send_header('Content-Length','0');self.end_headers();return
+                    operation=self.path.rsplit('/',1)[1];owner.checkpoint_requests.append((operation,data))
+                    now=document()['serverTime'];status=200
+                    if operation=='latest':
+                        value={'checkpoint':owner.checkpoint_latest}
+                        if owner.checkpoint_latest:value['download']={'url':owner.url+'/checkpoint-object?versionId='+owner.checkpoint_latest['versionId'],'expiresAt':now}
+                    elif operation=='uploads':
+                        q=data['checkpoint'];latest=owner.checkpoint_latest
+                        if latest and latest['serial']==q['serial'] and latest['sha256']==q['sha256']:value={'checkpoint':latest}
+                        else:value={'upload':{'url':owner.url+'/checkpoint-object','expiresAt':now,
+                            'headers':{'Content-Type':MEDIA_TYPE,'x-amz-meta-sha256':q['sha256'],
+                                       'x-amz-checksum-sha256':base64.b64encode(bytes.fromhex(q['sha256'])).decode()}}}
+                    else:
+                        q=data['checkpoint'];snapshot=owner.checkpoint_objects[data['versionId']];doc=snapshot.document()
+                        assert q['sha256']==snapshot.sha256 and q['bytes']==len(snapshot.wire) and q['serial']==snapshot.serial
+                        state=base64.b64decode(doc['stateBase64'])
+                        owner.checkpoint_latest={**q,'id':str(uuid.uuid5(uuid.NAMESPACE_OID,q['sha256'])),'runId':POD,'taskId':POD,
+                            'attemptId':OUT.producer.id,'epoch':OUT.producer.epoch,'serviceProfileVersionId':POD,
+                            'revision':doc['revision'],'versionId':data['versionId'],'createdAt':now,
+                            'summary':{'manifest':doc['manifest'],'revision':doc['revision'],
+                                'routes':[{k:v for k,v in row.items() if k!='frames'} for row in doc['routes']],
+                                'stateSha256':hashlib.sha256(state).hexdigest(),'stateBytes':len(state)}}
+                        value={'checkpoint':owner.checkpoint_latest};status=201
+                        if owner.checkpoint_drop:
+                            owner.checkpoint_drop=False;self.connection.shutdown(socket.SHUT_RDWR);self.connection.close();return
+                    encoded=json.dumps(value).encode();self.send_response(status);self.send_header('Content-Type','application/json')
+                    self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(encoded)))
+                    self.end_headers();self.wfile.write(encoded);return
                 identity = data['generationId']
                 sequence = data.get('sequence')
                 owner.calls.append((identity,sequence))
@@ -110,9 +155,10 @@ class StreamSessionTest(unittest.TestCase):
         for link in self.links.values():link.close(force=True)
         for journal in self.journals.values():journal.close()
 
-    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL'):
+    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False):
+        checkpoint=CheckpointClient(self.client,POD,list(GENERATIONS.values()),storage_ca_file=self.broker.ca) if automatic_checkpoint else None
         self.session=Session(self.client,POD,INPUTS,OUTPUTS,command,self.directory,{'mode':'zip'},
-                             limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability)
+                             limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability,checkpoint_client=checkpoint)
         return self.session
 
     def setup_flow(self, **options):
@@ -277,6 +323,28 @@ class StreamSessionTest(unittest.TestCase):
         newer=session.checkpoint();session.confirm_checkpoint(newer.serial,newer.sha256)
         eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
         self.assertEqual(b'14',self.consume_sink().payload)
+
+    def test_automatic_external_checkpoint_handles_service_failure_lost_reply_and_restart(self):
+        self.api.checkpoint_status=503
+        session=self.setup_flow(durability='EXTERNAL',automatic_checkpoint=True)
+        self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:session.journal.checkpoint().revision==1)
+        count=session.heartbeats
+        eventually(self.pump,lambda:session.heartbeats>count+3)
+        self.assertFalse(self.journals['sink'].pending())
+        self.assertTrue(self.journals['source-a'].outgoing())
+        self.assertEqual(0,session.publisher.confirmations)
+        self.api.checkpoint_drop=True;self.api.checkpoint_status=None
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'9',self.consume_sink().payload)
+        commits=[data['checkpoint'] for op,data in self.api.checkpoint_requests if op=='commit']
+        self.assertGreater(len(commits),len({(q['serial'],q['sha256']) for q in commits}))
+        self.assertFalse(self.api.storage_credential_leak)
+        session.close();session=self.open_session(create=False,durability='EXTERNAL',automatic_checkpoint=True)
+        self.emit(A,b'2');self.emit(B,b'3')
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'14',self.consume_sink().payload)
+        self.assertGreater(session.publisher.confirmations,0)
 
 
 if __name__=='__main__':unittest.main()
