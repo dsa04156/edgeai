@@ -218,3 +218,10 @@ ADR0036의 DeviceSource는 같은 Device Session의 송신·adapter 상태·자�
 옛 ACL 회수·새 경로 재전송·독립 계산9→14·END/ACK를 검증했다.
 [Device source 증거](docs/evidence/m7-device-source-handover.md)를 따른다. Task/인접 Task의
 인계 orchestration·SERVICE/Runner·공개 STREAM·Kubernetes 다중 장치 수용은 이어서 진행한다.
+
+ADR0037은 SERVICE 지속 계산·최종 파일 생성 계약과 Runner 실행 owner를 연결한다.
+실제 Runner/model·HTTPS/TLS MQTT의 결과14, 볼륨 손실 후9→14 복원과 잘못된 허가·실패를 검증했다.
+취소 중 signal 잠금 재진입을 실제로 재현하고 Runner/VD를 수정했다.
+[실행 연결 증거](docs/evidence/m7-service-stream-runner.md)를 따른다. 다음은 서버의 Device 입력/
+live port 배정, STREAM 구성 요소 Task 동시 시작·영속 완료 장벽, peer 인계와 운영 TLS 설정,
+공개 API/UI·실제 Kubernetes 다중 장치 수용이다. 공개 STREAM501과 M5 잔여/M7–M10 범위를 유지한다.

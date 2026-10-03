@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:edgeai:service-execution:v1",
   "title": "SERVICE execution spec v1",
-  "description": "Consumer contract for immutable SERVICE Profile.spec. Additional semantic validation: positive resource quantities, requests<=limits, matching resource keys, integer vendor resources, QoS consistency, qualified Kubernetes labels, toleration combinations, compatible node selectors, and combined file budget plus 16MiB <=1GiB. This is not a raw PodSpec.",
+  "description": "Consumer contract for immutable SERVICE Profile.spec. Additional semantic validation: positive resource quantities, requests<=limits, matching resource keys, integer vendor resources, QoS consistency, qualified Kubernetes labels, toleration combinations, compatible node selectors, and combined file budget plus 16MiB <=1GiB. This is not a raw PodSpec. Stream/file port names must be disjoint per direction. Stream work reserve is 6*(maxBufferBytes+maxStateBytes)+32MiB, included in the 1GiB work-volume bound.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -233,11 +233,136 @@
           "type": "string",
           "enum": [
             "NONE",
-            "RESTART"
+            "RESTART",
+            "CHECKPOINT"
           ],
-          "description": "NONE by default. RESTART explicitly declares that this workload may be stopped and restarted from its immutable inputs on a different node without checkpoint restoration."
+          "description": "NONE by default. RESTART explicitly declares that this workload may be stopped and restarted from its immutable inputs on a different node without checkpoint restoration. CHECKPOINT is required exclusively for stream specs; state and cursors are externally sealed. Automatic offload support remains gated separately."
         }
       }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Persistent edgeai.stream-workload/v1 calculation. All stream inputs are required. Root command/args generate final file outputs using EDGEAI_STATE_FILE only after an externally sealed terminal checkpoint and the server component completion grant. Public STREAM orchestration is not enabled yet.",
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "pattern": "^[^\\u0000]*$"
+          }
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "pattern": "^[^\\u0000]*$"
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mediaType": {
+                "type": "string",
+                "maxLength": 127,
+                "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+              },
+              "maxPayloadBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 262144
+              }
+            },
+            "required": [
+              "mediaType",
+              "maxPayloadBytes"
+            ]
+          },
+          "minProperties": 1
+        },
+        "outputs": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mediaType": {
+                "type": "string",
+                "maxLength": 127,
+                "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+              },
+              "maxPayloadBytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 262144
+              }
+            },
+            "required": [
+              "mediaType",
+              "maxPayloadBytes"
+            ]
+          }
+        },
+        "stepTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "maxBufferBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            },
+            "maxStateBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            }
+          },
+          "required": [
+            "maxFrames",
+            "maxBufferBytes",
+            "maxStateBytes"
+          ]
+        }
+      },
+      "required": [
+        "command",
+        "args",
+        "inputs",
+        "outputs",
+        "stepTimeoutSeconds",
+        "limits"
+      ]
     }
   },
   "required": [
@@ -250,5 +375,42 @@
     "inputs",
     "outputs",
     "timeoutSeconds"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "stream"
+        ]
+      },
+      "then": {
+        "required": [
+          "recovery"
+        ],
+        "properties": {
+          "recovery": {
+            "properties": {
+              "mode": {
+                "const": "CHECKPOINT"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "recovery": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "NONE",
+                  "RESTART"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
   ]
 }

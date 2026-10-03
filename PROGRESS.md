@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+ADR0037 SERVICE stream 규격·CHECKPOINT 모드·파일/스트림 포트 분리와 Runner 실행 owner를 추가했다.
+최신 외부 checkpoint의 마지막 END/ACK와 서버의 해당 checkpoint 완료 허가 후 최종 파일을 생성한다.
+실제 Runner/model·HTTPS/TLS MQTT에서 결과14·볼륨 삭제 후9→14 복원·잘못된 허가/취소/실패를 검증했다.
+서버 단위94·PG154·전체 Runner101·HTTPS/MQTT58 및 후속 VD/신호16개·계약 검증은 PASS다.
+전체 회귀에서 드러난 signal handler의 Event 잠금 재진입을 Runner/VD에서 재현하고 수정했다.
+상세: docs/evidence/m7-service-stream-runner.md. 서버 배정·완료 장벽은 fixture이며 공개 STREAM501은 유지한다.
+선행98ea1dc CI37101222581은5jobs/결과JSON17개·실제kind PASS다. GitOps1bc4439와
+062725Z-a19b3b3f에서 정확한3개 imageID·Ready·PVCBound·ArgoSynced·VD활성화도 확인했다.
+aggregate health는Progressing이다. 이 배포 증거는 후속ADR0037 변경의 CI/배포 완료 근거가 아니다.
 ADR0036 DeviceSource의 인증 송신·자동 heartbeat·동일 Device Session의 journal 인계를 구현했다.
 실제 SQLite/SIGKILL7개·HTTPS/TLS MQTT7개·Spring/PG/권한 worker/broker23개를 통과했다.
 전체 Runner99개·HTTPS/MQTT50개 및 후속 fanout 포함 journal8개·트랜잭션 중 취소/기한 갱신2개도 PASS다.

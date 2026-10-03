@@ -109,4 +109,55 @@ class ExecutionSpecTest {
         Files.createDirectories(Path.of("build/runtime-fixtures"));Files.writeString(Path.of("build/runtime-fixtures/offload-auto-job.json"),JSON.canonical(job));
     }
     private Map<?, ?> map(Object value) { return (Map<?, ?>) value; }
+
+    @SuppressWarnings("unchecked") private Map<String, Object> streamDocument() throws Exception {
+        return (Map<String, Object>) JSON.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+    }
+    @Test void streamCommandsAndFileFinalizerHaveSeparatePortsAndVolumeBudget() throws Exception {
+        var spec = parse(streamDocument());
+        assertEquals("CHECKPOINT", spec.recoveryMode());
+        assertEquals(Set.of("result"), spec.outputs().keySet());
+        assertEquals(Set.of("a", "b"), spec.stream().inputs().keySet());
+        assertEquals(Set.of("sum"), spec.stream().outputs().keySet());
+        assertEquals(List.of("python3", "/opt/edgeai/examples/stream_result.py"), spec.command());
+        assertEquals(153616384L, spec.workBytes());
+        var job = JSON.canonical(new KubernetesJobCompiler().compile(spec, launch(false)));
+        assertTrue(job.contains("\"sizeLimit\":\"153616384\""));
+        assertThrows(UnsupportedOperationException.class, () -> spec.stream().inputs().clear());
+        assertNull(parse(document()).stream());
+    }
+    @Test void streamRequiresExplicitCheckpointAndDoesNotPermitFilePortAmbiguity() throws Exception {
+        var root = streamDocument(); root.remove("recovery");
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+        root.put("recovery", Map.of("mode", "RESTART"));
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+        root.put("recovery", Map.of("mode", "CHECKPOINT")); root.remove("stream");
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+        root.putAll(streamDocument());
+        root.put("outputs", Map.of("sum", Map.of("mediaType", "application/json", "maxBytes", 10)));
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+    }
+    @SuppressWarnings("unchecked")
+    @Test void streamRejectsUnsafeLimitsAndAdditionalFieldsBeforeDispatch() throws Exception {
+        for (var change : Map.<String,Object>of("stepTimeoutSeconds", 4294967296L, "inputs", Map.of(),
+                "command", List.of(" "), "args", List.of(""), "env", Map.of("unexpected", "x")).entrySet()) {
+            var root = streamDocument(); var stream = (Map<String,Object>) root.get("stream");
+            stream.put(change.getKey(), change.getValue());
+            assertThrows(IllegalArgumentException.class, () -> parse(root), change.getKey());
+        }
+        var root = streamDocument(); var stream = (Map<String,Object>) root.get("stream");
+        stream.put("inputs", Map.of("a", Map.of("mediaType", "application/json", "maxPayloadBytes", 262145)));
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+        stream.putAll((Map<String,Object>) streamDocument().get("stream"));
+        stream.put("limits", Map.of("maxFrames", 4097, "maxBufferBytes", 16777216, "maxStateBytes", 262144));
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+    }
+    @Test void fileAndStreamReservationsShareTheSameWorkVolumeLimit() throws Exception {
+        var root = streamDocument(); var ports = new TreeMap<String,Object>();
+        for (int i=0; i<4; i++) ports.put("result"+i, Map.of("mediaType", "application/json", "maxBytes", 250000000));
+        root.put("outputs", ports);
+        assertThrows(IllegalArgumentException.class, () -> parse(root));
+        root.remove("stream"); root.remove("recovery");
+        assertTrue(parse(root).workBytes() < ServiceExecutionSpec.MAX_WORK_BYTES);
+    }
 }

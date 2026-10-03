@@ -131,6 +131,20 @@ class Session:
     def settled(self):
         return self.processor.settled
 
+    @property
+    def terminal_receipt(self):
+        """Latest sealed snapshot covers input ENDs and the final downstream ACKs.
+
+        This is evidence for the server's component barrier, never permission to exit.
+        """
+        self._check()
+        if not self.settled or self.publisher is None:
+            return None
+        receipt = self.publisher.last_receipt
+        if receipt is None or receipt['serial'] != self.journal.snapshot_serial:
+            return None
+        return dict(receipt)
+
     def checkpoint(self):
         self._check()
         return capture(self.journal, self.processor.execution_sha256)

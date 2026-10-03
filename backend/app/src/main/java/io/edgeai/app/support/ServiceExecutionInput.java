@@ -2,6 +2,7 @@ package io.edgeai.app.support;
 
 import io.edgeai.domain.runtime.ResourceRequirements;
 import io.edgeai.domain.runtime.ServiceExecutionSpec;
+import io.edgeai.domain.runtime.StreamExecutionSpec;
 import java.math.BigDecimal;
 import java.util.*;
 import static io.edgeai.app.support.WorkflowInput.*;
@@ -12,7 +13,7 @@ public final class ServiceExecutionInput {
     public static ServiceExecutionSpec parseSpec(String document) {
         var root = fields(JSON.parse(document, 65536),
             Set.of("apiVersion", "image", "command", "args", "resources", "platform", "inputs", "outputs", "timeoutSeconds"),
-            Set.of("nodeSelector", "tolerations", "runtimeClassName", "qos", "recovery"));
+            Set.of("nodeSelector", "tolerations", "runtimeClassName", "qos", "recovery", "stream"));
         JSON.boundedCanonical(root, 65536);
         if (!"edgeai/v1".equals(root.get("apiVersion"))) throw new IllegalArgumentException("SERVICE execution apiVersion must be edgeai/v1");
         var resources = object(root.get("resources"), "requests", "limits");
@@ -47,7 +48,29 @@ public final class ServiceExecutionInput {
             array(platform.get("architectures")), inputs, outputs, (int) timeout,
             root.containsKey("nodeSelector") ? strings(root.get("nodeSelector")) : Map.of(), tolerations,
             root.containsKey("runtimeClassName") ? text(root.get("runtimeClassName"), 253) : null,
-            root.containsKey("recovery") ? text(object(root.get("recovery"),"mode").get("mode"),8) : "NONE");
+            root.containsKey("recovery") ? text(object(root.get("recovery"),"mode").get("mode"),10) : "NONE",
+            root.containsKey("stream") ? stream(root.get("stream")) : null);
+    }
+    private static StreamExecutionSpec stream(Object value) {
+        var s = object(value, "command", "args", "inputs", "outputs", "stepTimeoutSeconds", "limits");
+        var limits = object(s.get("limits"), "maxFrames", "maxBufferBytes", "maxStateBytes");
+        return new StreamExecutionSpec(array(s.get("command")), array(s.get("args")),
+            streamPorts(s.get("inputs")), streamPorts(s.get("outputs")), smallInteger(s.get("stepTimeoutSeconds")),
+            new StreamExecutionSpec.Limits(smallInteger(limits.get("maxFrames")),
+                integer(limits.get("maxBufferBytes")), integer(limits.get("maxStateBytes"))));
+    }
+    private static Map<String, StreamExecutionSpec.Port> streamPorts(Object value) {
+        var result = new TreeMap<String, StreamExecutionSpec.Port>();
+        parameters(value).forEach((key, raw) -> {
+            var port = object(raw, "mediaType", "maxPayloadBytes");
+            result.put((String) key, new StreamExecutionSpec.Port(text(port.get("mediaType"), 127), integer(port.get("maxPayloadBytes"))));
+        });
+        return result;
+    }
+    private static int smallInteger(Object value) {
+        long number = integer(value);
+        if (number < 0 || number > Integer.MAX_VALUE) throw new IllegalArgumentException("Integer out of range");
+        return (int) number;
     }
     private static Map<?, ?> fields(Object value, Set<String> required, Set<String> optional) {
         var map = parameters(value); var allowed = new HashSet<>(required); allowed.addAll(optional);

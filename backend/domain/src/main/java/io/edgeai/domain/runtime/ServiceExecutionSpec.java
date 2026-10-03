@@ -7,7 +7,8 @@ import java.util.Set;
 public record ServiceExecutionSpec(String image, List<String> command, List<String> args,
         ResourceRequirements resources, List<String> architectures,
         Map<String, InputPort> inputs, Map<String, OutputPort> outputs, int timeoutSeconds,
-        Map<String, String> nodeSelector, List<Toleration> tolerations, String runtimeClassName,String recoveryMode) {
+        Map<String, String> nodeSelector, List<Toleration> tolerations, String runtimeClassName,String recoveryMode,
+        StreamExecutionSpec stream) {
     public static final long MAX_FILE_BYTES = 268435456L;
     public static final long MAX_WORK_BYTES = 1073741824L;
     public ServiceExecutionSpec {
@@ -27,6 +28,12 @@ public record ServiceExecutionSpec(String image, List<String> command, List<Stri
         long bytes = 16777216L;
         for (var port : inputs.values()) bytes += port.maxBytes();
         for (var port : outputs.values()) bytes += port.maxBytes();
+        if (stream != null) {
+            bytes += stream.workBytes();
+            if (!java.util.Collections.disjoint(inputs.keySet(), stream.inputs().keySet())
+                    || !java.util.Collections.disjoint(outputs.keySet(), stream.outputs().keySet()))
+                throw new IllegalArgumentException("File and stream ports must have distinct names in each direction");
+        }
         if (bytes > MAX_WORK_BYTES) throw new IllegalArgumentException("Combined file budget exceeds work volume limit");
         if (timeoutSeconds < 1 || timeoutSeconds > 86400) throw new IllegalArgumentException("Timeout must be 1..86400 seconds");
         nodeSelector = Map.copyOf(nodeSelector);
@@ -39,9 +46,11 @@ public record ServiceExecutionSpec(String image, List<String> command, List<Stri
         tolerations = List.copyOf(tolerations);
         if (tolerations.size() > 16) throw new IllegalArgumentException("Too many tolerations");
         if (runtimeClassName != null) RuntimeNames.dns(runtimeClassName, 253);
-        if(!Set.of("NONE","RESTART").contains(recoveryMode))throw new IllegalArgumentException("Unknown recovery mode");
+        if(!Set.of("NONE","RESTART","CHECKPOINT").contains(recoveryMode))throw new IllegalArgumentException("Unknown recovery mode");
+        if ((stream != null) != "CHECKPOINT".equals(recoveryMode))
+            throw new IllegalArgumentException("Stream execution requires explicit CHECKPOINT recovery");
     }
-    private static List<String> arguments(List<String> values, int maximum) {
+    static List<String> arguments(List<String> values, int maximum) {
         var result = List.copyOf(values);
         if (result.size() > maximum) throw new IllegalArgumentException("Too many command arguments");
         for (String value : result) if (value.length() > 4096 || value.indexOf('\0') >= 0)
@@ -50,9 +59,9 @@ public record ServiceExecutionSpec(String image, List<String> command, List<Stri
     }
     public long workBytes() {
         return 16777216L + inputs.values().stream().mapToLong(InputPort::maxBytes).sum()
-            + outputs.values().stream().mapToLong(OutputPort::maxBytes).sum();
+            + outputs.values().stream().mapToLong(OutputPort::maxBytes).sum() + (stream == null ? 0 : stream.workBytes());
     }
-    private static void validatePort(String mediaType, long maxBytes) {
+    static void validatePort(String mediaType, long maxBytes) {
         if (mediaType == null || mediaType.length() > 128 || !mediaType.matches("[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*"))
             throw new IllegalArgumentException("Port requires a canonical media type without parameters");
         if (maxBytes < 1 || maxBytes > MAX_FILE_BYTES) throw new IllegalArgumentException("File limit must be 1..256 MiB");

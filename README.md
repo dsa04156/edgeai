@@ -39,6 +39,9 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 공개 스트리밍 실행은 남아 있습니다.
 [Device 송신 journal 인계](docs/evidence/m7-device-source-handover.md)는 같은 장치 세션의 미확인
 샘플·순번을 보존하며 실제 broker 권한 회수 뒤 새 경로로 재전송하고 계산을 이어갑니다.
+[SERVICE·Runner 스트림 실행](docs/evidence/m7-service-stream-runner.md)은 지속 계산과 최종 파일
+생성을 구분하고, 외부 체크포인트와 서버 완료 허가 후 결과를 만듭니다. Runner 소비 경로를
+검증했으며 서버 배정·완료 장벽 및 공개 STREAM 실행은 아직 연결 전입니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

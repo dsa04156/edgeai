@@ -315,6 +315,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        stream:
+          $ref: ../profiles/service-execution.schema.json#/properties/stream
+          description: M7 Runner용 지속 계산 설정. 서버 route 배정·완료 장벽 연결 전에는 공개 실행에서 발급하지 않는다.
         telemetry:
           type: object
           additionalProperties: false

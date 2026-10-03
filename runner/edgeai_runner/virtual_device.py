@@ -13,17 +13,16 @@ import shutil
 import signal
 import subprocess
 import sys
-import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
-from edgeai_runner.main import MAX_JSON, NoRedirect, RunnerError, http_url, integer, json_decode, json_encode
+from edgeai_runner.main import MAX_JSON, NoRedirect, RunnerError, Cancellation, http_url, integer, json_decode, json_encode
 
 MAX_ATTEMPTS = 100000
-stopping = threading.Event()
+stopping = Cancellation()
 
 
 def identifier(value):
@@ -324,8 +323,8 @@ def probe():
 def main():
     if sys.argv[1:] == ["--ready"]:
         return probe()
-    signal.signal(signal.SIGTERM, lambda *_: stopping.set())
-    signal.signal(signal.SIGINT, lambda *_: stopping.set())
+    signal.signal(signal.SIGTERM, stopping.request_signal)
+    signal.signal(signal.SIGINT, stopping.request_signal)
     try:
         return Supervisor().run()
     except RunnerError as error:

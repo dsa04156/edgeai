@@ -215,6 +215,8 @@ public class RuntimeLifecycleService {
         var dag=storedDag(workflows.version(versionId).orElseThrow().dagJson());
         var specs=new HashMap<String,ServiceExecutionSpec>();
         for(var task:dag.tasks())specs.put(task.key(),ServiceExecutionInput.parseSpec(profiles.find(task.serviceProfileVersionId()).orElseThrow().specJson()));
+        if(specs.values().stream().anyMatch(s -> s.stream() != null))
+            throw error(501,"STREAM_NOT_IMPLEMENTED","스트림 실행 배정·완료 확인 연결 전에는 실행할 수 없습니다.");
         for(var edge:dag.dependencies()) {
             if(edge.mode()!=Dag.Mode.BATCH)throw new IllegalArgumentException("Runtime supports BATCH edges");
             var source=specs.get(edge.fromTask()).outputs().get(edge.fromPort());

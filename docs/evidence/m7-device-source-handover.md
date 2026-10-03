@@ -17,6 +17,14 @@
 현재 Runner 시험은100개다. 전체 MQTT50개 뒤 같은 두 source 시험의 조건을 강화해 재시험했다.
 제품 코드는 그 사이 변경하지 않았다. PostgreSQL migration/API 계약/UI 구현은 이번에 변경하지 않는다.
 
+후속 source98ea1dc의 CI37101222581은5jobs success이며 다운로드한 결과JSON17개가 모두PASS/0이다.
+실제 Runner 컨테이너100개(055239Z-96a69cec), MQTT50개(055433Z-9b4cdb31)와
+실제kind BATCH/Retry/Offload/TLSRemote/VD(060547Z-4731ef67)를 확인했다.
+고정 S3 결과20+5개와 소유cluster edgeai-ci-0733a6ca30ec 삭제도 로그에서 대조했다.
+GitOps1bc44392a627fc4f4ef1bd12f2f8737902faa23b 배포는062725Z-a19b3b3f에서
+정확한 API/dashboard/MinIO imageID·Ready·PVCBound·ArgoSynced·VD활성화가PASS다.
+공유Ingress의 aggregate health는Progressing이다. 공개 STREAM 실제 종단 완료는 아니다.
+
 ## 실제 데이터 경로
 
 실제 Spring이 발급한 Device 토큰·현재 배정과 TLS broker를 사용해 DATA4/5를 보낸다.

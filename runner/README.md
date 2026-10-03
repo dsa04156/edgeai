@@ -195,3 +195,20 @@ media_type)], state=adapter_cursor_bytes)`는 샘플·순번·adapter 상태를 
 허용하며 미확인 DATA/END·순번·adapter 상태를 보존한다. 장치 세션 변경이나 볼륨 손실을
 자동 재시작으로 대체하지 않는다. `settled`는 END의 처리 확인이며 플랫폼 Run 성공을 뜻하지 않는다.
 자세한 실제/fixture 범위는 [Device source 검증](../docs/evidence/m7-device-source-handover.md)을 따른다.
+
+## SERVICE 스트림 실행 owner
+
+`contracts/profiles/service-stream.example.json`은 지속 계산과 최종 파일 생성을 구분한다.
+`stream.command/args`는 프레임을 처리하고 루트 `command/args`는 확정된 상태 파일
+`EDGEAI_STATE_FILE`에서 최종 artifact를 만든다. 파일/스트림 포트는 각 방향에서 이름이
+달라야 한다. stream에는 CHECKPOINT 복구 모드와 명시적 journal 한도를 함께 선언한다.
+
+Runner는 인증 배정의 NEW/RESTORE/HANDOVER를 따르고, 마지막 END/ACK를 포함한
+외부 checkpoint와 서버의 해당 checkpoint 완료 허가를 모두 확인한 뒤 최종 파일을 만든다.
+기존 파일 업로드/결과 commit을 재사용한다. 모델 실패·취소·복원본 누락·잘못된 허가로
+성공 결과를 만들지 않는다. 제어 API/저장소 TLS의 사설 CA는 컨테이너 신뢰 저장소 또는
+Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다.
+
+현재 배정·완료 서버 경로와 공개 STREAM은 미연결이다. 이 예제를 공개 Run으로 실행할 수
+있다는 뜻은 아니다. [실행 설계](../docs/adr/0037-service-stream-runner-execution.md)와
+[검증 범위](../docs/evidence/m7-service-stream-runner.md)를 따른다.

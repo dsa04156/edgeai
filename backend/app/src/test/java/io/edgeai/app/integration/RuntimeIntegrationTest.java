@@ -50,6 +50,14 @@ class RuntimeIntegrationTest {
         return new Fixture(run,root,id(values,"child"),id(values,"independent"),executions.taskDetail(root).attempts().getFirst().id(),"test-"+UUID.randomUUID());
     }
     private UUID id(List<Task> tasks,String key) { return tasks.stream().filter(t->t.key().equals(key)).findFirst().orElseThrow().id(); }
+    @Test void streamingServiceCannotAccidentallyDispatchItsFinalizerAsBatch() throws Exception {
+        var stream=(Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+        var f=fixture(null,spec->{spec.put("stream",stream.get("stream"));spec.put("recovery",Map.of("mode","CHECKPOINT"));});
+        assertThatThrownBy(()->lifecycle.plan(f.attempt(),f.namespace()))
+            .isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("STREAM_NOT_IMPLEMENTED"));
+        assertThat(runtimes.byAttempt(f.attempt())).isEmpty();
+        assertThat(executions.taskDetail(f.root()).task().state()).isEqualTo("READY");
+    }
     private RuntimePod running(Fixture f) {
         lifecycle.plan(f.attempt(),f.namespace());var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
         lifecycle.submitted(f.attempt(),pod.jobUid());lifecycle.claim(f.attempt(),1,pod);return pod;

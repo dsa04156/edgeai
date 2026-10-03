@@ -26,7 +26,33 @@ from edgeai_runner.telemetry import Sampler, own_cgroup
 MAX_JSON = 262144
 MAX_FILE = 268435456
 PORT = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\Z")
-cancelled = threading.Event()
+
+
+class Cancellation(threading.Event):
+    """Signal callbacks must not acquire a lock interrupted on this same thread.
+
+    Normal thread cancellation retains Event notification. Signal cancellation is
+    a flag checked after bounded waits and by the independent workload watchdog.
+    """
+    def __init__(self):
+        super().__init__()
+        self._signal_requested = False
+
+    def request_signal(self, *_):
+        self._signal_requested = True
+
+    def is_set(self):
+        return self._signal_requested or super().is_set()
+
+    def wait(self, timeout):
+        return self.is_set() or super().wait(timeout) or self.is_set()
+
+    def clear(self):
+        self._signal_requested = False
+        super().clear()
+
+
+cancelled = Cancellation()
 
 
 class RunnerError(Exception):
@@ -102,7 +128,8 @@ class Runner:
             if split.path not in ("", "/") or split.query:
                 raise ValueError()
             self.base = origin.rstrip("/") + "/internal/v1/attempts/" + self.attempt
-            self.token = Path(os.environ["EDGEAI_CLAIM_FILE"]).read_text().strip()
+            self.token_file = Path(os.environ["EDGEAI_CLAIM_FILE"])
+            self.token = self.token_file.read_text().strip()
             self.pod_token_file = Path(os.environ["EDGEAI_POD_TOKEN_FILE"])
             if not self.token or len(self.token) > 1024 or any(ord(c) < 33 or ord(c) > 126 for c in self.token):
                 raise ValueError()
@@ -192,13 +219,15 @@ class Runner:
             except (urllib.error.URLError, TimeoutError, OSError):
                 raise RunnerError("STORAGE_FAILED") from None
 
-    def workload(self, assignment):
+    def workload(self, assignment, *, state_file=None):
         command = assignment["command"] + assignment["args"]
         if not command or not all(isinstance(v, str) and "\0" not in v and len(v) <= 4096 for v in command):
             raise RunnerError("INVALID_RESPONSE")
         env = {k: v for k, v in os.environ.items() if not k.startswith("EDGEAI_")}
         env.update(EDGEAI_INPUT_DIR=str(self.work / "inputs"), EDGEAI_OUTPUT_DIR=str(self.work / "outputs"),
             EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), EDGEAI_TELEMETRY_FILE=str(self.work / "telemetry.json"), TMPDIR=str(self.work / "tmp"))
+        if state_file is not None:
+            env['EDGEAI_STATE_FILE'] = str(state_file)
         process = None
         stop_metrics, fenced_metrics = threading.Event(), threading.Event()
         metrics_thread = None
@@ -319,7 +348,16 @@ class Runner:
         fd = os.open(self.work / "outputs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             print("RUNNER_WORKLOAD_START", flush=True)
-            self.workload(assignment)
+            state_file = None
+            if 'stream' in assignment:
+                from edgeai_runner.stream_execution import execute
+                try:
+                    state_file = execute(self, assignment)
+                except Exception:
+                    # Preserve cancellation/deadline disposition across SDK layers.
+                    self.timeout()
+                    raise
+            self.workload(assignment, state_file=state_file)
             committed = []
             for manifest, stream in self.outputs(assignment, fd):
                 grants = self.api("uploads", {**self.identity, "outputs": [manifest]})["outputs"]
@@ -347,8 +385,8 @@ class Runner:
 
 
 def main():
-    signal.signal(signal.SIGTERM, lambda *_: cancelled.set())
-    signal.signal(signal.SIGINT, lambda *_: cancelled.set())
+    signal.signal(signal.SIGTERM, cancelled.request_signal)
+    signal.signal(signal.SIGINT, cancelled.request_signal)
     runner = None
     try:
         runner = Runner()
