@@ -27,7 +27,7 @@ public final class JdbcStreamRunRepository implements StreamRunRepository {
             throw new IllegalStateException("Stream group release must be atomic from WAITING");
         jdbc.update("""
             INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at,remote_provider_key,remote_configuration_digest,remote_source_mode,vd_id)
-            SELECT ?,t.id,1,1,'QUEUED',t.initial_mode,t.initial_node_id,'INITIAL',?,?,w.remote_provider_key,w.remote_configuration_digest,w.remote_source_mode,w.vd_id
+            SELECT ?,t.id,1,1,'QUEUED',t.initial_mode,t.initial_node_id,'INITIAL',?,?,t.initial_remote_provider_key,t.initial_remote_configuration_digest,t.initial_remote_source_mode,t.initial_vd_id
             FROM edgeai.task t JOIN edgeai.workflow_run w ON w.id=t.run_id WHERE t.id=? AND w.id=?
             """,UUID.randomUUID(),Timestamp.from(now),Timestamp.from(now),id,run);
     }}

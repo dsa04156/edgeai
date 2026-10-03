@@ -1,6 +1,22 @@
 # 진행 상태
 
 [STATUS]
+ADR0054/V30 BATCH 작업별 VD/REMOTE 혼합 배치를 공개 API·Swagger·화면에 연결했다.
+대기 Task의 최초 VD/제공자를 고정하고 실제 VD producer는 자기 VD→Run 순서로 잠근다.
+PG214·실제 저장소40·단위105·UI42·계약5/MVC26·실API/DB/Swagger10개 PASS.
+로컬 V29→V30 업그레이드에서 기존 Task9,359개의 신원·최초 대상을 보존했다(202632Z-18d31194).
+실제 Kubernetes의 서로 다른 VD→NODE→VD, API 교체8.416초·고정 S3결과3개와 기존 VD 회귀를
+포함한5개/결과8개 PASS(201757Z-789c7d16). 새 혼합 시나리오는 kind CI에 연결했다.
+새 코드의 이미지/CI/공유 배포, 혼합 Remote의 실제 Kubernetes 종단, STREAM VD/REMOTE와
+외부 수용은 남는다. docs/evidence/m7-mixed-task-targets.md. M5 잔여/M7–M10 전체 미완료 유지.
+
+선행fe32ed8 CI37149032705는5jobs/원시17개·PG212·Runner111/MQTT90·STREAM11개/
+Pod39/S324·VD4·kind22Run·영속TLS/배포데모까지 PASS(202950Z-64c51a17)다.
+GitOpsaabb815 실제imageID·Ready/PVCBound/ArgoSynced(202950Z-98cfa5e7)·V29 성공과
+기존10파일/두PVC 보존도 확인했다. 공유Ingress aggregate Progressing은 유지한다.
+선행204645f 자동 취소 driver 실패의 원인 확인과 이번 새 V30의 CI/배포는 별도다.
+
+아래는 선행 AUTO/NODE 배치 검증 이력이다.
 ADR0053/V29 작업별 최초 AUTO/NODE 배치를 공개 API·Swagger·화면에 연결했다. Run 기본값과
 불변 Task 최초 위치를 분리하고 BATCH 하위·STREAM 그룹·재시도/최종 처리·offload 후 위치를 검증했다.
 PG212·실제 저장소38·단위105·UI42·실제 API/DB/Swagger PC모바일10개 PASS.

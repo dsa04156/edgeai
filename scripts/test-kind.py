@@ -219,7 +219,7 @@ def main():
                 vd_wait(lambda: before.isdisjoint({p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}), 60, 'Old API Pod did not terminate')
                 scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
                 return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-            scenario.run(restart_vd_api, tasks=True)
+            scenario.run(restart_vd_api, tasks=True, mixed=True)
             print('Running actual TLS multi-device STREAM/BATCH, group retry, API restart and cancellation acceptance', flush=True)
             source_revision = images['api'].rsplit(':sha-', 1)[1]
             result = subprocess.run(['python3', 'scripts/test-stream-kubernetes.py', '--context', context,

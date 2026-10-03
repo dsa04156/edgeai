@@ -10,6 +10,7 @@ test("task placements preserve failed input and replay, show waiting targets, an
   const tasks = ["root", "child", "independent"].map((key, index) => ({
     id: `44444444-4444-4444-8444-44444444444${index}`, definitionId: versionId, runId, key,
     state: key === "child" ? "WAITING" : "READY", cancellationReason: null, createdAt: now, updatedAt: now,
+    initialVdId: null, initialRemoteTarget: null,
     initialMode: key === "root" ? "AUTO" : "NODE", initialNodeId: key === "root" ? null : key === "child" ? nodeB : nodeA,
   }));
   const run = { id: runId, workflowVersionId: versionId, mode: "NODE", nodeId: nodeA, vdId: null, remoteTarget: null,
@@ -20,7 +21,9 @@ test("task placements preserve failed input and replay, show waiting targets, an
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace("/api/control-plane/", "");
     if (path === "workflow-runs" && request.method() === "POST") {
       keys.push(request.headers()["idempotency-key"]); posts++;
-      expect(request.postDataJSON()).toEqual({ workflowVersionId: versionId, execution: { mode: "NODE", nodeId: nodeA }, parameters: {}, taskExecutions });
+      expect(request.postDataJSON()).toEqual(posts <= 3
+        ? { workflowVersionId: versionId, execution: { mode: "NODE", nodeId: nodeA }, parameters: {}, taskExecutions }
+        : { workflowVersionId: versionId, execution: { mode: "AUTO" }, parameters: {}, taskExecutions: { root: { mode: "VD", vdId: nodeA }, child: { mode: "REMOTE", providerKey: "reference" } } });
       if (posts === 1) return route.fulfill({ status: 404, json: { message: "작업별 실행 위치에서 참조할 노드를 찾을 수 없습니다." } });
       return route.fulfill({ status: posts === 2 ? 201 : 200, json: run });
     }
@@ -34,7 +37,9 @@ test("task placements preserve failed input and replay, show waiting targets, an
       body = { workflow, versions: versions.map(version => ({ id: version === "1.0.0" ? versionId : nodeB, workflowId, version, digest: "a".repeat(64), createdAt: now,
         dag: { tasks: tasks.map(t => ({ key: t.key, serviceProfileVersionId: versionId, parameters: {} })), dependencies: [] } })), nextOffset: null };
     } else if (path === "workflow-runs") body = { items: posts > 1 ? [run] : [], nextOffset: null };
-    else if (path === `workflow-runs/${runId}`) body = { run, tasks };
+    else if (path === `workflow-runs/${runId}`) body = { run, tasks: posts <= 3 ? tasks : tasks.map(task => task.key === "root"
+      ? { ...task, initialMode: "VD", initialNodeId: null, initialVdId: nodeA }
+      : task.key === "child" ? { ...task, initialMode: "REMOTE", initialNodeId: null, initialRemoteTarget: { providerKey: "reference", configurationDigest: "sha256:" + "a".repeat(64), sourceMode: "SYNTHETIC" } } : task) };
     else if (path === `tasks/${tasks[1].id}`) body = { task: tasks[1], attempts: [], telemetry: null, offloads: [] };
     else if (path === `tasks/${tasks[1].id}/results`) body = { taskId: tasks[1].id, items: [] };
     else return route.fulfill({ status: 404, json: {} });
@@ -65,10 +70,19 @@ test("task placements preserve failed input and replay, show waiting targets, an
   await expect(page.getByText("동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.", { exact: true })).toBeVisible();
   expect(keys).toHaveLength(3); expect(new Set(keys).size).toBe(1);
   await page.getByRole("combobox", { name: "실행 위치 정책", exact: true }).selectOption("VD");
-  await expect(page.getByRole("group", { name: "작업별 실행 위치", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "root 실행 위치", exact: true })).toHaveValue("AUTO");
+  await expect(page.getByLabel("child 노드 ID", { exact: true })).toHaveValue(nodeB);
   await page.getByRole("combobox", { name: "실행 위치 정책", exact: true }).selectOption("AUTO");
-  await expect(page.getByRole("combobox", { name: "root 실행 위치", exact: true })).toHaveValue("DEFAULT");
-  await expect(page.getByRole("combobox", { name: "child 실행 위치", exact: true })).toHaveValue("DEFAULT");
+  await page.getByRole("combobox", { name: "root 실행 위치", exact: true }).selectOption("VD");
+  await page.getByLabel("root 가상 장치 ID", { exact: true }).fill(nodeA);
+  await page.getByRole("combobox", { name: "child 실행 위치", exact: true }).selectOption("REMOTE");
+  await expect(page.getByLabel("child Remote 제공자 key", { exact: true })).toHaveValue("reference");
+  await page.getByRole("group", { name: "작업별 실행 위치", exact: true }).screenshot({ path: testInfo.outputPath("mixed-task-placement-form.png") });
+  await page.getByRole("button", { name: "새 실행 키 만들기", exact: true }).click();
+  await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  await expect(selected.getByRole("row").filter({ has: page.getByRole("button", { name: "root", exact: true }) })).toContainText(`최초 배치 · VD · ${nodeA}`);
+  await expect(selected.getByRole("row").filter({ has: page.getByRole("button", { name: "child", exact: true }) })).toContainText("최초 배치 · REMOTE · reference");
+  await selected.screenshot({ path: testInfo.outputPath("mixed-task-placement-waiting.png") });
   await page.getByRole("combobox", { name: "root 실행 위치", exact: true }).selectOption("NODE");
   await page.getByLabel("root 노드 ID", { exact: true }).fill(nodeA);
   await page.getByRole("button", { name: "1.1.0", exact: true }).click();

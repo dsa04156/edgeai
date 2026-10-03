@@ -100,8 +100,8 @@ class WorkflowIntegrationTest {
         request.put("taskExecutions",Map.of("root",Map.of("mode","AUTO")));
         for(var policy:List.of(Map.of("mode","REMOTE","providerKey","fixture"),Map.of("mode","VD","vdId",UUID.randomUUID().toString()))) {
             request.put("execution",policy);String key=UUID.randomUUID().toString();
-            var error=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),409));
-            assertThat(error.path("code").asText()).isEqualTo("TASK_PLACEMENT_UNSUPPORTED");
+            var error=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),503));
+            assertThat(error.path("code").asText()).isIn("RUNTIME_DISABLED","VD_EXECUTION_DISABLED");
             assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(key))).isZero();
         }
     }

@@ -207,13 +207,17 @@ Remote 활성화·제공자·파일 설정은 [Remote 실행 문서](docs/remote
 **새 실행 키 만들기**를 누릅니다. 작업별 Attempt와 상태를 조회하고 작업 또는 실행을 취소할 수 있습니다.
 작업 취소는 같은 스트림 그룹과 후속 의존 그룹도 정리하며 별도 분기는 유지합니다.
 
-AUTO/NODE 실행에서는 **작업별 실행 위치**로 각 작업의 최초 노드를 지정할 수 있습니다.
+BATCH 실행에서는 **작업별 실행 위치**로 AUTO/NODE/VD/REMOTE 최초 대상을 지정할 수 있습니다.
 API는 `taskExecutions`에 발행된 DAG 작업 키를 사용합니다. 예:
 `{"decode":{"mode":"AUTO"},"infer":{"mode":"NODE","nodeId":"<Node UUID>"}}`.
 생략한 작업은 Run의 `execution`을 따릅니다. BATCH 하위 작업과 STREAM 그룹 모두 적용되며,
-Task의 `initialMode`/`initialNodeId`는 최초 배치, Attempt는 현재 실행 위치를 보여 줍니다.
-전환 뒤 재시도는 전환된 위치를 유지합니다. VD/REMOTE 혼합 지정은 후속 범위입니다.
-상세 계약·검증은 [작업별 최초 배치](docs/adr/0053-task-initial-placement.md)를 따릅니다.
+Task의 `initialMode`/`initialNodeId`/`initialVdId`/`initialRemoteTarget`은 대기 중인 작업의
+최초 배치도 보여 주며 Attempt는 현재 실행 위치를 보여 줍니다. VD는 해당 작업과 같은 SERVICE
+버전의 Ready VD UUID, Remote는 서버에 설정된 제공자 키를 사용합니다. Run 기본 정책을
+바꿔도 작업별 선택을 유지하며 **기본 실행 정책 따름**을 선택한 작업만 Run 정책을 따릅니다.
+전환 뒤 재시도는 전환된 위치를 유지합니다. STREAM은 AUTO/NODE만 지원하며 VD/REMOTE를
+포함한 실행의 자동 전환은 지원하지 않습니다.
+상세 계약·검증은 [혼합 배치](docs/adr/0054-mixed-task-targets.md)를 따릅니다.
 
 실행 기능이 비활성이면 root 작업은 READY/QUEUED, 나머지는 WAITING으로 요청을 보관합니다.
 활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.

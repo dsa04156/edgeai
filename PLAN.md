@@ -18,10 +18,19 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0054/V30은 BATCH 작업별 VD/REMOTE 혼합 배치를 추가했다. PG214·실제 저장소40·
+단위105·UI42·계약5/MVC26·실API/DB/Swagger10·기존 Task9,359개 보존을 통과했다.
+실제 Kubernetes VD→NODE→VD·API 교체·고정 S3와 기존 VD 회귀5개/결과8개도 PASS다.
+새 이미지·CI·배포, 혼합 Remote의 실제 Kubernetes 종단, STREAM VD/REMOTE와 외부 수용은 남는다.
+[혼합 배치 근거](docs/evidence/m7-mixed-task-targets.md)를 따른다.
+선행fe32ed8 CI37149032705의5jobs/원시17개·STREAM11/Pod39/S324와 GitOpsaabb815 실제
+imageID·Ready/PVCBound/ArgoSynced·V29·기존10파일/두PVC 보존은 확인했다.
+
+아래는 선행 AUTO/NODE 배치 검증 이력이다.
 ADR0053/V29의 작업별 최초 AUTO/NODE 배치를 구현했다. 공개 API·불변 DB·대기 Task·
 BATCH 하위·STREAM 그룹/최종 처리 복구·전환 후 재시도·Swagger/화면을 연결했다.
 PG212·실제 저장소38·단위105·UI42·실API/DB/Swagger10개 및 실제 Kubernetes 전체11개/
-Pod39개/S3결과24개 PASS다. 새 이미지/배포, VD/REMOTE 혼합 배치와 외부 장치 수용은 남는다.
+Pod39개/S3결과24개 PASS다. 이 기록의 이미지/배포 판정은 해당 CI 근거를 따른다.
 선행204645f CI37145780408의 자동 취소 driver 실패는 원인 미확정이다. 실패 위치를 다음 CI
 artifact에 보존해 확인한다. [작업별 배치 근거](docs/evidence/m7-task-initial-placement.md).
 

@@ -92,7 +92,7 @@ public class RuntimeLifecycleService {
     public RuntimeInstance plan(UUID attemptId,String namespace) {
         RuntimeNames.dns(namespace,63);
         if(namespace.contains("."))throw new IllegalArgumentException("Runtime namespace requires a DNS label");
-        var c=lock(attemptId);var existing=runtimes.byAttempt(attemptId);
+        var c=lockRun(attemptId);var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent())return existing.get();
         if(c.attempt().mode().equals("VD"))return planVD(c,namespace);
         if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
@@ -106,23 +106,25 @@ public class RuntimeLifecycleService {
     }
     @Transactional
     public void validateVDRequest(UUID vdId,UUID versionId,String namespace) {
+        validateVDTaskProfiles(vdId,workflows.definitions(versionId).stream().map(TaskDefinition::serviceProfileVersionId).collect(java.util.stream.Collectors.toSet()),namespace);
+    }
+    @Transactional
+    public void validateVDTaskProfiles(UUID vdId,Set<UUID> serviceProfiles,String namespace) {
         if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
         var vd=vds.find(vdId,true).orElseThrow(()->error(404,"VD_NOT_FOUND","VD를 찾을 수 없습니다."));
         var current=vdRuntimes.current(vdId).orElseThrow(()->error(409,"VD_NOT_READY","VD를 먼저 기동하세요."));
         if(vd.state()!=VirtualDevice.State.REGISTERED || !current.ready(clock.instant()) || !current.namespace().equals(namespace))
             throw error(409,"VD_NOT_READY","현재 namespace의 Ready VD만 실행 대상으로 선택할 수 있습니다.");
-        validateVDProfiles(vd,versionId);
-    }
-    private void validateVDProfiles(VirtualDevice vd,UUID versionId) {
-        if(workflows.definitions(versionId).stream().anyMatch(d->!d.serviceProfileVersionId().equals(vd.serviceProfileVersionId())))
-            throw error(409,"VD_SERVICE_MISMATCH","모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 합니다.");
+        if(serviceProfiles.stream().anyMatch(id->!id.equals(vd.serviceProfileVersionId())))
+            throw error(409,"VD_SERVICE_MISMATCH","해당 VD에 배치한 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 합니다.");
     }
     private RuntimeInstance planVD(Context c,String namespace) {
         if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()) ||
-            c.attempt().vdId()==null || !c.attempt().vdId().equals(c.run().vdId()))throw fenced();
+            c.attempt().vdId()==null || !c.attempt().vdId().equals(c.task().initialVdId()))throw fenced();
         var vd=vds.find(c.attempt().vdId(),false).orElseThrow(RuntimeLifecycleService::fenced);
-        validateVDProfiles(vd,c.run().workflowVersionId());validateDag(c.run().workflowVersionId());
+        if(!definition(c).serviceProfileVersionId().equals(vd.serviceProfileVersionId()))throw error(409,"VD_SERVICE_MISMATCH","작업과 VD의 SERVICE Profile 버전이 다릅니다.");
+        validateDag(c.run().workflowVersionId());
         var spec=spec(c);inputs(c,spec);parameters(c);var now=clock.instant();
         // Retries/children can queue during replacement; only the public initial request requires Ready.
         var r=new RuntimeInstance(UUID.randomUUID(),c.attempt().id(),c.task().id(),c.run().id(),c.attempt().epoch(),namespace,null,UUID.randomUUID(),
@@ -418,6 +420,12 @@ public class RuntimeLifecycleService {
         return result;
     }
     private Context lock(UUID attemptId) {
+        var initial=executions.attempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced);
+        // Only the current producer's VD is locked. Planning children never acquires a peer VD.
+        if(initial.vdId()!=null)vds.find(initial.vdId(),true).orElseThrow(RuntimeLifecycleService::fenced);
+        return lockRun(attemptId);
+    }
+    private Context lockRun(UUID attemptId) {
         var initial=executions.attempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced);
         var task=executions.task(initial.taskId()).orElseThrow();
         var run=executions.run(task.runId(),true).orElseThrow();

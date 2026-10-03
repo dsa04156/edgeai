@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. taskExecutions로 DAG 작업 키별 AUTO/NODE 최초 배치를 지정할 수 있습니다. 생략한 작업은 execution 기본값을 따릅니다. 대기 중인 BATCH 하위 작업과 STREAM 그룹에도 적용하며 Task의 initialMode/initialNodeId로 확인합니다. 재시도는 직전 Attempt의 실제 위치를 계승하므로 전환 뒤 최초 위치로 되돌아가지 않습니다. 알 수 없는 작업 키는400, 없는 노드는404, VD/REMOTE Run의 작업별 배치 요청은409입니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM 자동 offload는 현재 그룹 전체의 체크포인트가 확정되고 완료 허가 전일 때 적용합니다. 구성원 모두의 대기 시간·전환 한도를 확인하고, 그룹 전체의 종료와 권한 회수 뒤 새 Attempt에 상태를 인계합니다. 선택된 작업만 방문한 노드를 제외한 AUTO로 바꾸며 다른 구성원의 배치 정책은 보존합니다. STREAM REMOTE/VD 정책은409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. taskExecutions로 DAG 작업 키별 BATCH의 AUTO/NODE/VD/REMOTE 최초 배치를 지정할 수 있습니다. 생략한 작업은 execution 기본값을 따릅니다. 대기 중인 BATCH 하위 작업과 STREAM 그룹에도 적용하며 Task의 initialMode/initialNodeId/initialVdId/initialRemoteTarget으로 확인합니다. 재시도는 직전 Attempt의 실제 위치를 계승하므로 전환 뒤 최초 위치로 되돌아가지 않습니다. 알 수 없는 작업 키는400, 없는 노드/VD/제공자는404입니다. VD는 해당 작업의 SERVICE 버전을 확인하고 Remote 제공자 설정은 Task에 고정합니다. STREAM의 VD/REMOTE 배치는409입니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 각 Task에 고정하고 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 해당 VD에 배치하는 작업은 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry는 직전 Attempt의 대상을 계승하며 하위 작업은 자신의 최초 대상을 사용합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM 자동 offload는 현재 그룹 전체의 체크포인트가 확정되고 완료 허가 전일 때 적용합니다. 구성원 모두의 대기 시간·전환 한도를 확인하고, 그룹 전체의 종료와 권한 회수 뒤 새 Attempt에 상태를 인계합니다. 선택된 작업만 방문한 노드를 제외한 AUTO로 바꾸며 다른 구성원의 배치 정책은 보존합니다. STREAM REMOTE/VD 정책은409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -1015,7 +1015,7 @@ export interface components {
             mode: "VD";
             /**
              * Format: uuid
-             * @description 현재 Ready인 영속 VD의 ID. 모든 작업은 VD와 동일한 SERVICE Profile 버전을 사용합니다.
+             * @description 현재 Ready인 영속 VD의 ID. 이 VD에 배치하는 작업은 같은 SERVICE Profile 버전을 사용합니다.
              */
             vdId: string;
         };
@@ -1093,7 +1093,7 @@ export interface components {
             samples: components["schemas"]["RuntimeTelemetry"][];
         } | null;
         /**
-         * @description 발행된 DAG의 작업 키별 최초 실행 위치입니다. AUTO/NODE Run에서 사용하며 생략한 작업은 Run의 execution을 따릅니다. 빈 객체와 생략은 같은 멱등 요청으로 처리합니다. 대기 중인 작업도 최초 위치를 고정하며 재시도는 직전 Attempt의 실제 위치를 계승합니다.
+         * @description 발행된 DAG의 작업 키별 최초 실행 위치입니다. 생략한 작업은 Run의 execution을 따릅니다. BATCH는 AUTO/NODE/VD/REMOTE를 섞을 수 있습니다. VD는 해당 작업의 SERVICE와 일치해야 하며 Remote 제공자 설정은 대기 작업에도 고정합니다. STREAM Run은 AUTO/NODE만 지원합니다. 빈 객체와 생략은 같은 멱등 요청입니다. 재시도는 직전 Attempt의 실제 위치를 계승합니다.
          * @example {
          *       "decode": {
          *         "mode": "AUTO"
@@ -1105,18 +1105,7 @@ export interface components {
          *     }
          */
         TaskExecutions: {
-            [key: string]: {
-                /** @enum {string} */
-                mode: "AUTO";
-            } | {
-                /** @enum {string} */
-                mode: "NODE";
-                /**
-                 * Format: uuid
-                 * @description 관측된 Kubernetes 노드 UID입니다.
-                 */
-                nodeId: string;
-            };
+            [key: string]: components["schemas"]["ExecutionPolicy"];
         };
         RunCreate: {
             /** Format: uuid */
@@ -1233,6 +1222,12 @@ export interface components {
              * @description 최초 NODE 배치의 노드 UID입니다. 나머지 모드는 null입니다.
              */
             initialNodeId: string | null;
+            /**
+             * Format: uuid
+             * @description 최초 VD 배치의 ID입니다. 대기 중인 작업도 고정하며 현재 실행 세대는 Attempt와 Runtime에서 확인합니다.
+             */
+            initialVdId: string | null;
+            initialRemoteTarget: components["schemas"]["RemoteTarget"];
             /** @enum {string} */
             state: "WAITING" | "READY" | "RUNNING" | "RETRY_WAIT" | "OFFLOADING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
             cancellationReason: string | null;

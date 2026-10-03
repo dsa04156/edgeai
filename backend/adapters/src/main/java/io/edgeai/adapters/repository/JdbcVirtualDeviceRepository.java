@@ -31,7 +31,7 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
             """,UUID.randomUUID(),key,name,profileId,serviceId,placement.mode().name(),placement.nodeId(),digest)==1;
     }
     public Optional<VirtualDevice> find(UUID id,boolean lock) {
-        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE id=?"+(lock?" FOR UPDATE":""),VD,id).stream().findFirst();
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE id=?"+(lock?" FOR NO KEY UPDATE":""),VD,id).stream().findFirst();
     }
     public Optional<VirtualDevice> findByKey(String key) {
         return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=?",VD,key).stream().findFirst();

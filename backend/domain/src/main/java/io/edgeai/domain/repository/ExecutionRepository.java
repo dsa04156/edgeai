@@ -5,7 +5,8 @@ import java.time.Instant;
 import java.util.*;
 public interface ExecutionRepository {
     boolean create(WorkflowRun run);
-    void initialize(WorkflowRun run, List<TaskDefinition> definitions, Set<String> roots);
+    default void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots){initialize(run,definitions,roots,Map.of());}
+    void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots,Map<String,io.edgeai.domain.remote.RemoteTarget> taskRemoteTargets);
     Optional<WorkflowRun> run(UUID id, boolean lock);
     Optional<WorkflowRun> byIdempotencyKey(UUID key);
     List<WorkflowRun> runs(int limit, int offset);

@@ -14,7 +14,6 @@ import java.nio.file.*;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,7 +80,7 @@ class VDTaskPersistenceIntegrationTest {
     private VDTaskAllocation allocation(Fixture f,RuntimeInstance r,int slot,long sequence){return new VDTaskAllocation(UUID.randomUUID(),r.id(),f.vd().id(),f.supervisor().id(),f.supervisor().generation(),f.supervisor().sessionId(),f.supervisor().podUid(),slot,sequence,Instant.now(),null,null,null,null);}
     private Optional<VDTaskAllocation> allocate(Fixture f,RuntimeInstance r,int capacity) {
         return transaction(()->{
-            executions.run(r.runId(),true).orElseThrow();
+            vds.find(f.vd().id(),true).orElseThrow();executions.run(r.runId(),true).orElseThrow();
             var old=tasks.byRuntime(r.id());if(old.isPresent())return old;
             var used=new HashSet<>(tasks.open(f.supervisor().id()).stream().map(VDTaskAllocation::slot).toList());
             for(int slot=1;slot<=capacity;slot++)if(!used.contains(slot)) {
@@ -161,8 +160,7 @@ class VDTaskPersistenceIntegrationTest {
         invalid(()->jdbc.update("UPDATE edgeai.result_artifact SET bytes=3 WHERE result_id=?",stored.id()));
     }
     @Test void serviceIdentityLeaseAndProducerProofRemainRequired()throws Exception {
-        var incompatible=fixture(1,1,false);
-        invalid(()->allocate(incompatible,incompatible.work().getFirst(),1));
+        invalid(()->fixture(1,1,false)); // The incompatible initial Task is now rejected before allocation.
         var f=fixture(1,1);var r=f.work().getFirst();var vr=f.supervisor();
         var expired=new VDTaskAllocation(UUID.randomUUID(),r.id(),f.vd().id(),vr.id(),vr.generation(),vr.sessionId(),vr.podUid(),1,1,vr.leaseUntil(),null,null,null,null);
         invalid(()->transaction(()->{tasks.create(expired,vr.leaseUntil().plusSeconds(60));return null;}));
@@ -186,26 +184,19 @@ class VDTaskPersistenceIntegrationTest {
         assertThat(tasks.open(vr.id())).isEmpty();assertThat(tasks.byRuntime(r.id()).orElseThrow().closeReason()).isEqualTo("POD_GONE");
         assertThat(tasks.assigned(vr.id(),1)).hasSize(1);assertThat(runtimes.result(r.taskId())).isEmpty();
     }
-    @Test void retryRetainsVdTargetAndRunLockAcquiresVdBeforeRun()throws Exception {
+    @Test void retryRetainsVdTargetAndRunStateLockDoesNotAcquireDefaultVd()throws Exception {
         var f=fixture(1,1);var r=f.work().getFirst();
         transaction(()->{executions.run(r.runId(),true);runtimes.fail(r.id(),"RUNTIME_LOST",Instant.now());runtimes.terminated(r.id(),Instant.now());return null;});
         var next=transaction(()->{executions.run(r.runId(),true);return executions.startRetry(r.taskId(),Instant.now());});
         assertThat(next.vdId()).isEqualTo(f.vd().id());assertThat(next.mode()).isEqualTo("VD");assertThat(next.epoch()).isEqualTo(2);
-        var pid=new AtomicInteger();
         try(var pool=Executors.newSingleThreadExecutor()){
-            var job=transaction(()->{
+            transaction(()->{
                 vds.find(f.vd().id(),true).orElseThrow();
-                var future=pool.submit(()->transaction(()->{pid.set(jdbc.queryForObject("SELECT pg_backend_pid()",Integer.class));return executions.run(f.run().id(),true).orElseThrow();}));
-                long end=System.nanoTime()+Duration.ofSeconds(8).toNanos();boolean waiting=false;
-                while(System.nanoTime()<end){
-                    if(pid.get()!=0 && Boolean.TRUE.equals(jdbc.queryForObject("SELECT coalesce(bool_or(wait_event_type='Lock'),false) FROM pg_stat_activity WHERE pid=?",Boolean.class,pid.get()))){waiting=true;break;}
-                    try{Thread.sleep(20);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
-                }
-                assertThat(waiting).isTrue();
-                jdbc.queryForObject("SELECT id FROM edgeai.workflow_run WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.run().id());
-                return future;
+                var future=pool.submit(()->transaction(()->executions.run(f.run().id(),true).orElseThrow()));
+                try{assertThat(future.get(5,TimeUnit.SECONDS).id()).isEqualTo(f.run().id());}
+                catch(Exception e){throw new AssertionError("Run state lock waited on unrelated VD authority",e);}
+                return null;
             });
-            assertThat(job.get(10,TimeUnit.SECONDS).vdId()).isEqualTo(f.vd().id());
         }
     }
 }

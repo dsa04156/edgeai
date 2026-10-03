@@ -13,7 +13,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
     private final JdbcTemplate jdbc;
     public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
     private static final RowMapper<WorkflowRun> RUN=(r,n)->new WorkflowRun(r.getObject("id",UUID.class),r.getObject("workflow_version_id",UUID.class),r.getObject("idempotency_key",UUID.class),r.getString("request_digest"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("parameters"),new RetryPolicy(r.getInt("retry_max_attempts"),r.getInt("retry_backoff_seconds"),r.getInt("retry_max_elapsed_seconds"),Set.of((String[])r.getArray("retry_on").getArray())),r.getString("offload_policy"),r.getString("state"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),RemoteTargets.read(r),r.getObject("vd_id",UUID.class),r.getString("task_executions"));
-    private static final RowMapper<Task> TASK=(r,n)->new Task(r.getObject("id",UUID.class),r.getObject("run_id",UUID.class),r.getObject("definition_id",UUID.class),r.getString("task_key"),r.getString("state"),r.getString("cancellation_reason"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),r.getString("initial_mode"),r.getObject("initial_node_id",UUID.class));
+    private static final RowMapper<Task> TASK=(r,n)->new Task(r.getObject("id",UUID.class),r.getObject("run_id",UUID.class),r.getObject("definition_id",UUID.class),r.getString("task_key"),r.getString("state"),r.getString("cancellation_reason"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),r.getString("initial_mode"),r.getObject("initial_node_id",UUID.class),r.getObject("initial_vd_id",UUID.class),RemoteTargets.read(r,"initial_"));
     private static final RowMapper<TaskAttempt> ATTEMPT=(r,n)->new TaskAttempt(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getInt("number"),r.getLong("epoch"),r.getString("state"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("cause"),List.of((String[])r.getArray("excluded_node_names").getArray()),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),RemoteTargets.read(r),r.getObject("vd_id",UUID.class));
     private static final String TASK_QUERY="SELECT t.*,d.task_key FROM edgeai.task t JOIN edgeai.task_definition d ON t.definition_id=d.id";
     public boolean create(WorkflowRun r) {
@@ -22,19 +22,19 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
             VALUES (?,?,?,?,?,?,CAST(? AS jsonb),?,?,?,CAST(? AS text[]),CAST(? AS jsonb),?,?,?,?,?,?,?,CAST(? AS jsonb)) ON CONFLICT(idempotency_key) DO NOTHING
             """,r.id(),r.workflowVersionId(),r.idempotencyKey(),r.requestDigest(),r.mode(),r.nodeId(),r.parametersJson(),r.retry().maxAttempts(),r.retry().backoffSeconds(),r.retry().maxElapsedSeconds(),"{"+String.join(",",r.retry().retryOn().stream().sorted().toList())+"}",r.offloadPolicyJson(),r.state(),Timestamp.from(r.createdAt()),Timestamp.from(r.updatedAt()),RemoteTargets.key(r.remoteTarget()),RemoteTargets.digest(r.remoteTarget()),RemoteTargets.source(r.remoteTarget()),r.vdId(),r.taskExecutionsJson())==1;
     }
-    public void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots) {
+    public void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots,Map<String,io.edgeai.domain.remote.RemoteTarget> taskRemoteTargets) {
         for(var d:definitions) {
             UUID id=UUID.randomUUID();boolean root=roots.contains(d.key());Timestamp now=Timestamp.from(run.createdAt());
-            jdbc.update("INSERT INTO edgeai.task(id,run_id,workflow_version_id,definition_id,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",id,run.id(),run.workflowVersionId(),d.id(),root?"READY":"WAITING",now,now);
+            var target=taskRemoteTargets.get(d.key());
+            jdbc.update("INSERT INTO edgeai.task(id,run_id,workflow_version_id,definition_id,state,created_at,updated_at,initial_remote_provider_key,initial_remote_configuration_digest,initial_remote_source_mode) VALUES (?,?,?,?,?,?,?,?,?,?)",id,run.id(),run.workflowVersionId(),d.id(),root?"READY":"WAITING",now,now,RemoteTargets.key(target),RemoteTargets.digest(target),RemoteTargets.source(target));
             if(root) jdbc.update("""
                 INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at,remote_provider_key,remote_configuration_digest,remote_source_mode,vd_id)
-                SELECT ?,id,1,1,'QUEUED',initial_mode,initial_node_id,'INITIAL',?,?,?,?,?,? FROM edgeai.task WHERE id=?
-                """,UUID.randomUUID(),now,now,RemoteTargets.key(run.remoteTarget()),RemoteTargets.digest(run.remoteTarget()),RemoteTargets.source(run.remoteTarget()),run.vdId(),id);
+                SELECT ?,id,1,1,'QUEUED',initial_mode,initial_node_id,'INITIAL',?,?,initial_remote_provider_key,initial_remote_configuration_digest,initial_remote_source_mode,initial_vd_id FROM edgeai.task WHERE id=?
+                """,UUID.randomUUID(),now,now,id);
         }
     }
     public Optional<WorkflowRun> run(UUID id,boolean lock) {
-        // VD -> Run is also the allocation/drain lock order. The target is immutable.
-        if(lock)jdbc.query("SELECT id FROM edgeai.virtual_device WHERE id=(SELECT vd_id FROM edgeai.workflow_run WHERE id=?) FOR UPDATE",(r,n)->r.getObject(1,UUID.class),id);
+        // Run state/cancellation does not acquire another task's VD. Producer operations lock their VD first.
         return jdbc.query("SELECT * FROM edgeai.workflow_run WHERE id=?"+(lock?" FOR UPDATE":""),RUN,id).stream().findFirst(); }
     public Optional<WorkflowRun> byIdempotencyKey(UUID key) { return jdbc.query("SELECT * FROM edgeai.workflow_run WHERE idempotency_key=?",RUN,key).stream().findFirst(); }
     public List<WorkflowRun> runs(int limit,int offset) { return jdbc.query("SELECT * FROM edgeai.workflow_run ORDER BY created_at DESC,id LIMIT ? OFFSET ?",RUN,limit,offset); }

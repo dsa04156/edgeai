@@ -34,7 +34,13 @@ public final class WorkflowInput {
             var placement=parameters(entry.getValue());String mode=text(placement.get("mode"),8);
             if(mode.equals("AUTO")) {object(placement,"mode");result.put(key,Map.of("mode",mode));}
             else if(mode.equals("NODE")) {object(placement,"mode","nodeId");result.put(key,Map.of("mode",mode,"nodeId",uuid(placement.get("nodeId")).toString()));}
-            else throw new IllegalArgumentException("Task placement must be AUTO or NODE");
+            else if(mode.equals("VD")){object(placement,"mode","vdId");result.put(key,Map.of("mode",mode,"vdId",uuid(placement.get("vdId")).toString()));}
+            else if(mode.equals("REMOTE")){
+                object(placement,"mode","providerKey");String provider=text(placement.get("providerKey"),63);
+                if(!provider.matches("[a-z][a-z0-9]*(-[a-z0-9]+)*"))throw new IllegalArgumentException("Invalid provider key");
+                result.put(key,Map.of("mode",mode,"providerKey",provider));
+            }
+            else throw new IllegalArgumentException("Task placement must be AUTO, NODE, VD or REMOTE");
         }
         return result;
     }

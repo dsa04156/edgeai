@@ -4,7 +4,10 @@ import java.sql.*;
 final class RemoteTargets {
     private RemoteTargets(){}
     static RemoteTarget read(ResultSet row) throws SQLException {
-        return row.getString("remote_provider_key")==null?null:new RemoteTarget(row.getString("remote_provider_key"),row.getString("remote_configuration_digest"),row.getString("remote_source_mode"));
+        return read(row,"");
+    }
+    static RemoteTarget read(ResultSet row,String prefix) throws SQLException {
+        return row.getString(prefix+"remote_provider_key")==null?null:new RemoteTarget(row.getString(prefix+"remote_provider_key"),row.getString(prefix+"remote_configuration_digest"),row.getString(prefix+"remote_source_mode"));
     }
     static String key(RemoteTarget t){return t==null?null:t.providerKey();}
     static String digest(RemoteTarget t){return t==null?null:t.configurationDigest();}

@@ -85,13 +85,17 @@ class VDTaskIntegrationTest {
             if(!"vd-task-pod-fixture".equals(call.getArgument(1)) || p==null)throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);return p;
         });
         when(storage.verify(any(),any())).thenAnswer(call->{ArtifactContent c=call.getArgument(0);return new VerifiedArtifact("fixture-only",c.objectKey(),call.getArgument(1),c.sha256(),c.bytes(),c.mediaType());});
+        when(storage.download(any())).thenReturn(new ArtifactGrant(URI.create("http://storage.fixture/input"),Map.of(),Instant.now().plusSeconds(600)));
     }
     private <T>T transaction(java.util.function.Supplier<T> action){return new TransactionTemplate(transactions).execute(s->action.get());}
     private String encode(Object v){return json.canonical(v);}
     private UUID publish(ProfileIdentity.Kind kind,Object spec){return profiles.publish(kind,encode(Map.of("key","vd-exchange-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version().id();}
     private Fixture fixture(int count,int capacity)throws Exception{return fixture(count,capacity,false);}
-    private Fixture fixture(int count,int capacity,boolean retry)throws Exception {
-        UUID sp=publish(ProfileIdentity.Kind.SERVICE,json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json"))));
+    private Fixture fixture(int count,int capacity,boolean retry)throws Exception {return fixture(count,capacity,retry,false);}
+    private Fixture fixture(int count,int capacity,boolean retry,boolean consumer)throws Exception {
+        var spec=new LinkedHashMap<String,Object>((Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json"))));
+        if(consumer)spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));
+        UUID sp=publish(ProfileIdentity.Kind.SERVICE,spec);
         UUID vp=publish(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v1","type","emulation","serviceProfileVersionId",sp.toString(),"sources",Map.of(),"state",Map.of("mode","STATELESS"),
             "runtime",Map.of("maxConcurrentTasks",capacity,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
         var vd=devices.create(encode(Map.of("key","vd-exchange-"+UUID.randomUUID(),"displayName","VD exchange fixture","profileVersionId",vp.toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value();
@@ -134,6 +138,89 @@ class VDTaskIntegrationTest {
     private Map<String,Object> resultBody(Fixture f,RuntimeInstance r){var b=runnerBody(f,r);b.put("outputs",List.of(Map.of("port","output","bytes",2,"sha256","a".repeat(64),"mediaType","application/json","versionId","fixture-version")));return b;}
     private RuntimeInstance current(RuntimeInstance r){return runtimes.runtime(r.id()).orElseThrow();}
     private void fenced(org.assertj.core.api.ThrowableAssert.ThrowingCallable action){assertThatThrownBy(action).isInstanceOf(ControlPlaneException.class);}
+
+    private Map<String,Object> mixedRequest(Fixture a,Fixture b,boolean dependency) {
+        var workflow=workflows.create(encode(Map.of("key","mixed-vd-"+UUID.randomUUID(),"displayName","Separate task authorities"))).value();
+        var version=workflows.publish(workflow.id(),encode(Map.of("version","1.0.0","tasks",List.of(
+            Map.of("key","first","serviceProfileVersionId",a.vd().serviceProfileVersionId().toString(),"parameters",Map.of()),
+            Map.of("key","second","serviceProfileVersionId",b.vd().serviceProfileVersionId().toString(),"parameters",Map.of())),
+            "dependencies",dependency?List.of(Map.of("fromTask","first","toTask","second","fromPort","output","toPort","input","mode","BATCH")):List.of()))).value();
+        return new LinkedHashMap<>(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",a.vd().id().toString()),
+            "parameters",Map.of(),"taskExecutions",Map.of("second",Map.of("mode","VD","vdId",b.vd().id().toString()))));
+    }
+
+    @Test void differentVdServicesPinWaitingTasksAndReleaseChildrenWithoutTakingPeerAuthority()throws Exception {
+        var a=fixture(1,1);var b=fixture(1,1,false,true);
+        executionApi.cancelRun(a.run().id(),"{}");executionApi.cancelRun(b.run().id(),"{}");
+        var request=mixedRequest(a,b,true);String key=UUID.randomUUID().toString();
+        var response=mvc.perform(post("/api/v1/workflow-runs").with(user("fixture")).with(csrf()).header("Idempotency-Key",key)
+            .contentType("application/json").content(encode(request))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        UUID run=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));
+        var tasks=executions.tasks(run);var child=tasks.stream().filter(t->t.key().equals("second")).findFirst().orElseThrow();
+        assertThat(child.initialMode()).isEqualTo("VD");assertThat(child.initialVdId()).isEqualTo(b.vd().id());
+        assertThat(child.initialRemoteTarget()).isNull();assertThat(child.state()).isEqualTo("WAITING");assertThat(executions.attempts(child.id())).isEmpty();
+        mvc.perform(get("/api/v1/tasks/"+child.id()).with(user("fixture"))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.initialVdId").value(b.vd().id().toString()));
+        var root=assigned(a,poll(a,body(a,1,List.of(),List.of()),200)).getFirst();
+        assertThat(root.runId()).isEqualTo(run);runner(a,root,"claim",runnerBody(a,root),200);
+        // A peer poll/replacement may hold VD B while result A prepares B's child. FK checks must not deadlock.
+        try(var pool=Executors.newSingleThreadExecutor()) {
+            transaction(()->{
+                vds.find(b.vd().id(),true).orElseThrow();
+                var future=pool.submit(()->{runner(a,current(root),"commit",resultBody(a,root),201);return true;});
+                try{assertThat(future.get(8,TimeUnit.SECONDS)).isTrue();}
+                catch(Exception e){throw new AssertionError("Child preparation acquired peer VD authority",e);}
+                return null;
+            });
+        }
+        assertThat(executions.attempts(child.id())).singleElement().satisfies(attempt->{assertThat(attempt.vdId()).isEqualTo(b.vd().id());assertThat(attempt.cause()).isEqualTo("INITIAL");});
+        var next=assigned(b,poll(b,body(b,1,List.of(),List.of()),200)).getFirst();
+        assertThat(next.taskId()).isEqualTo(child.id());runner(b,next,"claim",runnerBody(b,next),200);
+        var inputs=lifecycle.authorize(next.attemptId(),next.epoch(),b.supervisor().podUid()).inputs();
+        assertThat(inputs).singleElement().satisfies(input->{assertThat(input.port()).isEqualTo("input");assertThat(input.artifact()).isEqualTo(runtimes.result(root.taskId()).orElseThrow().outputs().getFirst().artifact());});
+        runner(b,current(next),"commit",resultBody(b,next),201);
+        assertThat(runtimes.result(root.taskId()).orElseThrow().vdRuntimeId()).isEqualTo(a.supervisor().id());
+        assertThat(runtimes.result(child.id()).orElseThrow().vdRuntimeId()).isEqualTo(b.supervisor().id());
+        poll(a,body(a,2,List.of(),List.of(root)),200);poll(b,body(b,2,List.of(),List.of(next)),200);
+        assertThat(allocations.open(a.supervisor().id())).isEmpty();assertThat(allocations.open(b.supervisor().id())).isEmpty();
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("SUCCEEDED");
+        vdLifecycle.drain(b.vd().id(),0,"after-mixed-result");
+        assertThat(executionApi.create(key,encode(request)).value().id()).isEqualTo(run);
+        request.put("taskExecutions",Map.of("second",Map.of("mode","VD","vdId",a.vd().id().toString())));
+        assertThatThrownBy(()->executionApi.create(key,encode(request))).isInstanceOf(ControlPlaneException.class).hasMessageContaining("Idempotency-Key");
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task SET initial_vd_id=? WHERE id=?",a.vd().id(),child.id())).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test void twoVdPollsShareOneRunButKeepProducerAuthorityAndCancellationIndependent()throws Exception {
+        var a=fixture(1,1);var b=fixture(1,1);
+        executionApi.cancelRun(a.run().id(),"{}");executionApi.cancelRun(b.run().id(),"{}");
+        var run=executionApi.create(UUID.randomUUID().toString(),encode(mixedRequest(a,b,false))).value();
+        RuntimeInstance first,second;
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            var start=new CountDownLatch(1);
+            var fa=pool.submit(()->{start.await();return assigned(a,poll(a,body(a,1,List.of(),List.of()),200)).getFirst();});
+            var fb=pool.submit(()->{start.await();return assigned(b,poll(b,body(b,1,List.of(),List.of()),200)).getFirst();});
+            start.countDown();first=fa.get(10,TimeUnit.SECONDS);second=fb.get(10,TimeUnit.SECONDS);
+            assertThat(first.runId()).isEqualTo(run.id());assertThat(second.runId()).isEqualTo(run.id());
+            runner(a,first,"claim",runnerBody(a,first),200);runner(b,second,"claim",runnerBody(b,second),200);
+            transaction(()->{
+                vds.find(a.vd().id(),true).orElseThrow();
+                var future=pool.submit(()->lifecycle.authorize(second.attemptId(),second.epoch(),b.supervisor().podUid()));
+                try{assertThat(future.get(5,TimeUnit.SECONDS).runtime().vdId()).isEqualTo(b.vd().id());}
+                catch(Exception e){throw new AssertionError("Producer B used the default VD A authority",e);}
+                return null;
+            });
+            var cancel=pool.submit(()->executionApi.cancelTask(first.taskId(),"{}"));
+            var commit=pool.submit(()->{runner(b,current(second),"commit",resultBody(b,second),201);return true;});
+            cancel.get(10,TimeUnit.SECONDS);assertThat(commit.get(10,TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(executions.task(first.taskId()).orElseThrow().state()).isEqualTo("CANCELLING");
+        assertThat(runtimes.result(first.taskId())).isEmpty();assertThat(runtimes.result(second.taskId()).orElseThrow().vdRuntimeId()).isEqualTo(b.supervisor().id());
+        assertThat(allocations.open(a.supervisor().id())).hasSize(1);assertThat(allocations.open(b.supervisor().id())).hasSize(1);
+        poll(a,body(a,2,List.of(),List.of(first)),200);poll(b,body(b,2,List.of(),List.of(second)),200);
+        assertThat(allocations.open(a.supervisor().id())).isEmpty();assertThat(allocations.open(b.supervisor().id())).isEmpty();
+        assertThat(executions.task(first.taskId()).orElseThrow().state()).isEqualTo("CANCELLED");
+    }
 
     @Test void publicVdRunIsAuthenticatedPinnedIdempotentAndRequiresReadyCompatibleService()throws Exception {
         var f=fixture(1,1);var request=Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of());

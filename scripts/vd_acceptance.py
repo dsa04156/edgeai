@@ -288,13 +288,93 @@ class VDScenario:
         self.report.update(taskExecution=True, scope='real-kubernetes-vd-task-and-lifecycle')
         print('PASS: actual VD child DAG/Result, ' + ('API restart, ' if restart else '') + 'live replacement, isolated cancellation, failure/retry and physical drain', flush=True)
 
+    def mixed_tasks(self, restart=None):
+        left = self.create('mixed-left', {'mode': 'AUTO'}, task_capacity=2)
+        right = self.create('mixed-right', {'mode': 'AUTO'}, task_capacity=2)
+        targets = {}
+        for vd in (left, right):
+            operation = self.command(vd['id'], 'provision', 0)
+            runtime, pod = self.ready(vd['id'], operation['id'])
+            targets[vd['id']] = {'runtime': runtime, 'podUid': pod['metadata']['uid'], 'operationId': operation['id']}
+        left_profile = self.request('virtual-devices/' + left['id'])['vd']['serviceProfileVersionId']
+        right_profile = self.request('virtual-devices/' + right['id'])['vd']['serviceProfileVersionId']
+        assert left_profile != right_profile and targets[left['id']]['podUid'] != targets[right['id']]['podUid']
+        workflow = self.request('workflows', 'POST', {'key': self.prefix + '-mixed-chain', 'displayName': 'VD to Node to distinct VD'}, expected=201)
+        tasks = []
+        for key, profile in (('source', left_profile), ('bridge', left_profile), ('sink', right_profile)):
+            tasks.append({'key': key, 'serviceProfileVersionId': profile, 'parameters': {'features': [2, 1] if key == 'source' else [99, 99],
+                'weights': [2, 3], 'bias': 1, 'simulationDelayMillis': (25000 if restart else 5000) if key == 'bridge' else 3000}})
+        edges = [{'fromTask': a, 'toTask': b, 'fromPort': 'output', 'toPort': 'input', 'mode': 'BATCH'} for a, b in (('source', 'bridge'), ('bridge', 'sink'))]
+        version = self.request('workflows/' + workflow['id'] + '/versions', 'POST', {'version': '1.0.0', 'tasks': tasks, 'dependencies': edges}, expected=201)
+        node = targets[right['id']]['runtime']['nodeUid']
+        plan = {'source': {'mode': 'VD', 'vdId': left['id']}, 'bridge': {'mode': 'NODE', 'nodeId': node}, 'sink': {'mode': 'VD', 'vdId': right['id']}}
+        body = {'workflowVersionId': version['id'], 'execution': {'mode': 'AUTO'}, 'parameters': {}, 'taskExecutions': plan}
+        key = str(uuid.uuid4()); run = self.request('workflow-runs', 'POST', body, key=key, expected=201)
+        assert run['taskExecutions'] == plan and run['mode'] == 'AUTO' and run['vdId'] is None
+        initial = self.request('workflow-runs/' + run['id'])
+        task_ids = {task['key']: task['id'] for task in initial['tasks']}
+        for task in initial['tasks']:
+            target = plan[task['key']]
+            assert task['initialMode'] == target['mode'] and task['initialVdId'] == target.get('vdId') and task['initialNodeId'] == target.get('nodeId')
+            if task['key'] != 'source':
+                assert task['state'] == 'WAITING' and not self.request('tasks/' + task['id'])['attempts']
+        def bridge_running():
+            task = self.request('tasks/' + task_ids['bridge'])
+            assert task['task']['state'] not in ('FAILED', 'CANCELLED', 'SKIPPED')
+            if not task['attempts'] or task['attempts'][0]['state'] != 'RUNNING': return None
+            resources = self.kube(['-n', self.namespace, 'get', 'pods,jobs', '-l', 'edgeai.io/run-id=' + run['id'], '-o', 'json'])['items']
+            pods = [p for p in resources if p['kind'] == 'Pod']
+            if len(pods) != 1: return None
+            pod = pods[0]; actual = self.kube(['get', 'node', pod['spec']['nodeName'], '-o', 'json'])
+            assert actual['metadata']['uid'] == node
+            assert pod['metadata']['labels']['edgeai.io/task-id'] == task_ids['bridge']
+            assert pod['status']['containerStatuses'][0]['imageID'].endswith(self.image.split('@')[1])
+            return {'podUid': pod['metadata']['uid'], 'attemptId': task['attempts'][0]['id'], 'nodeUid': node}
+        bridge = wait(bridge_running, 60, 'Mixed Node bridge did not claim after the first VD result')
+        restart_proof = None
+        if restart:
+            restart_proof = restart(); self.csrf = self.request('csrf')['token']
+            for vd in (left, right):
+                runtime, pod = self.ready(vd['id'], targets[vd['id']]['operationId'])
+                assert runtime['id'] == targets[vd['id']]['runtime']['id'] and pod['metadata']['uid'] == targets[vd['id']]['podUid']
+        assert self.request('workflow-runs', 'POST', body, key=key)['id'] == run['id']
+        def completed():
+            state = self.request('workflow-runs/' + run['id'])['run']['state']
+            assert state not in ('FAILED', 'CANCELLED'), 'Mixed VD/Node execution failed'
+            return state == 'SUCCEEDED'
+        wait(completed, 120, 'Mixed VD/Node chain did not finish')
+        results, artifacts = [], []
+        for name, task_id in task_ids.items():
+            attempts = self.request('tasks/' + task_id)['attempts']; assert len(attempts) == 1
+            attempt = attempts[0]; target = plan[name]
+            assert attempt['mode'] == target['mode'] and attempt['vdId'] == target.get('vdId') and attempt['nodeId'] == target.get('nodeId')
+            items = self.request('tasks/' + task_id + '/results')['items']; assert len(items) == 1
+            result = items[0]; assert result['attemptId'] == attempt['id'] and result['remoteAllocationId'] is None
+            if name == 'bridge':
+                assert result['producerPodUid'] == bridge['podUid'] and result['attemptId'] == bridge['attemptId'] and result['vdRuntimeId'] is None
+            else:
+                runtime = targets[target['vdId']]['runtime']
+                assert result['producerPodUid'] == runtime['podUid'] and result['vdRuntimeId'] == runtime['id']
+            assert len(result['artifacts']) == 1
+            artifacts.append({'artifact': result['artifacts'][0], 'expected': {'sourceMode': 'SYNTHETIC', 'score': 8, 'prediction': 1, 'features': [2, 1]}})
+            results.append({'task': name, 'result': result})
+        verified = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts), text=True, capture_output=True, env=self.env, timeout=60)
+        assert verified.returncode == 0, 'Mixed VD/Node fixed-version S3 content differs; details suppressed'
+        for vd in (left, right):
+            operation = self.command(vd['id'], 'drain', 0)
+            wait(lambda: self.request('operations/' + operation['id'])['state'] == 'SUCCEEDED' and not self.resources(vd['id']), 90, 'Mixed VD resources did not drain')
+        wait(lambda: not self.kube(['-n', self.namespace, 'get', 'pods,jobs', '-l', 'edgeai.io/run-id=' + run['id'], '-o', 'json'])['items'], 90, 'Mixed Node resources did not terminate')
+        self.report['cases'].append({'case': 'mixed-task-targets', 'sourceMode': 'SYNTHETIC', 'runId': run['id'], 'taskExecutions': plan,
+            'vdTargets': targets, 'bridge': bridge, 'results': results, 'restart': restart_proof, 'verifiedArtifacts': len(artifacts), 'resourcesRemaining': 0})
+        print('PASS: actual distinct VD -> Node -> VD, pinned producers/three S3 results, API restart and physical cleanup', flush=True)
+
     def cleanup(self):
         self.csrf = self.request('csrf')['token']
         for vd in self.created:
             self.request('virtual-devices/' + vd, 'DELETE')
             wait(lambda: self.execution(vd)['current'] is None and not self.resources(vd), 90, 'Scenario VD cleanup incomplete')
 
-    def run(self, restart=None, tasks=False):
+    def run(self, restart=None, tasks=False, mixed=False):
         try:
             self.exercise({'mode': 'AUTO'}, 'auto-restart' if restart else 'auto', restart)
             def target():
@@ -308,6 +388,7 @@ class VDScenario:
             self.exercise({'mode': 'NODE', 'nodeId': node['id']}, 'node')
             self.startup_failure()
             if tasks: self.task_execution(restart)
+            if mixed: self.mixed_tasks(restart)
         finally:
             self.cleanup()
         self.report_path.parent.mkdir(exist_ok=True, parents=True)

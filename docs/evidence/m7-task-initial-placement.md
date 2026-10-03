@@ -1,7 +1,25 @@
 # M7 작업별 최초 배치 검증
 
 2026-10-04. ADR0053/V29. Run 기본값 위에 DAG 작업 키별 AUTO/NODE 최초 배치를 연결했다.
-VD/REMOTE 혼합 배치, STREAM VD/REMOTE와 외부 장치 수용은 남으며 M7 전체 완료가 아니다.
+이 문서는 AUTO/NODE 배치 검증 기록이다. BATCH VD/REMOTE 후속은
+[혼합 배치 근거](m7-mixed-task-targets.md)를 따른다. STREAM VD/REMOTE와 외부 장치 수용은 남으며 M7 전체 완료가 아니다.
+
+## 후속 CI·배포 확인
+
+`fe32ed8a0409813976926a2fa6c6a901f39f0459`의 CI37149032705는5jobs 모두 성공했다.
+원시17개 PASS·PG212·Runner111/MQTT90·kind22Run/S320·VD4/S35와 STREAM11개/Pod39개/
+고정 S3결과24개, 영속 TLS broker 교체·저장소·배포 데모를 확인했다.
+원시 감사는 `20261003T202950Z-64c51a17`이다. 새 혼합 V30 코드는 이 CI에 포함되지 않는다.
+
+GitOps `aabb81582cb6344e33d3508bedfb813d9fc9d9b8`의 실제 API/dashboard/MinIO imageID·
+Ready/PVCBound/ArgoSynced를 `20261003T202950Z-98cfa5e7`에서 확인했다.
+공유 개발 DB는 migration29개 모두 성공했고 V29 checksum1421541522다.
+기존10파일의 고정 버전·내용과 PostgreSQL/MinIO 두PVC 신원을
+`20261003T203013Z-192106b1` 저장소 검사에서 보존했다.
+Argo aggregate health의 기존 공유Ingress Progressing은 유지한다.
+
+이 CI에서 자동 취소도 통과했으나 아래 선행204645f 실패의 원인이 밝혀진 것은 아니다.
+실패 진단을 artifact에 보존하는 개선을 유지한다.
 
 ## 동작과 검증 경계
 
@@ -47,7 +65,7 @@ Runner는 CI에서 이미 검증한638d77d의 digest `eabb42b73b41b4768550ac65df
 실장비 정확도 또는 성능 수용을 대신하지 않는다.
 
 V29의 최초 적용 후 SHA-256은 `eacf25681b73403f7ed79cc04c6fd324207ff6bbd9187ae648262572273992dd`,
-로컬 Flyway checksum은1421541522다. 공유 Kubernetes 개발 DB의 새 배포 적용은 후속이다.
+로컬 Flyway checksum은1421541522다. 공유 개발 DB 적용은 위 후속 배포에서 확인했다.
 
 ## 실패와 남은 CI 게이트
 
@@ -67,5 +85,5 @@ V29의 최초 적용 후 SHA-256은 `eacf25681b73403f7ed79cc04c6fd324207ff6bbd91
   유지하고, 취소만 선택하면 모든 시나리오 취소와 실제 DB Result0을 확인하도록 수정했다.
   `193548Z-8aef1cde`에서 같은 단독 진단을 통과했다. 선행 CI driver 실패와는 다른 문제다.
 
-CI 기본 STREAM 목록은11개다. 신규 배치의 게시 이미지·배포, 선행 CI 간헐 실패 확인,
-VD/REMOTE 혼합 배치·실제 외부 장치 및 M5 잔여/M8–M10을 계속 진행한다.
+CI 기본 STREAM 목록11개와 해당 이미지·배포는 위 후속 확인을 통과했다.
+선행 CI 간헐 실패의 원인 확인, 후속 혼합 배치·실제 외부 장치 및 M5 잔여/M8–M10은 계속 진행한다.

@@ -93,7 +93,8 @@ class RemoteWorkerIntegrationTest {
         return (Map<?,?>)JSON.decode(response.body());
     }
     record Fixture(UUID run,UUID task,UUID child,UUID attempt,String request,String key){}
-    Fixture create(boolean remote,boolean child,int delay,boolean retry) throws Exception {
+    Fixture create(boolean remote,boolean child,int delay,boolean retry) throws Exception {return create(remote,child,delay,retry,Map.of());}
+    Fixture create(boolean remote,boolean child,int delay,boolean retry,Map<String,Object> taskExecutions) throws Exception {
         var spec=new HashMap<Object,Object>((Map<?,?>)JSON.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json"))));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));spec.put("recovery",Map.of("mode","RESTART"));
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,JSON.canonical(Map.of("key","worker-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
@@ -102,6 +103,7 @@ class RemoteWorkerIntegrationTest {
         var version=workflows.publish(workflow.id(),JSON.canonical(Map.of("version","1.0.0","tasks",tasks,"dependencies",child?List.of(Map.of("fromTask","root","toTask","child","fromPort","output","toPort","input","mode","BATCH")):List.of()))).value();
         var body=new TreeMap<String,Object>(Map.of("workflowVersionId",version.id().toString(),"execution",remote?Map.of("mode","REMOTE","providerKey","reference"):Map.of("mode","AUTO"),"parameters",Map.of()));
         if(retry)body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",600,"retryOn",List.of("RUNTIME_LOST")));
+        if(!taskExecutions.isEmpty())body.put("taskExecutions",taskExecutions);
         String text=JSON.canonical(body),key=UUID.randomUUID().toString();var response=call("POST","/api/v1/workflow-runs",text,key,201);UUID run=UUID.fromString((String)response.get("id"));
         var rows=executions.detail(run).tasks();UUID task=rows.stream().filter(t->t.key().equals("root")).findFirst().orElseThrow().id(),next=rows.stream().filter(t->t.key().equals("child")).map(t->t.id()).findFirst().orElse(null);
         return new Fixture(run,task,next,executions.taskDetail(task).attempts().getFirst().id(),text,key);
@@ -112,6 +114,51 @@ class RemoteWorkerIntegrationTest {
     void finishKubernetesCreate(UUID runtime){
         // No Kubernetes gateway is invoked in this fixture. Drain only this class's synthetic K8s commands.
         boolean found=false;for(int i=0;i<100;i++){var next=runtimes.leaseCommand(SCOPE,UUID.randomUUID(),clock.instant(),Duration.ofSeconds(30));if(next.isEmpty())break;var leased=next.get();if(leased.runtimeId().equals(runtime) && leased.kind().equals("CREATE"))found=true;assertThat(runtimes.finishCommand(leased.id(),leased.leaseOwner(),clock.instant())).isTrue();}assertThat(found).isTrue();
+    }
+
+    TaskResult commitKubernetesFixture(UUID attempt) throws Exception {return commitKubernetesFixture(attempt,null);}
+    TaskResult commitKubernetesFixture(UUID attempt,VerifiedArtifact expectedInput) throws Exception {
+        // Actual S3/Result verification; Kubernetes scheduling and computation are explicit fixtures here.
+        var r=runtimes.byAttempt(attempt).orElseThrow();var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"mixed-fixture-node");
+        lifecycle.submitted(attempt,pod.jobUid());var assignment=lifecycle.claim(attempt,r.epoch(),pod);finishKubernetesCreate(r.id());
+        if(expectedInput!=null)assertThat(assignment.inputs()).singleElement().satisfies(input->assertThat(input.artifact()).isEqualTo(expectedInput));
+        Path file=root.resolve(UUID.randomUUID()+".json");Files.writeString(file,"{\"sourceMode\":\"SYNTHETIC\",\"features\":[2,1],\"score\":8.0}");
+        byte[] bytes=Files.readAllBytes(file);String sha=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        var content=new ArtifactContent(r.taskId(),attempt,"output",sha,bytes.length,"application/json");String version=artifacts.uploadFile(content,file);
+        var result=commits.commit(attempt,r.epoch(),pod.podUid(),new ResultManifest(List.of(new ResultManifest.Output("output",bytes.length,sha,"application/json",version)))).value();
+        lifecycle.confirmStopped(attempt);return result;
+    }
+
+    @Test void waitingRemoteOverridePinsProviderAndConsumesActualKubernetesFixtureResult()throws Exception {
+        var f=create(false,true,0,false,Map.of("child",Map.of("mode","REMOTE","providerKey","reference")));
+        var child=executions.taskDetail(f.child());var binding=provider.select("reference");
+        assertThat(executions.detail(f.run()).run().remoteTarget()).isNull();
+        assertThat(child.task().initialRemoteTarget()).isEqualTo(binding);assertThat(child.task().initialMode()).isEqualTo("REMOTE");
+        assertThat(child.attempts()).isEmpty();assertThat(child.task().initialVdId()).isNull();
+        var detail=call("GET","/api/v1/tasks/"+f.child(),null,null,200);
+        assertThat(((Map<?,?>)((Map<?,?>)detail.get("task")).get("initialRemoteTarget")).get("configurationDigest")).isEqualTo(binding.configurationDigest());
+        var source=commitKubernetesFixture(f.attempt());
+        var next=executions.taskDetail(f.child()).attempts().getFirst();assertThat(next.remoteTarget()).isEqualTo(binding);
+        assertThat(lifecycle.remoteDispatch(next.id()).inputs().getFirst().artifact()).isEqualTo(source.outputs().getFirst().artifact());
+        until(()->executions.detail(f.run()).run().state().equals("SUCCEEDED"));
+        var result=runtimes.result(f.child()).orElseThrow();assertThat(result.producerPodUid()).isNull();assertThat(result.remoteAllocationId()).isNotNull();
+        Path file=root.resolve(UUID.randomUUID()+".json");artifacts.downloadFile(result.outputs().getFirst().artifact(),file);assertThat(Files.readString(file)).contains("8.0");
+        assertThat(call("POST","/api/v1/workflow-runs",f.request(),f.key(),200).get("id")).isEqualTo(f.run().toString());
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.task SET initial_remote_configuration_digest=? WHERE id=?","sha256:"+"f".repeat(64),f.child())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        until(()->runtimes.activeRemote(SCOPE,1000).isEmpty());
+    }
+
+    @Test void remoteDefaultCanReleaseAKubernetesChildWithoutInheritingProviderBinding()throws Exception {
+        var f=create(true,true,0,false,Map.of("child",Map.of("mode","AUTO")));
+        assertThat(executions.taskDetail(f.child()).task().initialRemoteTarget()).isNull();
+        until(()->runtimes.result(f.task()).isPresent());
+        var child=executions.taskDetail(f.child()).attempts().getFirst();assertThat(child.mode()).isEqualTo("AUTO");assertThat(child.remoteTarget()).isNull();
+        assertThat(runtimes.byAttempt(child.id()).orElseThrow().remote()).isFalse();
+        var expected=runtimes.result(f.task()).orElseThrow().outputs().getFirst().artifact();
+        commitKubernetesFixture(child.id(),expected);
+        assertThat(executions.detail(f.run()).run().state()).isEqualTo("SUCCEEDED");
+        assertThat(runtimes.result(f.child()).orElseThrow().producerPodUid()).isNotNull();
+        until(()->runtimes.activeRemote(SCOPE,1000).isEmpty());
     }
 
     @Test void publicRequestAndFreshWorkerInstancesExecuteRealBatchWithPinnedInput() throws Exception {

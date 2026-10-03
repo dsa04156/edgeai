@@ -21,6 +21,7 @@ from vd_acceptance import VDScenario, wait, ROOT
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--context', required=True)
+    parser.add_argument('--mixed', action='store_true', help='Also verify a chain across two distinct VDs and a real Node Job')
     args = parser.parse_args()
     k = ['kubectl', '--context', args.context, '--request-timeout=20s']
     def call(arguments, value=None, raw=None, timeout=40):
@@ -135,7 +136,7 @@ def main():
             fresh_uid = start_api(); assert fresh_uid != old_uid; current_api_uid = fresh_uid
             scenario.origin = forward()
             return {'kind': 'actual-kubernetes-api-pod', 'oldUid': old_uid, 'newUid': fresh_uid, 'jarSha256': jar_hash, 'databasePodPreserved': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-        scenario.run(restart, tasks=True)
+        scenario.run(restart, tasks=True, mixed=args.mixed)
     except BaseException:
         for kind, name, uid in records:
             if kind != 'pod': continue
