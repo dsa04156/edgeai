@@ -89,7 +89,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
         time.sleep(.02)
 
 
-def run_case(name, placement, cancel=False, recover=False):
+def run_case(name, placement, cancel=False, recover=False, finalize=False):
     global active, phase, csrf
     csrf = request('csrf')['token']
     prefix = 'stream-demo-' + uuid.uuid4().hex
@@ -104,6 +104,8 @@ def run_case(name, placement, cancel=False, recover=False):
         if task == 'sink':
             spec['stream']['inputs'] = {'input': {'mediaType': 'application/json', 'maxPayloadBytes': 262144}}
             spec['stream']['outputs'] = {}
+            if finalize:
+                spec['command'] = ['python3', '-c', config['finalizerCommand']]
         elif task == 'report':
             spec['command'] = ['python3', '-c', config['reportCommand']]
             spec['inputs'] = {key: {'mediaType': 'application/json', 'maxBytes': 1048576, 'required': True} for key in ('root', 'sink')}
@@ -128,7 +130,7 @@ def run_case(name, placement, cancel=False, recover=False):
         ('root', 'sink', 'sum', 'input', 'STREAM'), ('root', 'report', 'result', 'root', 'BATCH'), ('sink', 'report', 'result', 'sink', 'BATCH'))]
     version = request('workflows/' + workflow['id'] + '/versions', 'POST', {'version': '1.0.0', 'tasks': tasks, 'dependencies': edges}, 201)
     body = {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}
-    if recover:
+    if recover or finalize:
         body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['RUNTIME_LOST']}
     run = request('workflow-runs', 'POST', body, 201, str(uuid.uuid4()))
     active = run['id']
@@ -238,6 +240,17 @@ def run_case(name, placement, cancel=False, recover=False):
             wait(lambda: all(o.ready for o in owners.values()), tick)
             for port, owner in owners.items():
                 owner.emit([Emission(discovered_routes[port]['routeId'], b'', None, 'END')])
+            if finalize:
+                phase = name + '-finalizing'
+                save('phase.json', {**current, 'phase': phase})
+                wait(lambda: request('tasks/' + task_ids['root'] + '/results')['items'] and all(o.completed for o in owners.values()), tick)
+                current['preservedResult'] = request('tasks/' + task_ids['root'] + '/results')['items'][0]
+                phase = name + '-finalizer-granted'
+                save('phase.json', {**current, 'phase': phase})
+                wait(lambda: (work / (phase + '.continue')).exists(), tick)
+                phase = name + '-finalizer-restoring'
+                save('phase.json', {**current, 'phase': phase})
+                wait(lambda: (work / (phase + '.continue')).exists(), tick)
             phase = name + '-results'
             save('phase.json', {**current, 'phase': phase})
 
@@ -251,14 +264,21 @@ def run_case(name, placement, cancel=False, recover=False):
             for key, identity in task_ids.items():
                 attempts = sorted(request('tasks/' + identity)['attempts'], key=lambda a: a['number'])
                 values = request('tasks/' + identity + '/results')['items']
-                assert len(attempts) == (2 if recover and key != 'report' else 1) and attempts[-1]['state'] == 'SUCCEEDED' and len(values) == 1
+                retried = recover and key != 'report' or finalize and key == 'sink'
+                assert len(attempts) == (2 if retried else 1) and attempts[-1]['state'] == 'SUCCEEDED' and len(values) == 1
+                if retried:
+                    assert attempts[0]['state'] == 'FAILED' and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
                 value = values[0]
                 assert value['attemptId'] == attempts[-1]['id'] and value['producerPodUid'] and len(value['artifacts']) == 1
+                if finalize and key == 'root':
+                    assert value == current['preservedResult'], 'Successful peer Result changed during finalizer retry'
                 expected = {'sourceMode': 'SYNTHETIC', 'sum': 37, 'inputs': {'root': 14, 'sink': 23}} if key == 'report' else {'sum': 14 if key == 'root' else 23}
                 results.append({'task': key, 'result': value, 'expected': expected})
             current.update(cancelled=False, results=results)
         current['deviceOwner'] = 'DeviceRunSource'
         current['deviceConnections'] = {port:owner.connections for port,owner in owners.items()}
+        if finalize:
+            assert all(o.completed and o.connections == 1 for o in owners.values())
     wait(lambda: all(r['generation']['closedAt'] for r in request('workflow-runs/' + active + '/streams')['items']))
     current['closedRoutes'] = request('workflow-runs/' + active + '/streams')['items']
     report['cases'].append(current)
@@ -274,6 +294,7 @@ def main():
     run_case('auto', {'mode': 'AUTO'})
     run_case('node', {'mode': 'NODE', 'nodeId': config['nodeId']})
     run_case('recover', {'mode': 'AUTO'}, recover=True)
+    run_case('finalizer', {'mode': 'AUTO'}, finalize=True)
     run_case('cancel', {'mode': 'AUTO'}, cancel=True)
     save('done.json', report)
 

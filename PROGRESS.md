@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+완료 허가 뒤 실제 Kubernetes sink Job 유실도 검증했다. sink만 새 Attempt/Pod에서 원본
+grant/checkpoint로 결과를 확정하고 이미 성공한 root Result·기존 경로/체크포인트 이력을 보존했다.
+계산 중 그룹 복구·AUTO/NODE·API 교체·취소 포함5개 시나리오/Pod17개/S3파일12개 PASS.
+docs/evidence/m7-finalizer-kubernetes.md. 새 공개 retry 이미지의 CI·배포는 후속 게이트다.
+선행 ca56e2f CI37127032786은5jobs/17JSON·Runner111/MQTT87·완성 이미지 kind를 통과했다.
+GitOps94952ff의 실제3imageID·Ready/PVC/ArgoSynced도141815Z-64242f02에서 확인했다.
+
+아래는 공개 정책 연결의 검증 이력이다.
 ADR0047 공개 STREAM retry를 기존 Run API·Swagger·화면에 연결했다. 그룹/최종 처리 시험의
 직접 정책 생성 fixture를 제거하고 모두 공개 MVC 요청으로 시작한다. 공개 PostgreSQL23개,
 실제 Spring/PG/S3/TLS/Runner6개, 계약5개/MVC26개, UI38개 PASS다.
@@ -8,7 +16,7 @@ ADR0047 공개 STREAM retry를 기존 Run API·Swagger·화면에 연결했다. 
 Attempt2개·외부 상태9 복원·동일 장치 자동 재연결→14/23/BATCH37을 검증했다.
 정상 AUTO/NODE·API 교체·취소 포함4개 시나리오, 실제 Pod13개·고정 S3 파일9개와 정리 PASS.
 최종 단위101·실제 저장소36·실API/DB/Swagger PC모바일10개도 PASS, Flyway26개는 불변이다.
-새 CI/배포와 최종 처리 Kubernetes 장애 수용은 아직 완료가 아니다.
+이 시점에는 새 CI/배포와 최종 처리 Kubernetes 장애 수용이 남았으며 후속 상태는 위 기록을 따른다.
 상세: docs/evidence/m7-public-stream-retry.md.
 
 아래는 선행 장치 재연결의 검증 이력이다.

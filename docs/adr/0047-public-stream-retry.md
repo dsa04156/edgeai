@@ -34,6 +34,7 @@ STREAM offload·REMOTE·VD는 계속409이며 기본 공개 STREAM 비활성은5
 실제 Kubernetes 시험에는 공개 retry Run의 sink Job을 UID 조건으로 제거하는 시나리오를
 추가한다. 이전 Pod2개·세대3개의 종료, 새 Attempt2개·새 Pod2개, 새 Attempt에 저장된 상태9,
 같은 장치 owner/센서 커서, 후속14/23/BATCH37의 고정 S3 결과와 전체 자원 정리를 확인한다.
-실제 최종 처리 단계의 Kubernetes 장애 수용은 별도 게이트다.
+실제 최종 처리 단계의 Kubernetes 장애도 [후속 검증](../evidence/m7-finalizer-kubernetes.md)에서
+파일 장벽으로 허가 뒤 장애 시점을 고정하고 원본 grant/checkpoint·peer Result 보존을 확인했다.
 
 [실행 결과와 제한](../evidence/m7-public-stream-retry.md).

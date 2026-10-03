@@ -54,7 +54,8 @@ ca56e2f CI Runner job에서 실제 시험·발행한 digest
 
 ## 남은 범위
 
-완료 허가 뒤 실제 Kubernetes 장애, 운영 STREAM 배포·다중 장치 데모, STREAM 실행 중 위치
+후속 완료 허가 뒤 실제 Kubernetes 장애도 [최종 처리 장애 근거](m7-finalizer-kubernetes.md)의
+5개 시나리오/Pod17개/S3파일12개로 통과했다. 새 CI/배포, 운영 STREAM 배포·다중 장치 데모, STREAM 실행 중 위치
 전환과 M5 상태형/외부 계약 수용, M8–M10은 남는다. 선행 SDK 전체 MQTT의 간헐 timeout/lease
 만료는 원인 미확정이다. 선행 ca56e2f CI Runner의 MQTT 실행은 PASS였지만 재발 원인 해결을
 의미하지 않는다. 이 문서는 M7 또는 전체 플랫폼 완료 판정이 아니다.

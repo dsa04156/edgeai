@@ -2,6 +2,20 @@
 
 2026-10-03. [ADR0046](../adr/0046-device-run-reconnect.md).
 M7 전체 완료, 공개 retry 활성화 또는 Kubernetes 장애 수용 판정은 아니다.
+후속 공개 retry와 실제 그룹/최종 처리 Kubernetes 장애 검증은
+[공개 정책](m7-public-stream-retry.md)과 [최종 처리 수용](m7-finalizer-kubernetes.md)을 따른다.
+
+## 후속 CI·배포 확인
+
+source ca56e2f의 CI37127032786은5jobs/원시결과17개 PASS/0이다.
+`20261003T141907Z-7c641df5`에서 Runner 컨테이너111·HTTPS/TLS MQTT87, 완성 API 이미지의
+실제 kind AUTO/NODE/cancel·DeviceRunSource·Runner Pod8개·고정 S3 파일6개를 대조했다.
+API 교체17.122초 동안 실제 Runner UID2개를 유지했다. 이 CI에는 공개 retry 장애 시나리오가 없다.
+GitOps94952ff 배포는 `20261003T141815Z-64242f02`에서 정확한 API/dashboard/MinIO imageID,
+Ready·PVC Bound·Argo Synced와 VD 활성화를 확인했다. 기존 공유 Ingress 상태로 aggregate는
+Progressing이다. 로컬 MQTT 간헐 실패의 원인 해결 판정은 하지 않는다.
+
+아래는 최초 구현 당시 검증 이력과 당시 남은 범위다.
 
 | 검사 | 실행 ID | 결과 |
 |---|---|---|

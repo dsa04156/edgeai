@@ -19,7 +19,7 @@
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
 ADR0047에서 공개 Run의 retry 정책을 그룹/최종 처리 복구에 연결했다. 공개 API·실서버6개·
-PC/모바일과 실제 Kubernetes 그룹 장애 복구를 통과했다. 최종 처리 Kubernetes 장애와 새 CI/배포를 확인한다.
+PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과했다. 새 CI/배포를 확인한다.
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료

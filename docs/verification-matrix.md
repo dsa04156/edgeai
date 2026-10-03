@@ -51,6 +51,7 @@
 | M7-GROUP-RETRY | scripts/test-integration.sh + scripts/test-runtime-results.sh | 전체 종료/회수 장벽·동시 retry·취소/기한·새 Attempt2개·외부 상태9→14/23→BATCH37·Device journal 인계 | 실제 공개 MVC/PG/HTTPS/MQTT/S3/Runner; Pod 경계 fixture; m7-public-stream-retry.md |
 | M7-PUBLIC-RETRY | scripts/test-integration.sh + scripts/test-ui.sh | retry 정책 검증·순서 정규화·중복/충돌·PC/모바일 정책 입력과 재전송 | 공개 MVC/실제 PG23개, UI HTTP fixture38개; m7-public-stream-retry.md |
 | M7-KUBERNETES-RETRY | scripts/test-stream-kubernetes.sh <명시적-context> | 공개 retry·실제 Job 유실·이전 Pod/권한 회수·새 Attempt2개 상태9·동일 Device 자동 재연결·결과37 | 수정 JAR+CI-tested Runner 실제 클러스터4개 시나리오/Pod13개/S3파일9개 PASS; 새 API 이미지 및 최종 처리 장애와 구분, m7-public-stream-retry.md |
+| M7-KUBERNETES-FINALIZER | scripts/test-stream-kubernetes.sh <명시적-context> | 허가 뒤 실제 Job 유실·단독 새 Pod/Attempt·원본 grant/checkpoint·peer Result 보존·계산 재실행 없음 | 현재 JAR+CI-tested Runner 전체5개 시나리오/Pod17개/S3파일12개 PASS; 새 API 이미지와 구분, m7-finalizer-kubernetes.md |
 | M7-DEVICE-DISCOVERY | scripts/test-integration.sh + scripts/test-runner.sh | Device 토큰·불변 세션 고정·다른 Run404·교체401/409·fanout 페이지·비밀 필드 거절·lease 불변 | 실제 PostgreSQL/MVC·실제 SDK/HTTP; m7-device-route-discovery.md |
 | M7-DEVICE-DISCOVERY-DAG | scripts/test-runtime-results.sh | 실제 HTTPS Device 조회의 route/generation으로 송신·독립 Runner2개·BATCH 결과37·취소 | 실제 Spring/PG/TLS MQTT/S3/SDK; Pod 생성/신원은 fixture |
 | M7-PUBLIC-RUN | scripts/test-integration.sh | 공개 Run·정규화/멱등·Device pin·그룹 동시 배정·BATCH 장벽·NODE·실패/취소·불변 DB·경로 조회 | 실제 PostgreSQL/MVC; Pod/S3 receipt fixture |

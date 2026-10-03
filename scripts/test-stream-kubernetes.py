@@ -287,6 +287,8 @@ def main():
             config = {'origin': api_origin, 'runnerImage': snapshot['runnerImage'], 'nodeId': node['metadata']['uid'],
                       'streamSpec': json.loads((ROOT / 'contracts/profiles/service-stream.example.json').read_bytes()),
                       'batchSpec': json.loads((ROOT / 'contracts/profiles/service-execution.example.json').read_bytes()),
+                      # A test workload barrier after the real server grants completion, before file output.
+                      'finalizerCommand': "import os,time\nfrom pathlib import Path\nwork=Path(os.environ['EDGEAI_OUTPUT_DIR']).parent\n(work/'finalizer-entered').touch()\nwhile not (work/'finalizer-release').exists(): time.sleep(.05)\n" + (ROOT / 'runner/examples/stream_result.py').read_text(),
                       'reportCommand': 'import time; time.sleep(2)\n' + (ROOT / 'runner/examples/stream_report.py').read_text()}
             create('ConfigMap', root + '-scenario', immutable=True, data={'driver.py': (ROOT / 'scripts/stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
             create('Pod', driver, spec=pod_spec([{'name': 'source-driver', 'image': snapshot['runnerImage'], 'command': ['python3', '-B', '/scenario/driver.py'],
@@ -307,7 +309,7 @@ def main():
                 if current:
                     run = current['runId'];uuid.UUID(run);run_ids.add(run);observe(run)
                     phase = current['phase']
-                    if phase not in completed and ('expectedStates' in current or phase.endswith('-done')):
+                    if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-finalizer-granted', '-finalizer-restoring'))):
                         if 'expectedStates' in current:
                             task_ids = [str(uuid.UUID(current['tasks'][n])) for n in current['expectedStates']]
                             attempt_filter = ''
@@ -354,6 +356,53 @@ def main():
                                 assert query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + old_generations + ') AND closed_at IS NOT NULL') == '3'
                                 fault.update(newPodUids=sorted(after), oldRuntimesStopped=True, oldGenerationsClosed=True,
                                              restoredAttemptIds=current['expectedAttempts'])
+                        elif phase.endswith('-finalizer-granted'):
+                            sink = str(uuid.UUID(current['tasks']['sink']))
+                            owned = resources(run)
+                            pod = next(p for p in owned if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink)
+                            meta = pod['metadata'];old_attempt = str(uuid.UUID(meta['labels']['edgeai.io/attempt-id']))
+                            entered = call(['-n', 'edgeai-runtimes', 'exec', meta['name'], '--', 'python3', '-c',
+                                "from pathlib import Path;print(int(Path('/work/finalizer-entered').exists()))"]).decode().strip()
+                            if entered != '1':
+                                time.sleep(.3)
+                                continue
+                            grant = query("SELECT checkpoint_id,granted_at FROM edgeai.stream_task_completion WHERE attempt_id='" + old_attempt + "' AND granted_at IS NOT NULL")
+                            assert grant and query("SELECT count(*) FROM edgeai.task_result WHERE task_id='" + sink + "'") == '0'
+                            job = next(p for p in owned if p['kind'] == 'Job' and p['metadata']['labels']['edgeai.io/attempt-id'] == old_attempt)
+                            jm = job['metadata']
+                            assert jm['labels']['edgeai.io/run-id'] == run and jm['labels']['app.kubernetes.io/managed-by'] == 'edgeai-runtime-controller'
+                            snapshot['finalizerFault'] = {'runId': run, 'oldPodUid': meta['uid'], 'oldAttemptId': old_attempt, 'deletedJobUid': jm['uid'],
+                                'grant': grant, 'preservedResultId': current['preservedResult']['id'],
+                                'checkpointIds': query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines()}
+                            call(['delete', '--raw', '/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' + jm['name'], '-f', '-'],
+                                {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground', 'preconditions': {'uid': jm['uid']}})
+                        elif phase.endswith('-finalizer-restoring'):
+                            fault = snapshot['finalizerFault'];old_attempt = fault['oldAttemptId']
+                            sink = str(uuid.UUID(current['tasks']['sink']))
+                            candidates = [p for p in resources(run) if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink
+                                and p['metadata']['uid'] != fault['oldPodUid'] and any(s.get('state', {}).get('running') for s in p['status'].get('containerStatuses', []))]
+                            if not candidates:
+                                time.sleep(.3)
+                                continue
+                            assert len(candidates) == 1
+                            pod = candidates[0];meta = pod['metadata'];new_attempt = str(uuid.UUID(meta['labels']['edgeai.io/attempt-id']))
+                            flags = call(['-n', 'edgeai-runtimes', 'exec', meta['name'], '--', 'python3', '-c',
+                                "from pathlib import Path;print(int(Path('/work/finalizer-entered').exists()),int(Path('/work/stream').exists()))"]).decode().strip()
+                            if flags.startswith('0 '):
+                                time.sleep(.3)
+                                continue
+                            assert flags == '1 0', 'Finalizer retry unexpectedly opened a stream computation directory'
+                            assert fault['oldPodUid'] not in {p['metadata']['uid'] for p in resources(run) if p['kind'] == 'Pod'}
+                            assert query("SELECT desired_state,observed_state FROM edgeai.runtime_instance WHERE attempt_id='" + old_attempt + "'") == 'STOPPED|TERMINATED'
+                            assert query("SELECT predecessor_attempt_id,granted_attempt_id FROM edgeai.stream_finalization_recovery WHERE attempt_id='" + new_attempt + "'") == old_attempt + '|' + old_attempt
+                            assert query("SELECT checkpoint_id,granted_at FROM edgeai.stream_task_completion WHERE attempt_id='" + old_attempt + "'") == fault['grant']
+                            assert query("SELECT count(*) FROM edgeai.stream_task_completion WHERE attempt_id='" + new_attempt + "'") == '0'
+                            assert query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines() == fault['checkpointIds']
+                            assert query("SELECT count(*) FROM edgeai.route_generation WHERE run_id='" + run + "'") == '3'
+                            assert query("SELECT count(*) FROM edgeai.route_generation WHERE run_id='" + run + "' AND generation=1 AND closed_at IS NOT NULL") == '3'
+                            fault.update(newPodUid=meta['uid'], newAttemptId=new_attempt, oldRuntimeStopped=True,
+                                originalGrantPreserved=True, checkpointHistoryPreserved=True, newComputationOpened=False)
+                            call(['-n', 'edgeai-runtimes', 'exec', meta['name'], '--', 'touch', '/work/finalizer-release'])
                         else:
                             wait(lambda: not resources(run), 90, 'Actual stream runtime resources were not reclaimed')
                         call(['-n', 'edgeai', 'exec', driver, '--', 'touch', '/work/' + phase + '.continue'])
@@ -361,8 +410,9 @@ def main():
                         print('PASS: actual Kubernetes stream boundary ' + phase, flush=True)
                 if 'done' in state:
                     snapshot['cases'] = state['done']['cases']
-                    assert {case['case'] for case in snapshot['cases']} == {'auto', 'node', 'recover', 'cancel'} and restarted
+                    assert {case['case'] for case in snapshot['cases']} == {'auto', 'node', 'recover', 'finalizer', 'cancel'} and restarted
                     assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
+                    assert snapshot['finalizerFault']['originalGrantPreserved'] and snapshot['finalizerFault']['checkpointHistoryPreserved']
                     artifacts = []
                     for case in snapshot['cases']:
                         for row in case['results']:
@@ -371,7 +421,7 @@ def main():
                             if case['placement']['mode'] == 'NODE':
                                 assert observed['nodeUid'] == case['placement']['nodeId']
                             artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
-                    assert len(artifacts) == 9
+                    assert len(artifacts) == 12
                     result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
                     assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
@@ -437,7 +487,7 @@ def main():
                         process.kill();process.wait(5)
                 for record in reversed(records):
                     remove(*record)
-    print('PASS: actual TLS Kubernetes multi-device DAG, group retry, API restart and cancellation; all owned resources removed', flush=True)
+    print('PASS: actual TLS Kubernetes multi-device DAG, group/finalizer retry, API restart and cancellation; all owned resources removed', flush=True)
 
 
 if __name__ == '__main__':
