@@ -180,6 +180,16 @@ class StreamExecutionTest(unittest.TestCase):
         self.assertIsNone(self.artifact);self.assertFalse(self.commits)
         self.assertEqual('CANCELLED',self.failure)
 
+    def test_setgid_work_volume_still_creates_private_stream_session_and_commits(self):
+        # Kubernetes fsGroup marks emptyDir setgid; mkdir(0700) inherits that bit.
+        import stat
+        (self.root/'work').chmod(0o2700)
+        self.finalize=True;self.start();self.emit();self.finish(True)
+        self.assertEqual({'sum':14},json.loads(self.artifact))
+        self.assertEqual(1,len(self.commits))
+        for directory in ('stream','stream/journal','stream/workload'):
+            self.assertEqual(0o700,stat.S_IMODE((self.root/'work'/directory).stat().st_mode))
+
     def test_foreign_checkpoint_grant_never_runs_finalizer(self):
         self.wrong_receipt=True;self.finalize=True;self.start();self.emit();self.finish(False)
         self.assertIsNone(self.artifact);self.assertFalse(self.commits)

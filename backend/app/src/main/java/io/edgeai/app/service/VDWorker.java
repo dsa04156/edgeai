@@ -37,7 +37,8 @@ public final class VDWorker {
             if(cmd.kind().equals("CREATE")) {
                 if(r.desiredState().equals("RUNNING")) {
                     var launch=VDRuntimeDocuments.launch(r);
-                    if(!launch.serviceAccount().equals(settings.serviceAccount()) || !launch.controlPlane().equals(settings.controlPlane()))throw new RuntimeGatewayException(RuntimeGatewayException.Reason.OWNERSHIP_CONFLICT);
+                    if(!launch.serviceAccount().equals(settings.serviceAccount()) || !launch.controlPlane().equals(settings.controlPlane())
+                        || !launch.caConfigMap().equals(settings.caConfigMap()))throw new RuntimeGatewayException(RuntimeGatewayException.Reason.OWNERSHIP_CONFLICT);
                     var config=VDRuntimeDocuments.read(r.configurationJson());
                     var profile=profiles.find(UUID.fromString((String)config.get("serviceProfileVersionId"))).orElseThrow();
                     UUID uid=gateway.ensurePod(r,compiler.compile(ServiceExecutionInput.parseSpec(profile.specJson()),launch),tokens.issue(r));

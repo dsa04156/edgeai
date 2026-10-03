@@ -39,6 +39,15 @@ API 컨테이너에 명시한다. 로컬/공통 애플리케이션 기본값은 
 Runner SA에는 리소스 접근 권한을 추가하지 않는다. 기본 API token 자동 마운트는 꺼져 있고
 Pod 신원 증명용 audience=edgeai-runner projected token만 Job에 포함한다.
 
+내부 API·S3가 사설 CA의 HTTPS를 사용하면 runtime namespace에 공개 CA 번들의 `ca.crt`를 담은
+불변 ConfigMap을 준비하고 API에 `EDGEAI_RUNTIME_CA_CONFIG_MAP=<이름>`을 설정한다.
+Runner/VD는 이를 읽기 전용으로 마운트하고 인증서 검증을 유지한다. 빈 기본값은 시스템 신뢰 번들을
+사용한다. CA 교체는 새 이름으로 준비하며 기존 runtime이 종료될 때까지 기존 번들을 유지한다.
+VD는 이름을 실행 설정에 고정한다. 상세: [ADR0042](../../docs/adr/0042-runtime-tls-trust.md).
+
+`bash scripts/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
+검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
+
 `bash scripts/test-runtime-kubernetes.sh <명시적-context>`는 제한된 제어 서버 SA/TLS로
 실제 AUTO/NODE·TokenReview·watch·삭제를 시험한다. 해당 Attempt의 리소스만 정리한다.
 대기용 컨테이너 시험이며 Runner/MinIO 전체 실행 증거와 구분한다.

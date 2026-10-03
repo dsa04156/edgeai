@@ -19,7 +19,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 class RuntimeConfiguration {
     @Bean(name="taskScheduler") ThreadPoolTaskScheduler runtimeScheduler(){var scheduler=new ThreadPoolTaskScheduler();scheduler.setPoolSize(5);scheduler.setThreadNamePrefix("edgeai-controller-");return scheduler;}
     @Bean RuntimeSettings runtimeSettings(@Value("${edgeai.runtime.namespace}") String namespace,@Value("${edgeai.runtime.service-account}") String account,
-            @Value("${edgeai.runtime.control-plane-url}") String url,@Value("${edgeai.runtime.dispatch-seconds:120}") int timeout){return new RuntimeSettings(namespace,account,URI.create(url),timeout);}
+            @Value("${edgeai.runtime.control-plane-url}") String url,@Value("${edgeai.runtime.dispatch-seconds:120}") int timeout,
+            @Value("${edgeai.runtime.ca-config-map:}") String caConfigMap){return new RuntimeSettings(namespace,account,URI.create(url),timeout,caConfigMap);}
     @Bean(destroyMethod="close") RuntimeGateway runtimeGateway(RuntimeSettings settings,@Value("${edgeai.kubernetes.url}") String url,
             @Value("${edgeai.kubernetes.token-file:}") String token,@Value("${edgeai.kubernetes.ca-file:}") String ca){
         return new KubernetesRuntimeGateway(url,token,ca,settings.namespace(),settings.serviceAccount());

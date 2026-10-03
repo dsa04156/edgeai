@@ -74,6 +74,9 @@ def execute(runner, assignment):
         require(type(values) is list and values); ids.extend(values)
     checkpoint = CheckpointClient(client,assignment['runId'],ids)
     directory = runner.work/'stream'; directory.mkdir(mode=0o700)
+    # fsGroup emptyDir is setgid: mkdir(0700) inherits 02000. This directory
+    # was just created by this owner; retain the SDK's exact private-mode check.
+    directory.chmod(0o700)
     session = Session(client,assignment['runId'],reply['inputs'],reply['outputs'],spec['command']+spec['args'],
         directory,assignment['parameters'],limits=limits,step_timeout=spec['stepTimeoutSeconds'],
         timeout=runner.timeout(86400),create=True,cancel=cancelled,durability='EXTERNAL',checkpoint_client=checkpoint,

@@ -55,6 +55,7 @@ public final class KubernetesJobCompiler {
             Map.of("name", "EDGEAI_POD_UID", "valueFrom", Map.of("fieldRef", Map.of("fieldPath", "metadata.uid")))));
         container.put("volumeMounts", List.of(Map.of("name", "work", "mountPath", "/work"), Map.of("name", "claim", "mountPath", "/var/run/edgeai", "readOnly", true),
             Map.of("name","identity","mountPath","/var/run/edgeai-identity","readOnly",true)));
+        KubernetesTrustBundle.mount(pod,container,launch.caConfigMap());
         pod.put("containers", List.of(container));
         return Map.of("apiVersion", "batch/v1", "kind", "Job",
             "metadata", Map.of("name", launch.jobName(), "namespace", launch.namespace(), "labels", labels),

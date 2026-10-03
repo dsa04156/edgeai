@@ -5,12 +5,17 @@ import java.util.*;
 
 public record RuntimeLaunch(UUID runId, UUID taskId, UUID attemptId, long epoch,
         String namespace, String serviceAccount, String claimSecret, URI controlPlane,
-        UUID targetNodeId, String targetNodeName, List<String> excludedNodeNames) {
+        UUID targetNodeId, String targetNodeName, List<String> excludedNodeNames, String caConfigMap) {
+    public RuntimeLaunch(UUID runId,UUID taskId,UUID attemptId,long epoch,String namespace,String serviceAccount,String claimSecret,
+            URI controlPlane,UUID targetNodeId,String targetNodeName,List<String> excludedNodeNames) {
+        this(runId,taskId,attemptId,epoch,namespace,serviceAccount,claimSecret,controlPlane,targetNodeId,targetNodeName,excludedNodeNames,"");
+    }
     public RuntimeLaunch(UUID runId,UUID taskId,UUID attemptId,long epoch,String namespace,String serviceAccount,String claimSecret,
             URI controlPlane,UUID targetNodeId,String targetNodeName) {
         this(runId,taskId,attemptId,epoch,namespace,serviceAccount,claimSecret,controlPlane,targetNodeId,targetNodeName,List.of());
     }
     public RuntimeLaunch {
+        Objects.requireNonNull(caConfigMap);if(!caConfigMap.isEmpty())RuntimeNames.dns(caConfigMap,253);
         excludedNodeNames=List.copyOf(excludedNodeNames);
         if(excludedNodeNames.size()>16 || targetNodeName!=null && !excludedNodeNames.isEmpty())throw new IllegalArgumentException("Invalid AUTO exclusions");
         excludedNodeNames.forEach(n->RuntimeNames.dns(n,253));

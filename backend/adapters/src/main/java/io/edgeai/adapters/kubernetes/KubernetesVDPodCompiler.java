@@ -49,6 +49,7 @@ public final class KubernetesVDPodCompiler {
         var check=Map.of("command",List.of("python3","/opt/edgeai/vd.py","--ready"));
         container.put("readinessProbe",Map.of("exec",check,"periodSeconds",2,"timeoutSeconds",2,"failureThreshold",1));
         container.put("startupProbe",Map.of("exec",check,"periodSeconds",2,"timeoutSeconds",2,"failureThreshold",(launch.startupSeconds()+1)/2+1));
+        KubernetesTrustBundle.mount(pod,container,launch.caConfigMap());
         pod.put("containers",List.of(container));
         return Map.of("apiVersion","v1","kind","Pod","metadata",Map.of("name",launch.podName(),"namespace",launch.namespace(),"labels",labels),"spec",pod);
     }

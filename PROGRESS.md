@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+ADR0042의 Runtime 공개 CA 번들 설정·VD 불변 참조와 Runner fsGroup 디렉터리 권한을 구현했다.
+실제 Kubernetes에서 mkdir0700→2700 상속을 재현하고, 새 소유 폴더만 명시적으로0700으로 맞췄다.
+단위101·실제 PG178·실제 저장소34·HTTPS/TLS MQTT71개를 로컬 검증했다.
+MQTT 최초 전체 실행의 재연결1개 timeout은 단독/전체 재실행에서 재현되지 않았으며 원인 미확정이다.
+독립 다중 Runner DAG는 실제 Spring/PG/S3/TLS MQTT에서 검증했고 source08f57d1 CI5jobs/17JSON이 통과했다.
+새 실제 Kubernetes TLS 시험은 수정 Runner 이미지로 AUTO/NODE·API 재시작·취소·S3 결과를 확인해야 한다.
+상세: docs/evidence/m7-kubernetes-stream.md. 그룹 인계·운영 배포·M5 잔여/M7–M10 전체 수용은 남는다.
+
+아래는 이전 단계의 검증 이력이다.
 ADR0041/V25 공개 Run의 Device Session 고정·그룹 동시 배정·route generation 자동 준비를 구현했다.
 공개 생성/재전송·모든 BATCH 선행 Result 장벽·그룹 실패/취소 전파·metadata GET과 PC/모바일 UI를 연결했다.
 공개 MVC/실DB13개·전체 PG177개·공개 생성→실제 TLS/S3/MQTT/Runner2개·전체 저장소32개가 통과했다.

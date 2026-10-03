@@ -73,6 +73,17 @@ class VDLifecycleIntegrationTest {
         return new Fixture(vd,a,b,settings);
     }
     private VDOperation provision(Fixture f){return lifecycle.provision(f.vd().id(),f.vd().revision(),key(),f.settings(),false);}
+    @Test void runtimePersistsExplicitTrustReferenceAndKeepsLegacyConfigurationValid()throws Exception{
+        var f=fixture();var before=f.settings();
+        var trusted=new RuntimeSettings(before.namespace(),before.serviceAccount(),URI.create("https://control.example"),before.dispatchSeconds(),"edgeai-ca-v1");
+        var op=lifecycle.provision(f.vd().id(),0,key(),trusted,false);var r=lifecycle.get(op.targetRuntimeId());
+        var launch=io.edgeai.app.support.VDRuntimeDocuments.launch(r);
+        assertThat(launch.caConfigMap()).isEqualTo("edgeai-ca-v1");assertThat(launch.controlPlane()).isEqualTo(trusted.controlPlane());
+        assertThat(io.edgeai.app.support.VDRuntimeDocuments.settings(r.configurationJson()).caConfigMap()).isEqualTo(trusted.caConfigMap());
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.vd_runtime SET configuration=jsonb_set(configuration,'{caConfigMap}','\"other-ca\"') WHERE id=?",r.id())).isInstanceOf(DataIntegrityViolationException.class);
+        var legacy=fixture();var old=lifecycle.get(provision(legacy).targetRuntimeId());
+        assertThat(old.configurationJson()).doesNotContain("caConfigMap");assertThat(io.edgeai.app.support.VDRuntimeDocuments.launch(old).caConfigMap()).isEmpty();
+    }
     private void completeCreate(VDRuntime r) {
         for(int i=0;i<4;i++) {
             var cmd=runtimes.leaseCommand(r.namespace(),UUID.randomUUID(),clock.instant(),Duration.ofSeconds(45)).orElseThrow();

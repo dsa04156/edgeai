@@ -6,8 +6,13 @@ import java.util.UUID;
 
 public record VDRuntimeLaunch(UUID vdId, UUID runtimeId, long generation, String namespace, String serviceAccount,
                               URI controlPlane, UUID targetNodeId, String targetNodeName, int maxConcurrentTasks,
-                              int startupSeconds, int drainSeconds) {
+                              int startupSeconds, int drainSeconds, String caConfigMap) {
+    public VDRuntimeLaunch(UUID vdId,UUID runtimeId,long generation,String namespace,String serviceAccount,URI controlPlane,
+            UUID targetNodeId,String targetNodeName,int maxConcurrentTasks,int startupSeconds,int drainSeconds) {
+        this(vdId,runtimeId,generation,namespace,serviceAccount,controlPlane,targetNodeId,targetNodeName,maxConcurrentTasks,startupSeconds,drainSeconds,"");
+    }
     public VDRuntimeLaunch {
+        java.util.Objects.requireNonNull(caConfigMap);if(!caConfigMap.isEmpty())RuntimeNames.dns(caConfigMap,253);
         if(vdId==null || runtimeId==null || generation<1 || generation>9007199254740991L
             || maxConcurrentTasks<1 || maxConcurrentTasks>16 || startupSeconds<1 || startupSeconds>600 || drainSeconds<1 || drainSeconds>600)
             throw new IllegalArgumentException("Invalid VD runtime identity or policy");

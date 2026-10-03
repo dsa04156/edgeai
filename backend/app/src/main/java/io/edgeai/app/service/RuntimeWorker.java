@@ -36,7 +36,7 @@ public final class RuntimeWorker {
                     if(clock.instant().isAfter(r.createdAt().plusSeconds(settings.dispatchSeconds())) && r.jobUid()==null)
                         lifecycle.observeFailure(r.attemptId(),"DISPATCH_TIMEOUT");
                     else {
-                        var launch=new RuntimeLaunch(r.runId(),r.taskId(),r.attemptId(),r.epoch(),r.namespace(),settings.serviceAccount(),r.jobName()+"-claim",settings.controlPlane(),dispatch.nodeId(),dispatch.nodeName(),dispatch.excludedNodeNames());
+                        var launch=new RuntimeLaunch(r.runId(),r.taskId(),r.attemptId(),r.epoch(),r.namespace(),settings.serviceAccount(),r.jobName()+"-claim",settings.controlPlane(),dispatch.nodeId(),dispatch.nodeName(),dispatch.excludedNodeNames(),settings.caConfigMap());
                         UUID uid=gateway.ensureJob(r,compiler.compile(dispatch.spec(),launch),tokens.issue(r));
                         lifecycle.submitted(r.attemptId(),uid);
                     }

@@ -57,6 +57,7 @@ edgeai:
     namespace: ${EDGEAI_RUNTIME_NAMESPACE:edgeai-runtimes}
     service-account: ${EDGEAI_RUNTIME_SERVICE_ACCOUNT:edgeai-runner}
     control-plane-url: ${EDGEAI_RUNTIME_CONTROL_PLANE_URL:http://edgeai-api.edgeai.svc:18080}
+    ca-config-map: ${EDGEAI_RUNTIME_CA_CONFIG_MAP:}
     key-file: ${EDGEAI_RUNNER_KEY_FILE:}
     dispatch-seconds: ${EDGEAI_RUNTIME_DISPATCH_SECONDS:120}
   storage:

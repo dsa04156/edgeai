@@ -36,6 +36,7 @@ def launch():
         value = json.loads(descriptor.read_bytes())
         work = directory / 'work'
         work.mkdir(mode=0o700)
+        work.chmod(0o2700)  # Reproduce the setgid directory inherited from Kubernetes fsGroup.
         env = os.environ.copy()
         env.update(EDGEAI_ATTEMPT_ID=value['attemptId'], EDGEAI_ATTEMPT_EPOCH=str(value['epoch']),
                    EDGEAI_POD_UID=value['podUid'], EDGEAI_CONTROL_PLANE_URL=config['origin'],
