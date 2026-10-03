@@ -94,3 +94,15 @@ V15 `vd_runtime_poll`은 runtime/session 복합 FK로 같은 실행 세대의 �
 요청 bytes digest·RUN/DRAIN/STOP 명령을 보존한다. runtime당 하나이며 첫0·순차 증가·동일 순번
 해시 불변·명령 역행 금지와 삭제/절단 금지를 적용한다. lease/readiness/Operation과 같은 VD 잠금·
 트랜잭션에서 갱신하며 본문·토큰·Task claim 자격은 저장하지 않는다. 실제 Task 배정 receipt는 후속이다.
+
+## M7 공개 실행의 고정 원본 관계
+
+V25 `stream_run_configuration`은 `workflow_run`과1:1로 namespace·broker digest·lease 길이를 고정한다.
+`stream_device_binding`은 `data_route`와1:1이며 같은 Run 설정과 정확한 `(session_id,device_id,epoch)`를
+참조한다. 설정·원본 pin은 UPDATE/DELETE/TRUNCATE 불가다. 설정은 PENDING AUTO/NODE·Attempt 생성 전,
+원본 pin은 route 일치·membership 고정 전에만 삽입한다. broker 자격이나 입력 bytes는 저장하지 않는다.
+
+`data_route`의 Task→Task 또는 DeviceSession→Task 연결을 STREAM/동일 Device fanout으로 묶는다.
+`route_generation`의 실제 양쪽 Attempt/Session은 모든 그룹 구성원이 claim한 뒤 생성하며 기존 V19–V24의
+fence·heartbeat·checkpoint·공동 완료 불변 제약을 그대로 사용한다. 관계 변경으로 새 세션을 자동 채택하지 않는다.
+상세 테이블과 제약의 기준은 Flyway V19–V25 및 [ADR0041](adr/0041-public-stream-runs.md)이다.

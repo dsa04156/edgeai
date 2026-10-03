@@ -21,7 +21,7 @@ public final class WorkflowInput {
     public static Map<?, ?> runRequest(String body) {
         var map=parameters(JSON.parse(body,65536));
         if(!map.keySet().containsAll(Set.of("workflowVersionId","execution","parameters")) ||
-                !Set.of("workflowVersionId","execution","parameters","retry","offload").containsAll(map.keySet()))
+                !Set.of("workflowVersionId","execution","parameters","retry","offload","streamInputs").containsAll(map.keySet()))
             throw new IllegalArgumentException("Unexpected Run fields");
         JSON.boundedCanonical(map,65536);return map;
     }

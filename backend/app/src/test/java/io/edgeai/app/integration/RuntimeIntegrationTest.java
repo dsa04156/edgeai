@@ -29,6 +29,8 @@ class RuntimeIntegrationTest {
     @Autowired RuntimeLifecycleService lifecycle;
     @Autowired RuntimeRepository runtimes;
     @Autowired ExecutionService executions;
+    @Autowired ExecutionRepository executionStore;
+    @Autowired WorkflowRepository definitions;
     @Autowired WorkflowService workflows;
     @Autowired ProfileService profiles;
     @Autowired JdbcTemplate jdbc;
@@ -52,11 +54,20 @@ class RuntimeIntegrationTest {
     private UUID id(List<Task> tasks,String key) { return tasks.stream().filter(t->t.key().equals(key)).findFirst().orElseThrow().id(); }
     @Test void streamingServiceCannotAccidentallyDispatchItsFinalizerAsBatch() throws Exception {
         var stream=(Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
-        var f=fixture(null,spec->{spec.put("stream",stream.get("stream"));spec.put("recovery",Map.of("mode","CHECKPOINT"));});
-        assertThatThrownBy(()->lifecycle.plan(f.attempt(),f.namespace()))
+        var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key","stream-disabled-"+UUID.randomUUID(),"version","1.0.0","spec",stream))).version();
+        var workflow=workflows.create(json.canonical(Map.of("key","stream-disabled-"+UUID.randomUUID(),"displayName","Stream disabled"))).value();
+        var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",List.of(Map.of("key","root","serviceProfileVersionId",profile.id().toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
+        String key=UUID.randomUUID().toString();
+        assertThatThrownBy(()->executions.create(key,json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of()))))
             .isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("STREAM_NOT_IMPLEMENTED"));
-        assertThat(runtimes.byAttempt(f.attempt())).isEmpty();
-        assertThat(executions.taskDetail(f.root()).task().state()).isEqualTo("READY");
+        assertThat(executionStore.byIdempotencyKey(UUID.fromString(key))).isEmpty();
+        // Legacy metadata fixture: an already stored unmanaged Run must also reject dispatch.
+        var now=Instant.now();var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("legacy-stream-fixture",version.id().toString()),"AUTO",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now);
+        new TransactionTemplate(transactions).execute(s->{executionStore.create(run);executionStore.initialize(run,definitions.definitions(version.id()),Set.of("root"));return null;});
+        var task=executionStore.tasks(run.id()).getFirst();var attempt=executionStore.attempts(task.id()).getFirst();
+        assertThatThrownBy(()->lifecycle.plan(attempt.id(),"stream-disabled-test"))
+            .isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("STREAM_NOT_IMPLEMENTED"));
+        assertThat(runtimes.byAttempt(attempt.id())).isEmpty();assertThat(executions.taskDetail(task.id()).task().state()).isEqualTo("READY");
     }
     private RuntimePod running(Fixture f) {
         lifecycle.plan(f.attempt(),f.namespace());var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");

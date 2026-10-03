@@ -31,6 +31,8 @@ edgeai:
   stream:
     enabled: ${EDGEAI_STREAM_ENABLED:false}
     bindings-enabled: ${EDGEAI_STREAM_BINDINGS_ENABLED:false}
+    runs-enabled: ${EDGEAI_STREAM_RUNS_ENABLED:false}
+    lease-seconds: ${EDGEAI_STREAM_LEASE_SECONDS:30}
     device-key-file: ${EDGEAI_STREAM_DEVICE_KEY_FILE:}
     client-url: ${EDGEAI_STREAM_CLIENT_URL:}
     broker-url: ${EDGEAI_STREAM_BROKER_URL:}

@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0041/V25 공개 Run의 Device Session 고정·그룹 동시 배정·route generation 자동 준비를 구현했다.
+공개 생성/재전송·모든 BATCH 선행 Result 장벽·그룹 실패/취소 전파·metadata GET과 PC/모바일 UI를 연결했다.
+공개 MVC/실DB13개·전체 PG177개·공개 생성→실제 TLS/S3/MQTT/Runner2개·전체 저장소32개가 통과했다.
+단위·계약/MVC26개·UI38개와 최종 변경4개·실제 API/UI/Swagger10개 PASS. 관리Swagger41/내부12개.
+V25 프로젝트 DB 적용·기존 V1–V24 bytes 불변도 확인했다. 기본 STREAM 비활성 유지.
+실제 다중 Runner·peer 인계·운영 TLS·Kubernetes 종단과 M5 잔여/M7–M10은 미완료다.
+상세: docs/evidence/m7-public-stream-runs.md.
+선행 e422b6a CI37111365153 5jobs/17JSON PASS와 GitOps0ed9671 실제imageID/Ready/PVCBound/ArgoSynced를 확인했다.
+이번 공개 실행 변경의 새 CI·배포 판정은 선행 커밋의 검증과 구분한다.
+
+아래는 이전 단계의 검증 이력이다.
 ADR0040 현재 Runner의 공동 완료 허가 후 최종 상태 복구를 구현했다.
 역사적 논리 경로·정확한 고정 S3 체크포인트·다운로드 후 허가 재검증으로 MQTT 없이 최종 파일을 만든다.
 실제 Spring/PG/TLS API·MinIO·MQTT·장치 SDK·독립 Runner의 합14/Result와 취소를 검증했다.

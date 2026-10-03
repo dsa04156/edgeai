@@ -17,20 +17,24 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.*;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** Actual Spring/MinIO over TLS, PG, TLS broker, SDK, model and Runner finalizer.
- * Pod provisioning/identity and peer-triggered route closure are fixtures; public STREAM stays disabled. */
+/** Public Run MVC, actual Spring/MinIO over TLS, PG, TLS broker, SDK, model and Runner finalizer.
+ * Pod provisioning/identity and peer-triggered route closure are fixtures. Public execution is explicitly enabled in this test. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.stream.enabled=true",
-    "edgeai.stream.bindings-enabled=true","edgeai.stream.reconcile-ms=50"})
+    "edgeai.stream.bindings-enabled=true","edgeai.stream.runs-enabled=true","edgeai.stream.reconcile-ms=50"})
+@AutoConfigureMockMvc
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class StreamSourceCompletionIntegrationTest {
     private static final StreamBrokerFixture BROKER=new StreamBrokerFixture();
@@ -49,11 +53,11 @@ class StreamSourceCompletionIntegrationTest {
         p.add("edgeai.storage.bucket",()->BUCKET);
     }
     @Autowired ProfileService profiles;@Autowired WorkflowService workflows;@Autowired DeviceService devices;
-    @Autowired ExecutionService runs;@Autowired ExecutionRepository executions;@Autowired WorkflowRepository definitions;
+    @Autowired ExecutionService runs;@Autowired ExecutionRepository executions;
     @Autowired RuntimeRepository runtimes;@Autowired RuntimeLifecycleService lifecycle;@Autowired RunnerTokenService tokens;
     @Autowired DeviceStreamTokenService deviceTokens;@Autowired DataRouteService routes;@Autowired DataRouteRepository routeStore;
     @Autowired StreamCheckpointRepository checkpoints;@Autowired StreamExecutionRepository completions;
-    @Autowired StreamAuthorityWorker worker;@Autowired PlatformTransactionManager transactions;
+    @Autowired StreamAuthorityWorker worker;@Autowired MockMvc mvc;
     @MockitoBean RuntimeGateway gateway;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     private final JsonDocuments json=new JsonDocuments();
@@ -94,26 +98,31 @@ class StreamSourceCompletionIntegrationTest {
         var profile=profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",spec))).version();
         var workflow=workflows.create(json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"displayName","Actual source completion"))).value();
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",List.of(Map.of("key","sum","serviceProfileVersionId",profile.id().toString(),"parameters",Map.of("mode","zip"))),"dependencies",List.of()))).value();
-        var now=Instant.now();var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("source-completion-fixture",version.id().toString()),"AUTO",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now);
-        new TransactionTemplate(transactions).execute(s->{executions.create(run);executions.initialize(run,definitions.definitions(version.id()),Set.of("sum"));
-            var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
-            runtimes.create(new RuntimeInstance(UUID.randomUUID(),attempt.id(),task.id(),run.id(),1,BUCKET,"edgeai-"+attempt.id(),UUID.randomUUID(),"RUNNING","PENDING",null,null,null,null,null,null,now,now));return null;});
-        runIds.add(run.id());var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
-        var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(attempt.id(),pod);
-        lifecycle.submitted(attempt.id(),pod.jobUid());lifecycle.claim(attempt.id(),1,pod);
         var folder=Files.createDirectory(BROKER.root.resolve("probe-"+UUID.randomUUID()));Files.setPosixFilePermissions(folder,PosixFilePermissions.fromString("rwx------"));
-        secret(folder,"claim",tokens.issue(runtimes.byAttempt(attempt.id()).orElseThrow()));secret(folder,"pod","source-pod-proof");
-        var sources=new TreeMap<String,Object>();var ids=new ArrayList<UUID>();
+        var sessions=new TreeMap<String,io.edgeai.domain.device.DeviceSession>();var inputs=new ArrayList<Object>();
         for(String name:List.of("a","b")){
             var dp=profiles.publish(ProfileIdentity.Kind.DEVICE,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",Map.of("protocol","mqtt")))).version();
             var d=devices.create(json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"displayName","Real TLS source","profileVersionId",dp.id().toString(),"sourceMode","SYNTHETIC"))).value();
             var session=devices.openSession(d.id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
-            secret(folder,name+".token",deviceTokens.issue(session));
-            var route=routes.fromDevice(run.id(),d.id(),"samples",task.id(),name,4096);
-            var generation=routes.prepare(route.id(),UUID.randomUUID(),new RouteGeneration.Actor(session.id(),session.epoch()),new RouteGeneration.Actor(attempt.id(),1),DIGEST,30);
-            ids.add(generation.id());sources.put(name,Map.of("deviceId",d.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch(),"generationId",generation.id().toString(),"routeId",route.id().toString()));
+            sessions.put(name,session);secret(folder,name+".token",deviceTokens.issue(session));
+            inputs.add(Map.of("deviceId",d.id().toString(),"sourcePort","samples","toTask","sum","toPort",name,"maxPayloadBytes",4096));
         }
-        until(()->ids.stream().allMatch(id->routeStore.generation(id).orElseThrow().state().equals("ACTIVE")));
+        var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
+            .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        var run=executions.run(UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id")),false).orElseThrow();runIds.add(run.id());
+        var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
+        assertThat(routeStore.forRun(run.id(),20,0)).hasSize(2).allMatch(r->routeStore.open(r.id()).isEmpty());
+        var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(attempt.id(),pod);
+        lifecycle.submitted(attempt.id(),pod.jobUid());lifecycle.claim(attempt.id(),1,pod);
+        secret(folder,"claim",tokens.issue(runtimes.byAttempt(attempt.id()).orElseThrow()));secret(folder,"pod","source-pod-proof");
+        // The actual scheduled Run worker prepares generations; the authority worker activates them in the TLS broker.
+        until(()->routeStore.forRun(run.id(),20,0).stream().allMatch(r->routeStore.open(r.id()).filter(g->g.state().equals("ACTIVE")).isPresent()));
+        var sources=new TreeMap<String,Object>();var ids=new ArrayList<UUID>();
+        for(var route:routeStore.forRun(run.id(),20,0)){
+            var session=sessions.get(route.consumerPort());var generation=routeStore.open(route.id()).orElseThrow();ids.add(generation.id());
+            sources.put(route.consumerPort(),Map.of("deviceId",session.deviceId().toString(),"sessionId",session.id().toString(),"epoch",session.epoch(),"generationId",generation.id().toString(),"routeId",route.id().toString()));
+        }
         secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",run.id().toString(),"attemptId",attempt.id().toString(),"podUid",pod.podUid().toString(),"sources",sources,"stream",stream,"mode",mode)));
         return new Execution(run.id(),task.id(),attempt.id(),ids,folder);
     }

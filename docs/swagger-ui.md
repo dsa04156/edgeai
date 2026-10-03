@@ -85,3 +85,11 @@ FINALIZE 배정과 finalized 조회는 현재 producer의 영속 완료 허가�
 허가된 고정 S3 version을 읽고 허가를 재확인하는 복구 순서와 취소/만료409를 설명한다.
 내부 checkpoint 인계와 공개 STREAM 실행·Kubernetes 전체 수용의 미완료 범위를 구분한다.
 원본/패키징 byte 대조와 PC·모바일 렌더 검사는 기존 CI 계약/브라우저 경로에 포함한다.
+
+## M7 공개 스트림 실행
+
+ADR0041은 Run 생성의 `streamInputs`와 Run 태그의 `listRunStreamRoutes`를 추가한다.
+관리 Swagger는41개 operation이다. Device 현재 세션 고정·전체 live 포트 구성·그룹 동시 배정,
+입력 순서와 무관한 재전송, AUTO/NODE 제한·기본 비활성501·재시도/전환409를 설명한다.
+경로 조회는 componentId·sourceMode·고정 세션과 최신 generation을 제공하며 비밀번호/토큰은 반환하지 않는다.
+Task 취소 설명도 upstream 스트림 peer·후속 그룹 정리와 독립 분기 보존을 포함한다.

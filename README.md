@@ -19,7 +19,8 @@ MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/�
 구성 요소별로 검증했습니다. [권한 worker](docs/evidence/m7-stream-worker.md)의 실제 DB/TLS broker
 자동 조정은 CI·배포까지 검증했습니다. 현재 Device 세션 토큰과 Runner/Pod 인증을 확인하는
 [스트림 배정 API](docs/evidence/m7-stream-bindings.md)를 실제 HTTP/DB/TLS broker로 로컬 검증했으며,
-운영 Runner·다중 장치 실행 연결 전이므로 공개 STREAM은 아직501입니다.
+[공개 STREAM 실행 요청·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 선택적으로 활성화할 수 있습니다.
+기본값은 비활성이며, 운영 TLS·실제 Kubernetes 다중 작업 스트림의 전체 수용은 진행 중입니다.
 SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 [양쪽 heartbeat 갱신](docs/evidence/m7-stream-heartbeat.md)을 구현했습니다. 실제 Spring→Python→TLS MQTT에서
 기한 갱신 뒤 계산·상태 저장·처리 확인을 검증했고, 한쪽 부재·재전송으로 기한이 늘어나지 않습니다.
@@ -141,7 +142,8 @@ Runner Attempt/Pod 인증의 차이, 입출력·권한·lease 조건을 설명�
 현재 세션에 발급하는 `stream-token`은 관리 API 문서의 Device 그룹에 있습니다.
 배정은 `EDGEAI_STREAM_ENABLED=true`와 `EDGEAI_STREAM_BINDINGS_ENABLED=true`, 별도 장치 서명 키가
 필요합니다. [서버 배정·공동 완료](docs/evidence/m7-stream-execution-completion.md)는 구성 요소
-검증을 통과했으며, 공개 STREAM 실행과 운영 연결은 아직 비활성입니다.
+검증을 통과했습니다. 공개 실행에는 추가로 `EDGEAI_STREAM_RUNS_ENABLED=true`와 runtime 활성화가 필요합니다.
+Run 태그의 스트림 경로 조회를 포함한 관리 API는41개이며 운영 기본 설정은 공개 STREAM 비활성입니다.
 포트를 바꾸면 같은 호스트의 API를 사용하며, Swagger 자산은 JAR에 포함되어 외부 CDN이나
 온라인 validator에 연결하지 않습니다. 인증 정보는 Swagger 브라우저 저장소에 영속 저장하지 않습니다.
 
@@ -195,7 +197,7 @@ API/UI 실행 후 `bash scripts/demo-device-lifecycle.sh`는 합성 장치를 �
 Remote 활성화·제공자·파일 설정은 [Remote 실행 문서](docs/remote.md)를 따릅니다.
 `Idempotency-Key`는 요청을 재전송해도 실행을 중복 생성하지 않게 합니다. 다른 실행을 만들 때는
 **새 실행 키 만들기**를 누릅니다. 작업별 Attempt와 상태를 조회하고 작업 또는 실행을 취소할 수 있습니다.
-작업 취소는 그 결과를 기다리는 하위 작업을 건너뛰고 별도 분기는 유지합니다.
+작업 취소는 같은 스트림 그룹과 후속 의존 그룹도 정리하며 별도 분기는 유지합니다.
 
 실행 기능이 비활성이면 root 작업은 READY/QUEUED, 나머지는 WAITING으로 요청을 보관합니다.
 활성 배포에서는 실제 Runner가 작업을 수행하고 검증된 결과만 하위 작업에 전달합니다.
@@ -208,7 +210,12 @@ Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허�
 최신 Runner의 측정은 선택한 작업의 **실행 측정**에서 확인합니다. CPU·메모리의 제한이 없거나 측정하지
 못한 값은 미확인/미수집으로 표시하고, 새 Attempt에 이전 값이 이어지지 않습니다. 서비스 지연 보고
 방식은 [Runner 문서](runner/README.md)를 따릅니다. 현재 Remote는 자원·지연 측정을 지원하지 않습니다.
-STREAM 실행은 M7이며 현재 요청은 501입니다.
+STREAM은 기본 비활성501이며 운영 broker·TLS·runtime·bindings를 설정한 환경에서 별도로 활성화합니다.
+실행 폼의 **장치 스트림 입력 추가**로 장치 ID·출력 포트·받는 작업/포트·메시지 한도를 지정합니다.
+활성 세션은 Run에 고정되며 같은 그룹은 모든 BATCH 선행 결과를 받은 뒤 함께 배정됩니다.
+현재 AUTO/NODE·자동 재시도 없음으로 사용하며 그룹 인계가 필요한 재시도·전환·REMOTE/VD는 거절합니다.
+실행 상세의 **스트림 경로 조회**로 실제 경로·고정 세션·출처·세대 상태를 확인합니다.
+연결 ACTIVE와 작업/Result 성공은 별도 상태입니다([ADR0041](docs/adr/0041-public-stream-runs.md)).
 상세 계약은 [ADR 0004](docs/adr/0004-workflow-run-task.md)와 Swagger의 Workflow/실행/작업 태그를 따릅니다.
 
 ## 개발 기준

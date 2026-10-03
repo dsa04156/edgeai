@@ -9,7 +9,7 @@ import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(assignableTypes={WorkflowController.class,WorkflowRunController.class,TaskController.class,OperationController.class})
+@RestControllerAdvice(assignableTypes={WorkflowController.class,WorkflowRunController.class,StreamRunController.class,TaskController.class,OperationController.class})
 public class WorkflowExceptionHandler {
     @ExceptionHandler(ControlPlaneException.class)
     ResponseEntity<ApiErrorResponse> controlled(ControlPlaneException e) { return error(e.status(),e.code(),e.getMessage()); }

@@ -3,6 +3,7 @@ package io.edgeai.app.config;
 import io.edgeai.adapters.stream.MosquittoStreamBroker;
 import io.edgeai.app.service.*;
 import io.edgeai.domain.repository.DataRouteRepository;
+import io.edgeai.domain.repository.StreamRunRepository;
 import java.nio.file.Path;
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,4 +31,8 @@ public class StreamConfiguration {
             @Value("${edgeai.stream.scan-size:64}") int pageSize){
         return new StreamAuthorityWorker(routes,lifecycle,broker,digest,concurrency,pageSize);
     }
+    @Bean
+    @ConditionalOnProperty(name="edgeai.stream.runs-enabled",havingValue="true")
+    StreamRunWorker streamRunWorker(StreamRunRepository repository,StreamRunService streams,RuntimeLifecycleService runtimes,
+            @Value("${edgeai.runtime.namespace}") String namespace){return new StreamRunWorker(repository,streams,runtimes,namespace);}
 }

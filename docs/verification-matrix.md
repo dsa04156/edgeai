@@ -46,6 +46,9 @@
 | M6-VD-KUBERNETES | python3 scripts/test-vd-kubernetes.py --context <명시적-context> | 실제 VD 수명·Task·API 재생성·교체·취소·재시도·S35개·자원 정리 | 격리 API/DB/MinIO, 현재 JAR; m6-vd-task-execution.md |
 | M6-VD-KIND | scripts/test-kind.sh | 빌드된 실제 이미지로 VD 수명·Task·S3·API 재시작 | 새 게이트 CI 판정은 evidence 확인 |
 | M6-VD-DEMO | scripts/demo-vd.sh <명시적-context> | 지정한 배포 API의 VD 수명·Task·교체·취소·retry·S3 | API/저장소 환경 설정 필요, API 재시작 제외 |
+| M7-PUBLIC-RUN | scripts/test-integration.sh | 공개 Run·정규화/멱등·Device pin·그룹 동시 배정·BATCH 장벽·NODE·실패/취소·불변 DB·경로 조회 | 실제 PostgreSQL/MVC; Pod/S3 receipt fixture |
+| M7-PUBLIC-SOURCE | scripts/test-runtime-results.sh | 공개 Run MVC→자동 worker→실제 TLS/S3/MQTT/DeviceSource·checkpoint·Runner 최종 결과·취소 | 실제 PG/MinIO/Mosquitto/SDK; Pod 생성/신원·peer 회수 시작은 fixture |
+| M7-PUBLIC-UI | scripts/test-ui.sh + scripts/test-profiles-stack.sh | PC/모바일 입력 재전송·오류/경로/페이지/출처, 실제 BATCH 빈 경로 조회와 Swagger41개 | STREAM 화면은 명시적 HTTP fixture, 실제 API 시험은 기본 비활성 |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |

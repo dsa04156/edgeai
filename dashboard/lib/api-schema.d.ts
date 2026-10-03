@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM 실행은 아직501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. 현재 STREAM 자동 재시도·offload·REMOTE/VD 정책은409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -413,6 +413,28 @@ export interface paths {
          * @description 고정된 WorkflowVersion과 실행 정책, Run 안의 모든 Task 상태를 일관된 DB snapshot으로 조회합니다.
          */
         get: operations["getWorkflowRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs/{runId}/streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 실행의 스트림 입력·그룹·경로 세대 조회
+         * @description 고정된 장치 세션·출처와 논리 연결, 동시에 실행되는 componentId, 최신 경로 세대의 상태를 조회합니다. generation이 null이면 현재 실행 주체의 배정을 기다리는 중입니다. ACTIVE도 모델 처리나 Result 성공을 의미하지 않습니다. CLOSED는 broker 권한 회수가 확인된 이력입니다. MQTT 비밀번호·장치 토큰·서명 URL은 반환하지 않습니다. 같은 DB snapshot에서 조회하며, nextOffset이 있으면 다음 페이지를 요청합니다.
+         */
+        get: operations["listRunStreamRoutes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -477,8 +499,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 작업과 하위 의존 작업 취소
-         * @description 해당 작업을 취소하고 아직 실행 전인 하위 작업은 SKIPPED로 닫습니다. 독립 branch가 남으면 Run은 계속 대기/실행 상태를 유지합니다. 반복 취소는 멱등이며 완료 결과를 덮어쓰지 않습니다. 빈 JSON 객체를 보냅니다.
+         * 작업·같은 스트림 그룹·후속 의존 작업 취소
+         * @description 해당 작업, 같은 STREAM/장치 fanout 그룹의 작업과 후속 의존 그룹을 취소합니다. 실행 중인 작업은 producer를 차단한 뒤 물리 종료를 확인하며, 아직 실행 전인 후속 작업은 SKIPPED로 닫습니다. 독립 branch가 남으면 Run은 계속 대기/실행 상태를 유지합니다. 반복 취소는 멱등이며 완료 결과를 덮어쓰지 않습니다. 빈 JSON 객체를 보냅니다.
          */
         post: operations["cancelTask"];
         delete?: never;
@@ -754,7 +776,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "VD_EXECUTION_DISABLED" | "VD_NOT_READY" | "VD_SERVICE_MISMATCH" | "VD_AUTOMATIC_OFFLOAD_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "VD_EXECUTION_DISABLED" | "VD_NOT_READY" | "VD_SERVICE_MISMATCH" | "VD_AUTOMATIC_OFFLOAD_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -1073,12 +1095,70 @@ export interface components {
         RunCreate: {
             /** Format: uuid */
             workflowVersionId: string;
+            /** @description 장치의 현재 활성 세션을 실행 생성 시 고정하는 입력 목록입니다. 같은 toTask/toPort는 한 번만 지정하며 발행된 Task 의존 입력을 대체할 수 없습니다. 항목 순서는 멱등 요청의 의미를 바꾸지 않습니다. 모든 SERVICE stream 입력/출력은 장치 입력 또는 STREAM 의존 경로로 연결되어야 합니다. */
+            streamInputs?: components["schemas"]["StreamRunInput"][];
             execution: components["schemas"]["ExecutionPolicy"];
             retry?: components["schemas"]["RetryPolicy"];
             offload?: components["schemas"]["OffloadPolicy"];
             parameters: {
                 [key: string]: unknown;
             };
+        };
+        StreamRunInput: {
+            /** Format: uuid */
+            deviceId: string;
+            sourcePort: components["schemas"]["ProfileKey"];
+            toTask: components["schemas"]["ProfileKey"];
+            toPort: components["schemas"]["ProfileKey"];
+            maxPayloadBytes: number;
+        };
+        StreamRoutePage: {
+            items: components["schemas"]["StreamRoute"][];
+            nextOffset: number | null;
+        };
+        StreamRoute: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            componentId: string | null;
+            /** Format: uuid */
+            sourceTaskId: string | null;
+            /** Format: uuid */
+            sourceDeviceId: string | null;
+            /** Format: uuid */
+            sourceProfileVersionId: string;
+            /** @enum {string|null} */
+            sourceMode: "LIVE" | "REPLAY" | "SYNTHETIC" | null;
+            sourcePort: string;
+            /** Format: uuid */
+            consumerTaskId: string;
+            consumerPort: string;
+            mediaType: string;
+            maxPayloadBytes: number;
+            /** Format: uuid */
+            sourceSessionId: string | null;
+            sourceEpoch: number | null;
+            generation: components["schemas"]["StreamRouteGeneration"] | null;
+        };
+        StreamRouteGeneration: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** @enum {string} */
+            state: "PREPARING" | "ACTIVE" | "FENCED" | "CLOSED";
+            /** Format: uuid */
+            producerId: string;
+            producerEpoch: number;
+            /** Format: uuid */
+            consumerAttemptId: string;
+            consumerEpoch: number;
+            /** Format: date-time */
+            leaseUntil: string;
+            fenceReason: string | null;
+            /** Format: date-time */
+            closedAt: string | null;
         };
         WorkflowRun: {
             /** Format: uuid */
@@ -3040,7 +3120,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description STREAM 실행은 M7에서 구현합니다. */
+            /** @description 공개 STREAM 실행 설정과 운영 연결이 비활성입니다. */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3113,6 +3193,59 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
+            };
+        };
+    };
+    listRunStreamRoutes: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 경로 메타데이터와 최신 실행 세대입니다. BATCH 전용 실행은 빈 목록입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamRoutePage"];
+                };
+            };
+            /** @description 잘못된 UUID 또는 페이지 범위입니다. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 관리 API 인증이 필요합니다. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 실행 요청이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

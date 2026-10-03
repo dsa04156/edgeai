@@ -35,13 +35,15 @@ public class RuntimeLifecycleService {
     private final boolean vdEnabled;
     private final int dispatchSeconds;
     private final StreamExecutionRepository streamExecutions;
+    private final StreamRunService streams;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch,
             VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds,
-            StreamExecutionRepository streamExecutions) {
+            StreamExecutionRepository streamExecutions,StreamRunService streams) {
         this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.remotes=remotes;this.clock=clock;this.autoDispatch=autoDispatch;
         this.vds=vds;this.vdRuntimes=vdRuntimes;this.vdTasks=vdTasks;this.vdEnabled=vdEnabled;this.dispatchSeconds=dispatchSeconds;
         this.streamExecutions=streamExecutions;
+        this.streams=streams;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
     public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
@@ -54,12 +56,17 @@ public class RuntimeLifecycleService {
 
     @Transactional(readOnly=true)
     public void validateRequest(UUID versionId,String parameters) {
-        validateDag(versionId);
+        validateRequest(versionId,parameters,false);
+    }
+    @Transactional(readOnly=true)
+    public void validateRequest(UUID versionId,String parameters,boolean stream) {
+        validateDag(versionId,stream);
         for(var definition:workflows.definitions(versionId))mergeParameters(definition.parametersJson(),parameters);
     }
     @Transactional
     public void startRun(UUID runId,String namespace) {
         executions.run(runId,true).orElseThrow();
+        streams.releaseReady(runId);
         for(UUID attempt:runtimes.readyAttempts(runId,128))plan(attempt,namespace);
     }
     @Transactional
@@ -87,7 +94,7 @@ public class RuntimeLifecycleService {
         if(c.attempt().mode().equals("VD"))return planVD(c,namespace);
         if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()))throw fenced();
-        validateDag(c.run().workflowVersionId());
+        validateDag(c.run().workflowVersionId(),streams.managed(c.run().id()));
         var spec=spec(c);inputs(c,spec);parameters(c);
         var now=clock.instant();
         var value=new RuntimeInstance(UUID.randomUUID(),attemptId,c.task().id(),c.run().id(),c.attempt().epoch(),namespace,
@@ -215,20 +222,30 @@ public class RuntimeLifecycleService {
     }
     @Transactional(readOnly=true)
     public void validateDag(UUID versionId) {
+        validateDag(versionId,false);
+    }
+    private void validateDag(UUID versionId,boolean stream) {
         var dag=storedDag(workflows.version(versionId).orElseThrow().dagJson());
         var specs=new HashMap<String,ServiceExecutionSpec>();
         for(var task:dag.tasks())specs.put(task.key(),ServiceExecutionInput.parseSpec(profiles.find(task.serviceProfileVersionId()).orElseThrow().specJson()));
-        if(specs.values().stream().anyMatch(s -> s.stream() != null))
+        if(!stream && specs.values().stream().anyMatch(s -> s.stream() != null))
             throw error(501,"STREAM_NOT_IMPLEMENTED","스트림 실행 배정·완료 확인 연결 전에는 실행할 수 없습니다.");
         for(var edge:dag.dependencies()) {
-            if(edge.mode()!=Dag.Mode.BATCH)throw new IllegalArgumentException("Runtime supports BATCH edges");
+            if(edge.mode()==Dag.Mode.STREAM){
+                var source=specs.get(edge.fromTask()).stream();var target=specs.get(edge.toTask()).stream();
+                if(!stream || source==null || target==null)throw new IllegalArgumentException("STREAM dependencies require stream SERVICE ports");
+                var output=source.outputs().get(edge.fromPort());var input=target.inputs().get(edge.toPort());
+                if(output==null || input==null || !output.mediaType().equals(input.mediaType()) || output.maxPayloadBytes()>input.maxPayloadBytes())
+                    throw new IllegalArgumentException("Incompatible STREAM ports or budgets");
+                continue;
+            }
             var source=specs.get(edge.fromTask()).outputs().get(edge.fromPort());
             var target=specs.get(edge.toTask()).inputs().get(edge.toPort());
             if(source==null || target==null || !source.mediaType().equals(target.mediaType()) || source.maxBytes()>target.maxBytes())
                 throw new IllegalArgumentException("Incompatible DAG artifact ports or budgets");
         }
         specs.forEach((key,spec)->spec.inputs().forEach((port,input)->{
-            if(input.required() && dag.dependencies().stream().noneMatch(e->e.toTask().equals(key)&&e.toPort().equals(port)))
+            if(input.required() && dag.dependencies().stream().noneMatch(e->e.mode()==Dag.Mode.BATCH && e.toTask().equals(key)&&e.toPort().equals(port)))
                 throw new IllegalArgumentException("Required input has no producer");
         }));
     }
@@ -311,7 +328,9 @@ public class RuntimeLifecycleService {
                 throw new IllegalArgumentException("Verification receipt differs from declared artifact");
         }
         var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified,r.remoteAllocationId(),r.vd()?vdTasks.byRuntime(r.id()).orElseThrow().vdRuntimeId():null);
-        runtimes.commit(result,now);runtimes.releaseReadyChildren(r.runId(),now);executions.reconcileRunState(r.runId(),now);
+        runtimes.commit(result,now);
+        if(!streams.releaseReady(r.runId()))runtimes.releaseReadyChildren(r.runId(),now);
+        executions.reconcileRunState(r.runId(),now);
         if(autoDispatch)startRun(r.runId(),r.namespace());
         return new Creation<>(result,true);
     }
@@ -371,8 +390,8 @@ public class RuntimeLifecycleService {
     }
     private long retryAttempts(UUID taskId){return executions.attempts(taskId).stream().filter(a->!a.cause().equals("OFFLOAD")).count();}
     private void failDescendants(WorkflowRun run,Task task,Instant now) {
-        var descendants=storedDag(workflows.version(run.workflowVersionId()).orElseThrow().dagJson()).descendants(task.key());
-        for(var child:executions.tasks(run.id()))if(descendants.contains(child.key())){executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);offloads.cancelForTask(child.id(),now);}
+        var descendants=streams.affected(run,task.key());
+        for(var child:executions.tasks(run.id()))if(!child.id().equals(task.id()) && descendants.contains(child.key())){executions.cancelTask(child.id(),"SKIPPED","UPSTREAM_FAILED",now);offloads.cancelForTask(child.id(),now);}
     }
     private TaskResult replay(RuntimeInstance runtime,long epoch,UUID pod,UUID allocation,String digest) {
         var result=runtimes.result(runtime.taskId()).orElse(null);if(result==null)return null;
@@ -440,7 +459,7 @@ public class RuntimeLifecycleService {
         var tasks=new HashMap<String,Task>();executions.tasks(c.run().id()).forEach(t->tasks.put(t.key(),t));
         var result=new ArrayList<InputArtifact>();
         for(var edge:storedDag(workflows.version(c.run().workflowVersionId()).orElseThrow().dagJson()).dependencies()) {
-            if(!edge.toTask().equals(c.task().key()))continue;
+            if(edge.mode()!=Dag.Mode.BATCH || !edge.toTask().equals(c.task().key()))continue;
             var parent=tasks.get(edge.fromTask());
             if(!parent.state().equals("SUCCEEDED"))throw fenced();
             var source=runtimes.result(parent.id()).orElseThrow(RuntimeLifecycleService::fenced);

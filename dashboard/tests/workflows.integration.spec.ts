@@ -68,6 +68,10 @@ test("real immutable DAG publication, idempotent Run and dependency cancellation
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
   await expect(page.getByText("동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.", { exact: true })).toBeVisible();
   const selected = page.getByRole("region", { name: "선택한 실행", exact: true });
+  const routeResponse = page.waitForResponse(r => r.request().method() === "GET" && new URL(r.url()).pathname.endsWith(`/workflow-runs/${run.id}/streams`));
+  await selected.getByRole("button", { name: "스트림 경로 조회", exact: true }).click();
+  const routes = await routeResponse; expect(routes.status()).toBe(200); expect(await routes.json()).toEqual({ items: [], nextOffset: null });
+  await expect(selected.getByRole("region", { name: "스트림 경로", exact: true })).toContainText("이 실행에 등록된 스트림 경로가 없습니다.");
   await selected.getByRole("button", { name: "root", exact: true }).click();
   await expect(selected).toContainText("Attempt #1 · epoch 1 · 접수됨");
   await selected.getByRole("button", { name: "child", exact: true }).click();
