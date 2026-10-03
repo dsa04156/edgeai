@@ -5,6 +5,7 @@ errors are fixed messages; grants remain in memory. A PUT is not a confirmation.
 """
 import base64
 import hashlib
+import http.client
 import json
 import math
 import ssl
@@ -14,8 +15,8 @@ import urllib.parse
 import urllib.request
 
 from edgeai_runner.stream_assignment import BindingClient, AssignmentError, _token, instant
-from edgeai_runner.stream_checkpoint import Snapshot, MAX_BYTES, MEDIA_TYPE, capture, confirm, encode, state_bytes
-from edgeai_runner.stream_journal import JournalError, Limits
+from edgeai_runner.stream_checkpoint import Snapshot, MAX_BYTES, MEDIA_TYPE, capture, confirm, encode, state_bytes, restore
+from edgeai_runner.stream_journal import JournalError, Limits, manifest
 from edgeai_runner.stream_protocol import Binding, Producer, _uuid, _unique_object, _invalid_constant
 
 
@@ -220,10 +221,66 @@ class CheckpointClient:
             fields(value,'checkpoint')
         else:
             fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'])
-            grant=fields(value['download'],'url expiresAt');instant(grant['expiresAt'])
-            url=urllib.parse.urlsplit(self._url(grant['url']))
-            require(urllib.parse.parse_qs(url.query).get('versionId') == [receipt['versionId']])
+            self._download_grant(value['download'],receipt)
         return value
+
+    def _download_grant(self, grant, receipt):
+        fields(grant,'url expiresAt');instant(grant['expiresAt'])
+        url=urllib.parse.urlsplit(self._url(grant['url']))
+        require(urllib.parse.parse_qs(url.query,keep_blank_values=True).get('versionId') == [receipt['versionId']])
+
+    def download(self, value, *, guard, timeout=1):
+        """Read only the authenticated fixed version, within its exact byte budget."""
+        timeout=self._timeout(timeout);require(callable(guard));guard()
+        fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'])
+        self._download_grant(value['download'],receipt)
+        try:
+            request=urllib.request.Request(value['download']['url'],method='GET',headers={'Accept-Encoding':'identity'})
+            wire=bytearray();digest=hashlib.sha256();expected=receipt['bytes']
+            with self.storage.open(request,timeout=timeout) as response:
+                guard()
+                require(response.status == 200)
+                require(response.headers.get_all('x-amz-version-id') == [receipt['versionId']])
+                require(response.headers.get_all('Content-Length') == [str(expected)])
+                require(response.headers.get_all('Content-Type') == [MEDIA_TYPE])
+                require(response.headers.get_all('Content-Encoding') in (None,['identity']))
+                while True:
+                    guard()
+                    chunk=response.read(min(65536,expected-len(wire)+1))
+                    guard()
+                    if not chunk:break
+                    require(len(wire)+len(chunk) <= expected)
+                    wire.extend(chunk);digest.update(chunk)
+            require(len(wire) == expected and digest.hexdigest() == receipt['sha256'])
+            snapshot=Snapshot(bytes(wire))
+            self.receipt(receipt,snapshot,receipt['previousCheckpointId'])
+            guard()
+            return snapshot
+        except urllib.error.HTTPError as failure:
+            status=failure.code;failure.close()
+            if status in (403,429,500,502,503,504):
+                raise CheckpointUnavailable('Checkpoint storage unavailable or grant expired') from None
+            raise CheckpointError('Checkpoint storage rejected') from None
+        except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
+            raise CheckpointUnavailable('Checkpoint storage unavailable') from None
+        except (ValueError, TypeError, KeyError, OverflowError, RecursionError, JournalError):
+            raise CheckpointError('Invalid checkpoint snapshot') from None
+
+    def recover(self, directory, inputs, outputs, limits, execution_sha256, *, guard, timeout=1):
+        """Explicit new-volume recovery under unchanged Attempt and route authority.
+
+        No missing checkpoint, old local journal or new generation is silently used.
+        Recheck authenticated latest after storage I/O, before creating the journal.
+        """
+        require(callable(guard));guard();sha(execution_sha256)
+        value=self.latest(timeout=timeout);guard();receipt=value['checkpoint']
+        require(receipt is not None and receipt['executionSha256'] == execution_sha256)
+        require(receipt['summary']['manifest'] == json.loads(manifest(inputs,outputs,limits)))
+        snapshot=self.download(value,guard=guard,timeout=timeout)
+        current=self.latest(timeout=timeout)['checkpoint'];guard()
+        require(current == receipt)
+        return restore(directory,snapshot,inputs,outputs,limits,expected_sha256=receipt['sha256'],
+                       execution_sha256=execution_sha256,guard=guard)
 
 
 class CheckpointPublisher:

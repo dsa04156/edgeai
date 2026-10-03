@@ -201,3 +201,8 @@ ADR0033은 Session에 단계별 인증 checkpoint publisher를 연결했다. 실
 Runner87개·HTTPS/MQTT39개·실제 Spring/PG/S3/Python publisher7개를 통과했다.
 [자동 저장 증거](docs/evidence/m7-stream-checkpoint-publisher.md)를 따른다. 다음은 현재 기한·취소
 보호를 유지한 새 Attempt/세대 인계와 SERVICE/Runner·운영 broker·공개 STREAM 종단이다.
+
+ADR0034는 인증 latest·고정 S3 다운로드·권한/이력 재검사와 명시적 Session 새 볼륨 복원을
+연결했다. 실제 TLS MQTT에서9→14 계산 재개·출력/END 중복 방지와 실제 Spring/PG/MinIO의
+SDK 복원을 검증했다. [복원 증거](docs/evidence/m7-stream-checkpoint-recovery.md)를 따른다.
+동일 Attempt/세대 범위이며 새 Attempt 인계와 공개 실행의 전체 수용은 계속 남는다.

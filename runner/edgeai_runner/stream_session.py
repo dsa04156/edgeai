@@ -17,7 +17,7 @@ from edgeai_runner.stream_checkpoint import capture, confirm
 from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointPublisher
 from edgeai_runner.stream_journal import Journal, Limits
 from edgeai_runner.stream_mqtt import Link
-from edgeai_runner.stream_processor import Processor
+from edgeai_runner.stream_processor import Processor, execution_digest
 from edgeai_runner.stream_protocol import _uuid
 
 
@@ -33,7 +33,7 @@ def require(condition, code='STREAM_INVALID_SESSION'):
 class Session:
     def __init__(self, client, run_id, input_generations, output_generations, command,
                  directory, parameters=None, *, limits=Limits(), step_timeout=60,
-                 timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None):
+                 timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None, restore_latest=False):
         self.closed = False
         self.processor = self.link = self.journal = None
         self.publisher = None
@@ -58,6 +58,8 @@ class Session:
             require(durability == 'EXTERNAL' and isinstance(checkpoint_client,CheckpointClient)
                     and checkpoint_client.client is client and checkpoint_client.run_id == run_id
                     and checkpoint_client.generation_ids == sorted(identities),'STREAM_CHECKPOINT_SCOPE_MISMATCH')
+        require(type(restore_latest) is bool and (not restore_latest or create is True and checkpoint_client is not None),
+                'STREAM_EXPLICIT_NEW_VOLUME_RECOVERY_REQUIRED')
         directory = Path(directory)
         info = directory.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
@@ -79,17 +81,26 @@ class Session:
                 self.next_at[identity] = 0
                 self.retries[identity] = 0
             self._check()
-            self.journal = Journal(directory / 'journal',
-                [a.binding for a in self.assignments.values() if a.direction == 'CONSUMER'],
-                [a.binding for a in self.assignments.values() if a.direction == 'PRODUCER'], limits, create=create, durability=durability)
+            input_ports={port:self.assignments[identity].binding.route_id for port,identity in input_generations.items()}
+            output_ports={port:[self.assignments[identity].binding.route_id for identity in ids] for port,ids in outputs.items()}
+            inputs=[a.binding for a in self.assignments.values() if a.direction == 'CONSUMER']
+            outgoing=[a.binding for a in self.assignments.values() if a.direction == 'PRODUCER']
+            if restore_latest:
+                self.journal=checkpoint_client.recover(directory/'journal',inputs,outgoing,limits,
+                    execution_digest(command,parameters,input_ports,output_ports,step_timeout),
+                    guard=self._check,timeout=self._request_timeout())
+                # Transfer the bootstrap guard to Link's live assignment owner on
+                # this same thread, before any MQTT or model step may run.
+                self._check()
+                self.journal.authority_guard=None
+            else:
+                self.journal = Journal(directory/'journal',inputs,outgoing,limits,create=create,durability=durability)
             self.link = Link.from_assignments(self.journal, list(self.assignments.values()))
             work = directory / 'workload'
             if create:
                 work.mkdir(mode=0o700)
             self.processor = Processor(self.link, command, work,
-                {port: self.assignments[identity].binding.route_id for port, identity in input_generations.items()},
-                {port: [self.assignments[identity].binding.route_id for identity in ids] for port, ids in outputs.items()},
-                parameters, step_timeout=step_timeout, create=create, cancel=self.cancel)
+                input_ports,output_ports,parameters,step_timeout=step_timeout,create=create and not restore_latest,cancel=self.cancel)
             if checkpoint_client is not None:
                 self.publisher=CheckpointPublisher(checkpoint_client,self.journal,self.processor.execution_sha256,self._check)
         except BaseException:

@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import socket
+import shutil
 import sys
 import tempfile
 import threading
@@ -26,6 +27,7 @@ class CheckpointFixture:
         self.snapshot,self.run_id,self.generations=snapshot,run_id,generations
         self.status=200;self.cache='no-store';self.latest=None;self.raw=None
         self.drop=False;self.calls=[];self.puts=[];self.version='fixture-fixed-version'
+        self.gets=[];self.get_body=None;self.get_status=200;self.get_headers={};self.after_get=None
         owner=self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_):pass
@@ -33,6 +35,18 @@ class CheckpointFixture:
                 owner.puts.append((dict(self.headers),self.rfile.read(int(self.headers['Content-Length']))))
                 self.send_response(200);self.send_header('x-amz-version-id',owner.version)
                 self.send_header('Content-Length','0');self.end_headers()
+            def do_GET(self):
+                owner.gets.append((self.path,dict(self.headers)))
+                data=owner.snapshot.wire if owner.get_body is None else owner.get_body
+                self.send_response(owner.get_status)
+                headers={'Content-Type':MEDIA_TYPE,'Content-Length':str(len(data)),'x-amz-version-id':owner.version}
+                headers.update(owner.get_headers)
+                if owner.get_status==307:headers['Location']=owner.url+'/redirect'
+                for name,value in headers.items():self.send_header(name,value)
+                self.end_headers()
+                if owner.after_get:owner.after_get()
+                try:self.wfile.write(data)
+                except (BrokenPipeError,ConnectionResetError):pass
             def do_POST(self):
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 owner.calls.append((self.path,dict(self.headers),body))
@@ -199,6 +213,67 @@ class StreamCheckpointClientTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'expired'):publisher.step()
         self.assertIsNotNone(self.api.latest);self.assertEqual((),journal.outgoing(confirmed_only=True))
         self.assertEqual(0,publisher.confirmations)
+
+    def publish(self):
+        journal=self.pending_journal();publisher=CheckpointPublisher(self.client,journal,'a'*64,lambda:None)
+        for _ in range(4):publisher.step()
+        self.assertEqual(1,publisher.confirmations)
+        return journal
+
+    def test_authenticated_recovery_after_volume_loss_keeps_state_frames_and_frontiers(self):
+        journal=self.publish();journal.close();shutil.rmtree(self.root/'journal')
+        active=[True]
+        def guard():
+            if not active[0]:raise RuntimeError('fixture authority expired')
+        with self.client.recover(self.root/'recovered',[A,B],[OUT],Limits(max_frames=9),'a'*64,guard=guard) as recovered:
+            self.assertEqual(b'9',recovered.checkpoint().state)
+            self.assertEqual({A.route_id:1,B.route_id:1},recovered.processing_sequences())
+            self.assertEqual([b'9'],[f.payload for f in recovered.outgoing(confirmed_only=True)])
+            self.assertEqual('a'*64,(recovered.directory/'processor.sha256').read_text())
+            active[0]=False
+            with self.assertRaisesRegex(RuntimeError,'expired'):recovered.receive(data(A,2,b'1'))
+        path,headers=self.api.gets[0];self.assertIn('versionId='+self.api.version,path)
+        headers={k.lower():v for k,v in headers.items()}
+        self.assertNotIn('authorization',headers);self.assertNotIn('x-edgeai-pod-token',headers)
+
+    def test_download_rejects_wrong_version_size_hash_encoding_and_redirect(self):
+        self.publish();value=self.client.latest()
+        for headers in ({'x-amz-version-id':'wrong-version'},{'Content-Length':'1'},
+                        {'Content-Type':'application/json'},{'Content-Encoding':'gzip'}):
+            self.api.get_headers=headers
+            with self.subTest(headers=headers),self.assertRaises(CheckpointError):
+                self.client.download(value,guard=lambda:None)
+        self.api.get_headers={};self.api.get_body=b'x'*len(self.api.snapshot.wire)
+        with self.assertRaises(CheckpointError):self.client.download(value,guard=lambda:None)
+        self.api.get_body=None;self.api.get_status=307;before=len(self.api.gets)
+        with self.assertRaises(CheckpointError):self.client.download(value,guard=lambda:None)
+        self.assertEqual(before+1,len(self.api.gets))
+        self.api.get_status=503
+        with self.assertRaises(CheckpointUnavailable):self.client.download(value,guard=lambda:None)
+        self.api.get_status=200;value['download']['url']+='&versionId='
+        with self.assertRaises(CheckpointError):self.client.download(value,guard=lambda:None)
+
+    def test_recovery_never_uses_missing_changed_latest_or_wrong_execution(self):
+        target=self.root/'recovered'
+        def recover(execution='a'*64):
+            return self.client.recover(target,[A,B],[OUT],Limits(max_frames=9),execution,guard=lambda:None)
+        with self.assertRaises(CheckpointError):recover()
+        self.assertFalse(target.exists())
+        self.publish()
+        with self.assertRaises(CheckpointError):recover('b'*64)
+        self.assertEqual([],self.api.gets);self.assertFalse(target.exists())
+        self.api.after_get=lambda:self.api.latest.update(id=str(uuid.uuid4()))
+        with self.assertRaises(CheckpointError):recover()
+        self.assertEqual(1,len(self.api.gets));self.assertFalse(target.exists())
+
+    def test_recovery_authority_expiration_during_download_creates_no_journal(self):
+        self.publish();active=[True]
+        def guard():
+            if not active[0]:raise RuntimeError('fixture authority expired')
+        self.api.after_get=lambda:active.__setitem__(0,False)
+        with self.assertRaisesRegex(RuntimeError,'expired'):
+            self.client.recover(self.root/'recovered',[A,B],[OUT],Limits(max_frames=9),'a'*64,guard=guard)
+        self.assertFalse((self.root/'recovered').exists())
 
 
 if __name__=='__main__':unittest.main()

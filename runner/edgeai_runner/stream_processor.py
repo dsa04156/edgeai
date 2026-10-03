@@ -34,6 +34,17 @@ def blob(value, maximum):
         raise WorkloadError('STREAM_INVALID_WORKLOAD_RESPONSE') from None
 
 
+def execution_digest(command, parameters, input_ports, output_ports, step_timeout):
+    """Same immutable execution identity for creation and authenticated recovery."""
+    command=validate_command(command)
+    parameters={} if parameters is None else parameters
+    require(type(parameters) is dict and len(json_encode(parameters)) <= 262144)
+    require(type(step_timeout) in (int,float) and 0 < step_timeout <= 3600)
+    return hashlib.sha256(json_encode({'version':VERSION,'command':list(command),'parameters':parameters,
+        'inputs':dict(sorted(input_ports.items())),
+        'outputs':{p:list(r) for p,r in sorted(output_ports.items())},'stepTimeout':step_timeout})).hexdigest()
+
+
 class Processor:
     def __init__(self, link, command, directory, input_ports, output_ports, parameters=None,
                  *, step_timeout=60, create=False, cancel=None):
@@ -80,9 +91,8 @@ class Processor:
         info = self.directory.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700)
         checkpoint = self.journal.checkpoint()
-        digest = hashlib.sha256(json_encode({'version': VERSION, 'command': list(self.command), 'parameters': self.parameters,
-            'inputs': self.inputs, 'outputs': {p: list(r) for p, r in self.outputs.items()}, 'stepTimeout': step_timeout})).hexdigest().encode('ascii')
-        self.execution_sha256 = digest.decode('ascii')
+        self.execution_sha256 = execution_digest(self.command,self.parameters,self.inputs,self.outputs,step_timeout)
+        digest = self.execution_sha256.encode('ascii')
         pin = self.journal.directory / 'processor.sha256'
         if create:
             require(checkpoint.revision == 0)

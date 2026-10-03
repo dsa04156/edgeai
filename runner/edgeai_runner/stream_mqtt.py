@@ -316,7 +316,7 @@ class Link:
                     self.client.socket().close()
                 self.client.disconnect()
             finally:
-                # A blocked nonblocking DISCONNECT write must not keep the socket open.
-                connection = self.client.socket()
-                if connection is not None:
-                    connection.close()
+                # Pinned Paho 2.1.0 disconnect() leaves loop()'s wake-up socket
+                # pair alive until GC. Release all three sockets when this owner
+                # closes, even when Session/Journal callbacks retain references.
+                self.client._reset_sockets()

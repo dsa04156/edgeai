@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.parse
 from unittest.mock import patch
 import uuid
 
@@ -23,7 +24,7 @@ from edgeai_runner.stream_journal import Emission, Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_session import Session, SessionError
 from edgeai_runner.stream_checkpoint import Snapshot, MEDIA_TYPE, restore
-from edgeai_runner.stream_checkpoint_client import CheckpointClient
+from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointError
 
 RUNNER = Path(__file__).resolve().parents[1]
 COMMAND = [sys.executable, str(RUNNER/'examples/stream_sum.py')]
@@ -44,6 +45,7 @@ class SessionApi:
         self.foreign_run = False
         self.checkpoint_status=None;self.checkpoint_latest=None;self.checkpoint_objects={}
         self.checkpoint_drop=False;self.checkpoint_requests=[];self.storage_credential_leak=False
+        self.checkpoint_gets=0;self.checkpoint_corrupt_download=False
         owner = self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -54,6 +56,15 @@ class SessionApi:
                 owner.checkpoint_objects[snapshot.sha256]=snapshot
                 self.send_response(200);self.send_header('x-amz-version-id',snapshot.sha256)
                 self.send_header('Content-Length','0');self.end_headers()
+            def do_GET(self):
+                owner.storage_credential_leak |= bool(self.headers.get('Authorization') or self.headers.get('X-EdgeAI-Pod-Token'))
+                owner.checkpoint_gets+=1
+                version=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)['versionId'][0]
+                snapshot=owner.checkpoint_objects[version]
+                wire=b'x'*len(snapshot.wire) if owner.checkpoint_corrupt_download else snapshot.wire
+                self.send_response(200);self.send_header('x-amz-version-id',version)
+                self.send_header('Content-Type',MEDIA_TYPE);self.send_header('Content-Length',str(len(wire)))
+                self.end_headers();self.wfile.write(wire)
             def do_POST(self):
                 data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if '/streams/checkpoints/' in self.path:
@@ -155,10 +166,11 @@ class StreamSessionTest(unittest.TestCase):
         for link in self.links.values():link.close(force=True)
         for journal in self.journals.values():journal.close()
 
-    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False):
+    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False, restore_latest=False):
         checkpoint=CheckpointClient(self.client,POD,list(GENERATIONS.values()),storage_ca_file=self.broker.ca) if automatic_checkpoint else None
         self.session=Session(self.client,POD,INPUTS,OUTPUTS,command,self.directory,{'mode':'zip'},
-                             limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability,checkpoint_client=checkpoint)
+                             limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability,
+                             checkpoint_client=checkpoint,restore_latest=restore_latest)
         return self.session
 
     def setup_flow(self, **options):
@@ -345,6 +357,47 @@ class StreamSessionTest(unittest.TestCase):
         eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
         self.assertEqual(b'14',self.consume_sink().payload)
         self.assertGreater(session.publisher.confirmations,0)
+
+    def test_authenticated_new_volume_recovery_resumes_state_and_pending_outputs_without_duplicates(self):
+        session=self.setup_flow(durability='EXTERNAL',automatic_checkpoint=True)
+        self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'9',self.consume_sink().payload)
+        # The server checkpoint still contains output 9; the sink owns its durable ACK.
+        latest=self.api.checkpoint_latest
+        self.assertTrue(any(r['frames'] for r in self.api.checkpoint_objects[latest['versionId']].document()['routes']))
+        session.close();shutil.rmtree(self.directory);self.directory.mkdir(mode=0o700)
+        session=self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True)
+        self.assertEqual(b'9',session.journal.checkpoint().state)
+        self.assertIsNone(session.processor.workload)
+        self.emit(A,b'2');self.emit(B,b'3')
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual(b'14',self.consume_sink().payload)
+        self.assertEqual(2,self.journals['sink'].processing_sequences()[OUT.route_id])
+        self.assertEqual(1,self.api.checkpoint_gets);self.assertFalse(self.api.storage_credential_leak)
+        # END survives a second volume loss without running the model or emitting it twice.
+        self.emit(A,b'','END');self.emit(B,b'','END')
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        self.assertEqual('END',self.consume_sink().kind)
+        session.close();shutil.rmtree(self.directory);self.directory.mkdir(mode=0o700)
+        session=self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True)
+        self.assertTrue(session.complete);self.assertIsNone(session.processor.workload)
+        eventually(self.pump,lambda:session.settled)
+        self.assertFalse(self.journals['sink'].pending())
+        self.assertEqual(3,self.journals['sink'].processing_sequences()[OUT.route_id])
+
+    def test_missing_or_corrupt_latest_fails_before_journal_or_model_creation(self):
+        with self.assertRaises(CheckpointError):
+            self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True)
+        self.assertFalse((self.directory/'journal').exists())
+        session=self.setup_flow(durability='EXTERNAL',automatic_checkpoint=True)
+        self.emit(A,b'4');self.emit(B,b'5')
+        eventually(self.pump,lambda:bool(self.journals['sink'].pending()))
+        session.close();shutil.rmtree(self.directory);self.directory.mkdir(mode=0o700)
+        self.api.checkpoint_corrupt_download=True
+        with self.assertRaises(CheckpointError):
+            self.open_session(durability='EXTERNAL',automatic_checkpoint=True,restore_latest=True)
+        self.assertFalse((self.directory/'journal').exists());self.assertFalse((self.directory/'workload').exists())
 
 
 if __name__=='__main__':unittest.main()

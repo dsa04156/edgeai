@@ -123,8 +123,8 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
 시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
 종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
 
-`test-runner.sh`의60개에는 SDK10개·codec10개와 실제 SQLite/프로세스 강제 종료 journal12개가 포함된다.
-MQTT 통합은 별도14개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
+`test-runner.sh`의91개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
+HTTPS/MQTT/계산/Session 통합은 별도42개다. 같은 볼륨의 프로세스 복구와 S3 checkpoint를 이용한 새 Pod/Node 복원은
 다르며 후자는 아직 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
 [실제 검증 기록](../docs/evidence/m7-stream-transport.md).
 
@@ -134,7 +134,7 @@ MQTT 통합은 별도14개다. 같은 볼륨의 프로세스 복구와 S3 checkp
 step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을 검사해 만료한 socket을 닫고 쓰기를 거절하며,
 트랜잭션 도중 만료되면 전체 변경을 롤백한다. 이 조회는 lease를 연장하지 않는다.
 기존 저수준 `Link(journal, endpoint, client_id)`에는 인증 배정/lease 계약이 없으므로 운영 스트림
-실행의 대체 경로로 사용하지 않는다. 실제 Runner 계산 프로세스 watchdog은 후속 통합이다.
+실행의 대체 경로로 사용하지 않는다. 계산 프로세스 watchdog은 아래 자동 Session에서 연결한다.
 [설계](../docs/adr/0027-stream-client-lease.md), [검증과 fixture 경계](../docs/evidence/m7-stream-client.md).
 
 `BindingClient.heartbeat(generation_id, sequence)`는 `{sequence, assignment}` 결과를 반환한다.
@@ -167,3 +167,10 @@ Session은 같은 SQLite 후보로 오류/응답 유실을 재시도하고 인�
 로컬 `settled`는 Task/Run의 성공이 아니며 세션은 종료 명령까지 heartbeat를 유지한다.
 [자동 저장 설계](../docs/adr/0033-stream-automatic-checkpoint-publisher.md)와
 [실제 검증 및 남은 연결](../docs/evidence/m7-stream-checkpoint-publisher.md)을 따른다.
+
+새 private 세션 디렉터리를 준비하고 `Session(..., create=True, durability='EXTERNAL',
+checkpoint_client=checkpoints, restore_latest=True)`를 사용하면 인증 latest의 고정 S3 version을
+검증한 뒤 상태·커서·미확인 출력/END를 복원한다. 실행 digest·전체 binding이 같아야 하고
+기존 journal은 덮어쓰지 않는다. 확정본이 없거나 손상·권한 만료·이력 변경이 있으면 실패하며
+빈 상태로 시작하지 않는다. 이 옵션은 동일 Attempt/세대만 지원하며 새 Pod/Attempt의
+권한 인계는 별도다. [복원 설계·검증](../docs/evidence/m7-stream-checkpoint-recovery.md)을 따른다.

@@ -454,6 +454,18 @@ class StreamMqttTest(unittest.TestCase):
         self.assertGreater(count, 0, 'The live peer/listener sockets must be counted')
         return count
 
+    def test_close_releases_transport_and_loop_sockets_while_client_is_still_referenced(self):
+        self.broker.enable_tls()
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1',0));listener.listen(1)
+            baseline=self.socket_count();retained=[]
+            for force in (False,True):
+                journal,link=self.peer('source-a',[],[A],create=not retained)
+                self.ready();self.assertGreaterEqual(self.socket_count(),baseline+3)
+                link.close(force=force);link.close(force=force)
+                retained.append(link);journal.close()
+                self.assertEqual(baseline,self.socket_count())
+
     def test_tls_handshake_timeout_is_bounded_and_closes_failed_socket(self):
         self.broker.enable_tls()
         journal, _ = self.peer('source-a', [], [A])

@@ -32,6 +32,8 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 [인증된 체크포인트 확정 API](docs/evidence/m7-stream-checkpoint-api.md)는 현재 실행 주체·전체 경로와
 실제 S3 내용을 검증하고 불변 DB 이력을 저장합니다.
 [Session 자동 저장](docs/evidence/m7-stream-checkpoint-publisher.md)은 같은 후보 재시도와 인증된 확정 응답 적용을 연결합니다.
+[인증된 새 볼륨 복원](docs/evidence/m7-stream-checkpoint-recovery.md)은 서버 latest의 고정 S3 파일을
+검증하고 동일 Attempt·경로의 상태와 미확인 출력/END를 이어갑니다.
 새 Attempt/generation 전환, 운영 broker·SERVICE/Runner 실행 연결·
 공개 스트리밍 실행은 남아 있습니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.

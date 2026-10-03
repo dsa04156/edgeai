@@ -168,7 +168,7 @@ def confirm(journal, serial, sha256):
         journal.db.execute('DELETE FROM snapshot_candidate WHERE id=1')
 
 
-def restore(directory, snapshot, inputs, outputs, limits, *, expected_sha256, execution_sha256):
+def restore(directory, snapshot, inputs, outputs, limits, *, expected_sha256, execution_sha256, guard=None):
     """Restore a verified snapshot into a NEW private volume with exact bindings.
 
     Generation/Attempt remapping is deliberately not inferred from a file; it needs
@@ -180,8 +180,12 @@ def restore(directory, snapshot, inputs, outputs, limits, *, expected_sha256, ex
     value = snapshot.document()
     require(value['executionSha256'] == execution_sha256, 'Checkpoint execution changed')
     require(value['manifest'] == json.loads(manifest(inputs, outputs, limits)), 'Checkpoint restore authority changed')
+    if guard is not None:
+        require(callable(guard), 'Invalid checkpoint authority guard')
+        guard()
     journal = Journal(directory, inputs, outputs, limits, create=True, durability='EXTERNAL')
     try:
+        journal.authority_guard = guard
         with journal._transaction(advance=False):
             for route in value['routes']:
                 identity = route['routeId']
@@ -205,6 +209,7 @@ def restore(directory, snapshot, inputs, outputs, limits, *, expected_sha256, ex
             os.fsync(fd)
         finally:
             os.close(fd)
+        if guard is not None:guard()
         return journal
     except BaseException:
         journal.close()

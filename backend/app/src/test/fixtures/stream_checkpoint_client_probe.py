@@ -1,5 +1,6 @@
 """Actual Python client -> authenticated Spring API -> real fixed-version S3."""
 import json
+import shutil
 from pathlib import Path
 import sys
 
@@ -42,5 +43,11 @@ with Journal(directory/'publisher',inputs,[],Limits(**manifest['limits']),create
 assert client.latest()['checkpoint']==receipt
 assert client.upload(snapshot,None)['checkpoint']==receipt
 assert client.commit(snapshot,None,receipt['versionId'])==receipt
+shutil.rmtree(directory/'publisher')
+with client.recover(directory/'restored',inputs,[],Limits(**manifest['limits']),doc['executionSha256'],guard=lambda:None) as recovered:
+    assert recovered.checkpoint().state==b'9'
+    assert all(position==1 for position in recovered.processing_sequences().values())
+    assert recovered.db.execute('SELECT confirmed_serial,digest FROM durability WHERE id=1').fetchone()==(snapshot.serial,snapshot.sha256)
+    assert not recovered.pending()
 (directory/'receipt.json').write_text(json.dumps(receipt))
 print('STREAM_CHECKPOINT_CLIENT_PASS')

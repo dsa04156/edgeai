@@ -1,6 +1,11 @@
 # 진행 상태
 
 [STATUS]
+ADR0034 인증 latest·고정 S3 다운로드·새 볼륨 Session 복원을 연결했다.
+실제 HTTP12개·TLS MQTT 복원/소켓 정리3개·Spring/PG/MinIO7개를 검증했다.
+전체 Runner91개·HTTPS/MQTT42개·Spring/PG/TLS broker22개 회귀도 PASS다.
+동일 Attempt/경로에서 상태9→14와 미확인 출력/END를 복원하며 손상·기한 만료·이력 변경은 거절한다.
+상세는 docs/evidence/m7-stream-checkpoint-recovery.md다. 새 Attempt/세대 인계와 공개 STREAM은 남는다.
 ADR0033 인증 checkpoint client·Session 자동 publisher를 연결했다. 실제 HTTP/SQLite8개,
 실제 HTTPS/MQTT39개·Runner87개와 실제 Spring/PG/S3/Python publisher7개를 로컬 검증했다.
 실제 Spring/PG/TLS broker·Session 회귀22개도042847Z-5b966d84에서 PASS다.
@@ -13,7 +18,9 @@ ADR0032/V22 인증 checkpoint API·불변 DB 이력·실제 S3 내용 검증을 
 docs/evidence/m7-stream-checkpoint-api.md다. 자동 Session 저장은 후속 ADR0033이며 새 Attempt/세대 인계와
 운영 broker·공개 STREAM 실행·실제 Kubernetes 다중 장치 종단은 남는다.
 서버 연결의 실제 TLS broker22개·DB153개·S3/Remote/VD22개·PC/모바일10개 및 DB 장애/복구도 PASS다.
-새 서버 커밋의 CI/배포는 후속 확인 대상이다. 앞선 SDK a4e87c7의 CI37093274029는5 jobs/
+서버1463117의 CI37095590064는5 jobs/결과JSON17개·실제kind를 통과했고 GitOps db21328에 고정됐다.
+실제 배포044815Z-9e55517a에서 정확한3개 imageID·Ready·PVCBound·ArgoSynced·VD 활성화도 PASS다.
+aggregate health는 공유 Ingress 상태로Progressing이다. 앞선 SDK a4e87c7의 CI37093274029는5 jobs/
 결과JSON17개 및 실제kind를 통과했다. GitOps73b6f11·040416Z-7679f70f에서 정확한
 imageID/Ready/PVCBound/ArgoSynced·VD 활성화를 확인했으며 aggregate health는Progressing이다.
 ADR0031 외부 checkpoint SDK·전송 frontier를 구현했다. 실제 TLS MQTT/Session과 S3 고정 version의

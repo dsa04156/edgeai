@@ -50,4 +50,15 @@ V1–V21의 파일 bytes가 HEAD와 같음을 확인했다. 실제 DB의 V22 성
 Pod 신원 gateway와 broker 활성화 receipt는 명시적 fixture다. Session의 자동 checkpoint
 client나 실제 Kubernetes 다중 장치 실행의 증거는 아니다. 같은 binding 복원과 새 Attempt/
 generation handover도 구분한다. 후자는409로 차단하며 후속 구현이 필요하다.
-신규 서버 코드의 CI·이미지 배포는 별도 확인한다. 공개 STREAM 실행501은 유지한다.
+공개 STREAM 실행501은 유지한다.
+
+## CI 확인
+
+서버 소스1463117의 [CI37095590064](https://github.com/dsa04156/edgeai/actions/runs/37095590064)는
+scaffold/storage/runner/images/gitops5 jobs 모두 success다. 내려받은 결과JSON17개가 모두
+PASS/0임을 확인했다. kind `20261003T042319Z-ef07eaf2`의 실제 BATCH/Retry/Offload/TLS Remote/VD
+회귀와 S3 고정 결과20+5개 및 소유 cluster `edgeai-ci-aa41245ac60b` 삭제 로그도 직접 확인했다.
+GitOps db21328은 API/dashboard/MinIO digest를 고정했다. 실제 배포
+`20261003T044815Z-9e55517a`에서 소스1463117의 정확한3개 imageID·Ready·PVCBound·ArgoSynced와
+API의 VD 활성화를 확인했다. 공유 Ingress 상태의 기존 한계로 aggregate health는Progressing이다.
+이 CI의 Runner79·MQTT38개는 서버 소스 기준이며 후속 자동 publisher/복원 변경의 증거가 아니다.
