@@ -88,4 +88,5 @@ broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
 이후 SERVICE/Runner 실행, S3 체크포인트 저장·동일 Attempt 새 볼륨 복원, 서버 검증 인계,
 Task/Device 공동 완료와 공개 Run 연결은 [검증 목록](verification-matrix.md)에 각각 기록했다.
 dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 장애 복구는 검증했다.
-그룹 노드 전환의 실제 Kubernetes 수용, 자동 정책·VD/단계별 배치 및 실장비 수용은 남는다.
+그룹 노드 전환은 실제 Kubernetes의 다른 Node·체크포인트 인계·대기 중 API 교체/취소까지
+검증했고 전체7개 회귀를 통과했다. 새7개 이미지 CI, 자동 정책·VD/단계별 배치 및 실장비 수용은 남는다.

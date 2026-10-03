@@ -89,7 +89,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
         time.sleep(.02)
 
 
-def run_case(name, placement, cancel=False, recover=False, finalize=False):
+def run_case(name, placement, cancel=False, recover=False, finalize=False, offload=False):
     global active, phase, csrf
     csrf = request('csrf')['token']
     prefix = config.get('resourcePrefix', 'stream-demo-' + uuid.uuid4().hex) + '-' + name
@@ -175,6 +175,16 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
             for owner in owners.values():
                 owner.step()
 
+        def tick_cancel():
+            for owner in owners.values():
+                if owner.closed:
+                    continue
+                try:
+                    owner.step()
+                except (AssignmentError, SourceError):
+                    pass
+                assert not owner.completed
+
         def emit(a, b):
             wait(lambda: all(o.ready for o in owners.values()), tick)
             for port, number in (('a', a), ('b', b)):
@@ -185,7 +195,33 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
         phase = name + '-first'
         save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 9, 'sink': 9}})
         wait(lambda: (work / (phase + '.continue')).exists(), tick)
-        if recover:
+        if offload:
+            before = {key: request('tasks/' + task_ids[key])['attempts'][0] for key in ('root', 'sink')}
+            target = config['targetNodeId']
+            assert placement['mode'] == 'NODE' and target != placement['nodeId']
+            command = {'sourceAttemptId': before['root']['id'], 'targetNodeId': target,
+                       'drainTimeoutSeconds': 180, 'startTimeoutSeconds': 120}
+            command_key = str(uuid.uuid4())
+            operation = request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 202, command_key)
+            assert operation['state'] == 'DRAINING' and len(operation['members']) == 2
+            assert {m['sourceAttemptId'] for m in operation['members']} == {a['id'] for a in before.values()}
+            assert all(m['targetAttemptId'] is None for m in operation['members'])
+            current['offload'] = operation
+            phase = name + '-draining'
+            save('phase.json', {**current, 'phase': phase})
+            wait(lambda: (work / (phase + '.continue')).exists(), tick)
+            # The owner still holds only these Jobs while restarting the isolated API.
+            replay = request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 200, command_key)
+            assert replay['id'] == operation['id'] and replay['state'] == 'DRAINING' and replay['members'] == operation['members']
+            current['offloadReplayPreserved'] = True
+            if cancel:
+                request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
+                current['offload'] = request('operations/' + operation['id'])
+                assert current['offload']['state'] == 'CANCELLING'
+            phase = name + ('-cancelling' if cancel else '-releasing')
+            save('phase.json', {**current, 'phase': phase})
+            wait(lambda: (work / (phase + '.continue')).exists(), tick_cancel if cancel else tick)
+        if recover or offload and not cancel:
             phase = name + '-reconnecting'
             save('phase.json', {**current, 'phase': phase})
 
@@ -206,31 +242,37 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
                 attempts = request('tasks/' + task_ids[key])['attempts']
                 assert len(attempts) == 2
                 old, new = sorted(attempts, key=lambda a: a['number'])
-                assert old['state'] == 'FAILED' and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
+                assert old['state'] == ('OFFLOADED' if offload else 'FAILED') and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
+                assert new['cause'] == ('OFFLOAD' if offload else 'RETRY')
+                if offload:
+                    assert new['mode'] == 'NODE' and new['nodeId'] == (config['targetNodeId'] if key == 'root' else placement['nodeId'])
                 expected_attempts[key] = new['id']
             assert not request('tasks/' + task_ids['report'])['attempts']
             current['recovery'] = {'attempts': expected_attempts, 'sameDeviceOwners': True, 'sensorCursorsPreserved': True}
+            if offload:
+                current['offload'] = request('operations/' + operation['id'])
+                assert current['offload']['state'] == 'SUCCEEDED'
+                assert {m['targetAttemptId'] for m in current['offload']['members']} == set(expected_attempts.values())
             phase = name + '-recovered'
             save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 9, 'sink': 9}, 'expectedAttempts': expected_attempts})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
         if cancel:
-            request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
-
-            def tick_cancel():
-                for owner in owners.values():
-                    if owner.closed:
-                        continue
-                    try:
-                        owner.step()
-                    except (AssignmentError, SourceError):
-                        pass
-                    assert not owner.completed
+            if not offload:
+                request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
 
             wait(lambda: all(request('tasks/' + t)['task']['state'] in ('SKIPPED', 'CANCELLED') for t in task_ids.values()), tick_cancel)
             assert request('tasks/' + task_ids['sink'])['task']['state'] == 'CANCELLED'
             assert not request('tasks/' + task_ids['report'])['attempts']
             assert all(not request('tasks/' + t + '/results')['items'] for t in task_ids.values())
             wait(lambda: all(o.closed for o in owners.values()), tick_cancel)
+            if offload:
+                def cancelled_transfer():
+                    value = request('operations/' + operation['id'])
+                    assert value['state'] in ('CANCELLING', 'CANCELLED')
+                    return value if value['state'] == 'CANCELLED' else None
+                current['offload'] = wait(cancelled_transfer, tick_cancel)
+                assert all(m['targetAttemptId'] is None for m in current['offload']['members'])
+                assert all(len(request('tasks/' + task_ids[key])['attempts']) == 1 for key in ('root', 'sink'))
             current.update(cancelled=True, results=[])
         else:
             emit(2, 3)
@@ -264,10 +306,10 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
             for key, identity in task_ids.items():
                 attempts = sorted(request('tasks/' + identity)['attempts'], key=lambda a: a['number'])
                 values = request('tasks/' + identity + '/results')['items']
-                retried = recover and key != 'report' or finalize and key == 'sink'
+                retried = (recover or offload) and key != 'report' or finalize and key == 'sink'
                 assert len(attempts) == (2 if retried else 1) and attempts[-1]['state'] == 'SUCCEEDED' and len(values) == 1
                 if retried:
-                    assert attempts[0]['state'] == 'FAILED' and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
+                    assert attempts[0]['state'] == ('OFFLOADED' if offload else 'FAILED') and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
                 value = values[0]
                 assert value['attemptId'] == attempts[-1]['id'] and value['producerPodUid'] and len(value['artifacts']) == 1
                 if finalize and key == 'root':
@@ -292,10 +334,10 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
 
 def main():
     names = config.get('cases', ['auto', 'node', 'recover', 'finalizer', 'cancel'])
-    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel'}
+    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel'}
     for name in names:
-        placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' else {'mode': 'AUTO'}
-        run_case(name, placement, cancel=name == 'cancel', recover=name == 'recover', finalize=name == 'finalizer')
+        placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' or name.startswith('offload') else {'mode': 'AUTO'}
+        run_case(name, placement, cancel=name in ('cancel', 'offload-cancel'), recover=name == 'recover', finalize=name == 'finalizer', offload=name.startswith('offload'))
     save('done.json', report)
 
 

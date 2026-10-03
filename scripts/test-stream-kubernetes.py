@@ -21,6 +21,8 @@ import urllib.request
 import uuid
 from vd_acceptance import ROOT, wait
 
+CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel')
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -31,7 +33,10 @@ def main():
     parser.add_argument('--api-source', help='Full source commit for the explicit API image')
     parser.add_argument('--minio-image', help='Explicit CI-tested project MinIO digest')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/stream-kubernetes.json')
+    parser.add_argument('--cases', nargs='+', choices=CASES, default=list(CASES), help='Explicit subset for diagnosis; CI defaults to every case')
     args = parser.parse_args()
+    if len(args.cases) != len(set(args.cases)):
+        parser.error('Duplicate acceptance cases')
     if bool(args.runner_image) != bool(args.runner_source):
         parser.error('--runner-image and --runner-source must be supplied together')
     if args.runner_image and (not re.fullmatch(r'ghcr\.io/dsa04156/edgeai-runner@sha256:[0-9a-f]{64}', args.runner_image)
@@ -52,9 +57,16 @@ def main():
     api, db, storage, broker, driver = [root + '-' + name for name in ('api', 'db', 'storage', 'broker', 'driver')]
     run_ids = set()
     seen = {}
+    held_jobs, private_producers = {}, {}
+    succeeded = False
     db_ready = False
     snapshot = {'scope': 'real-kubernetes-stream-dag', 'testId': root, 'cases': [], 'checkpointBarriers': [], 'observedPods': seen}
     owner_path = ROOT / '.tools' / (root + '-owner.json')
+
+    def save_owner():
+        owner_path.write_text(json.dumps({'context': args.context, 'testId': root, 'resources': records,
+            'heldJobs': [{'name': name, 'uid': uid, 'runId': run} for (name, uid), run in held_jobs.items()]}) + '\n')
+        owner_path.chmod(0o600)
 
     def call(arguments, value=None, raw=None, timeout=40):
         data = raw if raw is not None else None if value is None else json.dumps(value).encode()
@@ -75,7 +87,7 @@ def main():
                'labels': {**labels, 'edgeai.io/test-resource': name}}, **fields}
         value = read_create(obj)
         records.append((kind.lower(), namespace, name, value['metadata']['uid']))
-        owner_path.write_text(json.dumps({'context': args.context, 'testId': root, 'resources': records}) + '\n')
+        save_owner()
         return value
 
     def read_create(value):
@@ -90,6 +102,56 @@ def main():
         call(['delete', '--raw', '/api/v1/namespaces/' + namespace + '/' + plural + '/' + name, '-f', '-'],
              {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': uid}})
         wait(lambda: not call(['-n', namespace, 'get', kind, name, '--ignore-not-found', '-o', 'name']).strip(), 90, 'Owned fixture resource did not terminate')
+
+    def hold_job(name, uid, run, enabled):
+        # Only Jobs created by this invocation's isolated API; never alter a shared node.
+        assert run in run_ids
+        finalizer = 'edgeai.io/stream-acceptance-hold'
+        for _ in range(6):
+            obj = json.loads(call(['-n', 'edgeai-runtimes', 'get', 'job', name, '--ignore-not-found', '-o', 'json']) or b'null')
+            if obj is None:
+                assert not enabled, 'Owned source Job vanished before installing the barrier'
+                held_jobs.pop((name, uid), None);save_owner();return
+            meta = obj['metadata']
+            assert meta['uid'] == uid and meta['labels']['edgeai.io/run-id'] == run
+            assert meta['labels']['app.kubernetes.io/managed-by'] == 'edgeai-runtime-controller'
+            before = meta.get('finalizers', [])
+            if enabled:
+                assert not meta.get('deletionTimestamp') and finalizer not in before
+                after = before + [finalizer]
+            else:
+                after = [value for value in before if value != finalizer]
+            patch = [{'op': 'test', 'path': '/metadata/uid', 'value': uid},
+                     {'op': 'test', 'path': '/metadata/resourceVersion', 'value': meta['resourceVersion']},
+                     {'op': 'add', 'path': '/metadata/finalizers', 'value': after}]
+            result = subprocess.run(k + ['-n', 'edgeai-runtimes', 'patch', 'job', name, '--type=json', '--patch-file=/dev/stdin'],
+                input=json.dumps(patch).encode(), capture_output=True, timeout=30)
+            if result.returncode == 0:
+                if enabled:
+                    held_jobs[(name, uid)] = run
+                else:
+                    held_jobs.pop((name, uid), None)
+                save_owner();return
+        raise AssertionError('Owned source Job barrier changed concurrently')
+
+    def capture_producer(pod):
+        code = "import sys;sys.path.insert(0,'/opt/edgeai');from edgeai_runner.main import Runner;import json;r=Runner();print(json.dumps({'attemptId':r.attempt,'podUid':r.pod,'epoch':r.epoch,'claim':r.token,'podToken':r.pod_token_file.read_text().strip()}))"
+        return json.loads(call(['-n', 'edgeai-runtimes', 'exec', pod['metadata']['name'], '--', 'python3', '-c', code]))
+
+    def check_old_producer(value, origin):
+        # Credentials stay in private pipes/memory. Only the HTTP status is returned.
+        code = """import json,sys,urllib.request,urllib.error
+v=json.load(sys.stdin);c=v['credentials']
+r=urllib.request.Request(v['origin']+'/internal/v1/attempts/'+c['attemptId']+'/commit',method='POST',
+ data=json.dumps({'epoch':c['epoch'],'podUid':c['podUid'],'outputs':[]}).encode(),
+ headers={'Authorization':'Bearer '+c['claim'],'X-EdgeAI-Pod-Token':c['podToken'],'Content-Type':'application/json'})
+try: response=urllib.request.urlopen(r,timeout=10)
+except urllib.error.HTTPError as error: response=error
+with response: print(response.status)
+"""
+        status = int(call(['-n', 'edgeai', 'exec', '-i', driver, '--', 'python3', '-c', code], {'origin': origin, 'credentials': value}))
+        assert status in (401, 409), 'Previous producer was not fenced'
+        return status
 
     def running(name, ready=False):
         pod = read(['-n', 'edgeai', 'get', 'pod', name, '-o', 'json'])
@@ -284,9 +346,13 @@ def main():
             api_uid = start_api()
             forward(api, 18443, '/actuator/health/readiness')
             nodes = read(['get', 'nodes', '-o', 'json'])['items']
-            node = next(n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
-                        and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', [])))
+            eligible = [n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
+                        and any(c['type'] == 'Ready' and c['status'] == 'True' for c in n['status']['conditions'])
+                        and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', []))]
+            assert len(eligible) >= (2 if any(name.startswith('offload') for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer'
+            node = eligible[0]
             config = {'origin': api_origin, 'runnerImage': snapshot['runnerImage'], 'nodeId': node['metadata']['uid'],
+                      'targetNodeId': eligible[-1]['metadata']['uid'], 'cases': args.cases,
                       'streamSpec': json.loads((ROOT / 'contracts/profiles/service-stream.example.json').read_bytes()),
                       'batchSpec': json.loads((ROOT / 'contracts/profiles/service-execution.example.json').read_bytes()),
                       # A test workload barrier after the real server grants completion, before file output.
@@ -311,7 +377,7 @@ def main():
                 if current:
                     run = current['runId'];uuid.UUID(run);run_ids.add(run);observe(run)
                     phase = current['phase']
-                    if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-finalizer-granted', '-finalizer-restoring'))):
+                    if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-finalizer-granted', '-finalizer-restoring', '-draining', '-releasing', '-cancelling'))):
                         if 'expectedStates' in current:
                             task_ids = [str(uuid.UUID(current['tasks'][n])) for n in current['expectedStates']]
                             attempt_filter = ''
@@ -324,6 +390,20 @@ def main():
                                 time.sleep(.3)
                                 continue
                             snapshot['checkpointBarriers'].append({'phase': phase, 'runId': run, 'states': current['expectedStates'], 'sha256': actual})
+                            if phase in ('offload-first', 'offload-cancel-first'):
+                                owned = resources(run);before = [p for p in owned if p['kind'] == 'Pod']
+                                assert len(before) == 2 and all(p['metadata']['uid'] in seen for p in before)
+                                assert all(seen[p['metadata']['uid']]['nodeUid'] == config['nodeId'] for p in before)
+                                private_producers[current['case']] = [capture_producer(p) for p in before]
+                                jobs = [p for p in owned if p['kind'] == 'Job'];assert len(jobs) == 2
+                                for job in jobs:
+                                    hold_job(job['metadata']['name'], job['metadata']['uid'], run, True)
+                                snapshot.setdefault('offloads', {})[current['case']] = {
+                                    'runId': run, 'oldPodUids': sorted(p['metadata']['uid'] for p in before),
+                                    'oldAttemptIds': sorted(p['metadata']['labels']['edgeai.io/attempt-id'] for p in before),
+                                    'oldGenerationIds': sorted(r['generation']['id'] for r in current['routes']),
+                                    'sourceNodeId': config['nodeId'], 'targetNodeId': config['targetNodeId'],
+                                    'heldJobUids': sorted(p['metadata']['uid'] for p in jobs)}
                             if phase == 'auto-first' and not restarted:
                                 before = {p['metadata']['uid'] for p in resources(run) if p['kind'] == 'Pod'}
                                 assert len(before) == 2
@@ -358,6 +438,52 @@ def main():
                                 assert query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + old_generations + ') AND closed_at IS NOT NULL') == '3'
                                 fault.update(newPodUids=sorted(after), oldRuntimesStopped=True, oldGenerationsClosed=True,
                                              restoredAttemptIds=current['expectedAttempts'])
+                            if phase == 'offload-recovered':
+                                proof = snapshot['offloads']['offload'];operation = str(uuid.UUID(proof['operationId']))
+                                after = [p for p in resources(run) if p['kind'] == 'Pod']
+                                assert len(after) == 2 and not {p['metadata']['uid'] for p in after}.intersection(proof['oldPodUids'])
+                                for p in after:
+                                    meta = p['metadata'];observed = seen[meta['uid']]
+                                    expected_node = config['targetNodeId'] if observed['taskId'] == current['tasks']['root'] else config['nodeId']
+                                    assert observed['nodeUid'] == expected_node
+                                old_attempts = ','.join("'" + str(uuid.UUID(a)) + "'" for a in proof['oldAttemptIds'])
+                                old_generations = ','.join("'" + str(uuid.UUID(g)) + "'" for g in proof['oldGenerationIds'])
+                                assert query('SELECT desired_state,observed_state FROM edgeai.runtime_instance WHERE attempt_id IN(' + old_attempts + ')').splitlines() == ['STOPPED|TERMINATED'] * 2
+                                assert query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + old_generations + ') AND closed_at IS NOT NULL') == '3'
+                                assert query("SELECT count(*) FROM edgeai.stream_checkpoint c JOIN edgeai.task_offload_member m ON c.handover_from_id=m.checkpoint_id AND c.attempt_id=m.target_attempt_id JOIN edgeai.stream_checkpoint old ON old.id=m.checkpoint_id WHERE m.operation_id='" + operation + "' AND c.serial=old.serial+1 AND c.state_revision=old.state_revision AND c.summary_json-'manifest'=old.summary_json-'manifest'") == '2'
+                                assert query("SELECT state FROM edgeai.task_offload WHERE id='" + operation + "'") == 'SUCCEEDED'
+                                proof.update(newPodUids=sorted(p['metadata']['uid'] for p in after), oldRuntimesStopped=True,
+                                    oldGenerationsClosed=True, immutableCheckpointHandovers=2, distinctNodeMove=True,
+                                    peerNodePreserved=True, restoredAttemptIds=current['expectedAttempts'])
+                        elif phase.endswith(('-draining', '-releasing', '-cancelling')):
+                            assert current['case'] in ('offload', 'offload-cancel')
+                            proof = snapshot['offloads'][current['case']]
+                            operation = str(uuid.UUID(current['offload']['id']))
+                            expected_state = 'CANCELLING' if phase.endswith('-cancelling') else 'DRAINING'
+                            assert query("SELECT state FROM edgeai.task_offload WHERE id='" + operation + "' AND run_id='" + run + "'") == expected_state
+                            assert query("SELECT count(*) FROM edgeai.task_offload_member WHERE operation_id='" + operation + "' AND target_attempt_id IS NULL") == '2'
+                            assert query("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON a.task_id=t.id WHERE t.run_id='" + run + "'") == '2'
+                            assert query("SELECT count(*) FROM edgeai.runtime_instance WHERE run_id='" + run + "' AND desired_state='STOPPED'") == '2'
+                            if phase.endswith('-draining'):
+                                pinned = query("SELECT source_attempt_id,checkpoint_id FROM edgeai.task_offload_member WHERE operation_id='" + operation + "' ORDER BY source_attempt_id")
+                                assert pinned.splitlines() == sorted(m['sourceAttemptId'] + '|' + m['checkpointId'] for m in current['offload']['members'])
+                                proof.update(operationId=operation, pinnedCheckpoints=pinned.splitlines(), drainingObserved=True)
+                                if current['case'] == 'offload':
+                                    started = time.monotonic();old = api_uid
+                                    remove('pod', 'edgeai', api, api_uid);records.remove(('pod', 'edgeai', api, api_uid))
+                                    api_uid = start_api();assert api_uid != old
+                                    assert query("SELECT state FROM edgeai.task_offload WHERE id='" + operation + "'") == 'DRAINING'
+                                    assert query("SELECT source_attempt_id,checkpoint_id FROM edgeai.task_offload_member WHERE operation_id='" + operation + "' ORDER BY source_attempt_id") == pinned
+                                    proof['apiRestart'] = {'oldUid': old, 'newUid': api_uid, 'elapsedSeconds': round(time.monotonic() - started, 3), 'pendingOperationPreserved': True}
+                                proof['lateProducerStatuses'] = [check_old_producer(v, api_origin) for v in private_producers.pop(current['case'])]
+                            else:
+                                assert current['offloadReplayPreserved']
+                                proof['publicReplayPreserved'] = True
+                                if phase.endswith('-cancelling'):
+                                    proof['cancelledBeforeTargetCreation'] = True
+                                for (name, uid), held_run in list(held_jobs.items()):
+                                    if held_run == run:
+                                        hold_job(name, uid, run, False)
                         elif phase.endswith('-finalizer-granted'):
                             sink = str(uuid.UUID(current['tasks']['sink']))
                             owned = resources(run)
@@ -407,28 +533,45 @@ def main():
                             call(['-n', 'edgeai-runtimes', 'exec', meta['name'], '--', 'touch', '/work/finalizer-release'])
                         else:
                             wait(lambda: not resources(run), 90, 'Actual stream runtime resources were not reclaimed')
+                            if current['case'] == 'offload-cancel':
+                                proof = snapshot['offloads']['offload-cancel']
+                                assert query("SELECT state FROM edgeai.task_offload WHERE id='" + str(uuid.UUID(proof['operationId'])) + "'") == 'CANCELLED'
+                                assert query("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON a.task_id=t.id WHERE t.run_id='" + run + "'") == '2'
+                                proof['cancelledWithoutNewAttempt'] = True
                         call(['-n', 'edgeai', 'exec', driver, '--', 'touch', '/work/' + phase + '.continue'])
                         completed.add(phase)
                         print('PASS: actual Kubernetes stream boundary ' + phase, flush=True)
                 if 'done' in state:
                     snapshot['cases'] = state['done']['cases']
-                    assert {case['case'] for case in snapshot['cases']} == {'auto', 'node', 'recover', 'finalizer', 'cancel'} and restarted
-                    assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
-                    assert snapshot['finalizerFault']['originalGrantPreserved'] and snapshot['finalizerFault']['checkpointHistoryPreserved']
+                    assert {case['case'] for case in snapshot['cases']} == set(args.cases)
+                    if 'auto' in args.cases:
+                        assert restarted
+                    if 'recover' in args.cases:
+                        assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
+                    if 'finalizer' in args.cases:
+                        assert snapshot['finalizerFault']['originalGrantPreserved'] and snapshot['finalizerFault']['checkpointHistoryPreserved']
+                    if 'offload' in args.cases:
+                        assert snapshot['offloads']['offload']['apiRestart']['pendingOperationPreserved']
+                        assert snapshot['offloads']['offload']['immutableCheckpointHandovers'] == 2
+                    if 'offload-cancel' in args.cases:
+                        assert snapshot['offloads']['offload-cancel']['cancelledWithoutNewAttempt']
+                    assert not held_jobs
                     artifacts = []
                     for case in snapshot['cases']:
                         for row in case['results']:
                             result = row['result'];observed = seen[result['producerPodUid']]
                             assert observed['runId'] == case['runId'] and observed['attemptId'] == result['attemptId']
                             if case['placement']['mode'] == 'NODE':
-                                assert observed['nodeUid'] == case['placement']['nodeId']
+                                expected_node = case['offload']['targetNodeId'] if case['case'] == 'offload' and row['task'] == 'root' else case['placement']['nodeId']
+                                assert observed['nodeUid'] == expected_node
                             artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
-                    assert len(artifacts) == 12
+                    assert len(artifacts) == sum(3 for case in args.cases if case not in ('cancel', 'offload-cancel'))
                     result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
                     assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedArtifacts'] = len(artifacts)
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
+                    succeeded = True
                     break
                 time.sleep(.3)
             else:
@@ -467,6 +610,13 @@ def main():
                 except (AssertionError, OSError, subprocess.TimeoutExpired):
                     pass
             try:
+                if not succeeded:
+                    # Stop this isolated controller before releasing deletion barriers on a failed run.
+                    for record in records:
+                        if record[0] == 'pod' and record[2] == api:
+                            remove(*record)
+                for (name, uid), run in list(held_jobs.items()):
+                    hold_job(name, uid, run, False)
                 for run in run_ids:
                     for item in resources(run):
                         meta = item['metadata'];assert meta['labels']['edgeai.io/run-id'] == run
@@ -489,7 +639,7 @@ def main():
                         process.kill();process.wait(5)
                 for record in reversed(records):
                     remove(*record)
-    print('PASS: actual TLS Kubernetes multi-device DAG, group/finalizer retry, API restart and cancellation; all owned resources removed', flush=True)
+    print('PASS: actual TLS Kubernetes stream cases ' + ','.join(args.cases) + '; all owned resources and Job barriers removed', flush=True)
 
 
 if __name__ == '__main__':

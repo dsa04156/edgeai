@@ -20,8 +20,12 @@
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
 ADR0051/V27의 공개 STREAM 그룹 노드 전환을 연결했다. 전체 종료/회수 장벽·고정 체크포인트,
 같은 Task/새 OFFLOAD Attempt와 실제 독립 Runner의 상태 인계를 로컬 검증했다.
-전체 PG197·실서버7·단위105·UI40 및 계약 검증을 통과했다. 실제 Kubernetes의 새 전환·취소/
-API 재시작과 새 이미지/CI/배포 수용은 [전환 근거](docs/evidence/m7-stream-group-offload.md)의 다음 범위다.
+전체 PG197·실서버7·단위105·UI40 및 계약 검증을 통과했다. 실제 Kubernetes의 다른 노드 전환·
+대기 중 API 재시작/재전송·취소·늦은 producer 차단도 검증했다. 기존 장애 복구를 포함한 전체7개,
+실제 Runner Pod24개·고정 S3파일15개 PASS다. d3797d6 CI37137184323의5jobs/17JSON과
+GitOps4263ecb 실제 이미지·V27 배포/기존 데이터 보존, 완성 이미지의 새 전환2개도 통과했다.
+새7개 기본 게이트의 CI 수용은
+[전환 근거](docs/evidence/m7-stream-group-offload.md)의 다음 범위다.
 ADR0047에서 공개 Run의 retry 정책을 그룹/최종 처리 복구에 연결했다. 공개 API·실서버6개·
 PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과했다. 새 CI/배포를 확인한다.
 [현재 검증 범위](docs/evidence/m7-public-stream-retry.md).
@@ -30,7 +34,8 @@ PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과�
 ADR0049에서 영속 TLS broker·불변 신원/CA·복구6개·실제 Pod 교체를 검증했다. 선택 컴포넌트의
 API/MinIO 활성화와 실제 운영 다중 장치 데모를 다음으로 진행한다. 새 기반 CI는 별도 게이트다.
 ADR0050의 dev TLS 활성화·기존파일10개/두PVC 보존과 실제 운영 데모3개/Runner8개/S3결과6개를
-통과했다. 추가 kind CI37134164748을 확인하고 M7의 전환/외부 장치 수용으로 이어간다.
+통과했다. CI37134164748의 broker 준비 대기 결함을 수정한 뒤37137184323 전체 kind와
+영속 TLS 기반·배포 데모가 통과했다. M7의 자동 전환/단계별 배치·외부 장치 수용으로 이어간다.
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료
 대기·응답 유실/재시작과 실제 Spring/PG/S3/TLS broker의 종료·Result 확정을 연결했다.

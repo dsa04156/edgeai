@@ -4,13 +4,20 @@
 ADR0051/V27 STREAM 그룹 NODE 전환: 전체 경로/producer 차단→전체 종료/회수→새 OFFLOAD
 Attempt·checkpoint 인계, peer 기존 AUTO/NODE 유지·그룹 claim 성공을 구현했다. 실제 DB197·
 독립 Runner/서버7·실제 저장소37·단위105·UI40·계약·실API/Swagger PC모바일10·DB 장애/복구 PASS.
-최종 그룹 DB30도 통과했다. 실제 Kubernetes의 새 전환 게이트와 새 CI/배포는
-남는다. docs/evidence/m7-stream-group-offload.md. M5 잔여/M7–M10 전체 미완료 유지.
+최종 그룹 DB30도 통과했다. 실제 Kubernetes의 다른 노드 전환·대기 중 API 교체/재전송·취소·
+늦은 producer401도 통과했다. 현재 JAR의 전체7개 시나리오/Runner Pod24개/고정 S3파일15개,
+원래 장애 복구와 소유 자원·Job 대기 finalizer 정리 PASS(165130Z-e5016260).
+소스d3797d6 CI37137184323은5jobs/원시JSON17개·영속 broker/TLS 저장소·배포 데모까지 PASS다.
+GitOps4263ecb의 실제imageID/Ready/PVC/ArgoSynced·V27 적용과 기존10파일/두PVC 보존을 확인했다.
+게시된 API 이미지의 새 전환/취소2개·Pod7개/S33개도171145Z-57cf39f1에서 PASS다.
+새7개 기본 게이트의 CI는 후속이다. docs/evidence/m7-stream-group-offload.md.
+M5 잔여/M7–M10 전체 미완료 유지.
 
 선행8239265 CI37134164748은 runner/storage/scaffold 성공, images의 신규 영속 broker 검사 실패,
 gitops skipped다. 원시JSON17개 중16PASS/1FAIL. 기존 kind BATCH/Remote/VD/STREAM5는 통과했고
 새 broker Pod가 Pending일 때 검사가 끝났다. PVC 존재만 기다린 뒤 Bound를 즉시 assert하던
-결함을 Bound까지 기다리도록 수정하며 새 CI에서 확인한다. 기존 source533d850 배포를 유지한다.
+결함을 Bound까지 기다리도록 수정했고 후속d3797d6 CI의 새 클러스터에서 통과했다.
+당시source533d850을 유지했으며 위GitOps4263ecb에서 검증된d3797d6 이미지로 갱신했다.
 
 아래는 배포 TLS/데모 검증 이력이다.
 ADR0050 dev TLS 컴포넌트8239265가 Synced이고 API/MinIO/broker가 Ready다. 실제 배포의

@@ -35,8 +35,16 @@ edgeai-ci-ca804128cd4f를 삭제한 로그도 확인했다. 기존 배포 이미
 
 새 PVC의 존재만 기다리고 즉시Bound를 assert하던 검사 결함을 발견했다. Bound까지 기다리도록
 수정하고, kind 실패 진단에 Pod condition reason과 PVC phase/condition을 추가했다. 실패 로그에는
-PVC 단계가 없어 그 시점의 정확한 할당 상태는 확인할 수 없다. 수정 후 새 클러스터 CI에서 확인한다.
-실제 로컬 클러스터 검증을 새 CI 성공으로 대체하지 않는다. M5 잔여/M7–M10 전체 수용은 미완료다.
+PVC 단계가 없어 그 시점의 정확한 할당 상태는 확인할 수 없다.
+
+후속d3797d6 CI37137184323은5jobs/원시JSON17개 모두PASS/0이며171024Z-5237e391에서
+감사했다. 새 kind164536Z-162a1bfb의 기존 실행22Run/S320개·VD/S35개·STREAM5개/S312개,
+신원 복구·영속 TLS broker 교체·MinIO TLS256KiB/익명403·배포 데모3개/8Pods/S36개가
+모두 통과했다. 소유kind `edgeai-ci-051974a2c853` 삭제도 확인했다. broker는 서로 다른
+Pod UID2개와 동일PVC UID·역할/기본 deny·잘못된 인증 거절을 기록했다.
+GitOps4263ecb의 실제3imageID·Ready/PVCBound/ArgoSynced는171025Z-f7b61da9에서,
+기존10개 파일의 고정 version·bytes/SHA·메타데이터와 두PVC UID는171301Z-f84b93cb에서 확인했다.
+M5 잔여/M7–M10 전체 수용은 미완료다.
 
 운영 인증서·파생 키·기존 데이터는 새 fixture 데이터로 바꾸지 않는다. 새 MinIO 기동 시험만
 임시 emptyDir/자격을 사용했으며 제품의 기존 PostgreSQL/MinIO PVC를 수정·교체하지 않았다.
