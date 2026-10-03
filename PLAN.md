@@ -24,8 +24,10 @@ ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완
 ADR0040은 허가 뒤 현재 Runner 재시작의 최종 상태 복구를 실제 Spring/S3/TLS와 연결했다.
 ADR0041/V25에서 공개 Run의 Device 세션 고정·route 생성·그룹 동시 배정과 경로 조회 UI를 연결했다.
 공개 실행은 별도 opt-in이며 운영 기본 STREAM501을 유지한다. 독립 다중 Runner 간 실제 데이터와
-BATCH 결과·취소는 Spring/PG/S3/TLS MQTT에서 검증했다. ADR0042의 공개 CA 번들·fsGroup 수정과
-실제 Kubernetes TLS 시험을 준비했다. 수정 이미지의 Kubernetes 종단·인접 Task 인계·운영 배포는 남는다.
+BATCH 결과·취소는 Spring/PG/S3/TLS MQTT에서 검증했다. ADR0042의 공개 CA 번들·fsGroup 수정 뒤
+실제 Kubernetes TLS AUTO/NODE DAG·API 교체·취소·S3 결과를 통과했다. 후속 e93d9e1 CI·배포와
+완성 API 이미지 자체의 같은 실제 클러스터 시험도 통과했다. 새 STREAM kind/CI 게이트 확인·
+인접 Task 인계·운영 STREAM 배포와 다중 장치 데모는 남는다.
 현재 검증 범위는 [Kubernetes 진행 기록](docs/evidence/m7-kubernetes-stream.md)을 따른다.
 새 검증 범위는 [공개 실행·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 따른다.
 복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.

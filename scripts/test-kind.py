@@ -98,7 +98,7 @@ def main():
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         print('BLOCKED: this kind acceptance environment currently requires Linux amd64')
         return 2
-    for executable in ['docker', 'kubectl', 'node', 'openssl']:
+    for executable in ['docker', 'kubectl', 'node', 'openssl', 'keytool', 'mosquitto_ctrl']:
         if not shutil.which(executable):
             print('BLOCKED: required executable missing: ' + executable)
             return 2
@@ -220,7 +220,15 @@ def main():
                 scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
                 return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
             scenario.run(restart_vd_api, tasks=True)
-            print('PASS: isolated kind runtime and VD lifecycle acceptance', flush=True)
+            print('Running actual TLS multi-device STREAM/BATCH, API restart and cancellation acceptance', flush=True)
+            source_revision = images['api'].rsplit(':sha-', 1)[1]
+            result = subprocess.run(['python3', 'scripts/test-stream-kubernetes.py', '--context', context,
+                '--api-image', images['api'], '--api-source', source_revision,
+                '--runner-image', images['runner'], '--runner-source', source_revision,
+                '--minio-image', images['minio'], '--report', '.tools/kind-stream.json'], env=env, timeout=1200)
+            if result.returncode:
+                raise RuntimeError('kind multi-device stream acceptance failed')
+            print('PASS: isolated kind runtime, VD and multi-device STREAM acceptance', flush=True)
             return 0
         finally:
             for process in forwards:

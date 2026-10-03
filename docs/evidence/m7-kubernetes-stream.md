@@ -1,6 +1,6 @@
 # M7 Kubernetes TLS·스트림 수용 진행 기록
 
-2026-10-03. [ADR0042](../adr/0042-runtime-tls-trust.md). 실제 Kubernetes 전체 DAG 통과는 아직 미확정이다.
+2026-10-03. [ADR0042](../adr/0042-runtime-tls-trust.md). 실제 Kubernetes AUTO/NODE DAG·API 재시작·취소를 통과했다. 전체 M7 수용은 아직 미완료다.
 
 ## 구현
 
@@ -49,7 +49,7 @@ Runner claim까지 진행했지만 스트림 초기화에서 실패했다. 첫 �
 시험 코드 문제도 있었다. 조회 성공 값을 재사용하고 실제 DB 실패 상태를 보존한 후 sink의 RUNNER_FAILED,
 root 취소·report 미배정을 확인했다. setgid 조건에서 같은 Runner 실패를 재현한 뒤 원인을 수정했다.
 실제 Pod 재현의 최초 `104522Z-b254049a`는 Pod 성공 판정에 실패했으며 amd64를 명시한 위 실행으로
-재검증했다. 실패한 각 시험의 소유 자원은 정리됐다. 수정된 Runner 이미지로 전체 DAG를 다시 실행해야 한다.
+재검증했다. 실패한 각 시험의 소유 자원은 정리됐다. 수정된 Runner 이미지의 후속 전체 DAG 검증은 아래와 같다.
 
 ## 선행 공개 실행의 CI·배포
 
@@ -67,5 +67,48 @@ Runner 컨테이너108개(102507Z-ef1671c5), TLS MQTT70개(102706Z-46089963), �
 API/dashboard/MinIO imageID·Ready·PVC Bound·Argo Synced와 VD 활성화를 확인했다.
 공유 Ingress로 aggregate health는Progressing이다.
 이 역시 이후 CA/setgid 수정 이미지의 검증과 구분한다.
+
+## 수정 이미지의 실제 Kubernetes 수용
+
+`20261003T110626Z-140db9d9`가 PASS/0이다. Runner는 source
+`e93d9e196af9122f1fba56afa3e11d5dd2bbb203`의 CI37118314544 runner 작업에서 검증한
+`sha256:e908fc5f70c30967033e04c9c910df83388813e72c23a82a961c232c1ccc96de`다.
+CI 컨테이너108개(110146Z-abfcec67)·HTTPS/TLS MQTT71개(110335Z-678d7a32) PASS/0를
+다운로드 확인하고 GHCR 소스 tag의 manifest 내용 SHA와 응답 digest를 대조했다.
+
+- 실제 AUTO 및 NODE에서 두 DeviceSource→두 STREAM Runner→BATCH Runner를 실행했다.
+  각 경우 root14·sink23·report37이며 실제 고정 S3 파일6개의 bytes·SHA·version·계산값을 검증했다.
+- AUTO의 확정 상태9/9에서 API Pod를 교체했다. 14.815초 뒤 새 API UID를 확인했고, 두 Runner
+  Pod UID를 유지한 채 상태14/23·최종 결과로 진행했다. 이 시간은 성능 수용값이 아니다.
+- NODE의 세 결과 생산자 모두 지정한 실제 Node UID와 일치했다. 세 Run 전체에서 실제 Runner
+  Pod8개의 imageID·Attempt/Task/Node/Pod 신원과 고정 Runner 이벤트를 관측했다.
+- 실행 중 sink 취소는 스트림 그룹·하위 Task로 전파됐다. 결과는 없고 BATCH Attempt도 생성되지
+  않았으며 Job/Pod/Secret과 시험용 API/DB/MinIO/broker/source 자원을 모두 제거했다.
+
+API는 현재 JAR SHA `0cec11a0f3ad51d463eb4e1c48ade18daf8a0d15d0b33a7244cfc0226629f657`를
+기존08f57d1 JRE 이미지로 실행했다. 완성된 보고서는 해당 실행 디렉터리의
+`stream-kubernetes.json`에 보존했다. 실제 물리 장치·모델 시험과 새 전체 API 이미지 검증은 별도다.
+재연결 단독 추가5회 `20261003T110309Z-e785956b`도44.085초/PASS였으나 선행 간헐 timeout의
+원인까지 확정하지 않았다.
+
+## 패키징된 API 이미지와 최신 배포
+
+source `e93d9e196af9122f1fba56afa3e11d5dd2bbb203`의 CI37118314544는5 jobs와
+다운로드한17개 결과JSON 모두 PASS/0이다. 실제 kind111413Z-a430c00d에서 기존
+BATCH/Retry/Offload/TLS Remote/VD·고정 S3 20+5개와 소유 클러스터 삭제를 확인했다.
+이 CI에는 후속 STREAM kind 게이트가 아직 포함되지 않는다.
+배포114014Z-b349b243에서 GitOps `ee44614a5168800212537c59c9bf39688a00bf4d`의
+정확한 API/dashboard/MinIO imageID·Ready·PVC Bound·Argo Synced·VD 활성화를 확인했다.
+공유 Ingress로 aggregate health는Progressing이다.
+
+`20261003T114015Z-426fc3dd`는 **packaged-image 모드**로 위 소스의 전체 API 이미지
+`sha256:fafdfb9713d7ff00b55deacfb21f7d64633c570e993c8e360b229c81d3bf2c79`를 검증했다.
+로컬 JAR를 주입하지 않고 이미지 안의 `/app/app.jar`를 실행한다. 실제 API imageID와 교체 전후
+같은 JAR SHA를 확인했고 AUTO/NODE의 두 Device→두 STREAM Runner→BATCH, 상태9 확정 뒤
+API Pod 교체, root14/sink23/report37, 고정 S3파일6개와 sink 취소·자원 정리가 모두 PASS다.
+실행 디렉터리의 `stream-kubernetes.json`에 원시 보고서를 보존했다.
+
+후속 kind 게이트도 이 packaged-image 경로를 사용한다. 실제 기존 클러스터의 패키지 이미지
+시험은 통과했지만, 새 kind 게이트의 GitHub Actions 실행 결과는 아직 별도로 확인해야 한다.
 
 M7 전체 완료, 배포의 공개 STREAM 활성화, demo-multidevice, 그룹 checkpoint 복구와 M5 잔여/M8–M10은 남는다.

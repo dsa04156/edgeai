@@ -6,8 +6,12 @@ ADR0042의 Runtime 공개 CA 번들 설정·VD 불변 참조와 Runner fsGroup �
 단위101·실제 PG178·실제 저장소34·HTTPS/TLS MQTT71개를 로컬 검증했다.
 MQTT 최초 전체 실행의 재연결1개 timeout은 단독/전체 재실행에서 재현되지 않았으며 원인 미확정이다.
 독립 다중 Runner DAG는 실제 Spring/PG/S3/TLS MQTT에서 검증했고 source08f57d1 CI5jobs/17JSON이 통과했다.
-새 실제 Kubernetes TLS 시험은 수정 Runner 이미지로 AUTO/NODE·API 재시작·취소·S3 결과를 확인해야 한다.
-상세: docs/evidence/m7-kubernetes-stream.md. 그룹 인계·운영 배포·M5 잔여/M7–M10 전체 수용은 남는다.
+수정 Runner e93d9e1의 CI 컨테이너108·TLS MQTT71개를 확인한 뒤 실제 Kubernetes TLS 시험을 통과했다.
+AUTO/NODE DAG·API Pod 교체·취소·S3 결과6개와 값14/23/37, 실제 Runner Pod8개의 신원을 검증했다.
+이후 source e93d9e1의 CI5jobs/17JSON과 GitOps ee44614 실제 배포도 확인했다.
+빌드된 API 이미지 자체로 같은 Kubernetes DAG·재시작·취소·S3파일6개를114015Z-426fc3dd에서 통과했다.
+새 kind STREAM 게이트는 연결했으며 CI 실행 결과는 별도다. 상세: docs/evidence/m7-kubernetes-stream.md.
+그룹 인계·운영 배포·다중 장치 데모·M5 잔여/M7–M10 전체 수용은 남는다.
 
 아래는 이전 단계의 검증 이력이다.
 ADR0041/V25 공개 Run의 Device Session 고정·그룹 동시 배정·route generation 자동 준비를 구현했다.

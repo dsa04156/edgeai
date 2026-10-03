@@ -49,6 +49,8 @@
 | M7-PUBLIC-RUN | scripts/test-integration.sh | 공개 Run·정규화/멱등·Device pin·그룹 동시 배정·BATCH 장벽·NODE·실패/취소·불변 DB·경로 조회 | 실제 PostgreSQL/MVC; Pod/S3 receipt fixture |
 | M7-PUBLIC-SOURCE | scripts/test-runtime-results.sh | 공개 Run MVC→자동 worker→실제 TLS/S3/MQTT/DeviceSource·checkpoint·Runner 최종 결과·취소 | 실제 PG/MinIO/Mosquitto/SDK; Pod 생성/신원·peer 회수 시작은 fixture |
 | M7-STREAM-DAG | scripts/test-runtime-results.sh | 두 Device→독립 STREAM Runner2개→고정 S3→BATCH Runner·기대값37·중간 취소/하위 미배정 | 실제 TLS HTTP/PG/S3/MQTT/모델/Runner; Pod 생성·신원·종료 관측은 fixture, m7-stream-dag.md |
+| M7-KUBERNETES | scripts/test-stream-kubernetes.sh <명시적-context> | 실제 AUTO/NODE 다중 STREAM→BATCH·API Pod 교체·취소·고정 S3 결과6개·소유 자원 정리 | 실제 scheduler/TokenReview/TLS API·S3·broker/Runner, 현재 JAR; m7-kubernetes-stream.md |
+| M7-KIND | scripts/test-kind.sh | 위 STREAM 시나리오를 빌드된 API 이미지와 CI-tested Runner/MinIO digest로 수행 | 새 게이트 연결 중; 실제 kind 통과·이미지 발행은 별도 확인 필요 |
 | M7-PUBLIC-UI | scripts/test-ui.sh + scripts/test-profiles-stack.sh | PC/모바일 입력 재전송·오류/경로/페이지/출처, 실제 BATCH 빈 경로 조회와 Swagger41개 | STREAM 화면은 명시적 HTTP fixture, 실제 API 시험은 기본 비활성 |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |

@@ -20,7 +20,8 @@ MQTT 전달·로컬 journal·DataRoute 세대 관리와 [broker 권한 발급/�
 자동 조정은 CI·배포까지 검증했습니다. 현재 Device 세션 토큰과 Runner/Pod 인증을 확인하는
 [스트림 배정 API](docs/evidence/m7-stream-bindings.md)를 실제 HTTP/DB/TLS broker로 로컬 검증했으며,
 [공개 STREAM 실행 요청·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 선택적으로 활성화할 수 있습니다.
-기본값은 비활성이며, 운영 TLS·실제 Kubernetes 다중 작업 스트림의 전체 수용은 진행 중입니다.
+기본값은 비활성입니다. 격리된 실제 Kubernetes의 TLS 스트림 실행은 검증했으며,
+운영 배포·그룹 복구를 포함한 전체 수용은 진행 중입니다.
 SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 [양쪽 heartbeat 갱신](docs/evidence/m7-stream-heartbeat.md)을 구현했습니다. 실제 Spring→Python→TLS MQTT에서
 기한 갱신 뒤 계산·상태 저장·처리 확인을 검증했고, 한쪽 부재·재전송으로 기한이 늘어나지 않습니다.
@@ -48,9 +49,12 @@ SDK의 배정 검증·lease 만료/MQTT 종료·journal rollback과
 종료·결과 저장과 경로 회수 후 장치 재시작을 연결합니다.
 [Runner 최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)는 현재 실행의 완료 허가를 확인하고
 MQTT 없이 S3 체크포인트에서 최종 파일을 생성합니다. 실제 Spring/S3/Runner를 연결했으며,
-공개 실행 생성·그룹 동시 배정은 ADR0041에서 연결했으며 실제 Kubernetes 스트림 종단은 남아 있습니다.
+공개 실행 생성·그룹 동시 배정은 ADR0041에서 연결했습니다.
 [다중 Runner DAG](docs/evidence/m7-stream-dag.md)는 두 장치→독립 STREAM Runner 두 개→고정 S3
 결과→BATCH Runner의 실제 데이터 계산과 중간 작업 취소를 검증했습니다. Pod 생성·신원은 시험용 대역입니다.
+[실제 Kubernetes 스트림](docs/evidence/m7-kubernetes-stream.md)은 TLS API/S3/broker, 실제 scheduler와
+Pod 신원으로 AUTO/NODE DAG·API 교체·취소·고정 S3 파일6개를 검증했습니다.
+현재 JAR 실행과 빌드 이미지·CI 게이트의 검증 범위를 해당 기록에서 구분합니다.
 상세는 [Remote worker 검증 기록](docs/evidence/m5-remote-worker.md)을 따릅니다.
 [M4 완료 근거](docs/evidence/m4-runtime.md)와 [M5 진행 기록](docs/evidence/m5-retry-offload.md)을 참고하세요.
 전체 플랫폼의 `LOCAL_VERIFIED` 또는 `FULL_ACCEPTANCE` 상태를 의미하지 않습니다.

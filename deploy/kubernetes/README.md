@@ -47,6 +47,11 @@ VD는 이름을 실행 설정에 고정한다. 상세: [ADR0042](../../docs/adr/
 
 `bash scripts/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
 검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
+빌드 이미지 자체는 `python3 scripts/test-stream-kubernetes.py --context <context> --api-image <API digest 또는 소스 commit tag>
+--api-source <40자리 commit> --runner-image <Runner digest> --runner-source <40자리 commit>`로 검증한다.
+이 모드는 이미지의 `/app/app.jar`를 사용하고 API Pod의 imageID와 JAR SHA를 확인한다.
+`--minio-image <MinIO digest>`와 `--report <JSON 경로>`도 지정할 수 있다. 예시의 image 값은 모두
+`ghcr.io/dsa04156/edgeai-<component>` 전체 참조여야 하며 임의 tag는 받지 않는다.
 
 `bash scripts/test-runtime-kubernetes.sh <명시적-context>`는 제한된 제어 서버 SA/TLS로
 실제 AUTO/NODE·TokenReview·watch·삭제를 시험한다. 해당 Attempt의 리소스만 정리한다.

@@ -1,4 +1,4 @@
-"""Current API JAR, real TLS API/S3/MQTT and real scheduler/TokenReview/Runner DAG.
+"""Packaged API image or current JAR, real TLS services and actual Kubernetes Runner DAG.
 
 Creates only uniquely labelled, UID-owned temporary resources in the previously
 bootstrapped project namespaces. Existing deployment, database and storage remain.
@@ -27,12 +27,24 @@ def main():
     parser.add_argument('--context', required=True)
     parser.add_argument('--runner-image', help='Explicit CI-tested ghcr.io/dsa04156/edgeai-runner@sha256 digest')
     parser.add_argument('--runner-source', help='Full source commit for the explicit CI-tested Runner image')
+    parser.add_argument('--api-image', help='Built project API commit tag or published digest; uses its packaged JAR')
+    parser.add_argument('--api-source', help='Full source commit for the explicit API image')
+    parser.add_argument('--minio-image', help='Explicit CI-tested project MinIO digest')
+    parser.add_argument('--report', type=Path, default=ROOT / '.tools/stream-kubernetes.json')
     args = parser.parse_args()
     if bool(args.runner_image) != bool(args.runner_source):
         parser.error('--runner-image and --runner-source must be supplied together')
     if args.runner_image and (not re.fullmatch(r'ghcr\.io/dsa04156/edgeai-runner@sha256:[0-9a-f]{64}', args.runner_image)
             or not re.fullmatch(r'[0-9a-f]{40}', args.runner_source)):
         parser.error('Runner override requires the project image digest and full source commit')
+    if bool(args.api_image) != bool(args.api_source):
+        parser.error('--api-image and --api-source must be supplied together')
+    if args.api_image and (not re.fullmatch(r'ghcr\.io/dsa04156/edgeai-api(?:@sha256:[0-9a-f]{64}|:sha-[0-9a-f]{40})', args.api_image)
+            or not re.fullmatch(r'[0-9a-f]{40}', args.api_source)
+            or ':sha-' in args.api_image and not args.api_image.endswith(':sha-' + args.api_source)):
+        parser.error('API override requires a project image pinned to its full source commit or digest')
+    if args.minio_image and not re.fullmatch(r'ghcr\.io/dsa04156/edgeai-minio@sha256:[0-9a-f]{64}', args.minio_image):
+        parser.error('MinIO override requires the project image digest')
     k = ['kubectl', '--context', args.context, '--request-timeout=20s']
     records, forwards = [], []
     root = 'edgeai-stream-check-' + uuid.uuid4().hex[:12]
@@ -41,7 +53,7 @@ def main():
     run_ids = set()
     seen = {}
     db_ready = False
-    snapshot = {'scope': 'real-kubernetes-stream-dag', 'cases': [], 'checkpointBarriers': [], 'observedPods': seen}
+    snapshot = {'scope': 'real-kubernetes-stream-dag', 'testId': root, 'cases': [], 'checkpointBarriers': [], 'observedPods': seen}
     owner_path = ROOT / '.tools' / (root + '-owner.json')
 
     def call(arguments, value=None, raw=None, timeout=40):
@@ -108,10 +120,14 @@ def main():
     pin = json.loads((ROOT / 'deploy/kubernetes/overlays/dev/release.json').read_bytes())
     runner_image = args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@' + pin['runnerDigest']
     runner_digest = runner_image.split('@', 1)[1]
-    jar = (ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()
-    snapshot.update(apiJarSha256=hashlib.sha256(jar).hexdigest(), imageSourceRevision=pin['sourceRevision'],
+    jar = None if args.api_image else (ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()
+    api_image = args.api_image or 'ghcr.io/dsa04156/edgeai-api@' + pin['apiDigest']
+    minio_image = args.minio_image or 'ghcr.io/dsa04156/edgeai-minio@' + pin['minioDigest']
+    snapshot.update(apiJarSha256=None if jar is None else hashlib.sha256(jar).hexdigest(),
+                    apiArtifactMode='packaged-image' if jar is None else 'local-jar', apiImage=api_image,
+                    imageSourceRevision=args.api_source or pin['sourceRevision'], minioImage=minio_image,
                     runnerSourceRevision=args.runner_source or pin['sourceRevision'], runnerImage=runner_image)
-    report_path = ROOT / '.tools/stream-kubernetes.json'
+    report_path = args.report
 
     with tempfile.TemporaryDirectory(prefix='stream-kube-', dir=ROOT / '.tools') as temporary:
         temp = Path(temporary)
@@ -199,7 +215,7 @@ def main():
                 'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/postgresql/data'}]}], [{'name': 'data', 'emptyDir': {}}], uid=70))
             wait(lambda: running(db, True), 150, 'Owned PostgreSQL was not ready')
             db_ready = True
-            create('Pod', storage, spec=pod_spec([{'name': 'minio', 'image': 'ghcr.io/dsa04156/edgeai-minio@' + pin['minioDigest'],
+            create('Pod', storage, spec=pod_spec([{'name': 'minio', 'image': minio_image,
                 'command': ['sh', '-c', 'umask 077; mkdir -p /tmp/certs; cp /bootstrap/server.crt /tmp/certs/public.crt; cp /bootstrap/server.key /tmp/certs/private.key; exec minio server /data --certs-dir /tmp/certs --console-address :9001'],
                 'env': [secret_env('MINIO_ROOT_USER', 'EDGEAI_MINIO_USER'), secret_env('MINIO_ROOT_PASSWORD', 'EDGEAI_MINIO_PASSWORD')], 'securityContext': security,
                 'resources': {'requests': {'cpu': '100m', 'memory': '256Mi'}, 'limits': {'cpu': '1', 'memory': '1Gi'}},
@@ -231,8 +247,13 @@ def main():
                 env('EDGEAI_STREAM_CA_FILE', '/tmp/identity/server.crt'), env('EDGEAI_STREAM_ADMIN_PASSWORD_FILE', '/tmp/identity/admin.password'),
                 env('EDGEAI_STREAM_PRINCIPAL_KEY_FILE', '/tmp/identity/principal.key'), env('EDGEAI_STREAM_DEVICE_KEY_FILE', '/tmp/identity/device.key')]
             api_env += [secret_env(name) for name in ('EDGEAI_API_USER', 'EDGEAI_API_PASSWORD', 'EDGEAI_DB_PASSWORD', 'EDGEAI_MINIO_USER', 'EDGEAI_MINIO_PASSWORD')]
-            api_spec = pod_spec([{'name': 'api', 'image': 'ghcr.io/dsa04156/edgeai-api@' + pin['apiDigest'],
-                'command': ['sh', '-c', 'umask 077; mkdir -p /tmp/identity; cp /bootstrap/* /tmp/identity/; chmod 600 /tmp/identity/*; while [ ! -f /tmp/start ]; do sleep 0.2; done; exec java -XX:MaxRAMPercentage=75.0 -Djavax.net.ssl.trustStore=/tmp/identity/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit -jar /tmp/current-api.jar'],
+            jar_path = '/app/app.jar' if jar is None else '/tmp/current-api.jar'
+            api_command = 'umask 077; mkdir -p /tmp/identity; cp /bootstrap/* /tmp/identity/; chmod 600 /tmp/identity/*; '
+            if jar is not None:
+                api_command += 'while [ ! -f /tmp/start ]; do sleep 0.2; done; '
+            api_command += 'exec java -XX:MaxRAMPercentage=75.0 -Djavax.net.ssl.trustStore=/tmp/identity/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit -jar ' + jar_path
+            api_spec = pod_spec([{'name': 'api', 'image': api_image,
+                'command': ['sh', '-c', api_command],
                 'env': api_env, 'securityContext': security, 'resources': {'requests': {'cpu': '250m', 'memory': '512Mi'}, 'limits': {'cpu': '2', 'memory': '1Gi'}},
                 'readinessProbe': {'httpGet': {'path': '/actuator/health/readiness', 'port': 18443, 'scheme': 'HTTPS'}, 'periodSeconds': 2}, 'volumeMounts': mounts}],
                 [secret_volume(('server.crt', 'server.key', 'runner.key', 'device.key', 'principal.key', 'admin.password', 'trust.p12')), {'name': 'tmp', 'emptyDir': {}}], account='edgeai-control-plane')
@@ -240,10 +261,22 @@ def main():
             def start_api():
                 pod = create('Pod', api, spec=api_spec)
                 wait(lambda: running(api), 150, 'Owned API container was not running')
-                call(['-n', 'edgeai', 'exec', '-i', api, '--', 'sh', '-c', 'cat > /tmp/current-api.jar'], raw=jar, timeout=100)
-                assert call(['-n', 'edgeai', 'exec', api, '--', 'sha256sum', '/tmp/current-api.jar']).decode().split()[0] == snapshot['apiJarSha256']
-                call(['-n', 'edgeai', 'exec', api, '--', 'touch', '/tmp/start'])
+                if jar is not None:
+                    call(['-n', 'edgeai', 'exec', '-i', api, '--', 'sh', '-c', 'cat > /tmp/current-api.jar'], raw=jar, timeout=100)
+                actual_hash = call(['-n', 'edgeai', 'exec', api, '--', 'sha256sum', jar_path]).decode().split()[0]
+                assert re.fullmatch(r'[0-9a-f]{64}', actual_hash)
+                if snapshot['apiJarSha256'] is None:
+                    snapshot['apiJarSha256'] = actual_hash
+                assert actual_hash == snapshot['apiJarSha256'], 'API JAR changed during the scenario'
+                if jar is not None:
+                    call(['-n', 'edgeai', 'exec', api, '--', 'touch', '/tmp/start'])
                 wait(lambda: running(api, True), 150, 'Owned native TLS API was not ready')
+                actual = read(['-n', 'edgeai', 'get', 'pod', api, '-o', 'json'])
+                image_id = actual['status']['containerStatuses'][0]['imageID']
+                assert actual['spec']['containers'][0]['image'] == api_image and image_id
+                if '@' in api_image:
+                    assert image_id.endswith('@' + api_image.split('@', 1)[1]), 'Actual API image differs from pinned digest'
+                snapshot.setdefault('apiPods', []).append({'uid': actual['metadata']['uid'], 'imageID': image_id, 'jarSha256': actual_hash})
                 return pod['metadata']['uid']
 
             api_uid = start_api()
