@@ -28,7 +28,8 @@ Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. 기�
 현재 BATCH는 검증된 선행 S3 결과를 다음 작업의 고정 입력으로 전달한다. Device 등록·session
 관측과 VD source binding은 관리 경로이며 센서 payload를 실행 입력으로 전달하는 경로가 아니다.
 Run의 실행 정책은 전체 DAG 기본값이다. 공개 STREAM 실행은 현재 Device session을 고정하고
-같은 스트림 그룹을 함께 배정한다. 그룹 복구 연결 전까지 retry/offload/REMOTE/VD는 거절한다.
+같은 스트림 그룹을 함께 배정한다. ADR0047은 기존 retry를 그룹/최종 처리 복구에 연결하며
+offload/REMOTE/VD는 아직 거절한다. 실제 검증 범위는 [공개 재시도 근거](evidence/m7-public-stream-retry.md)를 따른다.
 따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
 
 ## 구현 전에 정할 계약과 검증

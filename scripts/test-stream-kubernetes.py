@@ -296,7 +296,7 @@ def main():
                 [{'name': 'work', 'emptyDir': {}}, {'name': 'scenario', 'configMap': {'name': root + '-scenario'}}]))
             wait(lambda: running(driver), 150, 'Owned source driver did not start')
             completed = set()
-            deadline = time.monotonic() + 750
+            deadline = time.monotonic() + 1050
             restarted = False
             while time.monotonic() < deadline:
                 running(driver)
@@ -310,7 +310,10 @@ def main():
                     if phase not in completed and ('expectedStates' in current or phase.endswith('-done')):
                         if 'expectedStates' in current:
                             task_ids = [str(uuid.UUID(current['tasks'][n])) for n in current['expectedStates']]
-                            rows = query("SELECT DISTINCT ON(task_id) task_id,summary_json->>'stateSha256' FROM edgeai.stream_checkpoint WHERE task_id IN(" + ','.join("'" + t + "'" for t in task_ids) + ') ORDER BY task_id,serial DESC')
+                            attempt_filter = ''
+                            if 'expectedAttempts' in current:
+                                attempt_filter = ' AND attempt_id IN(' + ','.join("'" + str(uuid.UUID(a)) + "'" for a in current['expectedAttempts'].values()) + ')'
+                            rows = query("SELECT DISTINCT ON(task_id) task_id,summary_json->>'stateSha256' FROM edgeai.stream_checkpoint WHERE task_id IN(" + ','.join("'" + t + "'" for t in task_ids) + ')' + attempt_filter + ' ORDER BY task_id,serial DESC')
                             actual = dict(line.split('|') for line in rows.splitlines())
                             expected = {current['tasks'][n]: hashlib.sha256(str(v).encode()).hexdigest() for n, v in current['expectedStates'].items()}
                             if actual != expected:
@@ -327,6 +330,30 @@ def main():
                                 assert before == after, 'API restart replaced a live stream Pod'
                                 snapshot['apiRestart'] = {'oldUid': old, 'newUid': api_uid, 'preservedRunnerPodUids': sorted(before), 'elapsedSeconds': round(time.monotonic() - started, 3)}
                                 restarted = True
+                            if phase == 'recover-first':
+                                owned = resources(run)
+                                before = [p for p in owned if p['kind'] == 'Pod']
+                                assert len(before) == 2 and all(p['metadata']['uid'] in seen for p in before)
+                                job = next(p for p in owned if p['kind'] == 'Job' and p['metadata']['labels']['edgeai.io/task-id'] == current['tasks']['sink'])
+                                meta = job['metadata']
+                                assert meta['labels']['edgeai.io/run-id'] == run and meta['labels']['app.kubernetes.io/managed-by'] == 'edgeai-runtime-controller'
+                                snapshot['groupFault'] = {'runId': run, 'deletedJobUid': meta['uid'], 'oldPodUids': sorted(p['metadata']['uid'] for p in before),
+                                    'oldAttemptIds': sorted(p['metadata']['labels']['edgeai.io/attempt-id'] for p in before),
+                                    'oldGenerationIds': sorted(r['generation']['id'] for r in current['routes'])}
+                                # Foreground removal stops the owned Pod; the real controller observes the missing Job.
+                                call(['delete', '--raw', '/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' + meta['name'], '-f', '-'],
+                                     {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground', 'preconditions': {'uid': meta['uid']}})
+                            if phase == 'recover-recovered':
+                                fault = snapshot['groupFault']
+                                after = {p['metadata']['uid'] for p in resources(run) if p['kind'] == 'Pod'}
+                                assert len(after) == 2 and not after.intersection(fault['oldPodUids'])
+                                old_attempts = ','.join("'" + str(uuid.UUID(a)) + "'" for a in fault['oldAttemptIds'])
+                                old_generations = ','.join("'" + str(uuid.UUID(g)) + "'" for g in fault['oldGenerationIds'])
+                                rows = query('SELECT desired_state,observed_state FROM edgeai.runtime_instance WHERE attempt_id IN(' + old_attempts + ')').splitlines()
+                                assert len(rows) == 2 and all(row == 'STOPPED|TERMINATED' for row in rows)
+                                assert query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + old_generations + ') AND closed_at IS NOT NULL') == '3'
+                                fault.update(newPodUids=sorted(after), oldRuntimesStopped=True, oldGenerationsClosed=True,
+                                             restoredAttemptIds=current['expectedAttempts'])
                         else:
                             wait(lambda: not resources(run), 90, 'Actual stream runtime resources were not reclaimed')
                         call(['-n', 'edgeai', 'exec', driver, '--', 'touch', '/work/' + phase + '.continue'])
@@ -334,7 +361,8 @@ def main():
                         print('PASS: actual Kubernetes stream boundary ' + phase, flush=True)
                 if 'done' in state:
                     snapshot['cases'] = state['done']['cases']
-                    assert len(snapshot['cases']) == 3 and restarted
+                    assert {case['case'] for case in snapshot['cases']} == {'auto', 'node', 'recover', 'cancel'} and restarted
+                    assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
                     artifacts = []
                     for case in snapshot['cases']:
                         for row in case['results']:
@@ -343,7 +371,7 @@ def main():
                             if case['placement']['mode'] == 'NODE':
                                 assert observed['nodeUid'] == case['placement']['nodeId']
                             artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
-                    assert len(artifacts) == 6
+                    assert len(artifacts) == 9
                     result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
                     assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
@@ -409,7 +437,7 @@ def main():
                         process.kill();process.wait(5)
                 for record in reversed(records):
                     remove(*record)
-    print('PASS: actual TLS Kubernetes multi-device DAG, API restart and cancellation; all owned resources removed', flush=True)
+    print('PASS: actual TLS Kubernetes multi-device DAG, group retry, API restart and cancellation; all owned resources removed', flush=True)
 
 
 if __name__ == '__main__':

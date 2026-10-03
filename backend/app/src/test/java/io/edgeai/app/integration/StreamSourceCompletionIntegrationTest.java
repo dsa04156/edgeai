@@ -58,9 +58,8 @@ class StreamSourceCompletionIntegrationTest {
     @Autowired DeviceStreamTokenService deviceTokens;@Autowired DataRouteService routes;@Autowired DataRouteRepository routeStore;
     @Autowired StreamCheckpointRepository checkpoints;@Autowired StreamExecutionRepository completions;
     @Autowired StreamAuthorityWorker worker;@Autowired MockMvc mvc;
-    @Autowired StreamRunService streamRuns;@Autowired WorkflowRepository workflowStore;
+    @Autowired StreamRunService streamRuns;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @MockitoBean RuntimeGateway gateway;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     private final JsonDocuments json=new JsonDocuments();
@@ -94,6 +93,14 @@ class StreamSourceCompletionIntegrationTest {
     }catch(Exception e){throw new IllegalStateException("Real source completion storage unavailable; private details suppressed");}}
     private void secret(Path folder,String name,String value)throws Exception{var file=folder.resolve(name);Files.writeString(file,value);
         Files.setPosixFilePermissions(file,PosixFilePermissions.fromString("rw-------"));}
+    private WorkflowRun publicRun(UUID version,List<Object> inputs,boolean retry)throws Exception{
+        var body=new TreeMap<String,Object>(Map.of("workflowVersionId",version.toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs));
+        if(retry)body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
+            .contentType("application/json").content(json.canonical(body)))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return executions.run(UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id")),false).orElseThrow();
+    }
     @SuppressWarnings("unchecked") private Execution fixture(String mode)throws Exception{
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
         spec.put("command",List.of(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("../../runner/examples/stream_result.py").toAbsolutePath().normalize().toString()));
@@ -111,23 +118,7 @@ class StreamSourceCompletionIntegrationTest {
             sessions.put(name,session);secret(folder,name+".token",deviceTokens.issue(session));
             inputs.add(Map.of("deviceId",d.id().toString(),"sourcePort","samples","toTask","sum","toPort",name,"maxPayloadBytes",4096));
         }
-        WorkflowRun run;
-        if(mode.equals("finalizer-retry")){
-            // Public retry is still gated. Only policy creation and Pod lifecycle are fixtures.
-            run=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(tx->{
-                var parsed=io.edgeai.app.support.StreamRunInput.parse(inputs);
-                var pins=streamRuns.pin(parsed,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
-                var candidate=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),"sha256:"+"a".repeat(64),"AUTO",null,"{}",
-                    new RetryPolicy(2,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
-                assertThat(executions.create(candidate)).isTrue();executions.initialize(candidate,workflowStore.definitions(version.id()),Set.of());
-                streamRuns.configure(candidate,BUCKET,parsed,pins);lifecycle.startRun(candidate.id(),BUCKET);return executions.run(candidate.id(),false).orElseThrow();
-            });
-        }else{
-            var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
-                .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-            run=executions.run(UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id")),false).orElseThrow();
-        }
+        var run=publicRun(version.id(),inputs,mode.equals("finalizer-retry"));
         runIds.add(run.id());
         var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
         assertThat(routeStore.forRun(run.id(),20,0)).hasSize(2).allMatch(r->routeStore.open(r.id()).isEmpty());
@@ -249,23 +240,7 @@ class StreamSourceCompletionIntegrationTest {
             sources.put(name,Map.of("deviceId",device.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch()));
             inputs.add(Map.of("deviceId",device.id().toString(),"sourcePort","samples","toTask","root","toPort",name,"maxPayloadBytes",4096));
         }
-        UUID id;
-        if(recovery){
-            // Internal policy fixture until public retry and actual Kubernetes fault acceptance are connected.
-            id=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(tx->{
-                var bindings=io.edgeai.app.support.StreamRunInput.parse(json.decode(json.canonical(inputs)));
-                var sessions=streamRuns.pin(bindings,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
-                var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),"sha256:"+"d".repeat(64),"AUTO",null,"{}",
-                    new RetryPolicy(2,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
-                assertThat(executions.create(run)).isTrue();executions.initialize(run,workflowStore.definitions(version.id()),Set.of());
-                streamRuns.configure(run,BUCKET,bindings,sessions);lifecycle.startRun(run.id(),BUCKET);return run.id();
-            });
-        }else{
-            var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
-                .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-            id=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));
-        }
+        UUID id=publicRun(version.id(),inputs,recovery).id();
         runIds.add(id);
         var tasks=new TreeMap<String,UUID>();executions.tasks(id).forEach(t->tasks.put(t.key(),t.id()));
         assertThat(executions.attempts(tasks.get("report"))).isEmpty();

@@ -1,18 +1,19 @@
 import { test, expect } from "@playwright/test";
 
-test("stream input submission preserves request identity and displays paginated route provenance", async ({ page }, testInfo) => {
+test("stream retry submission preserves policy and request identity and displays paginated route provenance", async ({ page }, testInfo) => {
   // UI fixture only. StreamRunIntegrationTest covers public MVC/PG; TLS/S3 tests cover real sources and Runner.
   const workflowId = "11111111-1111-4111-8111-111111111111", versionId = "22222222-2222-4222-8222-222222222222";
   const runId = "33333333-3333-4333-8333-333333333333", taskId = "44444444-4444-4444-8444-444444444444";
   const deviceId = "55555555-5555-4555-8555-555555555555", sessionId = "66666666-6666-4666-8666-666666666666";
   const now = "2026-10-03T09:00:00Z", keys: string[] = []; let posts = 0, reads = 0;
-  const run = { id: runId, workflowVersionId: versionId, mode: "AUTO", state: "RUNNING", parameters: {}, createdAt: now, updatedAt: now };
+  const retry = { maxAttempts: 3, backoffSeconds: 2, maxElapsedSeconds: 300, retryOn: ["RUNTIME_LOST"] };
+  const run = { id: runId, workflowVersionId: versionId, mode: "AUTO", state: "RUNNING", parameters: {}, retry, createdAt: now, updatedAt: now };
   const task = { id: taskId, runId, key: "sum", state: "RUNNING", createdAt: now, updatedAt: now };
   await page.route("**/api/control-plane/**", async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname.replace("/api/control-plane/", "");
     if (path === "workflow-runs" && req.method() === "POST") {
       keys.push(req.headers()["idempotency-key"]); posts++;
-      expect(req.postDataJSON()).toEqual({ workflowVersionId: versionId, execution: { mode: "AUTO" }, parameters: {}, streamInputs: [
+      expect(req.postDataJSON()).toEqual({ workflowVersionId: versionId, execution: { mode: "AUTO" }, parameters: {}, retry, streamInputs: [
         { deviceId, sourcePort: "samples", toTask: "sum", toPort: "a", maxPayloadBytes: 4096 },
       ] });
       if (posts === 1) return route.fulfill({ status: 409, json: { message: "원본 장치의 활성 세션이 필요합니다." } });
@@ -44,6 +45,10 @@ test("stream input submission preserves request identity and displays paginated 
   await page.getByRole("button", { name: "연결", exact: true }).click();
   await page.getByRole("button", { name: "스트림 실행 시험 stream-fixture", exact: true }).click();
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
+  await page.getByLabel("최대 실행 횟수", { exact: true }).fill("3");
+  await page.getByLabel("재시도 대기 시간(초)", { exact: true }).fill("2");
+  await page.getByLabel("재시도 허용 기간(초)", { exact: true }).fill("300");
+  await page.getByLabel("파일 저장소 오류", { exact: true }).uncheck();
   await page.getByRole("button", { name: "장치 스트림 입력 추가", exact: true }).click();
   await page.getByLabel("원본 장치 ID", { exact: true }).fill(deviceId);
   await page.getByLabel("받는 작업 키", { exact: true }).fill("sum"); await page.getByLabel("받는 스트림 포트", { exact: true }).fill("a");
@@ -53,7 +58,9 @@ test("stream input submission preserves request identity and displays paginated 
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "활성 세션" })).toBeVisible();
   await expect(page.getByLabel("원본 장치 ID", { exact: true })).toHaveValue(deviceId);
+  await expect(page.getByLabel("최대 실행 횟수", { exact: true })).toHaveValue("3");
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
+  await expect(page.getByText("작업별 최대 3회 · 실패 후 2초 대기 · 최초 시도부터 300초 동안 재시도 가능", { exact: true })).toBeVisible();
   const region = page.getByRole("region", { name: "스트림 경로", exact: true });
   await region.getByRole("button", { name: "스트림 경로 조회", exact: true }).click();
   await expect(region.getByRole("alert")).toHaveText("스트림 경로 저장소를 다시 확인하세요.");

@@ -89,7 +89,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
         time.sleep(.02)
 
 
-def run_case(name, placement, cancel=False):
+def run_case(name, placement, cancel=False, recover=False):
     global active, phase, csrf
     csrf = request('csrf')['token']
     prefix = 'stream-demo-' + uuid.uuid4().hex
@@ -127,7 +127,10 @@ def run_case(name, placement, cancel=False):
     edges = [{'fromTask': f, 'toTask': t, 'fromPort': fp, 'toPort': tp, 'mode': mode} for f, t, fp, tp, mode in (
         ('root', 'sink', 'sum', 'input', 'STREAM'), ('root', 'report', 'result', 'root', 'BATCH'), ('sink', 'report', 'result', 'sink', 'BATCH'))]
     version = request('workflows/' + workflow['id'] + '/versions', 'POST', {'version': '1.0.0', 'tasks': tasks, 'dependencies': edges}, 201)
-    run = request('workflow-runs', 'POST', {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}, 201, str(uuid.uuid4()))
+    body = {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}
+    if recover:
+        body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['RUNTIME_LOST']}
+    run = request('workflow-runs', 'POST', body, 201, str(uuid.uuid4()))
     active = run['id']
     detail = request('workflow-runs/' + active)
     task_ids = {t['key']: t['id'] for t in detail['tasks']}
@@ -176,9 +179,38 @@ def run_case(name, placement, cancel=False):
                 owners[port].emit([Emission(discovered_routes[port]['routeId'], str(number).encode(), 'application/json')], str(number).encode())
 
         emit(4, 5)
+        source_checkpoints = {port: owner.checkpoint() for port, owner in owners.items()}
         phase = name + '-first'
         save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 9, 'sink': 9}})
         wait(lambda: (work / (phase + '.continue')).exists(), tick)
+        if recover:
+            phase = name + '-reconnecting'
+            save('phase.json', {**current, 'phase': phase})
+
+            def recovered():
+                current_routes = routes()
+                if not current_routes or any(r['generation']['number'] != 2 for r in current_routes):
+                    return None
+                return current_routes if all(o.ready and o.connections == 2 for o in owners.values()) else None
+
+            restored = wait(recovered, tick)
+            current['recoveredRoutes'] = restored
+            for port, owner in owners.items():
+                assert owner.checkpoint() == source_checkpoints[port], 'Device sensor cursor changed during reconnect'
+                generation = next(r['generation']['id'] for r in restored if r['sourceDeviceId'] and r['consumerPort'] == port)
+                assert set(owner.source.assignments) == {generation}
+            expected_attempts = {}
+            for key in ('root', 'sink'):
+                attempts = request('tasks/' + task_ids[key])['attempts']
+                assert len(attempts) == 2
+                old, new = sorted(attempts, key=lambda a: a['number'])
+                assert old['state'] == 'FAILED' and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
+                expected_attempts[key] = new['id']
+            assert not request('tasks/' + task_ids['report'])['attempts']
+            current['recovery'] = {'attempts': expected_attempts, 'sameDeviceOwners': True, 'sensorCursorsPreserved': True}
+            phase = name + '-recovered'
+            save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 9, 'sink': 9}, 'expectedAttempts': expected_attempts})
+            wait(lambda: (work / (phase + '.continue')).exists(), tick)
         if cancel:
             request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
 
@@ -217,11 +249,11 @@ def run_case(name, placement, cancel=False):
             wait(finished, tick)
             results = []
             for key, identity in task_ids.items():
-                attempts = request('tasks/' + identity)['attempts']
+                attempts = sorted(request('tasks/' + identity)['attempts'], key=lambda a: a['number'])
                 values = request('tasks/' + identity + '/results')['items']
-                assert len(attempts) == 1 and attempts[0]['state'] == 'SUCCEEDED' and len(values) == 1
+                assert len(attempts) == (2 if recover and key != 'report' else 1) and attempts[-1]['state'] == 'SUCCEEDED' and len(values) == 1
                 value = values[0]
-                assert value['attemptId'] == attempts[0]['id'] and value['producerPodUid'] and len(value['artifacts']) == 1
+                assert value['attemptId'] == attempts[-1]['id'] and value['producerPodUid'] and len(value['artifacts']) == 1
                 expected = {'sourceMode': 'SYNTHETIC', 'sum': 37, 'inputs': {'root': 14, 'sink': 23}} if key == 'report' else {'sum': 14 if key == 'root' else 23}
                 results.append({'task': key, 'result': value, 'expected': expected})
             current.update(cancelled=False, results=results)
@@ -241,6 +273,7 @@ def run_case(name, placement, cancel=False):
 def main():
     run_case('auto', {'mode': 'AUTO'})
     run_case('node', {'mode': 'NODE', 'nodeId': config['nodeId']})
+    run_case('recover', {'mode': 'AUTO'}, recover=True)
     run_case('cancel', {'mode': 'AUTO'}, cancel=True)
     save('done.json', report)
 

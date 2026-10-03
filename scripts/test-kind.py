@@ -220,7 +220,7 @@ def main():
                 scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
                 return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
             scenario.run(restart_vd_api, tasks=True)
-            print('Running actual TLS multi-device STREAM/BATCH, API restart and cancellation acceptance', flush=True)
+            print('Running actual TLS multi-device STREAM/BATCH, group retry, API restart and cancellation acceptance', flush=True)
             source_revision = images['api'].rsplit(':sha-', 1)[1]
             result = subprocess.run(['python3', 'scripts/test-stream-kubernetes.py', '--context', context,
                 '--api-image', images['api'], '--api-source', source_revision,

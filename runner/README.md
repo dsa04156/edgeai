@@ -247,8 +247,10 @@ Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다
 
 인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작 및
 AUTO/NODE Kubernetes 데이터 흐름은 검증했다. 공개 STREAM은 명시적 opt-in이며 기본501이다.
-장치 자동 재연결은 실제 서버/SDK 시험으로 연결했다. Kubernetes의 전체 그룹 장애 수용과
-공개 정책 연결은 남아 공개 retry/offload/REMOTE/VD는 계속 거절한다.
+장치 자동 재연결과 공개 retry를 연결했고 실제 Kubernetes 그룹 장애 복구까지 검증했다.
+계산 중에는 연결된 그룹을 함께 재시도하고 완료 허가 뒤에는 실패한 작업만 복구한다.
+offload/REMOTE/VD는 계속 거절하며 최종 처리의 실제 Kubernetes 장애 수용은 남는다.
+[공개 재시도 검증](../docs/evidence/m7-public-stream-retry.md)을 따른다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.

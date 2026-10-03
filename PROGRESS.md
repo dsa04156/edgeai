@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0047 공개 STREAM retry를 기존 Run API·Swagger·화면에 연결했다. 그룹/최종 처리 시험의
+직접 정책 생성 fixture를 제거하고 모두 공개 MVC 요청으로 시작한다. 공개 PostgreSQL23개,
+실제 Spring/PG/S3/TLS/Runner6개, 계약5개/MVC26개, UI38개 PASS다.
+전체 PostgreSQL188개도 통과했다. 실제 Kubernetes sink Job 제거→이전 Pod/권한 정리→새
+Attempt2개·외부 상태9 복원·동일 장치 자동 재연결→14/23/BATCH37을 검증했다.
+정상 AUTO/NODE·API 교체·취소 포함4개 시나리오, 실제 Pod13개·고정 S3 파일9개와 정리 PASS.
+최종 단위101·실제 저장소36·실API/DB/Swagger PC모바일10개도 PASS, Flyway26개는 불변이다.
+새 CI/배포와 최종 처리 Kubernetes 장애 수용은 아직 완료가 아니다.
+상세: docs/evidence/m7-public-stream-retry.md.
+
+아래는 선행 장치 재연결의 검증 이력이다.
 ADR0046 DeviceRunSource 자동 재연결을 실제 SDK와 그룹 재시도에 연결했다.
 고정 세션·논리 경로·LOCAL 볼륨에서 이전 transport를 닫고 새 인증 배정으로 미확인 데이터와
 센서 커서를 인계한다. 실제 HTTPS/TLS MQTT/SQLite14개와 Spring/PG/S3/Runner6개 PASS.

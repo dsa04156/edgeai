@@ -221,7 +221,10 @@ Run 생성의 선택적인 `retry`로 최대 시도 횟수·대기 시간·허�
 STREAM은 기본 비활성501이며 운영 broker·TLS·runtime·bindings를 설정한 환경에서 별도로 활성화합니다.
 실행 폼의 **장치 스트림 입력 추가**로 장치 ID·출력 포트·받는 작업/포트·메시지 한도를 지정합니다.
 활성 세션은 Run에 고정되며 같은 그룹은 모든 BATCH 선행 결과를 받은 뒤 함께 배정됩니다.
-현재 AUTO/NODE·자동 재시도 없음으로 사용하며 그룹 인계가 필요한 재시도·전환·REMOTE/VD는 거절합니다.
+AUTO/NODE에서 선택적인 `retry`를 설정하면 계산 중에는 연결된 그룹 전체를 재시도하고,
+완료 허가 뒤에는 실패한 작업의 최종 처리만 복구합니다. 장치는 같은 세션·송신 볼륨을 유지해야 합니다.
+최대 횟수는 최초 실행을 포함하며 전환·REMOTE/VD는 아직 거절합니다.
+[공개 재시도 계약과 검증 범위](docs/evidence/m7-public-stream-retry.md)를 확인하세요.
 실행 상세의 **스트림 경로 조회**로 실제 경로·고정 세션·출처·세대 상태를 확인합니다.
 연결 ACTIVE와 작업/Result 성공은 별도 상태입니다([ADR0041](docs/adr/0041-public-stream-runs.md)).
 상세 계약은 [ADR 0004](docs/adr/0004-workflow-run-task.md)와 Swagger의 Workflow/실행/작업 태그를 따릅니다.

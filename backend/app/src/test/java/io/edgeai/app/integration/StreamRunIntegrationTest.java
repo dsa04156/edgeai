@@ -98,16 +98,31 @@ class StreamRunIntegrationTest {
     private TaskAttempt attempt(UUID run,String name){return executions.attempts(task(run,name).id()).getFirst();}
     private RuntimeLifecycleService.Assignment claim(UUID run,String name){var a=attempt(run,name);var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
         lifecycle.submitted(a.id(),pod.jobUid());return lifecycle.claim(a.id(),a.epoch(),pod);}
-    /** Internal recovery fixture; public retry remains rejected until finalization and source reconnect are integrated. */
+    /** Every recovery scenario starts with the same public request used by real clients. */
     private UUID recoveryRun(Definition d,int attempts)throws Exception{
-        return new TransactionTemplate(transactions).execute(tx->{
-            var inputs=io.edgeai.app.support.StreamRunInput.parse(json.decode(encode(d.inputs())));
-            var sessions=streams.pin(inputs,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
-            var run=new WorkflowRun(UUID.randomUUID(),d.version(),UUID.randomUUID(),"sha256:"+"a".repeat(64),"AUTO",null,"{}",
-                new RetryPolicy(attempts,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
-            assertThat(executions.create(run)).isTrue();executions.initialize(run,workflowStore.definitions(d.version()),Set.of());
-            streams.configure(run,"public-stream-test",inputs,sessions);lifecycle.startRun(run.id(),"public-stream-test");return run.id();
-        });
+        var body=request(d);body.put("retry",Map.of("maxAttempts",attempts,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        return UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+    }
+    @Test void publicRetryNormalizesReplayKeepsBudgetAndRejectsConflictingOrInvalidPolicies()throws Exception{
+        var d=definition(false,false);var body=request(d);var key=UUID.randomUUID().toString();
+        body.put("retry",Map.of("maxAttempts",3,"backoffSeconds",2,"maxElapsedSeconds",300,"retryOn",List.of("WORKLOAD_FAILED","RUNTIME_LOST")));
+        var created=(Map<?,?>)json.decode(create(key,body,201));UUID id=UUID.fromString((String)created.get("id"));
+        assertThat(executions.run(id,false).orElseThrow().retry()).isEqualTo(new RetryPolicy(3,2,300,Set.of("WORKLOAD_FAILED","RUNTIME_LOST")));
+        body.put("retry",Map.of("maxAttempts",3,"backoffSeconds",2,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST","WORKLOAD_FAILED")));
+        body.put("streamInputs",d.inputs().reversed());
+        assertThat(((Map<?,?>)json.decode(create(key,body,200))).get("id")).isEqualTo(id.toString());
+        body.put("retry",Map.of("maxAttempts",4,"backoffSeconds",2,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        create(key,body,409);
+        assertThat(executions.attempts(task(id,"source").id())).hasSize(1);
+        for(Object reasons:List.of(List.of(),List.of("OUTPUT_INVALID"),List.of("RUNTIME_LOST","RUNTIME_LOST"))){
+            body=request(d);body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",30,"retryOn",reasons));
+            rejected(d,body,400);
+        }
+        body=request(d);body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+        var offload=new TreeMap<String,Object>();offload.put("cpuPercent",80);offload.put("memoryPercent",null);offload.put("latencyMicros",null);
+        offload.putAll(Map.of("consecutiveSamples",2,"maxSampleAgeSeconds",30,"maxGapSeconds",10,"minRunningSeconds",10,
+            "cooldownSeconds",10,"maxTransfers",1,"drainTimeoutSeconds",30,"startTimeoutSeconds",30));
+        body.put("offload",offload);rejected(d,body,409);
     }
     private void finishPhysical(UUID run,String name){
         var a=attempt(run,name);var r=runtimes.byAttempt(a.id()).orElseThrow();
@@ -307,7 +322,7 @@ class StreamRunIntegrationTest {
         var d=definition(false,false);var body=request(d);
         body.put("execution",Map.of("mode","VD","vdId",UUID.randomUUID().toString()));rejected(d,body,409);
         body=request(d);body.put("execution",Map.of("mode","REMOTE","providerKey","reference"));rejected(d,body,409);
-        body=request(d);body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",30,"retryOn",List.of("WORKLOAD_FAILED")));rejected(d,body,409);
+        body=request(d);body.put("retry",Map.of("maxAttempts",9,"backoffSeconds",1,"maxElapsedSeconds",30,"retryOn",List.of("WORKLOAD_FAILED")));rejected(d,body,400);
         var missing=new TreeMap<>(d.inputs().getFirst());missing.put("deviceId",UUID.randomUUID().toString());body=request(d);body.put("streamInputs",List.of(missing,d.inputs().get(1)));rejected(d,body,404);
         devices.release(d.devices().getFirst().id());rejected(d,request(d),409);
     }

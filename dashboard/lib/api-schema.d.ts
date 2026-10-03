@@ -390,7 +390,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. 현재 STREAM 자동 재시도·offload·REMOTE/VD 정책은409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 고정하고 하위 BATCH와 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 모든 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry와 하위 작업은 vdId를 계승합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM offload·REMOTE/VD 정책은 409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -1027,7 +1027,7 @@ export interface components {
             sourceMode: "SYNTHETIC" | "EXTERNAL";
         } | null;
         /**
-         * @description Task별 자동 재시도 정책. 생략하면 최초 1회만 실행합니다. 같은 Task ID에서 새 Attempt/epoch를 만들며 이전 실행의 종료와 대기 시간을 확인합니다. 입력·출력 오류, 결과 누락, 소유권 충돌과 취소는 재시도하지 않습니다.
+         * @description Task별 자동 재시도 정책. 생략하면 최초 1회만 실행합니다. 같은 Task ID에서 새 Attempt/epoch를 만들며 이전 실행의 종료와 대기 시간을 확인합니다. STREAM은 계산 중 연결된 그룹을 함께 재시도하고 모든 이전 실행 종료와 broker 권한 회수를 기다립니다. 그룹 구성원 중 가장 이른 기한을 따르며 각 Task의 횟수 예산을 소비합니다. 완료 허가 뒤에는 실패한 Task의 최종 처리만 재시도합니다. 입력·출력 오류, 결과 누락, 소유권 충돌과 취소는 재시도하지 않습니다.
          * @example {
          *       "maxAttempts": 3,
          *       "backoffSeconds": 5,

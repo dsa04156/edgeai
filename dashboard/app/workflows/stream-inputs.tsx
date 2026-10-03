@@ -8,7 +8,7 @@ export function StreamInputFields({ value, onChange }: { value: StreamInput[]; o
   }
   return <fieldset className="publish-fields">
     <legend>장치 스트림 입력</legend>
-    <p className="hint">장치의 활성 세션을 실행에 고정합니다. 작업 사이의 스트림 연결은 발행한 DAG를 따릅니다. 현재 스트림 실행은 AUTO·NODE에서 자동 재시도·전환 없이 사용합니다.</p>
+    <p className="hint">장치의 활성 세션을 실행에 고정합니다. AUTO·NODE에서 재시도를 설정하면 연결된 스트림 작업이 함께 복구됩니다. 장치는 같은 세션과 송신 기록으로 재연결해야 합니다. 자동 실행 위치 전환은 아직 지원하지 않습니다.</p>
     {value.length === 0 && <p className="muted">지정한 장치 입력이 없습니다. 장치 데이터를 받는 스트림 포트마다 입력을 추가하세요.</p>}
     {value.map((row, index) => <fieldset className="publish-fields" key={index}>
       <legend>스트림 입력 {index + 1}</legend>
