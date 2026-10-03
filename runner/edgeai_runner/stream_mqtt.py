@@ -99,6 +99,10 @@ def password(path):
 
 
 class Link:
+    @property
+    def assignments(self):
+        return tuple(self._assignments.values())
+
     @classmethod
     def from_assignments(cls, journal, assignments):
         if type(assignments) not in (list, tuple) or not 1 <= len(assignments) <= 32 or not all(type(a) is Assignment for a in assignments):

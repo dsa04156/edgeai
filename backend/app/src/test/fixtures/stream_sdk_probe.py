@@ -13,6 +13,7 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_protocol import Producer
 from edgeai_runner.stream_journal import Emission, Journal
 from edgeai_runner.stream_mqtt import Link
+from edgeai_runner.stream_processor import Processor
 
 phase='configuration'
 
@@ -38,10 +39,13 @@ def run(root):
     with Journal(root/'source',[],[producer.binding],create=True) as source_journal, Journal(root/'consumer',[incoming.binding],[],create=True) as sink:
         source_link=Link.from_assignments(source_journal,[producer])
         sink_link=Link.from_assignments(sink,[incoming])
+        work=root/'work';work.mkdir(mode=0o700)
+        processor=Processor(sink_link,[sys.executable,str(Path(__file__).resolve().parents[5]/'runner/examples/stream_sum.py')],
+                            work,{'input':incoming.binding.route_id},{},create=True)
         def pump_until(condition):
             until=time.monotonic()+8
             while time.monotonic()<until:
-                source_link.step(.001);sink_link.step(.001)
+                source_link.step(.001);processor.step()
                 if condition():return
                 time.sleep(.005)
             raise ProbeFailure(f'progress timeout source_ready={source_link.ready} sink_ready={sink_link.ready} '
@@ -61,24 +65,19 @@ def run(root):
                 device_client.heartbeat(value['generationId'],producer_sequence)
                 reply=runner_client.heartbeat(value['generationId'],consumer_sequence)
                 source_link.refresh([device_client.heartbeat(value['generationId'],producer_sequence).assignment])
-                sink_link.refresh([reply.assignment])
+                processor.refresh([reply.assignment])
                 until=time.monotonic()+.4
                 while time.monotonic()<until:
-                    source_link.step(.001);sink_link.step(.001);time.sleep(.005)
+                    source_link.step(.001);processor.step();time.sleep(.005)
             phase='mqtt-data'
             source_journal.commit(0,[],b'',[
                 Emission(producer.binding.route_id,b'4','application/json'),
-                Emission(producer.binding.route_id,b'5','application/json')])
-            # A real reference calculation, then an atomic journal commit and
-            # consumer processing acknowledgement, distinct from broker PUBACK.
-            for sequence in (1,2):
-                pump_until(lambda:len(sink.pending())==1)
-                if sequence==1 and len(source_journal.outgoing())!=2:raise RuntimeError('Output discarded before processing')
-                pending=sink.pending();checkpoint=sink.checkpoint()
-                if pending[0].sequence!=sequence:raise RuntimeError('Unexpected actual SDK sequence')
-                total=str(int(checkpoint.state or b'0')+int(pending[0].payload)).encode()
-                sink.commit(checkpoint.revision,pending,total)
-            if total!=b'9':raise RuntimeError('Unexpected actual SDK calculation')
+                Emission(producer.binding.route_id,b'5','application/json'),
+                Emission(producer.binding.route_id,b'',None,'END')])
+            # Actual persistent child computation, journal commit and processing ACK.
+            pump_until(lambda:processor.complete)
+            if sink.checkpoint().revision!=3 or processor.requests!=3:
+                raise RuntimeError('Unexpected actual workload checkpoint sequence')
             phase='processing-ack'
             pump_until(lambda:not source_journal.outgoing())
             if sink.checkpoint().state!=b'9':raise RuntimeError('Actual SDK state not committed')
@@ -86,7 +85,7 @@ def run(root):
                 for file in directory.iterdir():
                     if assignment.connection.secret.encode() in file.read_bytes():raise RuntimeError('Credential persisted in journal')
         finally:
-            source_link.close();sink_link.close()
+            source_link.close();processor.close()
 
 
 if __name__=='__main__':

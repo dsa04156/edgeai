@@ -88,6 +88,7 @@ class Journal:
         self.lock = None
         self.authority_guard = None
         directory = Path(directory)
+        self.directory = directory
         if create:
             directory.mkdir(mode=0o700)
         info = directory.lstat()
@@ -243,7 +244,7 @@ class Journal:
         require(type(revision) is int and 0 <= revision < MAX_COUNTER, 'Invalid checkpoint revision')
         require(type(state) is bytes and len(state) <= self.limits.max_state_bytes, 'Invalid checkpoint size')
         require(type(consumed) in (list, tuple) and len(consumed) <= 16, 'Invalid consumed frames')
-        require(type(emitted) in (list, tuple) and len(emitted) <= 16, 'Invalid emitted frames')
+        require(type(emitted) in (list, tuple) and len(emitted) <= 32, 'Invalid emitted frames')
         require(all(type(f) is Frame for f in consumed) and all(type(e) is Emission for e in emitted),
                 'Invalid checkpoint frames')
         ids = [f.binding.route_id for f in consumed]

@@ -87,3 +87,12 @@ Argo revision76651cd를 확인했다. 이를 source766 이미지 배포로 취�
 확인했다. GitOps9171827와 source766의 정확한 imageID/Ready·PVCBound·ArgoSynced는
 011108Z-5d82c84b PASS/0이다. 전체 Argo health는Progressing으로 남는다.
 이 선행 CI·배포는 이번 V21/heartbeat 변경의 신규 CI·배포 완료 근거가 아니다.
+
+## 후속 heartbeat CI·배포 확인
+
+소스77b687a의 CI37085573042는5 jobs 모두 success다. 내려받은 결과JSON17개가 PASS/0이며,
+실제kind012948Z-9977e79e 로그에서 BATCH/Remote/VD·복구·S3 결과20+5개와 생성한 클러스터
+`edgeai-ci-20d7ff7b87b8` 삭제를 직접 확인했다. GitOps19d7cec의 실제 배포는
+20261003T015434Z-4112045e에서 source77b687a의 정확한 API/dashboard/MinIO imageID,
+Ready·PVCBound·ArgoSynced·VD 활성화를 확인했다. 전체 Argo health는Progressing이다.
+이후 지속 계산 subprocess 연결은 [별도 검증](m7-stream-workload.md)을 따른다.

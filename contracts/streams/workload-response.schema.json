@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgeai.example/contracts/streams/workload-response-v1",
+  "title": "Persistent stream workload response",
+  "description": "One JSON line, at most 12 MiB. Revision, canonical base64, offered input sequences, state/output limits and COMPLETE only after all ENDs are enforced by Processor before atomic journal commit. WAIT cannot mutate state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "revision", "status", "consumed", "stateBase64", "outputs"],
+  "properties": {
+    "apiVersion": {"const": "edgeai.stream-workload/v1"},
+    "revision": {"type": "integer", "minimum": 0},
+    "status": {"enum": ["WAIT", "COMMIT", "COMPLETE"]},
+    "consumed": {
+      "type": "object", "maxProperties": 16, "propertyNames": {"$ref": "#/$defs/port"},
+      "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+    },
+    "stateBase64": {"type": "string", "maxLength": 1398104, "pattern": "^[A-Za-z0-9+/]*={0,2}$"},
+    "outputs": {
+      "type": "object", "maxProperties": 16, "propertyNames": {"$ref": "#/$defs/port"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["mediaType", "payloadBase64"],
+        "properties": {
+          "mediaType": {"type": "string", "maxLength": 127, "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"},
+          "payloadBase64": {"type": "string", "maxLength": 349528, "pattern": "^[A-Za-z0-9+/]*={0,2}$"}
+        }
+      }
+    }
+  },
+  "allOf": [{
+    "if": {"properties": {"status": {"const": "WAIT"}}},
+    "then": {"properties": {"consumed": {"maxProperties": 0}, "outputs": {"maxProperties": 0}}},
+    "else": {"properties": {"consumed": {"minProperties": 1}}}
+  }],
+  "$defs": {
+    "port": {"type": "string", "maxLength": 100, "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"}
+  }
+}

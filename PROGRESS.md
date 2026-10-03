@@ -19,8 +19,13 @@ V1–V20 불변과 V21 적용/기존196개 보수적 window backfill도 직접 �
 상세: docs/evidence/m7-stream-heartbeat.md.
 인증 배정337abb3 CI37080508316과 SDK76651cd CI37082953978은 각각5 jobs/JSON17개·실제kind PASS다.
 SDK의 GitOps9171827와 실제 imageID/Ready/PVCBound/ArgoSynced는011108Z-5d82c84b PASS다.
-Argo 전체 health는Progressing이다. 이번 heartbeat의 새 CI·배포는 별도이며 완료로 판정하지 않는다.
-계산 프로세스 watchdog·운영 broker·Runner 스트림 workload·새 Pod checkpoint 복원과
+heartbeat77b687a의 CI37085573042는5 jobs/JSON17개·실제kind를 통과했고, GitOps19d7cec·
+015434Z-4112045e에서 정확한 imageID/Ready/PVCBound/ArgoSynced를 확인했다. Argo health는Progressing이다.
+ADR0029 지속 계산 subprocess·watchdog·Processor는 로컬 Runner69개(015358Z-5934ba4f),
+실제 TLS MQTT26개(015610Z-bbcac546),Spring/DB/broker22개(015042Z-1edb329c)를 통과했다.
+모델 재사용·WAIT/출력 적체·fanout·동일 볼륨 복원·잘못된 응답·부모 HTTP 대기 중 만료 종료와
+VD Task session 자손 정리를 검증했다. 상세는 docs/evidence/m7-stream-workload.md다.
+이 계산 변경의 신규 CI·배포는 후속 확인 대상이다. 운영 broker·SERVICE/Runner 실행 연결·새 Pod checkpoint 복원과
 공개 실행/API/UI·실제 Kubernetes 다중 장치 수용은 남았다. 공개 STREAM501은 유지한다.
 최신 M6 판정은 docs/evidence/m6-completion-audit.md를 따른다. 아래는 누적 구현·검증 이력이다.
 M0–M4 구현·검증 완료. M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증 완료.

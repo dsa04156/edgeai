@@ -1,0 +1,16 @@
+{
+  "apiVersion": "edgeai.stream-workload/v1",
+  "revision": 0,
+  "status": "COMMIT",
+  "consumed": {
+    "a": 1,
+    "b": 1
+  },
+  "stateBase64": "OQ==",
+  "outputs": {
+    "sum": {
+      "payloadBase64": "OQ==",
+      "mediaType": "application/json"
+    }
+  }
+}

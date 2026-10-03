@@ -77,4 +77,6 @@ Dynamic Security의 client/role/topic 제어는 [ADR0024](adr/0024-stream-broker
 broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
 후속 [ADR0026](adr/0026-stream-authenticated-bindings.md)은 Device 세션 토큰과 Runner/Pod 인증을
 배정 조회에 연결했고 실제 HTTP/DB/TLS broker 시험을 통과했다. Pod 신원은 명시적 fixture다.
-SDK의 lease 준수·갱신, 운영 broker·실제 Runner 데이터 흐름과 공개 실행 수용은 계속 남는다.
+후속 ADR0027/0028의 SDK lease·heartbeat는 CI·배포까지 검증했다. ADR0029 지속 계산
+프로세스·watchdog·journal은 실제 TLS MQTT와 Spring 인증 probe로 로컬 검증했다.
+운영 broker·SERVICE/Runner 실행 연결·S3 checkpoint/새 Pod 복원·공개 실행 수용은 계속 남는다.

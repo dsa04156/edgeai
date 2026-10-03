@@ -173,7 +173,10 @@ CI37082953978·CI37080508316의5 jobs/JSON17개·실제kind를 통과했다. sou
 배포는 GitOps9171827·011108Z-5d82c84b에서 imageID/Ready/PVC/ArgoSynced를 확인했다.
 ADR0028/V21의 양쪽 heartbeat·순번 재전송/동시성·SDK live refresh와 실제 Spring→Python→TLS MQTT
 연결은 로컬 broker22개·PG153개·Runner60개·MQTT14개·계약/Swagger4개 검증을 통과했다.
-상세는 [heartbeat 검증](docs/evidence/m7-stream-heartbeat.md)이다. 새 heartbeat CI·배포는 별도다.
-다음은 운영 broker·Runner/SERVICE 인터페이스와 계산 프로세스 watchdog,
+상세는 [heartbeat 검증](docs/evidence/m7-stream-heartbeat.md)이다. heartbeat77b687a도
+CI37085573042의5 jobs/JSON17개·실제kind와 GitOps19d7cec의 정확한 이미지 배포 검증을 통과했다.
+ADR0029의 지속 계산 프로세스·watchdog·journal 연결은 Runner69개·실제TLS MQTT26개·
+Spring/DB/broker22개를 통과했다. [계산 검증](docs/evidence/m7-stream-workload.md)의 범위를 따른다.
+다음은 운영 broker·Runner/SERVICE 실행 인터페이스,
 S3 checkpoint/새 Pod 복원·공개 실행/Swagger/UI·실제 Kubernetes 다중 장치 데모다.
 현재 공개 STREAM 요청501은 유지하며 이 구성 요소 시험으로 전체 M7 완료를 판정하지 않는다.

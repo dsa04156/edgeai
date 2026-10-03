@@ -147,6 +147,23 @@ class StreamJournalTest(unittest.TestCase):
         journal.acknowledge(OUT, 1)
         self.assertEqual((output[1],), journal.outgoing())
 
+    def test_final_data_and_end_for_sixteen_output_routes_commit_atomically(self):
+        outputs=[replace(OUT,route_id=f'33333333-3333-4333-8333-{index:012d}') for index in range(16)]
+        with Journal(self.path,[A],outputs,create=True) as journal:
+            end=Frame(A,1,'END',b'',None)
+            journal.receive(end)
+            emitted=[Emission(binding.route_id,b'9','application/json') for binding in outputs]
+            emitted.extend(Emission(binding.route_id,b'',None,'END') for binding in outputs)
+            frames=journal.commit(0,[end],b'9',emitted)
+            self.assertEqual(32,len(frames))
+            self.assertEqual(1,journal.checkpoint().revision)
+            self.assertEqual(frozenset([A.route_id]),journal.checkpoint().ended_inputs)
+            for binding in outputs:
+                self.assertEqual(['DATA','END'],[f.kind for f in frames if f.binding==binding])
+            with self.assertRaises(JournalError):
+                journal.commit(1,[],b'changed',[Emission(outputs[0].route_id,b'10','application/json')])
+            self.assertEqual(b'9',journal.checkpoint().state)
+
     def test_replay_window_gives_each_output_a_turn_despite_different_sequence_numbers(self):
         with Journal(self.path, [], [A, OUT], create=True) as journal:
             for _ in range(20):

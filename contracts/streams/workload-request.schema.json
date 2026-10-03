@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgeai.example/contracts/streams/workload-request-v1",
+  "title": "Persistent stream workload request",
+  "description": "One JSON line, at most 12 MiB. Runner owns the checkpoint; workload must derive state from this request. Route assignment, port membership and journal limits are enforced by Processor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "revision", "stateBase64", "inputPorts", "endedInputs", "inputs", "outputs", "parameters"],
+  "properties": {
+    "apiVersion": {"const": "edgeai.stream-workload/v1"},
+    "revision": {"type": "integer", "minimum": 0},
+    "stateBase64": {"type": "string", "maxLength": 1398104, "pattern": "^[A-Za-z0-9+/]*={0,2}$"},
+    "inputPorts": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"$ref": "#/$defs/port"}},
+    "endedInputs": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"$ref": "#/$defs/port"}},
+    "inputs": {
+      "type": "object", "minProperties": 1, "maxProperties": 16,
+      "propertyNames": {"$ref": "#/$defs/port"},
+      "additionalProperties": {"$ref": "frame.schema.json"}
+    },
+    "outputs": {
+      "type": "object", "maxProperties": 16, "propertyNames": {"$ref": "#/$defs/port"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["mediaType", "maxBytes"],
+        "properties": {
+          "mediaType": {"$ref": "#/$defs/media"},
+          "maxBytes": {"type": "integer", "minimum": 1, "maximum": 262144}
+        }
+      }
+    },
+    "parameters": {"type": "object", "description": "Fixed execution parameters, encoded size at most 256 KiB."}
+  },
+  "$defs": {
+    "port": {"type": "string", "maxLength": 100, "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
+    "media": {"type": "string", "maxLength": 127, "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"}
+  }
+}
