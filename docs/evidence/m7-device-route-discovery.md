@@ -12,8 +12,8 @@ SDK를 로컬 실제 HTTP/DB/SDK/계산 경로까지 연결했다. 그룹 복구
 
 Python `BindingClient.device_routes`는 정확한 주체·JSON 타입·페이지·중복·정렬·generation을 검증한다.
 실제 Source/DAG probe는 이 응답의 route/generation으로 DeviceSource를 열고 샘플·END를 송신한다.
-관리 API에서 관측한 경로는 독립 대조에만 사용한다. Kubernetes driver도 같은 호출로 연결했으나
-이 새 코드의 이미지·실제 Kubernetes 검증은 아직 후속 CI 대상이다.
+관리 API에서 관측한 경로는 독립 대조에만 사용한다. Kubernetes driver도 같은 호출로 연결했다.
+이 코드의 후속 이미지·실제 Kubernetes 검증은 아래 후속 기록을 따른다.
 
 ## 확인한 근거
 
@@ -47,3 +47,14 @@ Kubernetes AUTO/NODE DAG·API 교체·취소·S36개를 통과했다. 상세는
 이 조회 API는 장치의 자동 reconnect/journal handover 또는 전체 그룹의 fence·물리 종료·
 새 Attempt/경로 세대·checkpoint 인계 orchestration을 구현하지 않는다. 공개 STREAM opt-in과
 AUTO/NODE 범위는 유지하며 M5 잔여/M7–M10 및 전체 목표는 미완료다.
+
+## 후속 이미지 검증 — 2026-10-03
+
+source934d003의 CI37122400842는5 jobs 성공이며 다운로드한 결과JSON17개 모두 PASS/0이다.
+kind `20261003T123106Z-64f108ff`에서 packaged API/Runner934d003으로 AUTO/NODE/취소3개 시나리오의
+Device2개가 각자 토큰으로 경로/세대를 조회한 뒤 실제 송신했다. STREAM2→BATCH의14/23/37,
+고정 S3 결과6개·API Pod 교체16.304초/기존 Runner2UID 보존·실제 RunnerPod8개·전체 자원 정리와
+소유 kind edgeai-ci-9f8670d7e9f5 삭제를 확인했다. `kind-stream.json`과 output/result를 해당
+로컬 evidence 디렉터리에 보존했다. 이 시험은 그룹 장애/새 Attempt 최종 처리 수용을 대신하지 않는다.
+GitOps17d51ad 배포 `20261003T125513Z-90ec351e`는 API/dashboard/MinIO imageID 일치,
+Ready·PVCBound·ArgoSynced·VD 활성화를 통과했다. 공유 Ingress의 aggregate health는Progressing이다.

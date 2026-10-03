@@ -125,9 +125,15 @@ def execute(runner, assignment):
 
 
 def _finalized_state(runner, assignment, reply, binding, limits):
-    fields(reply,'state runId taskId attemptId epoch checkpointId inputRoutes outputRoutes generationIds')
+    fields(reply,'state runId taskId attemptId epoch checkpointId inputRoutes outputRoutes generationIds'+
+           (' checkpointActor' if 'checkpointActor' in reply else ''))
     require(all(reply[k] == assignment[k] for k in ('runId','taskId','attemptId','epoch')))
     require(type(reply['epoch']) is int)
+    checkpoint_actor=None
+    if 'checkpointActor' in reply:
+        source=fields(reply['checkpointActor'],'attemptId epoch')
+        checkpoint_actor=Producer('TASK_ATTEMPT',source['attemptId'],integer(source['epoch'],1,9007199254740991))
+        require(checkpoint_actor.id != binding.actor.id and checkpoint_actor.epoch < binding.actor.epoch)
     _uuid(reply['checkpointId'])
     spec=assignment['stream'];inputs=reply['inputRoutes'];outputs=reply['outputRoutes']
     require(type(inputs) is dict and set(inputs) == set(spec['inputs']))
@@ -141,18 +147,18 @@ def _finalized_state(runner, assignment, reply, binding, limits):
     while True:
         runner.timeout()
         try:
-            value=client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()))
+            value=client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()),checkpoint_actor=checkpoint_actor)
             receipt=value['checkpoint'];saved=receipt['summary']['manifest']
             require(receipt['taskId'] == assignment['taskId'] and receipt['executionSha256'] == expected)
             require(Limits(**saved['limits']) == limits)
             require({b['routeId'] for b in saved['inputs']} == set(incoming)
                     and {b['routeId'] for b in saved['outputs']} == set(outgoing))
-            snapshot=client.download(value,guard=runner.timeout,timeout=min(1,runner.timeout()))
+            snapshot=client.download(value,guard=runner.timeout,timeout=min(1,runner.timeout()),checkpoint_actor=checkpoint_actor)
             doc=snapshot.document()
             require(all(row['ended'] and row['received'] == row['committed'] > 0 and not row['frames'] for row in doc['routes']))
             # Cancellation/fencing can happen during S3 I/O. Re-read the exact
             # server grant before writing state or running any finalizer process.
-            require(client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()))['checkpoint'] == receipt)
+            require(client.finalized(reply['checkpointId'],timeout=min(1,runner.timeout()),checkpoint_actor=checkpoint_actor)['checkpoint'] == receipt)
             runner.timeout()
             return state_bytes(doc['stateBase64'],limits.max_state_bytes)
         except CheckpointUnavailable:

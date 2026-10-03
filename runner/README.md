@@ -230,12 +230,15 @@ Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다
 `streams/checkpoints/finalized`로 정확한 checkpoint를 조회한다. 논리 포트/실행 digest·한도·
 고정 S3 version·종료 커서를 검증하고 다운로드 후 허가를 재조회한다. 새 빈 작업 디렉터리에
 0600 상태 파일을 저장해 최종 파일 명령만 실행하며 MQTT·Session·지속 모델은 열지 않는다.
-같은 현재 Attempt/epoch/Pod/runtime에 한정하며 새 Attempt 전환이나 임의 기존 디렉터리 재사용은 아니다.
+서버가 명시적으로 기록한 최종 처리 재시도는 이전 실행 종료·경로 회수 후 새 Attempt로 복구할 수 있다.
+이때 `checkpointActor`는 원래 허가된 checkpoint의 Attempt/epoch이며 현재 요청 인증과 구분한다.
+일반 checkpoint 업로드·latest·handover는 현재 actor 검증을 유지한다. 임의 기존 작업 폴더를 재사용하지 않는다.
 [복구 설계](../docs/adr/0040-stream-finalizer-recovery.md)와
-[실제 Spring/S3/Runner 검증](../docs/evidence/m7-finalizer-recovery.md)을 따른다.
+[새 Attempt 복구 설계·검증](../docs/adr/0045-stream-finalizer-attempt-recovery.md)을 따른다.
 
-인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작과
-운영 TLS·실제 Kubernetes 스트림 수용은 남아 있어 공개 STREAM은 아직501이다.
+인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작 및
+AUTO/NODE Kubernetes 데이터 흐름은 검증했다. 공개 STREAM은 명시적 opt-in이며 기본501이다.
+장치 자동 재연결·전체 그룹 장애 수용이 남아 공개 retry/offload/REMOTE/VD는 계속 거절한다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.

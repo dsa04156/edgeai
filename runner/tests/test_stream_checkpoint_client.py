@@ -18,6 +18,7 @@ from edgeai_runner.stream_assignment import BindingClient
 from edgeai_runner.stream_checkpoint import Snapshot, MEDIA_TYPE, capture, encode
 from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointPublisher, CheckpointError, CheckpointUnavailable
 from edgeai_runner.stream_journal import Journal, Limits, Emission
+from edgeai_runner.stream_protocol import Producer
 from test_stream_journal import A, B, OUT, data
 from test_stream_assignment import POD
 
@@ -98,6 +99,27 @@ class StreamCheckpointClientTest(unittest.TestCase):
         self.binding=BindingClient(self.api.url,OUT.producer,self.root/'claim',pod_uid=POD,
                                    pod_token_file=self.root/'pod',allow_http_loopback=True)
         self.client=CheckpointClient(self.binding,POD,self.generations,allow_http_loopback=True)
+
+    def test_inherited_finalized_receipt_never_relaxes_current_attempt_write_or_restore_scope(self):
+        self.api.latest=self.api.receipt(self.client.candidate(self.snapshot,None))
+        previous=OUT.producer
+        actor=Producer('TASK_ATTEMPT',str(uuid.uuid4()),previous.epoch+1)
+        binding=BindingClient(self.api.url,actor,self.root/'claim',pod_uid=POD,
+                              pod_token_file=self.root/'pod',allow_http_loopback=True)
+        client=CheckpointClient(binding,POD,self.generations,allow_http_loopback=True)
+        for action in (lambda:client.latest(),lambda:client.finalized(self.api.latest['id']),
+                       lambda:client.upload(self.snapshot,None),lambda:client.handover(self.api.latest['executionSha256']),
+                       lambda:client.commit(self.snapshot,None,self.api.version)):
+            with self.assertRaises(CheckpointError):action()
+        value=client.finalized(self.api.latest['id'],checkpoint_actor=previous)
+        self.assertEqual(self.snapshot.wire,client.download(value,guard=lambda:None,checkpoint_actor=previous).wire)
+        self.assertEqual(actor.epoch,self.api.calls[-1][2]['epoch'])
+        self.assertIn('/'+actor.id+'/',self.api.calls[-1][0])
+        with self.assertRaises(CheckpointError):client.download(value,guard=lambda:None)
+        for wrong in (Producer('TASK_ATTEMPT',str(uuid.uuid4()),previous.epoch),
+                      Producer('TASK_ATTEMPT',previous.id,actor.epoch),
+                      Producer('TASK_ATTEMPT',actor.id,previous.epoch)):
+            with self.assertRaises(CheckpointError):client.finalized(value['checkpoint']['id'],checkpoint_actor=wrong)
 
     def test_real_http_candidate_put_and_verified_receipt_scope_and_rotation(self):
         self.assertIsNone(self.client.latest()['checkpoint'])

@@ -33,6 +33,7 @@ class StreamExecutionTest(unittest.TestCase):
         self.recovery = 'NEW'; self.unavailable = 0
         self.hold_grant=False;self.granted=threading.Event();self.release_grant=threading.Event()
         self.finalized_calls=0;self.finalized_status=None;self.reject_during_download=False;self.swap_final_routes=False
+        self.checkpoint_actor=None
         profile = json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
         self.spec = profile['stream']; self.spec['command'] = [sys.executable,str(ROOT/'runner/examples/stream_sum.py')]
         self.spec['limits']['maxFrames'] = 12
@@ -51,7 +52,8 @@ class StreamExecutionTest(unittest.TestCase):
                     data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                     owner.finalized_calls+=1;latest=owner.api.checkpoint_latest
                     valid=(self.headers.get('Authorization')=='Bearer fixture-claim' and self.headers.get('X-EdgeAI-Pod-Token')=='fixture-pod'
-                           and data=={'epoch':OUT.producer.epoch,'podUid':POD,'checkpointId':latest['id']})
+                           and data=={'epoch':owner.assignment['epoch'],'podUid':POD,'checkpointId':latest['id']}
+                           and self.path.startswith('/internal/v1/attempts/'+owner.assignment['attemptId']+'/'))
                     if not valid or not owner.finalize or owner.finalized_status:return self.reply(owner.finalized_status or 409,{})
                     return self.reply(200,{'checkpoint':latest,'download':{'url':owner.api.url+'/checkpoint-object?versionId='+latest['versionId'],
                         'expiresAt':latest['createdAt']}})
@@ -60,7 +62,7 @@ class StreamExecutionTest(unittest.TestCase):
                 data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if self.headers.get('Authorization') != 'Bearer fixture-claim' or self.headers.get('X-EdgeAI-Pod-Token') != 'fixture-pod':
                     return self.reply(401,{})
-                if data.get('epoch') != OUT.producer.epoch or data.get('podUid') != POD:
+                if data.get('epoch') != owner.assignment['epoch'] or data.get('podUid') != POD:
                     return self.reply(409,{})
                 operation=self.path.rsplit('/',1)[1]
                 if operation=='claim':return self.reply(200,owner.assignment)
@@ -70,7 +72,8 @@ class StreamExecutionTest(unittest.TestCase):
                         return self.reply(200,{'state':'FINALIZE',**{k:owner.assignment[k] for k in ('runId','taskId','attemptId','epoch')},
                             'inputRoutes':{'a':B.route_id,'b':A.route_id} if owner.swap_final_routes else {'a':A.route_id,'b':B.route_id},
                             'outputRoutes':{'sum':[OUT.route_id]},'generationIds':owner.api.checkpoint_latest['generationIds'],
-                            'checkpointId':owner.api.checkpoint_latest['id']})
+                            'checkpointId':owner.api.checkpoint_latest['id'],
+                            **({'checkpointActor':owner.checkpoint_actor} if owner.checkpoint_actor is not None else {})})
                     if owner.execution_calls==1:return self.reply(200,{'state':'WAITING'})
                     return self.reply(200,{'state':'READY',**{k:owner.assignment[k] for k in ('runId','taskId','attemptId','epoch')},
                         'inputs':INPUTS,'outputs':OUTPUTS,'recovery':owner.recovery})
@@ -128,8 +131,8 @@ class StreamExecutionTest(unittest.TestCase):
         for journal in self.journals.values():journal.close()
 
     def start(self):
-        env={**os.environ,'SSL_CERT_FILE':str(self.broker.ca),'EDGEAI_ATTEMPT_ID':OUT.producer.id,
-            'EDGEAI_ATTEMPT_EPOCH':str(OUT.producer.epoch),'EDGEAI_POD_UID':POD,'EDGEAI_CONTROL_PLANE_URL':self.api.url,
+        env={**os.environ,'SSL_CERT_FILE':str(self.broker.ca),'EDGEAI_ATTEMPT_ID':self.assignment['attemptId'],
+            'EDGEAI_ATTEMPT_EPOCH':str(self.assignment['epoch']),'EDGEAI_POD_UID':POD,'EDGEAI_CONTROL_PLANE_URL':self.api.url,
             'EDGEAI_CLAIM_FILE':str(self.root/'claim'),'EDGEAI_POD_TOKEN_FILE':str(self.root/'pod'),
             'EDGEAI_WORK_DIR':str(self.root/'work')}
         self.process=subprocess.Popen([sys.executable,str(ROOT/'runner/runner.py')],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -252,6 +255,26 @@ class StreamExecutionTest(unittest.TestCase):
         self.assertEqual(b'14',(self.root/'work/stream-state').read_bytes())
         self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
         self.assertFalse(self.api.storage_credential_leak)
+
+    def test_new_attempt_finalizer_uses_original_sealed_state_and_current_authentication(self):
+        self.finalizer_restart();calls=len(self.api.calls)
+        self.checkpoint_actor={'attemptId':OUT.producer.id,'epoch':OUT.producer.epoch}
+        self.assignment['attemptId']=str(uuid.uuid4());self.assignment['epoch']+=1
+        self.start();self.finish(True)
+        self.assertEqual(calls,len(self.api.calls));self.assertEqual(2,self.finalized_calls)
+        self.assertFalse((self.root/'work/stream').exists())
+        self.assertEqual(b'14',(self.root/'work/stream-state').read_bytes())
+        self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
+        self.assertEqual(self.assignment['epoch'],self.commits[0]['epoch'])
+        self.assertEqual(OUT.producer.id,self.api.checkpoint_latest['attemptId'])
+
+    def test_new_attempt_finalizer_rechecks_cancellation_after_object_read(self):
+        self.finalizer_restart();self.reject_during_download=True
+        self.checkpoint_actor={'attemptId':OUT.producer.id,'epoch':OUT.producer.epoch}
+        self.assignment['attemptId']=str(uuid.uuid4());self.assignment['epoch']+=1
+        self.start();self.finish(False)
+        self.assertEqual(2,self.finalized_calls);self.assertGreater(self.api.checkpoint_gets,0)
+        self.assertIsNone(self.artifact);self.assertFalse((self.root/'work/stream-state').exists())
 
     def test_finalizer_recovery_rejects_corrupt_fixed_version_without_creating_state(self):
         self.finalizer_restart();self.api.checkpoint_corrupt_download=True;self.start();self.finish(False)

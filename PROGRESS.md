@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0045/V26 완료 허가 뒤 새 Attempt의 최종 처리 복구를 구현했다. 기존 checkpoint/허가/세대는
+보존하고 실패한 Task만 종료·회수 장벽 후 재시도해 실제 S3 결과14를 새 Attempt에 확정했다.
+실제 저장소36·PG187·단위101·Runner111·계약 검증 PASS. 공개 retry는 아직 거절한다.
+전체 MQTT73개 재검사는 PASS지만 이전 broker 재연결1개 timeout은 원인 미확정이며 진단을 추가했다.
+Device 자동 재연결·Kubernetes 장애 수용·새 코드 CI/배포는 남는다. 전체 목표는 미완료다.
+상세: docs/evidence/m7-finalizer-attempt-recovery.md.
+선행934d003 CI37122400842 5jobs/17JSON·Device 조회를 사용한 실제 kind3개 시나리오와
+GitOps17d51ad의 imageID/Ready/PVC/ArgoSynced 배포도 통과했다. 새 V26 이미지 검증과는 구분한다.
+
+아래는 계산 중 그룹 재시도의 검증 이력이다.
 ADR0044 계산 중 스트림 그룹의 원자적 재시도·전체 물리 종료/권한 회수 장벽을 구현했다.
 실제 두 Runner가 새 Attempt/폴더에서 외부 checkpoint 상태9를 복원하고 Device journal을 인계해
 root14/sink23/BATCH37을 확정했다. 전체 실제 저장소35·PG184·단위101 PASS다.

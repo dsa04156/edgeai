@@ -376,7 +376,18 @@ class StreamMqttTest(unittest.TestCase):
                 restarted = True
             for journal in self.journals.values():
                 self.assertLessEqual(journal.usage()[0], 6)
-        eventually(cycle, lambda: consumed == 20 and all(not j.outgoing() for j in self.journals.values()), 20)
+        try:
+            eventually(cycle, lambda: consumed == 20 and all(not j.outgoing() for j in self.journals.values()), 20)
+        except AssertionError:
+            # Numeric protocol state only: no payload, topic, credential or endpoint.
+            state={'produced':produced,'consumed':consumed,'restarted':restarted,'peers':{}}
+            for name,journal in self.journals.items():
+                link=self.links[name]
+                state['peers'][name]={'ready':link.ready,'socket':link._socket_open,'rejected':link.rejected,
+                    'gaps':link.gaps,'backpressured':link.backpressured,'revision':journal.checkpoint().revision,
+                    'cursors':journal.db.execute('SELECT direction,received,committed,ended FROM route ORDER BY id').fetchall(),
+                    'inflight':link.client._inflight_messages,'queuedStates':[int(m.state) for m in link.client._out_messages.values()]}
+            self.fail('MQTT progress timeout: '+json.dumps(state,sort_keys=True))
         self.assertTrue(restarted)
         self.assertGreater(full, 0)
         self.assertEqual(20, sink.checkpoint().revision)

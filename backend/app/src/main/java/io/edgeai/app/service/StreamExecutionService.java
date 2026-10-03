@@ -39,8 +39,7 @@ public class StreamExecutionService {
         var plan=plan(c);if(plan.isEmpty())return Map.of("state","WAITING");var p=plan.get();
         if(p.specs().get(r.taskId()).stream()==null)throw conflict("STREAM_SERVICE_REQUIRED");
         freeze(c);
-        var done=store.task(r.attemptId()).orElse(null);
-        if(done!=null && done.grantedAt()!=null)return finalization(principal,r,p);
+        if(store.granted(r.attemptId()).isPresent())return finalization(principal,r,p);
         var input=new TreeMap<String,Object>();var output=new TreeMap<String,List<String>>();var ids=new ArrayList<UUID>();
         for(var route:p.taskRoutes(r.taskId())) {
             var generation=routeStore.open(route.id()).orElse(null);
@@ -65,12 +64,17 @@ public class StreamExecutionService {
         return checkpoint;
     }
     private StreamCheckpoint grantedCheckpoint(RunnerPrincipal principal,RuntimeInstance runtime) {
-        var done=store.task(runtime.attemptId()).orElseThrow(()->conflict("STREAM_COMPLETION_REQUIRED"));
-        if(done.grantedAt()==null)throw conflict("STREAM_COMPLETION_REQUIRED");
+        var done=store.granted(runtime.attemptId()).orElseThrow(()->conflict("STREAM_COMPLETION_REQUIRED"));
         var checkpoint=checkpoints.latest(runtime.taskId()).orElseThrow(()->conflict("STREAM_CHECKPOINT_MISSING"));
-        if(!checkpoint.id().equals(done.checkpointId()) || !checkpoint.attemptId().equals(principal.attemptId())
-                || checkpoint.epoch()!=principal.epoch() || !checkpoint.producerPodUid().equals(principal.podUid())
+        if(!checkpoint.id().equals(done.checkpointId()) || !checkpoint.attemptId().equals(done.attemptId()))throw conflict("STREAM_CHECKPOINT_STALE");
+        if(done.attemptId().equals(runtime.attemptId())){
+            if(checkpoint.epoch()!=principal.epoch() || !checkpoint.producerPodUid().equals(principal.podUid())
                 || !checkpoint.runtimeId().equals(runtime.id()))throw conflict("STREAM_CHECKPOINT_STALE");
+        }else{
+            var source=runtimes.byAttempt(done.attemptId()).orElseThrow(()->conflict("STREAM_CHECKPOINT_STALE"));
+            if(!source.taskId().equals(runtime.taskId()) || source.epoch()>=runtime.epoch()
+                || !source.desiredState().equals("STOPPED") || !source.observedState().equals("TERMINATED"))throw conflict("STREAM_CHECKPOINT_STALE");
+        }
         terminal(checkpoint);return checkpoint;
     }
     private Object finalization(RunnerPrincipal principal,RuntimeInstance runtime,StreamRunPlan plan) {
@@ -83,25 +87,29 @@ public class StreamExecutionService {
         for(var route:plan.taskRoutes(runtime.taskId())) {
             var g=generations.remove(route.id());if(g==null)throw conflict("STREAM_COMPONENT_CHANGED");
             boolean input=route.consumerTaskId().equals(runtime.taskId());
-            if(!(input?g.consumer():g.producer()).equals(new RouteGeneration.Actor(runtime.attemptId(),runtime.epoch())))
+            if(!(input?g.consumer():g.producer()).equals(new RouteGeneration.Actor(checkpoint.attemptId(),checkpoint.epoch())))
                 throw conflict("STREAM_COMPONENT_CHANGED");
             if(input)inputs.put(route.consumerPort(),route.id().toString());
             else outputs.computeIfAbsent(route.sourcePort(),k->new ArrayList<>()).add(route.id().toString());
         }
         if(!generations.isEmpty())throw conflict("STREAM_COMPONENT_CHANGED");
         outputs.values().forEach(Collections::sort);
-        return Map.of("state","FINALIZE","runId",runtime.runId().toString(),"taskId",runtime.taskId().toString(),
+        var reply=new TreeMap<String,Object>(Map.of("state","FINALIZE","runId",runtime.runId().toString(),"taskId",runtime.taskId().toString(),
             "attemptId",runtime.attemptId().toString(),"epoch",runtime.epoch(),"checkpointId",checkpoint.id().toString(),
-            "inputRoutes",inputs,"outputRoutes",outputs,"generationIds",checkpoint.request().generationIds().stream().map(UUID::toString).toList());
+            "inputRoutes",inputs,"outputRoutes",outputs,"generationIds",checkpoint.request().generationIds().stream().map(UUID::toString).toList()));
+        if(!checkpoint.attemptId().equals(runtime.attemptId()))reply.put("checkpointActor",Map.of("attemptId",checkpoint.attemptId().toString(),"epoch",checkpoint.epoch()));
+        return reply;
     }
     @Transactional
     public Object complete(RunnerPrincipal principal,String body) {
         var input=RunnerInput.parse(body,principal,"checkpointId");var id=uuid(input.get("checkpointId"));
         var r=runtime(principal);var c=lock(r.runId());authorize(principal);
+        if(store.granted(r.attemptId()).isPresent()){
+            if(!grantedCheckpoint(principal,r).id().equals(id))throw conflict("STREAM_COMPLETION_CONFLICT");
+            return taskReply(id,true);
+        }
         var prior=store.task(r.attemptId()).orElse(null);
         if(prior!=null && !prior.checkpointId().equals(id))throw conflict("STREAM_COMPLETION_CONFLICT");
-        // Durable grant remains readable after peers finish and their broker ACLs close.
-        if(prior!=null && prior.grantedAt()!=null)return taskReply(id,true);
         var plan=requiredPlan(c);var checkpoint=checkpoints.latest(r.taskId()).orElseThrow(()->conflict("STREAM_CHECKPOINT_MISSING"));
         if(!checkpoint.id().equals(id) || !checkpoint.attemptId().equals(r.attemptId()) || checkpoint.epoch()!=principal.epoch()
                 || !checkpoint.producerPodUid().equals(principal.podUid()))throw conflict("STREAM_CHECKPOINT_STALE");

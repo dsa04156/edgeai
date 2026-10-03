@@ -114,15 +114,21 @@ def main():
             consumer.close()
             (folder/'granted').touch()
             wait(lambda:(folder/'routes-closed').exists())
-            assert post('streams/execution',identity)['state']=='FINALIZE'
-            assert post('claim',identity)['attemptId']==config['attemptId']
+            current={'attemptId':config['attemptId'],'epoch':1,'podUid':config['podUid']}
+            credentials=folder
+            if config['mode']=='finalizer-retry':
+                credentials=folder/'successor';current=json.loads((credentials/'identity.json').read_bytes())
+                assert current['attemptId']!=config['attemptId'] and current['epoch']==2
+            else:
+                assert post('streams/execution',identity)['state']=='FINALIZE'
+                assert post('claim',identity)['attemptId']==config['attemptId']
             # A fresh work volume has neither a journal nor model state. The real
             # Runner downloads the sealed S3 version, rechecks the grant and commits.
             work=folder/'runner-work';work.mkdir(mode=0o700)
             env=os.environ.copy()
-            env.update(EDGEAI_ATTEMPT_ID=config['attemptId'],EDGEAI_ATTEMPT_EPOCH='1',EDGEAI_POD_UID=config['podUid'],
-                EDGEAI_CONTROL_PLANE_URL=config['origin'],EDGEAI_CLAIM_FILE=str(folder/'claim'),
-                EDGEAI_POD_TOKEN_FILE=str(folder/'pod'),EDGEAI_WORK_DIR=str(work))
+            env.update(EDGEAI_ATTEMPT_ID=current['attemptId'],EDGEAI_ATTEMPT_EPOCH=str(current['epoch']),EDGEAI_POD_UID=current['podUid'],
+                EDGEAI_CONTROL_PLANE_URL=config['origin'],EDGEAI_CLAIM_FILE=str(credentials/'claim'),
+                EDGEAI_POD_TOKEN_FILE=str(credentials/'pod'),EDGEAI_WORK_DIR=str(work))
             result=subprocess.run([sys.executable,'-W','error::ResourceWarning',str(repo/'runner'/'runner.py')],
                 env=env,capture_output=True,timeout=25)
             if result.returncode:

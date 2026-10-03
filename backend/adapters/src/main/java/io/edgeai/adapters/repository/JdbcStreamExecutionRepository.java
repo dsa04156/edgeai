@@ -24,6 +24,19 @@ public final class JdbcStreamExecutionRepository implements StreamExecutionRepos
         return jdbc.query("SELECT * FROM edgeai.stream_device_completion WHERE generation_id=?",
             (r,n)->new DeviceCompletion(r.getObject("generation_id",UUID.class),r.getLong("sequence"),instant(r,"created_at"),instant(r,"granted_at")),generation).stream().findFirst();
     }
+    public Optional<TaskCompletion> granted(UUID attempt) {
+        return jdbc.query("""
+            SELECT c.* FROM edgeai.stream_task_completion c WHERE c.granted_at IS NOT NULL
+              AND (c.attempt_id=? OR c.attempt_id=(SELECT granted_attempt_id
+                FROM edgeai.stream_finalization_recovery WHERE attempt_id=?))
+            """,(r,n)->new TaskCompletion(r.getObject("attempt_id",UUID.class),r.getObject("checkpoint_id",UUID.class),
+                instant(r,"created_at"),instant(r,"granted_at")),attempt,attempt).stream().findFirst();
+    }
+    public void inheritFinalization(UUID attempt,UUID predecessor,Instant now) {
+        var grant=granted(predecessor).orElseThrow();
+        jdbc.update("INSERT INTO edgeai.stream_finalization_recovery(attempt_id,predecessor_attempt_id,granted_attempt_id,created_at) VALUES (?,?,?,?)",
+            attempt,predecessor,grant.attemptId(),Timestamp.from(now));
+    }
     public void recordTask(UUID attempt,UUID checkpoint,Instant now) {
         jdbc.update("INSERT INTO edgeai.stream_task_completion(attempt_id,checkpoint_id,created_at) VALUES (?,?,?)",attempt,checkpoint,Timestamp.from(now));
     }

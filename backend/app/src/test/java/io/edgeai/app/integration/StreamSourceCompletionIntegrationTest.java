@@ -111,10 +111,24 @@ class StreamSourceCompletionIntegrationTest {
             sessions.put(name,session);secret(folder,name+".token",deviceTokens.issue(session));
             inputs.add(Map.of("deviceId",d.id().toString(),"sourcePort","samples","toTask","sum","toPort",name,"maxPayloadBytes",4096));
         }
-        var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
-            .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
-            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        var run=executions.run(UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id")),false).orElseThrow();runIds.add(run.id());
+        WorkflowRun run;
+        if(mode.equals("finalizer-retry")){
+            // Public retry is still gated. Only policy creation and Pod lifecycle are fixtures.
+            run=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(tx->{
+                var parsed=io.edgeai.app.support.StreamRunInput.parse(inputs);
+                var pins=streamRuns.pin(parsed,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
+                var candidate=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),"sha256:"+"a".repeat(64),"AUTO",null,"{}",
+                    new RetryPolicy(2,1,300,Set.of("RUNTIME_LOST")),null,"PENDING",now,now);
+                assertThat(executions.create(candidate)).isTrue();executions.initialize(candidate,workflowStore.definitions(version.id()),Set.of());
+                streamRuns.configure(candidate,BUCKET,parsed,pins);lifecycle.startRun(candidate.id(),BUCKET);return executions.run(candidate.id(),false).orElseThrow();
+            });
+        }else{
+            var response=mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).header("Idempotency-Key",UUID.randomUUID().toString())
+                .contentType("application/json").content(json.canonical(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+            run=executions.run(UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id")),false).orElseThrow();
+        }
+        runIds.add(run.id());
         var task=executions.tasks(run.id()).getFirst();var attempt=executions.attempts(task.id()).getFirst();
         assertThat(routeStore.forRun(run.id(),20,0)).hasSize(2).allMatch(r->routeStore.open(r.id()).isEmpty());
         var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(attempt.id(),pod);
@@ -131,6 +145,7 @@ class StreamSourceCompletionIntegrationTest {
         return new Execution(run.id(),task.id(),attempt.id(),ids,folder);
     }
     private void probe(Execution e,boolean cancel)throws Exception{
+        boolean recovery=Files.readString(e.folder().resolve("request.json")).contains("finalizer-retry");
         var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/stream_source_completion_probe.py",e.folder().toString())
             .redirectOutput(e.folder().resolve("probe.log").toFile()).redirectError(e.folder().resolve("probe-error.log").toFile());
         builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));var child=builder.start();
@@ -145,9 +160,27 @@ class StreamSourceCompletionIntegrationTest {
             if(!cancel){
                 until(()->Files.exists(e.folder().resolve("granted")) || !child.isAlive());
                 assertThat(Files.exists(e.folder().resolve("granted"))).as("SDK grant: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
-                // Model a peer closing the completed component; the actual worker revokes broker authority.
-                for(var id:e.generations())routes.fence(id,"COMPLETED");
-                until(()->e.generations().stream().allMatch(id->routeStore.generation(id).orElseThrow().closedAt()!=null));
+                if(recovery){
+                    // The Python owner has closed all Session/Device producers before reporting granted.
+                    lifecycle.observeFailure(e.attempt(),"RUNTIME_LOST");
+                    assertThat(lifecycle.retryTask(e.task())).isFalse();
+                    var old=runtimes.byAttempt(e.attempt()).orElseThrow();
+                    jdbc.update("UPDATE edgeai.runtime_command SET completed=true WHERE runtime_id=? AND kind='CREATE'",old.id());
+                    lifecycle.confirmStopped(e.attempt());
+                    until(()->e.generations().stream().allMatch(id->routeStore.generation(id).orElseThrow().closedAt()!=null));
+                    until(()->{lifecycle.retryTask(e.task());return executions.attempts(e.task()).getFirst().epoch()==2;});
+                    var next=executions.attempts(e.task()).getFirst();assertThat(next.epoch()).isEqualTo(2);
+                    var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");pods.put(next.id(),pod);
+                    lifecycle.submitted(next.id(),pod.jobUid());lifecycle.claim(next.id(),next.epoch(),pod);
+                    assertThat(streamRuns.prepare(e.run())).isEmpty();
+                    var folder=Files.createDirectory(e.folder().resolve("successor"),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+                    secret(folder,"claim",tokens.issue(runtimes.byAttempt(next.id()).orElseThrow()));secret(folder,"pod","source-pod-proof");
+                    secret(folder,"identity.json",json.canonical(Map.of("attemptId",next.id().toString(),"epoch",next.epoch(),"podUid",pod.podUid().toString())));
+                }else{
+                    // Model a peer closing the completed component; the actual worker revokes broker authority.
+                    for(var id:e.generations())routes.fence(id,"COMPLETED");
+                    until(()->e.generations().stream().allMatch(id->routeStore.generation(id).orElseThrow().closedAt()!=null));
+                }
                 Files.writeString(e.folder().resolve("routes-closed"),"");
                 until(()->Files.exists(e.folder().resolve("committed")) || !child.isAlive());
                 assertThat(Files.exists(e.folder().resolve("committed"))).as("Runner Result: %s",Files.readString(e.folder().resolve("probe.log"))).isTrue();
@@ -160,10 +193,23 @@ class StreamSourceCompletionIntegrationTest {
             if(cancel){assertThat(completions.task(e.attempt())).isEmpty();for(var id:e.generations())assertThat(completions.device(id).orElseThrow().grantedAt()).isNull();}
             else {var grant=completions.task(e.attempt()).orElseThrow();assertThat(grant.grantedAt()).isNotNull();
                 assertThat(grant.checkpointId()).isEqualTo(checkpoint.id());
-                for(var id:e.generations())assertThat(completions.device(id).orElseThrow().grantedAt()).isEqualTo(grant.grantedAt());}
+                for(var id:e.generations())assertThat(completions.device(id).orElseThrow().grantedAt()).isEqualTo(grant.grantedAt());
+                if(recovery){
+                    var next=executions.attempts(e.task()).getFirst();var result=runtimes.result(e.task()).orElseThrow();
+                    assertThat(result.attemptId()).isEqualTo(next.id());assertThat(result.epoch()).isEqualTo(2);
+                    assertThat(completions.task(next.id())).isEmpty();assertThat(completions.granted(next.id()).orElseThrow()).isEqualTo(grant);
+                    assertThat(checkpoints.latest(e.task()).orElseThrow().id()).isEqualTo(checkpoint.id());
+                    assertThat(routeStore.forRun(e.run(),20,0)).allMatch(r->routeStore.history(r.id(),20,0).size()==1);
+                    var output=result.outputs().getFirst().artifact();
+                    try(var content=MINIO.getObject(GetObjectArgs.builder().bucket(output.bucket()).object(output.objectKey()).versionId(output.versionId()).build())){
+                        assertThat(json.canonical(json.decode(new String(content.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8)))).isEqualTo("{\"sum\":14}");
+                    }
+                }
+            }
         }finally{if(child.isAlive()){child.destroyForcibly();assertThat(child.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
     }
     @Test void realSourcesAndRunnerRecoverGrantedCheckpointAfterRouteClosureAndCommitActualResult()throws Exception{probe(fixture("complete"),false);}
+    @Test void newAttemptFinalizerInheritsRealGrantedS3CheckpointAndCommitsWithoutNewGenerations()throws Exception{probe(fixture("finalizer-retry"),false);}
     @Test void actualCancellationBetweenTerminalCheckpointAndTaskReportNeverGrantsSources()throws Exception{probe(fixture("cancel"),true);}
     @SuppressWarnings("unchecked") private UUID dagService(String name)throws Exception{
         var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/"+(name.equals("report")?"service-execution":"service-stream")+".example.json")));

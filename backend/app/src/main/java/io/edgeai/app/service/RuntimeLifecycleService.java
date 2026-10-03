@@ -300,7 +300,7 @@ public class RuntimeLifecycleService {
         return new CommitPermit(r,manifest,digest,null);
     }
     private void requireStreamGrant(Context context) {
-        if(spec(context).stream()!=null && streamExecutions.task(context.attempt().id()).filter(t->t.grantedAt()!=null).isEmpty())
+        if(spec(context).stream()!=null && streamExecutions.granted(context.attempt().id()).isEmpty())
             throw error(409,"STREAM_COMPLETION_REQUIRED","연결된 모든 스트림 참여자의 종료 확인 후 결과를 확정할 수 있습니다.");
     }
     @Transactional
@@ -361,7 +361,8 @@ public class RuntimeLifecycleService {
     }
     private void recordFailure(Context c,RuntimeInstance r,String reason) {
         var now=clock.instant();boolean grouped=streamRecovery.manages(c.run(),c.task().id());
-        if(grouped && streamRecovery.schedule(c.run(),c.task().id(),reason,now)){
+        boolean finalizing=grouped && streamRecovery.finalizing(c.attempt().id());
+        if(grouped && !finalizing && streamRecovery.schedule(c.run(),c.task().id(),reason,now)){
             runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);return;
         }
         runtimes.fail(r.id(),reason,now);offloads.failedAttempt(c.attempt().id(),now);
@@ -369,9 +370,10 @@ public class RuntimeLifecycleService {
         var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
         var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
         var availableAt=now.plusSeconds(policy.backoffSeconds());
-        if(!grouped && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
+        if((!grouped || finalizing) && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
             executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
         else failDescendants(c.run(),c.task(),now);
+        if(finalizing)streamRecovery.fenceFinalizer(c.run(),c.task().id(),now);
         runtimes.stopForRun(r.runId(),now);executions.reconcileRunState(r.runId(),now);
     }
     @Transactional(readOnly=true)
@@ -389,6 +391,10 @@ public class RuntimeLifecycleService {
             runtimes.stopForRun(run.id(),now);executions.reconcileRunState(run.id(),now);return true;
         }
         if(streamRecovery.manages(run,taskId)){
+            if(streamRecovery.finalizing(retry.failedAttemptId())){
+                var next=streamRecovery.retryFinalizer(run,taskId,now);
+                next.ifPresent(a->plan(a.id(),retry.namespace()));return next.isPresent();
+            }
             var next=streamRecovery.retry(run,taskId,now);
             for(var attempt:next)plan(attempt.id(),retry.namespace());
             return !next.isEmpty();

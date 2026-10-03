@@ -13,7 +13,7 @@ paths:
       summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
       description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
         반환하고, 아직 준비 중이면 WAITING을 반환한다. 이미 공동 완료 허가가 있으면 경로 회수 후에도 FINALIZE와 확정 checkpointId·논리 route 포트를 반환한다. 이 경우 MQTT·계산을 다시 시작하지 않고 finalized 체크포인트 API로 최종 상태만 복구한다. READY의 recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
-        연장하지 않는다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이다.
+        연장하지 않는다. 명시적인 최종 처리 재시도는 이전 실행의 물리 종료와 경로 회수 후에만 배정되며 checkpointActor로 원본 체크포인트 실행 주체를 표시한다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이고 공개 retry 정책은 아직 지원하지 않는다.
       security:
       - runnerClaim: []
         podIdentity: []
@@ -470,7 +470,7 @@ paths:
       summary: 완료 허가된 현재 Runner의 최종 상태 다운로드 권한 조회
       description: 현재 Attempt·epoch·Pod와 영속 공동 완료 허가를 확인하고 정확한 checkpointId의 고정 S3 version을 반환한다. 경로 회수 뒤에도 조회할 수 있지만 MQTT
         배정이나 lease를 갱신하지 않는다. Runner는 크기·SHA-256·실행 설정·종료 커서를 검증하고 다운로드 뒤 이 API를 다시 호출하여 취소·만료를 확인한 후 최종 파일만 생성한다. 새로운
-        Attempt에 완료 허가를 인계하지 않으며 허가 전·취소·만료·다른 체크포인트는 거절한다.
+        Attempt는 서버가 기록한 최종 처리 재시도 이력이 있을 때만 원래 허가된 체크포인트를 읽는다. 응답의 checkpoint.attemptId와 epoch는 원본 실행 주체이며 현재 요청의 인증 정보는 새 실행 주체다. 허가 전·취소·만료·다른 체크포인트는 거절한다.
       security:
       - runnerClaim: []
         podIdentity: []
@@ -673,6 +673,7 @@ components:
             type: string
             format: uuid
           inputRoutes:
+            description: Immutable SERVICE input port to logical route ID; not an MQTT generation assignment.
             type: object
             minProperties: 1
             maxProperties: 16
@@ -682,7 +683,19 @@ components:
             additionalProperties:
               type: string
               format: uuid
-            description: Immutable SERVICE input port to logical route ID; not an MQTT generation assignment.
+          checkpointActor:
+            type: object
+            additionalProperties: false
+            description: Only present for an explicitly authorized finalizer retry. Identifies the original sealed checkpoint, never MQTT or write authority.
+            properties:
+              attemptId:
+                type: string
+                format: uuid
+              epoch:
+                type: integer
+                minimum: 1
+                maximum: 9007199254740991
+            required: [attemptId, epoch]
           outputRoutes:
             type: object
             maxProperties: 16

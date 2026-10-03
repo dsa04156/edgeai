@@ -118,8 +118,11 @@ class CheckpointClient:
                 'bytes':len(snapshot.wire), 'executionSha256':snapshot.document()['executionSha256'],
                 'generationIds':self.generation_ids.copy()}
 
-    def receipt(self, value, snapshot=None, previous_id=None):
+    def receipt(self, value, snapshot=None, previous_id=None, *, checkpoint_actor=None):
         try:
+            actor=self.client.actor if checkpoint_actor is None else checkpoint_actor
+            require(type(actor) is Producer and actor.kind == 'TASK_ATTEMPT')
+            require(actor == self.client.actor or actor.id != self.client.actor.id and actor.epoch < self.client.actor.epoch)
             fields(value, 'id runId taskId attemptId epoch serviceProfileVersionId previousCheckpointId serial revision sha256 bytes executionSha256 generationIds versionId summary createdAt')
             for key in ('id','runId','taskId','attemptId','serviceProfileVersionId'):
                 _uuid(value[key])
@@ -128,8 +131,8 @@ class CheckpointClient:
             counter(value['epoch'],1);counter(value['serial']);counter(value['revision'],0,value['serial'])
             counter(value['bytes'],1,MAX_BYTES);sha(value['sha256']);sha(value['executionSha256'])
             text(value['versionId'],1024);require(value['versionId'] != 'null');instant(value['createdAt'])
-            require(value['runId'] == self.run_id and value['attemptId'] == self.client.actor.id
-                    and value['epoch'] == self.client.actor.epoch and value['generationIds'] == self.generation_ids)
+            require(value['runId'] == self.run_id and value['attemptId'] == actor.id
+                    and value['epoch'] == actor.epoch and value['generationIds'] == self.generation_ids)
             summary = fields(value['summary'],'manifest revision routes stateSha256 stateBytes')
             require(summary['revision'] == value['revision'] and type(summary['revision']) is int)
             sha(summary['stateSha256']);counter(summary['stateBytes'],0,1048576)
@@ -144,7 +147,7 @@ class CheckpointClient:
                     fields(entry,'routeId generation producer')
                     binding=Binding(entry['routeId'],entry['generation'],Producer.parse(entry['producer']))
                     require(binding.route_id not in routes);routes.add(binding.route_id)
-                    require(direction != 'outputs' or binding.producer == self.client.actor)
+                    require(direction != 'outputs' or binding.producer == actor)
             require(len(routes) == len(self.generation_ids) and limits.max_frames >= len(routes)
                     and limits.max_buffer_bytes >= len(routes) and summary['stateBytes'] <= limits.max_state_bytes)
             require(type(summary['routes']) is list and len(summary['routes']) == len(routes))
@@ -217,10 +220,10 @@ class CheckpointClient:
     def latest(self, *, timeout=1):
         return self._latest_response(self._post('latest',{'generationIds':self.generation_ids.copy()},timeout))
 
-    def finalized(self, checkpoint_id, *, timeout=1):
+    def finalized(self, checkpoint_id, *, timeout=1, checkpoint_actor=None):
         """Exact server-granted checkpoint, without MQTT assignment authority."""
         _uuid(checkpoint_id)
-        value=self._latest_response(self._post('finalized',{'checkpointId':checkpoint_id},timeout))
+        value=self._latest_response(self._post('finalized',{'checkpointId':checkpoint_id},timeout),checkpoint_actor=checkpoint_actor)
         require(value['checkpoint'] is not None and value['checkpoint']['id'] == checkpoint_id)
         return value
 
@@ -231,12 +234,12 @@ class CheckpointClient:
         require(value['checkpoint'] is not None and value['checkpoint']['executionSha256'] == execution_sha256)
         return value
 
-    def _latest_response(self, value):
+    def _latest_response(self, value, *, checkpoint_actor=None):
         require(type(value) is dict)
         if value.get('checkpoint') is None:
             fields(value,'checkpoint')
         else:
-            fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'])
+            fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'],checkpoint_actor=checkpoint_actor)
             self._download_grant(value['download'],receipt)
         return value
 
@@ -245,10 +248,10 @@ class CheckpointClient:
         url=urllib.parse.urlsplit(self._url(grant['url']))
         require(urllib.parse.parse_qs(url.query,keep_blank_values=True).get('versionId') == [receipt['versionId']])
 
-    def download(self, value, *, guard, timeout=1):
+    def download(self, value, *, guard, timeout=1, checkpoint_actor=None):
         """Read only the authenticated fixed version, within its exact byte budget."""
         timeout=self._timeout(timeout);require(callable(guard));guard()
-        fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'])
+        fields(value,'checkpoint download');receipt=self.receipt(value['checkpoint'],checkpoint_actor=checkpoint_actor)
         self._download_grant(value['download'],receipt)
         try:
             request=urllib.request.Request(value['download']['url'],method='GET',headers={'Accept-Encoding':'identity'})
@@ -269,7 +272,7 @@ class CheckpointClient:
                     wire.extend(chunk);digest.update(chunk)
             require(len(wire) == expected and digest.hexdigest() == receipt['sha256'])
             snapshot=Snapshot(bytes(wire))
-            self.receipt(receipt,snapshot,receipt['previousCheckpointId'])
+            self.receipt(receipt,snapshot,receipt['previousCheckpointId'],checkpoint_actor=checkpoint_actor)
             guard()
             return snapshot
         except urllib.error.HTTPError as failure:

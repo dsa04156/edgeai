@@ -24,6 +24,23 @@ public class StreamRecoveryService {
     public boolean manages(WorkflowRun run,UUID task){
         return streams.managed(run.id()) && !streams.plan(run).componentRoutes(task).isEmpty();
     }
+    public boolean finalizing(UUID attempt){return completions.granted(attempt).isPresent();}
+    public void fenceFinalizer(WorkflowRun run,UUID task,Instant now){
+        for(var route:streams.plan(run).taskRoutes(task))routes.open(route.id()).filter(g->g.fencedAt()==null)
+            .ifPresent(g->routes.fence(g.id(),"REPLACED",now));
+    }
+    /** Only this task restarts after FINALIZE; peers may already have committed their results. */
+    public Optional<TaskAttempt> retryFinalizer(WorkflowRun run,UUID taskId,Instant now){
+        var pending=executions.retry(taskId).orElseThrow();
+        var previous=executions.attempt(pending.failedAttemptId()).orElseThrow();
+        if(!finalizing(previous.id()) || !previous.state().equals("FAILED") || runtimes.result(taskId).isPresent()
+            || now.isBefore(pending.availableAt()) || !now.isBefore(pending.deadline())
+            || retryAttempts(executions.attempts(taskId))>=run.retry().maxAttempts() || !runtimes.retryReady(taskId)
+            || streams.plan(run).taskRoutes(taskId).stream().anyMatch(r->routes.open(r.id()).isPresent()))return Optional.empty();
+        var next=executions.startRetry(taskId,now);
+        completions.inheritFinalization(next.id(),previous.id(),now);
+        return Optional.of(next);
+    }
     /** Atomically fence all peers and persist one shared retry window before returning. */
     public boolean schedule(WorkflowRun run,UUID failedTask,String reason,Instant now){
         var policy=run.retry();if(!run.state().equals("RUNNING") || !policy.retryOn().contains(reason))return false;

@@ -370,10 +370,10 @@ class StreamCheckpointIntegrationTest {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.stream_checkpoint WHERE task_id=?",Integer.class,e.task())).isEqualTo(1);
         var id=checkpoints.latest(e.task()).orElseThrow().id();
-        // Include the referencing table so PostgreSQL reaches the immutable-history trigger,
+        // Include the referencing tables so PostgreSQL reaches the immutable-history trigger,
         // rather than its unsupported lone-table TRUNCATE guard (SQLSTATE 0A000).
-        for(String sql:List.of("UPDATE edgeai.stream_checkpoint SET serial=serial+1 WHERE id='"+id+"'","DELETE FROM edgeai.stream_checkpoint WHERE id='"+id+"'","TRUNCATE edgeai.stream_checkpoint,edgeai.stream_task_completion"))
-            new TransactionTemplate(transactions).executeWithoutResult(s->{s.setRollbackOnly();assertThatThrownBy(()->jdbc.execute(sql)).isInstanceOf(org.springframework.dao.DataAccessException.class);});
+        for(String sql:List.of("UPDATE edgeai.stream_checkpoint SET serial=serial+1 WHERE id='"+id+"'","DELETE FROM edgeai.stream_checkpoint WHERE id='"+id+"'","TRUNCATE edgeai.stream_checkpoint,edgeai.stream_task_completion,edgeai.stream_finalization_recovery"))
+            new TransactionTemplate(transactions).executeWithoutResult(s->{s.setRollbackOnly();assertThatThrownBy(()->jdbc.execute(sql)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);});
         assertThat(checkpoints.latest(e.task()).orElseThrow().id()).isEqualTo(id);
     }
     @Test @SuppressWarnings("unchecked") void oldCursorsWrongStateRevisionAndChangedExecutionCannotAdvanceLatest()throws Exception {

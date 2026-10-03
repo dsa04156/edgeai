@@ -36,6 +36,9 @@ Runner와 연결했다. metadata 조회로 권한이나 journal을 전환하지 
 ADR0044에서 계산 중 그룹의 동시 재시도 예약·전체 종료/회수 장벽·새 Attempt와 세대를 연결했다.
 실제 두 Runner의 외부 상태9 복원·Device journal 인계·결과37을 검증했다. 완료 허가 뒤 복구와
 Device 자동 재연결·공개 정책·Kubernetes 장애 수용은 [그룹 재시도 근거](docs/evidence/m7-group-retry.md)의 남은 범위를 따른다.
+ADR0045/V26은 공동 완료 허가 뒤 실패한 Task만 새 Attempt로 재시도하고 원래 최종 상태에서
+Result를 확정한다. 실제 PG·HTTP/SDK·Spring/S3/TLS·독립 Runner의 결과14를 검증했다.
+범위·남은 MQTT 간헐 실패·공개 정책/운영 수용은 [최종 처리 인계 근거](docs/evidence/m7-finalizer-attempt-recovery.md)를 따른다.
 새 검증 범위는 [공개 실행·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 따른다.
 복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.
 상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.

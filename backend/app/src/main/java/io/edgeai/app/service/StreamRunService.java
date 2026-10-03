@@ -179,7 +179,7 @@ public class StreamRunService {
             var members=tasks.stream().filter(t->group.contains(t.id())).toList();var attempts=new HashMap<UUID,TaskAttempt>();
             for(var member:members){var history=executions.attempts(member.id());if(!history.isEmpty())attempts.put(member.id(),history.getFirst());}
             if(attempts.size()!=members.size())continue;
-            if(attempts.values().stream().allMatch(a->completions.task(a.id()).filter(c->c.grantedAt()!=null).isPresent()))continue;
+            if(attempts.values().stream().allMatch(a->completions.granted(a.id()).isPresent()))continue;
             if(members.stream().anyMatch(t->!t.state().equals("RUNNING")))continue;
             var first=attempts.values().stream().filter(a->Set.of("DISPATCHING","RUNNING").contains(a.state())).findFirst();if(first.isEmpty())continue;
             boolean changed=!config.brokerDigest().equals(brokerDigest);
