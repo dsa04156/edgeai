@@ -44,8 +44,11 @@ ADR0055/V31–V32 VD STREAM의 자기 VD 권한·동시 용량·그룹/최종 �
 저장소40·단위105·계약·UI에서 검증했다. 새 VD의 Pod/브로커/S3 receipt는 DB 시험 fixture다.
 후속 실제 supervisor/자식 Runner5개·전체 저장소45개에서 TLS/S3·그룹 상태 복원·취소·결과28/37을
 확인했다. 후속 실제 Kubernetes6개/VD14Pods·Node1Pod/S3결과15개·API 교체·자식 SIGKILL 후
-복구·취소와 소유 자원 정리도 통과했다. 새 CI/배포·VD Pod 자체 교체, STREAM REMOTE와
-VD 그룹 전환은 남는다.
+복구·취소와 소유 자원 정리도 통과했다. 후속 VD 공개 교체·Pod 유실 후 복원·완료 허가 뒤
+최종 처리 복구3개/VD10Pods/S3결과9개도 실제 Kubernetes에서 통과했다. drain 중 자식 종료
+보고의 실패 분류 수정 후 전체 PG220개도 통과했다. 소스b144c8b CI37157334661은 저장소
+시험 실패로 images/gitops를 실행하지 않았다. CI 실패 원인 확인·새 수정의 CI/배포,
+STREAM REMOTE와 VD 그룹 전환은 남는다.
 [VD 스트리밍 근거](evidence/m7-vd-stream-execution.md)를 따른다.
 [작업별 배치 근거](evidence/m7-task-initial-placement.md)와
 [혼합 배치 근거](evidence/m7-mixed-task-targets.md)를 따른다.

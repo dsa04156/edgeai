@@ -362,6 +362,34 @@ class StreamRunIntegrationTest {
         assertThat(allocations.open(vd.runtime().id())).isEmpty();assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("CANCELLED");
         assertThat(runtimes.result(task(run,"source").id())).isEmpty();assertThat(runtimes.result(task(run,"sink").id())).isEmpty();
     }
+    @Test void drainingVdChildCancellationSchedulesGroupRecoveryButUserCancellationDoesNot()throws Exception{
+        for(boolean userCancelled:List.of(false,true)){
+            var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,2);
+            var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+            var body=request(d);body.put("execution",vdTarget(vd));
+            body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
+            UUID run=publicRun(body);poll(vd,1,List.of(),List.of());claimVD(run,"source",vd);claimVD(run,"sink",vd);streams.prepare(run);
+            var sink=attempt(run,"sink");vdLifecycle.drain(vd.device().id(),0,"drain");
+            if(userCancelled){
+                runs.cancelRun(run,"{}");
+                assertThatThrownBy(()->lifecycle.fail(sink.id(),sink.epoch(),vd.pod().podUid(),"CANCELLED"))
+                    .isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+                assertThat(executions.retry(task(run,"sink").id())).isEmpty();
+            }else{
+                lifecycle.fail(sink.id(),sink.epoch(),vd.pod().podUid(),"CANCELLED");
+                assertThat(runtimes.byAttempt(sink.id()).orElseThrow().failureReason()).isEqualTo("RUNTIME_LOST");
+                for(String name:List.of("source","sink")){
+                    assertThat(task(run,name).state()).isEqualTo("RETRY_WAIT");assertThat(executions.retry(task(run,name).id())).isPresent();
+                }
+                assertThat(lifecycle.retryTask(task(run,"source").id())).isFalse();
+                assertThat(allocations.open(vd.runtime().id())).hasSize(2);
+                lifecycle.fail(sink.id(),sink.epoch(),vd.pod().podUid(),"CANCELLED"); // Exact late report is idempotent.
+                runs.cancelRun(run,"{}");
+            }
+            poll(vd,2,List.of(),List.of(attempt(run,"source"),attempt(run,"sink")));
+            routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));revokeGroup(run);
+        }
+    }
     @Test void vdFinalizerRetryPreservesSealedCheckpointAndDoesNotRestartCompletedPeer()throws Exception{
         var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,2);
         var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));

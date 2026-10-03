@@ -20,9 +20,15 @@ dispatch 기한·실패·취소·재시도와 확인된 자식 종료 장벽을 
 
 V31은 STREAM Run 기본 정책에 VD를 허용한다. 실제 DB 시험에서 V26의 최종 처리 복구 제약이
 VD를 거절하는 것을 확인해 V32에서 해당 모드만 허용한다. 원래 완료 허가·체크포인트·이전 실행
-종료·broker 회수 조건은 유지한다. 적용된 V1–V31은 변경하지 않는다.
+종료·broker 회수 조건은 유지한다. 적용된 V1–V32는 변경하지 않는다.
 VD 측정은 공유 Pod 값이므로 작업별 자동 offload는 계속 거절한다. Remote 스트리밍 계약과
 실장비 수용은 별도 남은 범위이며 이번 VD 연결로 대체하지 않는다.
+
+공개 VD 교체의 drain 중에는 supervisor가 기한 전에 자식을 종료하고 자식 Runner가
+`CANCELLED`를 보고할 수 있다. 이는 실행 환경의 종료이므로 해당 VD runtime에 drain 기한이
+설정된 경우 `RUNTIME_LOST`로 정규화한 뒤 재전송/producer 검증과 재시도 정책을 적용한다.
+사용자의 Run 취소는 이미 producer 권한을 차단하므로 이 변환으로 작업을 재시도하지 않는다.
+실제 Kubernetes 교체에서 재현한 뒤 PostgreSQL 회귀와 같은 교체 시나리오로 수정 결과를 확인했다.
 
 필수 검증은 실제 PostgreSQL의 서로 다른 VD·같은 Pod의 서로 다른 Attempt·동시 poll/경로/
 체크포인트/완료·그룹 실패/재시도·취소·slot 부족 거절, 실제 broker/S3/자식 Runner와 Kubernetes

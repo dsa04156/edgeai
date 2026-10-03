@@ -24,8 +24,11 @@ PG219·새 VD5개를 포함한 STREAM/route53개·단위105·기존 실제 저�
 receipt를 사용한 새 DB 시험과 실제 VD 스트리밍 종단 수용은 구분한다. 후속 실제 supervisor/
 자식 Runner5개·전체 실제 저장소45개에서 TLS/S3·그룹 상태 복원·취소·결과28/37을 확인했다.
 후속 실제 Kubernetes6개/VD14Pods·Node1Pod/S3결과15개·API 교체·자식 SIGKILL 복구·취소와
-자원 정리도 PASS다(215558Z-8e800c29). 새 CI17개 기본 게이트·배포, VD Pod 자체 교체와
-Remote STREAM/VD 그룹 전환은 남는다.
+자원 정리도 PASS다(215558Z-8e800c29). 후속 VD 교체·Pod 유실 복구·최종 처리 복구도
+실제 Kubernetes3개/VD10Pods/S3결과9개에서 통과했다(222247Z-bfb805ce).
+교체 중 취소 보고의 실패 분류를 수정한 전체 PG220개도 PASS(222557Z-1fe8caf0)다.
+소스b144c8b CI37157334661은 storage 실패로 images/gitops를 실행하지 않았다.
+CI 실패 원인은 미확정이며 새 수정의 CI·이미지·배포와 Remote STREAM/VD 그룹 전환은 남는다.
 실제 API/DB/Swagger PC·모바일10개와 로컬 V30→V32의 기존 Task9,371개 보존도 확인했다.
 [VD 스트리밍 근거](docs/evidence/m7-vd-stream-execution.md)를 따른다.
 

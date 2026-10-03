@@ -3,7 +3,8 @@
 2026-10-04. ADR0055/V31–V32의 서버·DB·Swagger·화면을 연결했다.
 서버·DB 시험에 이어 실제 VD supervisor/자식 Runner·TLS broker·S3 시험5개와
 전체 실제 저장소 회귀45개를 통과했다. 후속 실제 Kubernetes6개/VD Pod14개·Node Pod1개/
-고정 S3결과15개도 통과했다. 새 이미지 CI·배포와 VD Pod 자체 교체 수용은 별도다.
+고정 S3결과15개도 통과했다. 이어 VD 교체·Pod 유실·최종 처리 복구3개를 실제 Kubernetes에서
+검증했다. 새 이미지 CI·배포는 남으며 최신 선행 CI의 저장소 시험은 실패했다.
 
 ## 구현한 경계
 
@@ -41,6 +42,23 @@
 | 전체 실제 저장소 회귀 | 20261003T214448Z-27d21841 | PASS45개, 실패/오류/skip0. 신규 VD5개와 기존40개를 같은 실행에서 확인 |
 | 실제 Kubernetes VD STREAM | 20261003T215558Z-8e800c29 | PASS6개. 같은/다른 VD·VD→Node→VD·API Pod 교체·같은/다른 VD 자식 SIGKILL 후 상태 인계·취소, 실제 VD14Pods/Node1Pod/S3결과15개와 소유 자원 정리 |
 | 기존 Kubernetes AUTO 회귀 | 20261003T220351Z-8031f85d | 변경된 공통 driver/fixture의 실제 AUTO·API 교체·Node3Pods/S3결과3개·소유 자원 정리 PASS |
+| VD 교체·Pod 유실·최종 처리 복구 | 20261003T222247Z-bfb805ce | PASS3개/VD10Pods/S3결과9개. 같은 VD 공개 REPLACE·다른 VD의 sink Pod 삭제 후 PROVISION·완료 허가 뒤 sink 자식 SIGKILL. 이전 실행 종료 후 다음 세대, 상태 인계, 원본 완료 허가/체크포인트 보존과 소유 자원 정리 확인 |
+| 실패 분류 수정 후 PostgreSQL 전체 | 20261003T222557Z-1fe8caf0 | PASS220개/21 suites, 실패·오류·skip0. summary.json에 집계 보존 |
+| VD drain 결함 재현 | 20261003T221934Z-e7f14442 | 수정 전 회귀가 실제 RUNTIME_LOST 대신 CANCELLED를 관측해 실패. 실제 Kubernetes 교체 실패221255Z-1d1b7754와 같은 분류 경계 |
+| VD drain 수정 후 회귀 | 20261003T222037Z-8f5b8d10 | STREAM/VDTask/route 실제 PG68개 PASS. 물리 종료 전 재시도 금지·같은 늦은 보고 재전송·사용자 취소 차단 확인 |
+| 수정 후 단위·실행 JAR | 20261003T222142Z-fe49ce8b | PASS105개/bootJar. 추가 Kubernetes3개가 이 JAR을 사용 |
+| 수정 후 전체 실제 저장소 | 20261003T222248Z-3e62e39b | PASS45개, 실패/오류/skip0. 선행 CI의 공유 VD 재시도 실패는 이 로컬 실행에서 재현되지 않음 |
+
+추가 Kubernetes3개는 수정 JAR SHA
+`af0096deaaba97cffbcf3296c049dd85c675278337ac2d4c12c6e7ff3ab45821`을 사용했다.
+교체/Pod 유실 두 경우 모두 이전 supervisor의 물리 종료와 generation+1 순서를 확인하고
+각 작업의 상태 인계2개를 검증했다. 같은 장치 SDK 객체가 각각2회 연결됐다.
+최종 처리 복구는 기존 완료 허가·체크포인트 이력을 유지하며 새 계산을 열지 않고 sink만
+새 Attempt에서 재개했다. 장치는 각각1회 연결을 유지했다. 모든 시험 소유 자원의 잔여 수는0이다.
+
+소스b144c8b CI37157334661은 scaffold/runner 성공, storage 실패, images/gitops skipped다.
+실패한 공유 VD 재시도 시험의 원인은 아직 확정하지 않았다. 아래 VD drain 실패 분류 결함과
+같은 원인이라고 판단하지 않으며, 다음 CI에는 비밀값을 제외한 대기 단계·호출 위치·작업 상태를 남긴다.
 
 DB 시험의 Pod 신원·프로세스 종료 보고·broker/S3 receipt는 명시적 fixture다. 그룹 retry 시험은
 새 Runner가 `HANDOVER`를 요구하고 원본 체크포인트를 보존하는 경계까지 검증한다. 새 VD의
@@ -62,10 +80,14 @@ chain37이며 합성 입력이다. API Pod 교체 중에도 VD Pod·자식 프�
 전체 작업 종료 후 빈 자식 디렉터리/닫힌 slot과 아직 살아 있는 supervisor를 확인하고, 공개 drain
 뒤 Pod/claim 제거를 확인한다. 이 시험은 현재 JAR SHA
 `1a2eec760f3d49d61fc88b098904413b9a227abe67efca749f7937948c9e9616`을 기존 CI 이미지의
-JRE에서 실행했다. 새 API 이미지 자체의 검증은 후속 CI17개 기본 게이트다.
+JRE에서 실행했다. 후속 VD 교체/최종 처리3개를 포함해 새 API 이미지 자체의 CI 기본 게이트는20개다.
 
 ## 시험으로 발견한 수정
 
+- 실제 공개 VD 교체 중 supervisor가 자식을 종료하면 자식은 `CANCELLED`를 보고할 수 있다.
+  이를 사용자 취소로 분류하면 `RUNTIME_LOST` 재시도가 발동하지 않아 스트림이 종료됐다.
+  drain 중인 VD 실행의 해당 보고만 `RUNTIME_LOST`로 정규화했다. 실제 사용자 Run 취소는
+  기존 producer 차단을 유지한다. 수정 후 전체 PG220개와 실제 Kubernetes 교체/복구3개가 통과했다.
 - 최초 컴파일의 Result accessor/와일드카드 List 검증 오류를 실제 타입에 맞췄다.
 - 재시도 fixture가 인계 없이 새 체크포인트를 삽입해 DB 제약에 거절됐다. 제약을 유지하고
   `HANDOVER` 요구와 원본 보존을 확인하도록 시험을 수정했다. 취소 경로에는 실제 production
@@ -89,6 +111,6 @@ V32 SHA-256: `222fcd6f35d8e7af131511a2b735cdd0f3ede38ff3e2386d4ec0e5bd58ad03d3`.
 
 ## 남은 수용 범위
 
-VD supervisor Pod 자체 교체 뒤 스트림 복원과 VD 최종 처리 실패의 실제 Kubernetes 수용,
-새 이미지 CI/배포가 남는다. 실제 자식 프로세스 교체 성공을 VD Pod 교체 성공으로 해석하지 않는다.
+VD supervisor Pod 교체·유실 뒤 복원과 VD 최종 처리 실패의 실제 Kubernetes 수용은 위3개로
+확인했다. 선행 CI의 공유 VD 재시도 실패 원인 확인과 새 수정의 이미지 CI/배포는 남는다.
 Remote STREAM, VD 그룹 전환, 외부 장치 수용 및 M5 잔여/M8–M10도 남는다.

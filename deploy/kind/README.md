@@ -62,10 +62,14 @@ API에는 CA·bearer만, 제공자에는 별도 Secret의 TLS key·bearer를 마
 API/S3/MQTT 모두 TLS 인증서를 검증한다. 실패하면 API/화면 이미지 발행으로 진행하지 않는다.
 비밀을 포함하지 않는 `.tools/kind-stream.json`만 기존 이미지 검증 artifact에 추가한다.
 
-기본 스트림 게이트는 기존11개와 VD6개를 함께 실행한다. VD는 같은 Pod의 두 자식, 서로 다른 VD,
+기본 스트림 게이트는 기존11개와 VD9개, 총20개를 함께 실행한다. VD는 같은 Pod의 두 자식, 서로 다른 VD,
 VD→Node→VD, API 교체, 같은/다른 VD 자식의 실제 SIGKILL 후 그룹 상태 복원, 취소를 포함한다.
 Task 전용 Job과 VD supervisor Pod를 따로 관측하고 실제 자식 종료·slot 회수·고정 S3 결과28/37을
 대조한다. VD별 drain 뒤 Pod/claim이 없어야 통과하며 실패 시에도 격리 DB에서 확인한 소유 VD만 정리한다.
+추가3개는 실행 중 공개 VD 교체, sink VD Pod 유실 뒤 재생성과 그룹 상태 복원,
+공동 완료 허가 뒤 자식 실패 시 기존 허가/체크포인트를 유지한 최종 처리 복구다.
+교체는 이전 supervisor 종료 후 다음 세대를 생성하는 순서를 검사하고, 최종 처리 복구는
+이미 완료한 peer Result를 유지하며 새 스트림 계산을 시작하지 않는지 확인한다.
 
 이 새 게이트의 실제 kind 통과 여부는 [M7 증거](../../docs/evidence/m7-kubernetes-stream.md)를 따른다.
 현재 JAR를 사용한 기존 클러스터 시험 성공이 새 빌드 이미지/CI의 완료를 대신하지 않는다.

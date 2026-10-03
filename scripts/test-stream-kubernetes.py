@@ -572,7 +572,7 @@ with response: print(response.status)
                                 for (name, uid), held_run in list(held_jobs.items()):
                                     if held_run == run:
                                         hold_job(name, uid, run, False)
-                        elif phase.endswith('-finalizer-granted'):
+                        elif phase.endswith('-finalizer-granted') and current['case'] not in VD_CASES:
                             sink = str(uuid.UUID(current['tasks']['sink']))
                             owned = resources(run)
                             pod = next(p for p in owned if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink)
@@ -592,7 +592,7 @@ with response: print(response.status)
                                 'checkpointIds': query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines()}
                             call(['delete', '--raw', '/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' + jm['name'], '-f', '-'],
                                 {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground', 'preconditions': {'uid': jm['uid']}})
-                        elif phase.endswith('-finalizer-restoring'):
+                        elif phase.endswith('-finalizer-restoring') and current['case'] not in VD_CASES:
                             fault = snapshot['finalizerFault'];old_attempt = fault['oldAttemptId']
                             sink = str(uuid.UUID(current['tasks']['sink']))
                             candidates = [p for p in resources(run) if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink

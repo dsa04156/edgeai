@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+현재 M7 다중 장치 DAG/스트리밍을 진행한다. M0–M4·M6 완료, M5 잔여/M8–M10 미완료다.
+후속 실제 Kubernetes의 VD 교체·Pod 유실 복구·최종 처리 복구3개/VD10Pods/S3결과9개를
+통과했다(222247Z-bfb805ce). 교체 중 자식의 CANCELLED 보고를 사용자 취소로 취급하던
+문제를 RUNTIME_LOST로 분류하도록 수정했다. 전체 PG220개도 PASS(222557Z-1fe8caf0)다.
+소스b144c8b CI37157334661은 storage 실패, scaffold/runner 성공, images/gitops skipped다.
+CI의 공유 VD 재시도 실패 원인은 미확정이며 로컬 전체 저장소45개는 PASS다. 새 수정의
+이미지·CI·배포 확인은 남는다. 아래는 선행 단계별 검증 기록이다.
+
 ADR0055/V31–V32 VD STREAM의 서버·DB·Swagger·UI를 구현했다. 자기 VD→Device→Run
 잠금·다른 VD 공동 완료·같은 Pod의 Attempt/토큰 분리·그룹 용량 거절·실제 자식 종료 보고 뒤
 재시도/취소와 완료 허가 뒤 VD 최종 처리 복구를 실제 PG 시험으로 확인했다.

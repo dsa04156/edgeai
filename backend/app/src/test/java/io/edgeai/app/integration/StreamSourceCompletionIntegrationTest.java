@@ -502,8 +502,10 @@ class StreamSourceCompletionIntegrationTest {
         var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/vd_stream_probe.py",folder.toString());
         builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));
         var driver=builder.redirectOutput(folder.resolve("probe.log").toFile()).redirectError(folder.resolve("probe-error.log").toFile()).start();
+        String phase="CONNECT";
         try{
             until(()->Files.exists(folder.resolve("first-sent")) || !driver.isAlive());assertThat(driver.isAlive()).as("VD stream sources connected").isTrue();
+            phase="FIRST_CHECKPOINT";
             until(()->stateCheckpoint(tasks.get("root"),9) && stateCheckpoint(tasks.get("sink"),9));
             assertThat(executions.attempts(tasks.get("report"))).isEmpty();
             for(String name:List.of("root","sink")){
@@ -512,18 +514,21 @@ class StreamSourceCompletionIntegrationTest {
                 assertThat(vdAllocations.byRuntime(r.id()).orElseThrow().open()).isTrue();
             }
             if(cancel){
+                phase="CANCEL";
                 runs.cancelRun(run,"{}");Files.writeString(folder.resolve("cancelled"),"");
                 until(()->executions.run(run,false).orElseThrow().state().equals("CANCELLED"));
                 tasks.values().forEach(id->assertThat(runtimes.result(id)).isEmpty());assertThat(executions.attempts(tasks.get("report"))).isEmpty();
             }else{
                 if(recovery){
+                    phase="OLD_CHILD_EXIT";
                     lifecycle.observeFailure(executions.attempts(tasks.get("sink")).getFirst().id(),"RUNTIME_LOST");
                     var old=new HashMap<String,StreamCheckpoint>();for(String name:List.of("root","sink"))old.put(name,checkpoints.latest(tasks.get(name)).orElseThrow());
                     assertThat(lifecycle.retryTask(tasks.get("root"))).isFalse();Files.writeString(folder.resolve("fault-injected"),"");
                     // Only actual supervisor completion polls close the old slots; no confirmStopped fixture here.
                     until(()->old.values().stream().allMatch(cp->runtimes.runtime(cp.runtimeId()).orElseThrow().observedState().equals("TERMINATED")
                         && !vdAllocations.byRuntime(cp.runtimeId()).orElseThrow().open()));
-                    until(()->lifecycle.retryTask(tasks.get("root")));
+                    phase="RETRY";until(()->lifecycle.retryTask(tasks.get("root")));
+                    phase="HANDOVER";
                     until(()->old.entrySet().stream().allMatch(entry->{
                         var next=executions.attempts(tasks.get(entry.getKey())).getFirst();
                         return checkpoints.byAttemptSerial(next.id(),entry.getValue().request().serial()+1).isPresent();
@@ -538,8 +543,10 @@ class StreamSourceCompletionIntegrationTest {
                     }
                     Files.writeString(folder.resolve("restored"),"");
                 }else Files.writeString(folder.resolve("first-verified"),"");
+                phase="SECOND_CHECKPOINT";
                 until(()->stateCheckpoint(tasks.get("root"),14) && stateCheckpoint(tasks.get("sink"),shared?14:23));
                 Files.writeString(folder.resolve("second-verified"),"");
+                phase="RESULT";
                 until(()->executions.run(run,false).orElseThrow().state().equals("SUCCEEDED"));
                 for(String name:tasks.keySet()){
                     var result=runtimes.result(tasks.get(name)).orElseThrow();var expected=targets.get(name).runtime();
@@ -556,11 +563,11 @@ class StreamSourceCompletionIntegrationTest {
                 var a=completions.task(executions.attempts(tasks.get("root")).getFirst().id()).orElseThrow();
                 var b=completions.task(executions.attempts(tasks.get("sink")).getFirst().id()).orElseThrow();assertThat(a.grantedAt()).isNotNull().isEqualTo(b.grantedAt());
             }
-            assertThat(driver.waitFor(15,TimeUnit.SECONDS)).isTrue();
+            phase="DRIVER_EXIT";assertThat(driver.waitFor(15,TimeUnit.SECONDS)).isTrue();
             assertThat(driver.exitValue()).as("VD device driver: %s",Files.readString(folder.resolve("probe.log"))).isZero();
             assertThat(Files.readString(folder.resolve("probe.log"))).isEqualTo(cancel?"VD_STREAM_CANCELLED\n":recovery?"VD_STREAM_RECOVERED\n":"VD_STREAM_PASS\n");
             assertThat(Files.size(folder.resolve("probe-error.log"))).isZero();
-            until(()->supervisors.values().stream().allMatch(s->vdAllocations.open(s.runtime().id()).isEmpty()));
+            phase="CLEANUP";until(()->supervisors.values().stream().allMatch(s->vdAllocations.open(s.runtime().id()).isEmpty()));
             until(()->routeStore.forRun(run,20,0).stream().noneMatch(r->routeStore.open(r.id()).isPresent()));
             assertThat(routeStore.forRun(run,20,0)).allMatch(r->routeStore.history(r.id(),20,0).size()==(recovery?2:1));
             for(var s:supervisors.values()){
@@ -568,6 +575,19 @@ class StreamSourceCompletionIntegrationTest {
                 assertThat(s.process().waitFor(10,TimeUnit.SECONDS)).isTrue();assertThat(s.process().exitValue()).isZero();
                 try(var paths=Files.list(s.folder().resolve("work/attempts"))){assertThat(paths.count()).isZero();}
             }
+        }catch(Exception|AssertionError error){
+            var states=new TreeMap<String,Object>();
+            for(var item:tasks.entrySet()){
+                var attempts=executions.attempts(item.getValue());var a=attempts.isEmpty()?null:attempts.getFirst();
+                var r=a==null?null:runtimes.byAttempt(a.id()).orElse(null);var cp=checkpoints.latest(item.getValue()).orElse(null);
+                states.put(item.getKey(),Map.of("task",executions.task(item.getValue()).orElseThrow().state(),"attempts",attempts.size(),
+                    "runtime",r==null?"NONE":r.desiredState()+"/"+r.observedState(),"reason",r==null || r.failureReason()==null?"NONE":r.failureReason(),
+                    "checkpointSerial",cp==null?-1:cp.request().serial()));
+            }
+            var lines=Files.readAllLines(folder.resolve("probe.log")).stream().filter(s->s.matches("VD_STREAM_[A-Za-z0-9_ .,:-]+") && s.length()<2000).toList();
+            System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,
+                "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines)));
+            throw error;
         }finally{if(driver.isAlive()){driver.destroy();if(!driver.waitFor(5,TimeUnit.SECONDS)){driver.destroyForcibly();assertThat(driver.waitFor(5,TimeUnit.SECONDS)).isTrue();}}}
     }
     @Test void actualSharedVdChildrenCompleteFanoutAndReleaseVerifiedBatch()throws Exception{vdStreams(true,false,false);}

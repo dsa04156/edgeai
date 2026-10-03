@@ -351,6 +351,10 @@ public class RuntimeLifecycleService {
             throw new IllegalArgumentException("Unknown Runner failure code");
         var c=lock(attemptId);var r=runtime(attemptId);
         if(r.remote())throw fenced();
+        // A draining supervisor stops its children before its lease/deadline elapses. This is
+        // runtime loss, not a user Task cancellation (which already fences producer authority).
+        if(r.vd() && reason.equals("CANCELLED") && vdTasks.byRuntime(r.id())
+                .map(a->vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().drainDeadline()!=null).orElse(false))reason="RUNTIME_LOST";
         if(c.attempt().state().equals("FAILED") && r.epoch()==epoch && Objects.equals(r.producerPodUid(),podUid) && Objects.equals(r.failureReason(),reason))return;
         producer(c,r,epoch,podUid);recordFailure(c,r,reason);
     }

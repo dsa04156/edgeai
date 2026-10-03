@@ -21,8 +21,12 @@ class VDStreamObserver:
                 status = pod.get('status', {}).get('containerStatuses', [])
                 if not status or not status[0].get('imageID'):
                     continue
-                assert meta['uid'] == runtime['podUid'] and meta['labels']['edgeai.io/vd-runtime-id'] == runtime['id']
                 assert meta['labels']['app.kubernetes.io/managed-by'] == 'edgeai-vd-controller'
+                if meta['uid'] != runtime['podUid'] and current['case'] in ('vd-shared-replace', 'vd-distinct-pod-recover'):
+                    # The driver still reports the prior phase while awaiting public replacement readiness.
+                    # The next checkpoint barrier must identify and validate the new generation explicitly.
+                    continue
+                assert meta['uid'] == runtime['podUid'] and meta['labels']['edgeai.io/vd-runtime-id'] == runtime['id']
                 assert status[0]['imageID'].endswith('@' + self.digest) and status[0]['restartCount'] == 0
                 assert spec['serviceAccountName'] == 'edgeai-runner' and spec['automountServiceAccountToken'] is False
                 container = spec['containers'][0]
@@ -79,7 +83,7 @@ print(json.dumps({'counts':{a:len(ids) for a,ids in found.items()},'killed':bool
                 assert self.processes(self.pods[pod_uid], ids)['counts'] == dict.fromkeys(ids, 1)
             if name.startswith('vd-shared'):
                 assert len(children) == 1 and len(next(iter(children.values()))) == 2
-            proof.update(initialAttempts=attempts, children=children, actualChildProcesses=sum(map(len, children.values())))
+            proof.update(initialAttempts=attempts, children=children, actualChildProcesses=sum(map(len, children.values())), initialVdTargets=current['vdTargets'])
             if name == 'vd-distinct':
                 before = sorted(self.pods[p['podUid']]['runtimeId'] for p in current['vdTargets'].values())
                 proof['apiRestart'] = self.restart()
@@ -88,20 +92,79 @@ print(json.dumps({'counts':{a:len(ids) for a,ids in found.items()},'killed':bool
                 for pod_uid, ids in children.items():
                     assert self.processes(self.pods[pod_uid], ids)['counts'] == dict.fromkeys(ids, 1)
                 proof['apiRestart']['childrenPreserved'] = True
-            if name.endswith('-recover'):
+            if name.endswith('-pod-recover'):
+                runtime = current['vdTargets'][current['taskExecutions']['sink']['vdId']]
+                pod = self.pods[runtime['podUid']]
+                actual = next(p for p in self.resources(pod['vdId']) if p['kind'] == 'Pod' and p['metadata']['uid'] == runtime['podUid'])
+                assert actual['metadata']['labels']['edgeai.io/vd-runtime-id'] == runtime['id']
+                self.call(['delete', '--raw', '/api/v1/namespaces/edgeai-runtimes/pods/' + pod['name'], '-f', '-'],
+                          {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': runtime['podUid']}})
+                proof['deletedPodUid'] = runtime['podUid']
+            elif name.endswith('-recover'):
                 pod_uid = next(p for p, ids in children.items() if attempts['sink'] in ids)
                 proof['childFault'] = self.processes(self.pods[pod_uid], [attempts['sink']], attempts['sink'])
                 assert proof['childFault']['killed']
         elif phase.endswith('-recovered'):
             old = ','.join("'" + str(uuid.UUID(v)) + "'" for v in proof['initialAttempts'].values())
             rows = self.query('SELECT r.desired_state,r.observed_state,a.close_reason FROM edgeai.runtime_instance r JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id WHERE r.attempt_id IN(' + old + ')').splitlines()
-            assert rows == ['STOPPED|TERMINATED|PROCESS_EXIT'] * 2
+            assert len(rows) == 2 and all(r in ('STOPPED|TERMINATED|PROCESS_EXIT', 'STOPPED|TERMINATED|POD_GONE') for r in rows)
+            if name not in ('vd-shared-replace', 'vd-distinct-pod-recover'):
+                assert rows == ['STOPPED|TERMINATED|PROCESS_EXIT'] * 2
             assert self.query("SELECT count(*) FROM edgeai.stream_checkpoint c JOIN edgeai.stream_checkpoint old ON old.id=c.handover_from_id WHERE c.run_id='" + run + "' AND c.serial=old.serial+1 AND c.state_revision=old.state_revision AND c.summary_json->>'stateSha256'=old.summary_json->>'stateSha256' AND c.object_key<>old.object_key") == '2'
             generations = ','.join("'" + str(uuid.UUID(r['generation']['id'])) + "'" for r in current['routes'])
             assert int(self.query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + generations + ') AND closed_at IS NOT NULL')) == len(current['routes'])
             for pod_uid, ids in proof['children'].items():
-                assert self.processes(self.pods[pod_uid], ids)['counts'] == dict.fromkeys(ids, 0)
+                pod = self.pods[pod_uid]
+                if any(p['kind'] == 'Pod' and p['metadata']['uid'] == pod_uid for p in self.resources(pod['vdId'])):
+                    assert self.processes(pod, ids)['counts'] == dict.fromkeys(ids, 0)
+                else:
+                    assert name in ('vd-shared-replace', 'vd-distinct-pod-recover')
+            if name in ('vd-shared-replace', 'vd-distinct-pod-recover'):
+                before, after = current['replacement']['before'], current['replacement']['after']
+                assert before == proof['initialVdTargets'][current['taskExecutions']['sink']['vdId']]
+                assert after['podUid'] in self.pods and self.pods[after['podUid']]['runtimeId'] == after['id']
+                assert not any(p['metadata']['uid'] == before['podUid'] for p in self.resources(self.pods[after['podUid']]['vdId']))
+                assert self.query("SELECT count(*) FROM edgeai.vd_runtime old JOIN edgeai.vd_runtime new ON new.vd_id=old.vd_id WHERE old.id='" + str(uuid.UUID(before['id'])) + "' AND new.id='" + str(uuid.UUID(after['id'])) + "' AND old.observed_state='TERMINATED' AND old.updated_at<=new.created_at AND new.generation=old.generation+1") == '1'
+                proof.update(replacement=current['replacement'], oldSupervisorPhysicallyGone=True, nextGenerationAfterTermination=True)
             proof.update(oldChildrenExited=True, oldGenerationsClosed=True, verifiedStateHandovers=2)
+        elif phase.endswith('-finalizer-granted'):
+            attempt = str(uuid.UUID(proof['initialAttempts']['sink']))
+            runtime = current['vdTargets'][current['taskExecutions']['sink']['vdId']]
+            pod = self.pods[runtime['podUid']]
+            folder = '/work/attempts/' + attempt
+            wait(lambda: self.call(['-n', 'edgeai-runtimes', 'exec', pod['name'], '--', 'python3', '-c',
+                "from pathlib import Path;print(int(Path('" + folder + "/finalizer-entered').exists()))"]).strip() == b'1', 90, 'Original VD finalizer did not enter')
+            grant = self.query("SELECT checkpoint_id,granted_at FROM edgeai.stream_task_completion WHERE attempt_id='" + attempt + "' AND granted_at IS NOT NULL")
+            assert grant and self.query("SELECT count(*) FROM edgeai.task_result WHERE task_id='" + str(uuid.UUID(current['tasks']['sink'])) + "'") == '0'
+            proof['finalizer'] = {'oldAttemptId': attempt, 'grant': grant, 'preservedResultId': current['preservedResult']['id'],
+                'checkpointIds': self.query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines()}
+            proof['finalizer']['childFault'] = self.processes(pod, [attempt], attempt)
+        elif phase.endswith('-finalizer-restoring'):
+            fault = proof['finalizer']
+            task = str(uuid.UUID(current['tasks']['sink']))
+            attempt = wait(lambda: self.query("SELECT id FROM edgeai.task_attempt WHERE task_id='" + task + "' AND number=2 AND state='RUNNING'"), 90, 'New VD finalizer did not claim')
+            attempt = str(uuid.UUID(attempt))
+            runtime = current['vdTargets'][current['taskExecutions']['sink']['vdId']]
+            pod = self.pods[runtime['podUid']]
+            folder = '/work/attempts/' + attempt
+            def entered():
+                flags = self.call(['-n', 'edgeai-runtimes', 'exec', pod['name'], '--', 'python3', '-c',
+                    "from pathlib import Path;p=Path('" + folder + "');print(int((p/'finalizer-entered').exists()),int((p/'stream').exists()))"]).strip()
+                if flags.startswith(b'0 '): return False
+                assert flags == b'1 0', 'Finalizer retry opened a stream computation directory'
+                return True
+            wait(entered, 90, 'Restored VD finalizer did not enter')
+            old = fault['oldAttemptId']
+            assert self.query("SELECT desired_state,observed_state FROM edgeai.runtime_instance WHERE attempt_id='" + old + "'") == 'STOPPED|TERMINATED'
+            assert self.processes(pod, [old, attempt])['counts'] == {old: 0, attempt: 1}
+            assert self.query("SELECT predecessor_attempt_id,granted_attempt_id FROM edgeai.stream_finalization_recovery WHERE attempt_id='" + attempt + "'") == old + '|' + old
+            assert self.query("SELECT checkpoint_id,granted_at FROM edgeai.stream_task_completion WHERE attempt_id='" + old + "'") == fault['grant']
+            assert self.query("SELECT count(*) FROM edgeai.stream_task_completion WHERE attempt_id='" + attempt + "'") == '0'
+            assert self.query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines() == fault['checkpointIds']
+            assert self.query("SELECT count(*) FROM edgeai.route_generation WHERE run_id='" + run + "'") == '3'
+            assert self.query("SELECT count(*) FROM edgeai.route_generation WHERE run_id='" + run + "' AND generation=1 AND closed_at IS NOT NULL") == '3'
+            fault.update(newAttemptId=attempt, oldRuntimeStopped=True, originalGrantPreserved=True, checkpointHistoryPreserved=True, newComputationOpened=False)
+            self.call(['-n', 'edgeai-runtimes', 'exec', pod['name'], '--', 'touch', folder + '/finalizer-release'])
         elif phase.endswith('-children-exited'):
             wait(lambda: self.query("SELECT count(*) FROM edgeai.vd_task_allocation a JOIN edgeai.runtime_instance r ON r.id=a.runtime_id WHERE r.run_id='" + run + "' AND a.closed_at IS NULL") == '0', 90, 'Actual VD children did not exit')
             for runtime in current['vdTargets'].values():

@@ -3,13 +3,15 @@ from contextlib import ExitStack
 import json
 import uuid
 
-CASES = ('vd-shared', 'vd-distinct', 'vd-mixed', 'vd-shared-recover', 'vd-distinct-recover', 'vd-shared-cancel')
+CASES = ('vd-shared', 'vd-distinct', 'vd-mixed', 'vd-shared-recover', 'vd-distinct-recover', 'vd-shared-cancel',
+         'vd-shared-replace', 'vd-distinct-pod-recover', 'vd-finalizer')
 
 
 def run_case(c, name):
     assert name in CASES
     c.csrf = c.request('csrf')['token']
-    shared, recover, cancel = name.startswith('vd-shared'), name.endswith('-recover'), name.endswith('-cancel')
+    shared, recover, cancel = name.startswith('vd-shared'), name.endswith('-recover') or name.endswith('-replace'), name.endswith('-cancel')
+    replace, pod_fault, finalize = name.endswith('-replace'), name.endswith('-pod-recover'), name == 'vd-finalizer'
     prefix = 'vd-stream-' + uuid.uuid4().hex
     request, wait = c.request, c.wait
 
@@ -32,6 +34,8 @@ def run_case(c, name):
         elif task == 'sink':
             spec['stream']['inputs'] = {'input': {'mediaType': 'application/json', 'maxPayloadBytes': 262144}}
             spec['stream']['outputs'] = {}
+            if finalize:
+                spec['command'] = ['python3', '-c', c.config['finalizerCommand']]
         profiles[task] = publish('SERVICE', task, spec)
     targets, vds = {}, {}
     for task in ('root', 'sink', 'report'):
@@ -78,8 +82,9 @@ def run_case(c, name):
         'dependencies': [{'fromTask': f, 'toTask': t, 'fromPort': fp, 'toPort': tp, 'mode': m} for f, t, fp, tp, m in edges]}, 201)
     body = {'workflowVersionId': version['id'], 'execution': targets['root'], 'taskExecutions': {k: v for k, v in targets.items() if k != 'root'},
             'parameters': {}, 'streamInputs': inputs}
-    if recover:
-        body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['WORKLOAD_FAILED']}
+    if recover or finalize:
+        body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600,
+                         'retryOn': ['WORKLOAD_FAILED', 'RUNTIME_LOST'] if replace or pod_fault else ['WORKLOAD_FAILED']}
     run = request('workflow-runs', 'POST', body, 201, str(uuid.uuid4()))
     c.active = run['id']
     task_ids = {t['key']: t['id'] for t in request('workflow-runs/' + c.active)['tasks']}
@@ -128,6 +133,25 @@ def run_case(c, name):
         assert not request('tasks/' + task_ids['report'])['attempts']
         barrier('first', tick, expectedStates={'root': 9, 'sink': 9})
         if recover:
+            if replace or pod_fault:
+                identity = targets['sink']['vdId']
+                before = dict(vds[identity])
+                if pod_fault:
+                    wait(lambda: request('virtual-devices/' + identity + '/execution')['current'] is None, tick)
+                action = 'replace' if replace else 'provision'
+                vd = request('virtual-devices/' + identity)['vd']
+                operation = request('virtual-devices/' + identity + '/' + action, 'POST', {'revision': vd['revision']}, 202, str(uuid.uuid4()))
+
+                def replaced():
+                    op = request('operations/' + operation['id'])
+                    assert op['state'] not in ('FAILED', 'SUPERSEDED')
+                    runtime = request('virtual-devices/' + identity + '/execution')['current']
+                    return runtime if runtime and runtime['ready'] and op['state'] == 'SUCCEEDED' else None
+
+                after = wait(replaced, tick)
+                assert after['generation'] == before['generation'] + 1 and after['podUid'] != before['podUid'] and after['id'] != before['id']
+                current['replacement'] = {'operation': operation['id'], 'action': action, 'before': before, 'after': after}
+                vds[identity] = after
             wait(lambda: all(o.ready and o.connections == 2 for o in owners.values()), tick)
             assert all(value.checkpoint() == checkpoints[key] for key, value in owners.items())
             attempts = {}
@@ -159,6 +183,11 @@ def run_case(c, name):
             barrier('second', tick, expectedStates={'root': 14, 'sink': 14 if shared else 23})
             for port, owner in owners.items():
                 owner.emit([c.Emission(route, b'', None, 'END') for route in route_ids[port]])
+            if finalize:
+                wait(lambda: request('tasks/' + task_ids['root'] + '/results')['items'] and all(o.completed for o in owners.values()), tick)
+                current['preservedResult'] = request('tasks/' + task_ids['root'] + '/results')['items'][0]
+                barrier('finalizer-granted', tick)
+                barrier('finalizer-restoring', tick)
 
             def finished():
                 state = request('workflow-runs/' + c.active)['run']['state']
@@ -169,7 +198,10 @@ def run_case(c, name):
             results = []
             for key, task in task_ids.items():
                 attempts = sorted(request('tasks/' + task)['attempts'], key=lambda a: a['number'])
-                assert len(attempts) == (2 if recover and key != 'report' else 1) and attempts[-1]['state'] == 'SUCCEEDED'
+                retried = recover and key != 'report' or finalize and key == 'sink'
+                assert len(attempts) == (2 if retried else 1) and attempts[-1]['state'] == 'SUCCEEDED'
+                if retried:
+                    assert attempts[0]['state'] == 'FAILED' and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
                 target = targets[key]
                 assert all(a['mode'] == target['mode'] and a.get('vdId') == target.get('vdId') and a.get('nodeId') == target.get('nodeId') for a in attempts)
                 values = request('tasks/' + task + '/results')['items']
@@ -179,10 +211,13 @@ def run_case(c, name):
                 if target['mode'] == 'VD':
                     runtime = vds[target['vdId']]
                     assert result['vdRuntimeId'] == runtime['id'] and result['producerPodUid'] == runtime['podUid']
+                if finalize and key == 'root':
+                    assert result == current['preservedResult']
                 expected = {'sourceMode': 'SYNTHETIC', 'sum': 28 if shared else 37, 'inputs': {'root': 14, 'sink': 14 if shared else 23}} if key == 'report' else {'sum': 14 if key == 'root' or shared else 23}
                 results.append({'task': key, 'result': result, 'expected': expected})
             current.update(cancelled=False, results=results)
         current['deviceConnections'] = {key: value.connections for key, value in owners.items()}
+        assert all(value.connections == (2 if recover else 1) for value in owners.values())
     wait(lambda: all(r['generation']['closedAt'] for r in request('workflow-runs/' + c.active + '/streams')['items']))
     # The owner verifies exited child processes/closed allocations while VD Pods remain alive.
     barrier('children-exited')
