@@ -18,6 +18,7 @@ import time
 import urllib.request
 import uuid
 from vd_acceptance import VDScenario, wait as vd_wait
+from mixed_remote_acceptance import run_mixed_remote
 
 ROOT = Path(__file__).resolve().parent.parent
 KIND_VERSION = 'v0.33.0'
@@ -220,6 +221,12 @@ def main():
                 scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
                 return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
             scenario.run(restart_vd_api, tasks=True, mixed=True)
+            scenario = VDScenario(context, '.tools/kind-mixed-remote.json', env)
+            def mixed_provider_pod():
+                pods = json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-remote', '-o', 'json']))['items']
+                assert len(pods) == 1 and pods[0]['metadata']['labels'].get('edgeai.io/test-cluster') == name
+                return pods[0]
+            run_mixed_remote(scenario, mixed_provider_pod, restart_vd_api)
             print('Running actual TLS multi-device STREAM/BATCH, group retry, API restart and cancellation acceptance', flush=True)
             source_revision = images['api'].rsplit(':sha-', 1)[1]
             result = subprocess.run(['python3', 'scripts/test-stream-kubernetes.py', '--context', context,

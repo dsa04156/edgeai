@@ -30,6 +30,7 @@ VD 행의 `FOR NO KEY UPDATE`는 변경을 직렬화하면서 불변 ID 외래 �
 | 실제 API/DB·PC/모바일·Swagger | 20261003T202502Z-ea86ef80 | PASS,10개. 혼합 배치의 한국어 설명·최초 대상 필드·STREAM 제한 표시, 실제 CSRF 발행 |
 | 기존 DB V29→V30 업그레이드 | 20261003T202632Z-18d31194 | PASS,기존 Task9,359개의 신원·최초 실행 대상 보존, 성공한 migration30개 |
 | 실제 Kubernetes VD·혼합 DAG | 20261003T201757Z-789c7d16 | PASS,5개/고정 S3결과8개. 서로 다른 VD→NODE→VD의 실제 생산자·지정 Node UID·API 교체·결과3개·소유 자원 정리 |
+| 실제 Kubernetes·Remote 최초 혼합 배치 | 20261003T204108Z-330b498b | PASS,3개/고정 S3결과5개. NODE→REMOTE→NODE·REMOTE→AUTO·혼합 Remote 취소, 실제 TLS 제공자·Pod·S3 입력/결과·API 교체·단일 계산·소유 자원 정리 |
 
 PC/모바일의 새 혼합 입력 및 대기 대상 화면을 원시 디렉터리에 보관했고 실제 이미지를 확인했다.
 실제 Kubernetes 시험은 현재 JAR와 이미 검증된 Runner digest를 사용했다. 혼합 DAG 도중 API Pod를
@@ -40,6 +41,25 @@ kind CI에 연결했다. 아직 새 소스의 이미지·CI·공유 배포 완�
 검증한 JAR SHA-256은 `32f53705cf33661cd4aac82a52990660b19081f54a73f09404c122480a8d3c04`다.
 업그레이드 전후 기존 Task9,359개의 전체 신원·최초 대상 스냅샷을 비교했다. 로컬 V30 Flyway
 checksum은 `1571392355`다. 비공개 snapshot은 로컬에만 보관한다.
+
+## 후속 실제 Remote 혼합 실행
+
+`scripts/test-vd-kubernetes.py --context <context> --mixed-remote`는 현재 JAR를 쓰는 격리 API/DB/S3와
+독립 TLS 참조 제공자 Pod로 새 `mixed_remote_acceptance.py`를 실행한다. 기존 공유 배포나 노드의
+스케줄링 상태를 바꾸지 않는다. 제공자 상태 볼륨은 API 재시작과 독립적이며 실제 제공자 재시작·
+외부 장비 계약 수용은 이 시험에 포함하지 않는다.
+
+- AUTO 기본 Run의 NODE→REMOTE→NODE: 기다리는 작업의 최초 대상을 고정하고 실제 다른
+  생산자의 결과를 BATCH 입력으로 전달한다. Remote 실행 중 API를 교체해 같은 Attempt/allocation과
+  계산1회를 보존한다. Remote가 받은 파일의 크기/SHA와 Node가 받은 고정 S3 version을 각각 대조한다.
+- REMOTE 기본 Run의 REMOTE→AUTO: 하위 AUTO 작업이 기본 Remote binding을 물려받지 않고
+  실제 scheduler/Pod에서 실행된다. 선행 Remote 결과의 고정 S3 입력과 실제 Pod 생산자를 확인한다.
+- NODE 기본 Run의 Remote root 취소: 취소 뒤 API를 교체해 실제 제공자의 CANCELLED·계산1회,
+  하위 Attempt/Result 부재와 Node Job 미생성·자원 정리를 확인한다.
+
+실제 Node Pod3개와 고정 S3파일5개가 계산값8/features[2,1]에 일치했다. 이 새3개는 kind의 기존
+실행/VD/STREAM 게이트에 추가했고 성공·실패 모두 `.tools/kind-mixed-remote.json`을 artifact로
+보존한다. 위 로컬 JAR 결과와 새 이미지/CI/공유 배포 판정은 구분한다.
 
 V30을 최초 격리 DB에 적용한 후 SHA-256은
 `5cd128c280daecc410e86305d0a61036e11fa09de9e0132a5dd82575b9c09835`이다.
@@ -58,5 +78,5 @@ V30을 최초 격리 DB에 적용한 후 SHA-256은
 선행 작업별 AUTO/NODE 코드 `fe32ed8`의 CI37149032705와 이 혼합 배치 변경은 구분한다.
 해당 CI5jobs/원시17개와 GitOpsaabb815의 실제 imageID·Ready/PVCBound/ArgoSynced·V29 적용,
 기존10파일/두PVC 보존은 통과했다. 이 혼합 V30 변경의 새 이미지·배포 증거가 아니다.
-혼합 Remote의 Kubernetes 부분은 아직 fixture이며 실제 Kubernetes↔Remote 작업별 최초
-배치의 종단 시험은 후속이다. 실제 외부 제공자·실장비, STREAM VD/REMOTE, M5 잔여/M8–M10도 남아 있다.
+저장소40개 시험의 Kubernetes 부분은 fixture이며 후속 실제 Kubernetes↔Remote3개와 구분한다.
+새 이미지·CI·공유 배포, 실제 외부 제공자·실장비, STREAM VD/REMOTE, M5 잔여/M8–M10은 남아 있다.

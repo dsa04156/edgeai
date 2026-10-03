@@ -21,7 +21,8 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 ADR0054/V30은 BATCH 작업별 VD/REMOTE 혼합 배치를 추가했다. PG214·실제 저장소40·
 단위105·UI42·계약5/MVC26·실API/DB/Swagger10·기존 Task9,359개 보존을 통과했다.
 실제 Kubernetes VD→NODE→VD·API 교체·고정 S3와 기존 VD 회귀5개/결과8개도 PASS다.
-새 이미지·CI·배포, 혼합 Remote의 실제 Kubernetes 종단, STREAM VD/REMOTE와 외부 수용은 남는다.
+후속 실제 Kubernetes↔Remote 최초 혼합3개/Node Pod3개/S3결과5개·API 교체·취소·계산1회도
+통과했다(204108Z-330b498b). 새 이미지·CI·배포, STREAM VD/REMOTE와 외부 수용은 남는다.
 [혼합 배치 근거](docs/evidence/m7-mixed-task-targets.md)를 따른다.
 선행fe32ed8 CI37149032705의5jobs/원시17개·STREAM11/Pod39/S324와 GitOpsaabb815 실제
 imageID·Ready/PVCBound/ArgoSynced·V29·기존10파일/두PVC 보존은 확인했다.

@@ -34,7 +34,8 @@ ADR0053은 AUTO/NODE Run의 작업별 최초 AUTO/NODE 배치를 연결한다. �
 실API/DB/Swagger10개 및 실제 Kubernetes 전체11개/Pod39개/S324를 통과했다.
 ADR0054는 BATCH 작업별 VD/REMOTE를 연결하고 PG214·실제 저장소40·UI42·실API/Swagger10,
 기존 Task9,359개의 업그레이드 보존과 실제 VD→NODE→VD·API 교체를 검증했다.
-새 게시 이미지/CI/배포, 혼합 Remote의 실제 Kubernetes 종단과 STREAM REMOTE/VD 실행은 남는다.
+후속 실제 Kubernetes의 NODE→REMOTE→NODE·REMOTE→AUTO·혼합 취소3개와 API 교체·독립
+TLS 제공자의 계산1회·고정 S3결과5개도 통과했다. 새 게시 이미지/CI/배포와 STREAM REMOTE/VD 실행은 남는다.
 [작업별 배치 근거](evidence/m7-task-initial-placement.md)와
 [혼합 배치 근거](evidence/m7-mixed-task-targets.md)를 따른다.
 실제 검증 범위는 [공개 재시도 근거](evidence/m7-public-stream-retry.md)와
@@ -100,6 +101,6 @@ dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 �
 현재 JAR 전체9개/Pod31개/S318에서 통과했다. 이미지/CI별 범위는
 [자동 전환 근거](evidence/m7-stream-automatic-offload.md)를 따른다.
 AUTO/NODE 작업별 배치는 ADR0053, BATCH VD/REMOTE 혼합은 ADR0054의 위 범위로 검증했다.
-혼합 Remote의 실제 Kubernetes 종단·STREAM VD/REMOTE 및 실장비 수용은 남는다.
+혼합 Remote의 실제 Kubernetes 종단3개도 통과했으며 STREAM VD/REMOTE 및 실장비 수용은 남는다.
 선행204645f의9개 CI는 자동 취소 driver 실패로 게시/배포되지 않았으며,
 로컬 재통과와 CI 원인 해소를 구분한다.

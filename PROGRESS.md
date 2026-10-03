@@ -7,7 +7,10 @@ PG214·실제 저장소40·단위105·UI42·계약5/MVC26·실API/DB/Swagger10�
 로컬 V29→V30 업그레이드에서 기존 Task9,359개의 신원·최초 대상을 보존했다(202632Z-18d31194).
 실제 Kubernetes의 서로 다른 VD→NODE→VD, API 교체8.416초·고정 S3결과3개와 기존 VD 회귀를
 포함한5개/결과8개 PASS(201757Z-789c7d16). 새 혼합 시나리오는 kind CI에 연결했다.
-새 코드의 이미지/CI/공유 배포, 혼합 Remote의 실제 Kubernetes 종단, STREAM VD/REMOTE와
+후속 실제 Kubernetes↔Remote 최초 혼합3개/Node Pod3개/S3결과5개도 PASS(204108Z-330b498b).
+NODE→REMOTE→NODE·REMOTE→AUTO·혼합 취소, 독립 TLS 제공자 계산1회·고정 입력·API 교체·
+소유 자원 정리를 검증했고 새 kind 게이트와 실패 artifact 보존을 연결했다.
+새 코드의 이미지/CI/공유 배포, STREAM VD/REMOTE와
 외부 수용은 남는다. docs/evidence/m7-mixed-task-targets.md. M5 잔여/M7–M10 전체 미완료 유지.
 
 선행fe32ed8 CI37149032705는5jobs/원시17개·PG212·Runner111/MQTT90·STREAM11개/

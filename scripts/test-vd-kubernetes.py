@@ -12,16 +12,19 @@ from pathlib import Path
 import secrets
 import socket
 import subprocess
+import tempfile
 import time
 import urllib.request
 import uuid
 from vd_acceptance import VDScenario, wait, ROOT
+from mixed_remote_acceptance import run_mixed_remote
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--context', required=True)
     parser.add_argument('--mixed', action='store_true', help='Also verify a chain across two distinct VDs and a real Node Job')
+    parser.add_argument('--mixed-remote', action='store_true', help='Verify only initial Node/Remote chains and cancellation with an owned TLS provider')
     args = parser.parse_args()
     k = ['kubectl', '--context', args.context, '--request-timeout=20s']
     def call(arguments, value=None, raw=None, timeout=40):
@@ -45,7 +48,7 @@ def main():
         current = json.loads(call(['-n', 'edgeai', 'get', kind, name, '--ignore-not-found', '-o', 'json']) or b'null')
         if current is None: return
         assert current['metadata']['uid'] == uid and current['metadata']['labels'].get('edgeai.io/test-id') == root, 'Refusing resource not owned by this invocation'
-        plural = {'pod': 'pods', 'secret': 'secrets', 'service': 'services'}[kind]
+        plural = {'pod': 'pods', 'secret': 'secrets', 'service': 'services', 'configmap': 'configmaps'}[kind]
         call(['delete', '--raw', '/api/v1/namespaces/edgeai/' + plural + '/' + name, '-f', '-'],
              {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': uid}})
         def absent(): return not call(['-n', 'edgeai', 'get', kind, name, '--ignore-not-found', '-o', 'name']).strip()
@@ -90,6 +93,39 @@ def main():
                 'volumeMounts': [{'name': 'data', 'mountPath': '/data'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
             'volumes': [{'name': 'data', 'emptyDir': {}}, {'name': 'tmp', 'emptyDir': {}}]})
         wait(lambda: is_ready(storage_name), 120, 'Isolated versioned storage not ready')
+        remote_name = root + '-remote'
+        if args.mixed_remote:
+            with tempfile.TemporaryDirectory(prefix='remote-tls-', dir=ROOT / '.tools') as directory:
+                cert, key = Path(directory) / 'tls.crt', Path(directory) / 'tls.key'
+                generated = subprocess.run(['openssl', 'req', '-x509', '-nodes', '-newkey', 'rsa:2048', '-days', '1',
+                    '-subj', '/CN=' + remote_name + '.edgeai.svc', '-addext', 'subjectAltName=DNS:' + remote_name + '.edgeai.svc',
+                    '-keyout', str(key), '-out', str(cert)], capture_output=True, timeout=30)
+                assert generated.returncode == 0, 'Owned Remote certificate generation failed; private output suppressed'
+                key.chmod(0o600); token = secrets.token_urlsafe(32)
+                create('Secret', remote_name, stringData={'tls.crt': cert.read_text(), 'tls.key': key.read_text(), 'token': token})
+                create('Secret', remote_name + '-client', stringData={'ca.crt': cert.read_text(), 'token': token})
+                del token
+            create('ConfigMap', remote_name + '-code', data={
+                'remote_server.py': (ROOT / 'simulator/remote_server.py').read_text(),
+                'remote-provider.py': (ROOT / 'deploy/kind/remote-provider.py').read_text()})
+            create('Service', remote_name, spec={'selector': {'edgeai.io/test-resource': remote_name}, 'ports': [{'name': 'https', 'port': 8443, 'targetPort': 8443}]})
+            remote = create('Pod', remote_name, spec={'restartPolicy': 'Never', 'automountServiceAccountToken': False,
+                'nodeSelector': {'kubernetes.io/arch': 'amd64'},
+                'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
+                'containers': [{'name': 'provider', 'image': 'ghcr.io/dsa04156/edgeai-runner@' + pin['runnerDigest'],
+                    'command': ['python3', '/opt/probe/remote-provider.py'],
+                    'args': ['--state-dir', '/data/provider', '--token-file', '/var/run/remote/token', '--cert-file', '/var/run/remote/tls.crt', '--key-file', '/var/run/remote/tls.key'],
+                    'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
+                    'resources': {'requests': {'cpu': '50m', 'memory': '64Mi'}, 'limits': {'cpu': '1', 'memory': '256Mi'}},
+                    'readinessProbe': {'tcpSocket': {'port': 8443}, 'periodSeconds': 2},
+                    'volumeMounts': [{'name': 'code', 'mountPath': '/opt/probe', 'readOnly': True}, {'name': 'identity', 'mountPath': '/var/run/remote', 'readOnly': True}, {'name': 'data', 'mountPath': '/data'}]}],
+                'volumes': [{'name': 'code', 'configMap': {'name': remote_name + '-code'}},
+                            {'name': 'identity', 'secret': {'secretName': remote_name, 'defaultMode': 288}}, {'name': 'data', 'emptyDir': {}}]})
+            wait(lambda: is_ready(remote_name), 120, 'Owned TLS Remote provider not ready')
+            def provider_pod():
+                current = read(['-n', 'edgeai', 'get', 'pod', remote_name, '-o', 'json'])
+                assert current['metadata']['uid'] == remote['metadata']['uid'] and current['metadata']['labels'].get('edgeai.io/test-id') == root
+                return current
         api_spec = {'restartPolicy': 'Never', 'serviceAccountName': 'edgeai-control-plane', 'automountServiceAccountToken': True, 'nodeSelector': {'kubernetes.io/arch': 'amd64'},
             'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
             'containers': [{'name': 'api', 'image': api_image, 'command': ['sh', '-c', 'while [ ! -f /tmp/start ]; do sleep 0.2; done; exec java -XX:MaxRAMPercentage=75.0 -jar /tmp/current-api.jar'],
@@ -105,6 +141,12 @@ def main():
                 'readinessProbe': {'httpGet': {'path': '/actuator/health/readiness', 'port': 18080}, 'periodSeconds': 2},
                 'volumeMounts': [{'name': 'work', 'mountPath': '/tmp'}, {'name': 'identity', 'mountPath': '/var/run/edgeai-test', 'readOnly': True}]}],
             'volumes': [{'name': 'work', 'emptyDir': {}}, {'name': 'identity', 'secret': {'secretName': root, 'defaultMode': 288, 'items': [{'key': 'signing.key', 'path': 'signing.key'}]}}]}
+        if args.mixed_remote:
+            api_spec['containers'][0]['env'].extend([
+                env('EDGEAI_REMOTE_ENABLED', 'true'), env('EDGEAI_REMOTE_URL', 'https://' + remote_name + '.edgeai.svc:8443'),
+                env('EDGEAI_REMOTE_TOKEN_FILE', '/var/run/edgeai-remote/token'), env('EDGEAI_REMOTE_CA_FILE', '/var/run/edgeai-remote/ca.crt')])
+            api_spec['containers'][0]['volumeMounts'].append({'name': 'remote-client', 'mountPath': '/var/run/edgeai-remote', 'readOnly': True})
+            api_spec['volumes'].append({'name': 'remote-client', 'secret': {'secretName': remote_name + '-client', 'defaultMode': 288}})
         def start_api():
             pod = create('Pod', api_name, spec=api_spec)
             wait(lambda: is_running(api_name), 120, 'Isolated API container not running')
@@ -136,7 +178,11 @@ def main():
             fresh_uid = start_api(); assert fresh_uid != old_uid; current_api_uid = fresh_uid
             scenario.origin = forward()
             return {'kind': 'actual-kubernetes-api-pod', 'oldUid': old_uid, 'newUid': fresh_uid, 'jarSha256': jar_hash, 'databasePodPreserved': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-        scenario.run(restart, tasks=True, mixed=args.mixed)
+        if args.mixed_remote:
+            scenario.report_path = ROOT / '.tools/mixed-remote-kubernetes.json'
+            run_mixed_remote(scenario, provider_pod, restart)
+        else:
+            scenario.run(restart, tasks=True, mixed=args.mixed)
     except BaseException:
         for kind, name, uid in records:
             if kind != 'pod': continue

@@ -259,6 +259,7 @@ jobs:
             docs/evidence/runs/
             .tools/kind-runtime.json
             .tools/kind-vd.json
+            .tools/kind-mixed-remote.json
             .tools/kind-stream.json
             .tools/kind-stream-broker.json
             .tools/kind-stream-minio-tls.json
