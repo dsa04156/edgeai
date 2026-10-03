@@ -18,6 +18,17 @@
 | M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
+ADR0056/V33의 VD STREAM 그룹 수동 NODE 전환을 구현했다. 동료 VD 유지·전체 종료/회수 장벽·
+마지막 VD claim·Swagger/UI를 연결했다. PG223·단위105·실제 저장소47·UI46·실API/Swagger10,
+V33 업그레이드의 기존 Task9,371개 보존과 실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S36개를
+통과했다. 후속 대기 중 API 교체·전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS다
+(232628Z-8d401390). 새24개 기본 게이트의 CI·배포는 후속 확인한다.
+[VD 그룹 전환 근거](docs/evidence/m7-vd-stream-group-offload.md)를 따른다.
+
+아래는 선행 VD STREAM 구현·검증 이력이다.
+소스415a1ce CI37159106124의5jobs/원시17개·STREAM20/Node40·VD24/S348을 감사했고,
+GitOps2227a91의 실제 이미지·Ready/PVC·ArgoSynced·기존 파일10개/두PVC 보존도 확인했다.
+이 배포 판정은 V31–V32이며 아래 b144의 CI 실패 원인이 해소됐다는 주장은 아니다.
 ADR0055/V31–V32의 VD STREAM 제어·동시 실행 용량·권한·그룹/최종 처리 재시도를 연결했다.
 PG219·새 VD5개를 포함한 STREAM/route53개·단위105·기존 실제 저장소40·계약5/MVC26을 통과했다.
 화면 lint/type/build·기존42개와 수정한 새 VD 선택 PC/모바일2개도 통과했다. Pod/S3/브로커

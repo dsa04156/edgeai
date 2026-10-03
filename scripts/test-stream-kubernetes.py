@@ -106,14 +106,16 @@ def main():
     def read_create(value):
         return json.loads(call(['create', '-f', '-', '-o', 'json'], value))
 
-    def remove(kind, namespace, name, uid):
+    def remove(kind, namespace, name, uid, grace_seconds=None):
         current = json.loads(call(['-n', namespace, 'get', kind, name, '--ignore-not-found', '-o', 'json']) or b'null')
         if current is None:
             return
         assert current['metadata']['uid'] == uid and current['metadata'].get('labels', {}).get('edgeai.io/test-id') == root
         plural = {'pod': 'pods', 'secret': 'secrets', 'service': 'services', 'configmap': 'configmaps'}[kind]
-        call(['delete', '--raw', '/api/v1/namespaces/' + namespace + '/' + plural + '/' + name, '-f', '-'],
-             {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': uid}})
+        options = {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'preconditions': {'uid': uid}}
+        if grace_seconds is not None:
+            options['gracePeriodSeconds'] = grace_seconds
+        call(['delete', '--raw', '/api/v1/namespaces/' + namespace + '/' + plural + '/' + name, '-f', '-'], options)
         wait(lambda: not call(['-n', namespace, 'get', kind, name, '--ignore-not-found', '-o', 'name']).strip(), 90, 'Owned fixture resource did not terminate')
 
     def hold_job(name, uid, run, enabled):
@@ -251,6 +253,29 @@ with response: print(response.status)
         def query(sql):
             return call(['-n', 'edgeai', 'exec', db, '--', 'psql', '-U', 'edgeai', '-d', 'edgeai', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', sql]).decode().strip()
 
+        held_vds = {}
+        def hold_vd(identity, enabled):
+            identity = str(uuid.UUID(identity))
+            application = 'edgeai-vd-hold-' + identity
+            if enabled:
+                assert identity not in held_vds and identity in vd_ids
+                process = subprocess.Popen(k + ['-n', 'edgeai', 'exec', '-i', db, '--', 'psql', '-U', 'edgeai', '-d', 'edgeai', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1'],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                held_vds[identity] = process
+                # Permit the offload member's VD foreign-key check while blocking poll's FOR UPDATE.
+                process.stdin.write(("SET application_name='" + application + "'; BEGIN; SELECT id FROM edgeai.virtual_device WHERE id='" + identity + "' FOR NO KEY UPDATE;\n").encode())
+                process.stdin.flush()
+                def locked():
+                    assert process.poll() is None, 'Owned VD barrier session exited'
+                    return query("SELECT count(*) FROM pg_stat_activity WHERE application_name='" + application + "' AND state='idle in transaction'") == '1'
+                wait(locked, 15, 'Owned VD poll receipt barrier did not acquire')
+            else:
+                process = held_vds[identity]
+                if process.poll() is None:
+                    process.communicate(b'ROLLBACK;\n', timeout=15)
+                assert process.returncode == 0, 'Owned VD barrier did not release'
+                held_vds.pop(identity)
+
         def resources(run):
             uuid.UUID(run)
             return read(['-n', 'edgeai-runtimes', 'get', 'pods,jobs,secrets', '-l', 'edgeai.io/run-id=' + run, '-o', 'json'])['items']
@@ -329,6 +354,11 @@ with response: print(response.status)
             api_env += [secret_env(name) for name in ('EDGEAI_API_USER', 'EDGEAI_API_PASSWORD', 'EDGEAI_DB_PASSWORD', 'EDGEAI_MINIO_USER', 'EDGEAI_MINIO_PASSWORD')]
             if any(name in VD_CASES for name in args.cases):
                 api_env += [env('EDGEAI_VD_ENABLED', 'true'), env('EDGEAI_VD_LEASE_SECONDS', '60')]
+            if any(name in ('vd-distinct-offload', 'vd-shared-offload-pending-cancel') for name in args.cases):
+                # The injected row lock deliberately holds several poll/child requests; reserve
+                # connections for the public command and readiness while those transactions wait.
+                api_env += [env('SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE', '20')]
+                snapshot['vdOffloadBarrierPoolSize'] = 20
             jar_path = '/app/app.jar' if jar is None else '/tmp/current-api.jar'
             api_command = 'umask 077; mkdir -p /tmp/identity; cp /bootstrap/* /tmp/identity/; chmod 600 /tmp/identity/*; '
             if jar is not None:
@@ -363,21 +393,21 @@ with response: print(response.status)
                 return pod['metadata']['uid']
 
             api_uid = start_api()
-            def restart_vd_api():
+            def restart_vd_api(abrupt=False):
                 nonlocal api_uid
                 old = api_uid
-                remove('pod', 'edgeai', api, old); records.remove(('pod', 'edgeai', api, old))
+                remove('pod', 'edgeai', api, old, grace_seconds=0 if abrupt else None); records.remove(('pod', 'edgeai', api, old))
                 api_uid = start_api()
                 assert api_uid != old
-                return {'oldUid': old, 'newUid': api_uid, 'kind': 'actual-kubernetes-api-pod'}
+                return {'oldUid': old, 'newUid': api_uid, 'kind': 'actual-kubernetes-api-pod', 'abrupt': abrupt}
 
-            vd_observer = VDStreamObserver(read, call, query, snapshot, vd_resources, runner_digest, root + '-ca', restart_vd_api)
+            vd_observer = VDStreamObserver(read, call, query, snapshot, vd_resources, runner_digest, root + '-ca', restart_vd_api, hold_vd)
             forward(api, 18443, '/actuator/health/readiness')
             nodes = read(['get', 'nodes', '-o', 'json'])['items']
             eligible = [n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
                         and any(c['type'] == 'Ready' and c['status'] == 'True' for c in n['status']['conditions'])
                         and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', []))]
-            assert len(eligible) >= (2 if any(name.startswith(('offload', 'placement')) for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer or task placement'
+            assert len(eligible) >= (2 if any(name.startswith(('offload', 'placement')) or '-offload' in name for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer or task placement'
             node = eligible[0]
             config = {'origin': api_origin, 'runnerImage': snapshot['runnerImage'], 'nodeId': node['metadata']['uid'],
                       'nodeName': node['metadata']['name'],
@@ -533,7 +563,7 @@ with response: print(response.status)
                                 proof['budgetAlternativeNodeId'] = destination['metadata']['uid']
                                 call(['-n', 'edgeai-runtimes', 'exec', replacement['metadata']['name'], '--', 'python3', '-c',
                                     "from pathlib import Path;p=Path('/work/automatic-pressure');assert not p.exists();p.touch()"])
-                        elif phase.endswith(('-draining', '-releasing', '-cancelling')):
+                        elif phase.endswith(('-draining', '-releasing', '-cancelling')) and current['case'] not in VD_CASES:
                             assert current['case'].startswith('offload')
                             proof = snapshot['offloads'][current['case']]
                             operation = str(uuid.UUID(current['offload']['id']))
@@ -738,6 +768,8 @@ with response: print(response.status)
                             remove(*record)
                 for (name, uid), run in list(held_jobs.items()):
                     hold_job(name, uid, run, False)
+                for identity in list(held_vds):
+                    hold_vd(identity, False)
                 owned = [('edgeai.io/run-id', run, resources, 'edgeai-runtime-controller') for run in run_ids]
                 owned += [('edgeai.io/vd-id', vd, vd_resources, 'edgeai-vd-controller') for vd in vd_ids]
                 for label, identity, lookup, manager in owned:

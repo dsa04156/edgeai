@@ -148,7 +148,8 @@ public class RuntimeLifecycleService {
         if(!a.vdRuntimeId().equals(proof.runtimeId()) || a.generation()!=proof.generation() || !a.sessionId().equals(proof.sessionId()) ||
             !vr.nodeUid().equals(proof.nodeUid()) || !vr.nodeName().equals(proof.nodeName()))throw fenced();
         var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
-        vdTasks.claimed(r.id(),proof.podUid(),proof.nodeUid(),proof.nodeName(),clock.instant());
+        var now=clock.instant();vdTasks.claimed(r.id(),proof.podUid(),proof.nodeUid(),proof.nodeName(),now);
+        offloads.completedByClaim(attemptId,now);
         return new Assignment(runtime(attemptId),spec,parameters,inputs);
     }
     /** Called only with authenticated completion/absence evidence or confirmed supervisor deletion. */
@@ -295,11 +296,19 @@ public class RuntimeLifecycleService {
         }
         return until;
     }
-    /** Joint completion only: inspect peer authority under the Run lock without taking another VD mutex.
+    /** Group planning/completion only: inspect peer authority under the Run lock without taking another VD mutex.
      * This does not issue credentials or commit a peer result; those paths still lock the caller's VD. */
     @Transactional(propagation=org.springframework.transaction.annotation.Propagation.MANDATORY)
     public void validateStreamPeer(UUID attemptId,long epoch,UUID podUid){
         var c=lockRun(attemptId);producer(c,runtime(attemptId),epoch,podUid);
+    }
+    @Transactional(propagation=org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void validateStreamOffloadPeer(UUID attemptId,long epoch,UUID podUid){
+        var c=lockRun(attemptId);var r=runtime(attemptId);producer(c,r,epoch,podUid);
+        if(r.vd()){
+            var a=vdAuthority(r,podUid);
+            if(!vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().ready(clock.instant()))throw fenced();
+        }
     }
     @Transactional
     public CommitPermit prepareCommit(UUID attemptId,long epoch,UUID podUid,ResultManifest manifest) {

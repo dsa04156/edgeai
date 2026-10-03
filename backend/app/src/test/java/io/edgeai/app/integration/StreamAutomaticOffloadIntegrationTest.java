@@ -251,12 +251,12 @@ class StreamAutomaticOffloadIntegrationTest {
         var f=fixture(1);var now=clock.instant();var selected=task(f.run(),"source");var excluded=List.of("transfer-"+f.source());
         var members=List.of("source","sink").stream().map(name->{var t=task(f.run(),name);
             return new OffloadMember(t.id(),attempt(f.run(),name).id(),null,checkpoints.latest(t.id()).orElseThrow().id(),
-                name.equals("source")?null:f.source(),name.equals("source")?excluded:List.<String>of());}).toList();
+                name.equals("source")?null:f.source(),null,name.equals("source")?excluded:List.<String>of());}).toList();
         for(String change:List.of("valid","policy","selected-node","selected-exclusions","peer-node","peer-exclusions")){
             var altered=members.stream().map(m->{boolean source=m.taskId().equals(selected.id());
                 UUID node=(source && change.equals("selected-node") || !source && change.equals("peer-node"))?f.target():m.targetNodeId();
                 var names=source && change.equals("selected-exclusions")?List.<String>of():!source && change.equals("peer-exclusions")?excluded:m.excludedNodeNames();
-                return new OffloadMember(m.taskId(),m.sourceAttemptId(),null,m.checkpointId(),node,names);}).toList();
+                return new OffloadMember(m.taskId(),m.sourceAttemptId(),null,m.checkpointId(),node,null,names);}).toList();
             var id=UUID.randomUUID();var o=new OffloadOperation(id,selected.id(),f.run(),attempt(f.run(),"source").id(),null,null,id,"sha256:"+"a".repeat(64),
                 "automatic-stream-test","DRAINING",null,now.plusSeconds(60),60,null,now,now,"MEMORY",excluded,
                 encode(Map.of("policy",policy(change.equals("policy")?2:1))),null,altered);
@@ -277,7 +277,7 @@ class StreamAutomaticOffloadIntegrationTest {
     }
     @Test void databaseRequiresExplicitRunOptInForAutomaticStreamOperation()throws Exception{
         var f=fixture(0);var source=task(f.run(),"source");var now=clock.instant();var excluded=List.of("transfer-"+f.source());var id=UUID.randomUUID();
-        var member=new OffloadMember(source.id(),attempt(f.run(),"source").id(),null,checkpoints.latest(source.id()).orElseThrow().id(),null,excluded);
+        var member=new OffloadMember(source.id(),attempt(f.run(),"source").id(),null,checkpoints.latest(source.id()).orElseThrow().id(),null,null,excluded);
         var o=new OffloadOperation(id,source.id(),f.run(),member.sourceAttemptId(),null,null,id,"sha256:"+"a".repeat(64),
             "automatic-stream-test","DRAINING",null,now.plusSeconds(60),60,null,now,now,"MEMORY",excluded,"{}",null,List.of(member));
         assertThatThrownBy(()->new TransactionTemplate(transactions).execute(tx->{executions.run(f.run(),true);return offloadStore.create(o);}))

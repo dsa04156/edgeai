@@ -17,10 +17,11 @@ public class StreamOffloadService {
     private final StreamRunService streams;private final ExecutionRepository executions;private final RuntimeRepository runtimes;
     private final DataRouteRepository routes;private final StreamCheckpointRepository checkpoints;
     private final StreamExecutionRepository completions;private final OffloadRepository operations;
+    private final RuntimeLifecycleService lifecycle;
     public StreamOffloadService(StreamRunService streams,ExecutionRepository executions,RuntimeRepository runtimes,
-            DataRouteRepository routes,StreamCheckpointRepository checkpoints,StreamExecutionRepository completions,OffloadRepository operations){
+            DataRouteRepository routes,StreamCheckpointRepository checkpoints,StreamExecutionRepository completions,OffloadRepository operations,RuntimeLifecycleService lifecycle){
         this.streams=streams;this.executions=executions;this.runtimes=runtimes;this.routes=routes;
-        this.checkpoints=checkpoints;this.completions=completions;this.operations=operations;
+        this.checkpoints=checkpoints;this.completions=completions;this.operations=operations;this.lifecycle=lifecycle;
     }
     public List<OffloadMember> plan(WorkflowRun run,UUID selected,UUID target,Instant now){
         if(target==null)throw error(409,"OFFLOAD_RECOVERY_UNSUPPORTED","스트리밍 체크포인트 전환은 공개 STREAM의 NODE 대상으로 요청하세요.");
@@ -51,11 +52,13 @@ public class StreamOffloadService {
         var result=new ArrayList<OffloadMember>();var current=new HashMap<UUID,TaskAttempt>();
         for(var task:executions.tasks(run.id()))if(ids.contains(task.id())){
             var a=executions.attempts(task.id()).getFirst();var r=runtimes.byAttempt(a.id()).orElseThrow();
-            if(!task.state().equals("RUNNING") || !a.state().equals("RUNNING") || r.remote() || r.vd()
+            if(!task.state().equals("RUNNING") || !a.state().equals("RUNNING") || r.remote() || r.vd() && !excluded.isEmpty()
                 || !r.desiredState().equals("RUNNING") || !r.observedState().equals("RUNNING") || r.producerPodUid()==null
                 || r.expiresAt()==null || !now.isBefore(r.expiresAt()) || runtimes.result(task.id()).isPresent()
                 || completions.granted(a.id()).isPresent())
                 throw error(409,"OFFLOAD_SOURCE_CHANGED","완료 허가 전이며 전체 STREAM 그룹이 실행 중이어야 합니다.");
+            if(r.vd())try{lifecycle.validateStreamOffloadPeer(a.id(),a.epoch(),r.producerPodUid());}
+                catch(ControlPlaneException stale){throw error(409,"OFFLOAD_SOURCE_CHANGED","그룹의 모든 VD 배정과 supervisor 권한이 유효해야 합니다.");}
             var history=operations.forTask(task.id());
             if(history.size()>=8 || history.stream().anyMatch(o->Set.of("DRAINING","STARTING","CANCELLING").contains(o.state())))
                 throw error(409,"OFFLOAD_LIMIT","연결된 모든 작업의 전환 한도와 진행 중인 요청을 확인하세요.");
@@ -72,7 +75,7 @@ public class StreamOffloadService {
             if(!generations.equals(new HashSet<>(cp.request().generationIds())))
                 throw error(409,"STREAM_CHECKPOINT_STALE","현재 경로 세대의 체크포인트를 기다린 뒤 전환하세요.");
             result.add(new OffloadMember(task.id(),a.id(),null,cp.id(),task.id().equals(selected)?target:a.nodeId(),
-                task.id().equals(selected)?excluded:a.excludedNodeNames()));current.put(task.id(),a);
+                task.id().equals(selected)?null:a.vdId(),task.id().equals(selected)?excluded:a.excludedNodeNames()));current.put(task.id(),a);
         }
         if(result.stream().map(m->runtimes.byAttempt(m.sourceAttemptId()).orElseThrow().namespace()).distinct().count()!=1)
             throw error(409,"OFFLOAD_SOURCE_CHANGED","그룹 실행 namespace가 다릅니다.");

@@ -95,7 +95,8 @@ public class OffloadService {
                 if(!streamOffload.ready(operation))return;
                 UUID selected=null;
                 for(var member:operation.members()){
-                    var next=executions.startOffload(member.taskId(),member.targetNodeId(),member.excludedNodeNames(),now);
+                    var next=member.targetVdId()==null?executions.startOffload(member.taskId(),member.targetNodeId(),member.excludedNodeNames(),now)
+                        :executions.startVdOffload(member.taskId(),member.targetVdId(),now);
                     operations.memberTarget(id,member.taskId(),next.id());lifecycle.plan(next.id(),operation.namespace());
                     if(member.taskId().equals(operation.taskId()))selected=next.id();
                 }

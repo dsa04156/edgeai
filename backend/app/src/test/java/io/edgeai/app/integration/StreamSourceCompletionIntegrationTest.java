@@ -474,7 +474,21 @@ class StreamSourceCompletionIntegrationTest {
         try{return ((Map<?,?>)json.decode(cp.summaryJson())).get("stateSha256").equals(HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Integer.toString(value).getBytes(java.nio.charset.StandardCharsets.UTF_8))));}
         catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
     }
-    private void vdStreams(boolean shared,boolean recovery,boolean cancel)throws Exception{
+    private Process startTransferredRunner(TaskAttempt attempt,Path parent)throws Exception{
+        var folder=Files.createDirectory(parent.resolve("transferred-runner"),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        var work=Files.createDirectory(folder.resolve("work"));var node=nodeStore.find(attempt.nodeId()).orElseThrow();
+        var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),node.id(),node.name());pods.put(attempt.id(),pod);
+        lifecycle.submitted(attempt.id(),pod.jobUid());secret(folder,"claim",tokens.issue(runtimes.byAttempt(attempt.id()).orElseThrow()));
+        secret(folder,"pod","source-pod-proof");secret(folder,"runner.log","");secret(folder,"runner-error.log","");
+        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning",Path.of("../../runner/runner.py").toAbsolutePath().normalize().toString());
+        var env=builder.environment();env.keySet().removeIf(k->k.startsWith("EDGEAI_"));
+        env.putAll(Map.of("EDGEAI_ATTEMPT_ID",attempt.id().toString(),"EDGEAI_ATTEMPT_EPOCH",Long.toString(attempt.epoch()),
+            "EDGEAI_POD_UID",pod.podUid().toString(),"EDGEAI_CONTROL_PLANE_URL",apiTls.origin,"EDGEAI_CLAIM_FILE",folder.resolve("claim").toString(),
+            "EDGEAI_POD_TOKEN_FILE",folder.resolve("pod").toString(),"EDGEAI_WORK_DIR",work.toString(),"SSL_CERT_FILE",BROKER.file("server.crt")));
+        return builder.redirectOutput(folder.resolve("runner.log").toFile()).redirectError(folder.resolve("runner-error.log").toFile()).start();
+    }
+    private void vdStreams(boolean shared,boolean recovery,boolean cancel)throws Exception{vdStreams(shared,recovery,cancel,false);}
+    private void vdStreams(boolean shared,boolean recovery,boolean cancel,boolean offload)throws Exception{
         var folder=Files.createDirectory(BROKER.root.resolve("vd-stream-"+UUID.randomUUID()),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
         UUID rootService=dagService(shared?"fanout":"root"),sinkService=shared?rootService:dagService("sink"),reportService=dagService("report");
         var root=startSupervisor(rootService,shared?2:1,folder,"root-vd");
@@ -502,7 +516,7 @@ class StreamSourceCompletionIntegrationTest {
         var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/vd_stream_probe.py",folder.toString());
         builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));
         var driver=builder.redirectOutput(folder.resolve("probe.log").toFile()).redirectError(folder.resolve("probe-error.log").toFile()).start();
-        String phase="CONNECT";
+        String phase="CONNECT";Process transferredRunner=null;
         try{
             until(()->Files.exists(folder.resolve("first-sent")) || !driver.isAlive());assertThat(driver.isAlive()).as("VD stream sources connected").isTrue();
             phase="FIRST_CHECKPOINT";
@@ -521,13 +535,26 @@ class StreamSourceCompletionIntegrationTest {
             }else{
                 if(recovery){
                     phase="OLD_CHILD_EXIT";
-                    lifecycle.observeFailure(executions.attempts(tasks.get("sink")).getFirst().id(),"RUNTIME_LOST");
+                    UUID operation=null,target=null;
+                    if(offload){
+                        target=UUID.randomUUID();nodes.recordSnapshot(List.of(new io.edgeai.domain.node.ExecutionNode(target,"vd-transfer-"+target,
+                            "amd64","linux","READY","4","4Gi","{}",Instant.now())),Instant.now());
+                        var response=mvc.perform(post("/api/v1/tasks/"+tasks.get("sink")+"/offload").with(user("test")).with(csrf())
+                            .header("Idempotency-Key",UUID.randomUUID().toString()).contentType("application/json")
+                            .content(json.canonical(Map.of("sourceAttemptId",executions.attempts(tasks.get("sink")).getFirst().id().toString(),
+                                "targetNodeId",target.toString(),"drainTimeoutSeconds",60,"startTimeoutSeconds",60)))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+                        operation=UUID.fromString((String)((Map<?,?>)json.decode(response)).get("id"));
+                    }else lifecycle.observeFailure(executions.attempts(tasks.get("sink")).getFirst().id(),"RUNTIME_LOST");
                     var old=new HashMap<String,StreamCheckpoint>();for(String name:List.of("root","sink"))old.put(name,checkpoints.latest(tasks.get(name)).orElseThrow());
                     assertThat(lifecycle.retryTask(tasks.get("root"))).isFalse();Files.writeString(folder.resolve("fault-injected"),"");
                     // Only actual supervisor completion polls close the old slots; no confirmStopped fixture here.
                     until(()->old.values().stream().allMatch(cp->runtimes.runtime(cp.runtimeId()).orElseThrow().observedState().equals("TERMINATED")
                         && !vdAllocations.byRuntime(cp.runtimeId()).orElseThrow().open()));
-                    phase="RETRY";until(()->lifecycle.retryTask(tasks.get("root")));
+                    phase="RETRY";
+                    if(offload){
+                        UUID id=operation;until(()->{offloads.advance(id);return offloads.find(id).state().equals("STARTING");});
+                        transferredRunner=startTransferredRunner(executions.attempts(tasks.get("sink")).getFirst(),folder);
+                    }else until(()->lifecycle.retryTask(tasks.get("root")));
                     phase="HANDOVER";
                     until(()->old.entrySet().stream().allMatch(entry->{
                         var next=executions.attempts(tasks.get(entry.getKey())).getFirst();
@@ -536,10 +563,16 @@ class StreamSourceCompletionIntegrationTest {
                     for(String name:old.keySet()){
                         var previous=old.get(name);var next=executions.attempts(tasks.get(name)).getFirst();
                         var transferred=checkpoints.byAttemptSerial(next.id(),previous.request().serial()+1).orElseThrow();
-                        assertThat(next.vdId()).isEqualTo(targets.get(name).runtime().vdId());assertThat(next.epoch()).isEqualTo(2);
+                        if(offload && name.equals("sink")){assertThat(next.mode()).isEqualTo("NODE");assertThat(next.nodeId()).isEqualTo(target);assertThat(next.vdId()).isNull();}
+                        else assertThat(next.vdId()).isEqualTo(targets.get(name).runtime().vdId());
+                        assertThat(next.epoch()).isEqualTo(2);assertThat(next.cause()).isEqualTo(offload?"OFFLOAD":"RETRY");
                         assertThat(transferred.handoverFromId()).isEqualTo(previous.id());assertThat(transferred.revision()).isEqualTo(previous.revision());
                         assertThat(((Map<?,?>)json.decode(transferred.summaryJson())).get("stateSha256")).isEqualTo(((Map<?,?>)json.decode(previous.summaryJson())).get("stateSha256"));
                         assertThat(transferred.artifact().versionId()).isNotBlank();assertThat(transferred.artifact().objectKey()).isNotEqualTo(previous.artifact().objectKey());
+                    }
+                    if(offload){
+                        var moved=offloads.find(operation);assertThat(moved.state()).isEqualTo("SUCCEEDED");
+                        assertThat(moved.members()).anySatisfy(m->{assertThat(m.taskId()).isEqualTo(tasks.get("root"));assertThat(m.targetVdId()).isEqualTo(root.runtime().vdId());});
                     }
                     Files.writeString(folder.resolve("restored"),"");
                 }else Files.writeString(folder.resolve("first-verified"),"");
@@ -550,7 +583,9 @@ class StreamSourceCompletionIntegrationTest {
                 until(()->executions.run(run,false).orElseThrow().state().equals("SUCCEEDED"));
                 for(String name:tasks.keySet()){
                     var result=runtimes.result(tasks.get(name)).orElseThrow();var expected=targets.get(name).runtime();
-                    assertThat(result.vdRuntimeId()).isEqualTo(expected.id());assertThat(result.producerPodUid()).isEqualTo(expected.podUid());
+                    if(offload && name.equals("sink")){
+                        assertThat(result.vdRuntimeId()).isNull();assertThat(result.producerPodUid()).isEqualTo(pods.get(result.attemptId()).podUid());
+                    }else{assertThat(result.vdRuntimeId()).isEqualTo(expected.id());assertThat(result.producerPodUid()).isEqualTo(expected.podUid());}
                     assertThat(executions.attempts(tasks.get(name))).hasSize(recovery && !name.equals("report")?2:1);
                     var artifact=result.outputs().getFirst().artifact();assertThat(artifact.versionId()).isNotBlank().isNotEqualTo("null");
                     try(var input=MINIO.getObject(GetObjectArgs.builder().bucket(artifact.bucket()).object(artifact.objectKey()).versionId(artifact.versionId()).build())){
@@ -567,6 +602,8 @@ class StreamSourceCompletionIntegrationTest {
             assertThat(driver.exitValue()).as("VD device driver: %s",Files.readString(folder.resolve("probe.log"))).isZero();
             assertThat(Files.readString(folder.resolve("probe.log"))).isEqualTo(cancel?"VD_STREAM_CANCELLED\n":recovery?"VD_STREAM_RECOVERED\n":"VD_STREAM_PASS\n");
             assertThat(Files.size(folder.resolve("probe-error.log"))).isZero();
+            if(transferredRunner!=null){assertThat(transferredRunner.waitFor(10,TimeUnit.SECONDS)).isTrue();assertThat(transferredRunner.exitValue()).isZero();
+                lifecycle.confirmStopped(executions.attempts(tasks.get("sink")).getFirst().id());}
             phase="CLEANUP";until(()->supervisors.values().stream().allMatch(s->vdAllocations.open(s.runtime().id()).isEmpty()));
             until(()->routeStore.forRun(run,20,0).stream().noneMatch(r->routeStore.open(r.id()).isPresent()));
             assertThat(routeStore.forRun(run,20,0)).allMatch(r->routeStore.history(r.id(),20,0).size()==(recovery?2:1));
@@ -585,16 +622,24 @@ class StreamSourceCompletionIntegrationTest {
                     "checkpointSerial",cp==null?-1:cp.request().serial()));
             }
             var lines=Files.readAllLines(folder.resolve("probe.log")).stream().filter(s->s.matches("VD_STREAM_[A-Za-z0-9_ .,:-]+") && s.length()<2000).toList();
-            System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,
+            System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,"offload",offload,
                 "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines)));
             throw error;
-        }finally{if(driver.isAlive()){driver.destroy();if(!driver.waitFor(5,TimeUnit.SECONDS)){driver.destroyForcibly();assertThat(driver.waitFor(5,TimeUnit.SECONDS)).isTrue();}}}
+        }finally{
+            if(transferredRunner!=null && transferredRunner.isAlive()){
+                transferredRunner.descendants().forEach(ProcessHandle::destroy);transferredRunner.destroy();
+                if(!transferredRunner.waitFor(5,TimeUnit.SECONDS)){transferredRunner.descendants().forEach(ProcessHandle::destroyForcibly);transferredRunner.destroyForcibly();assertThat(transferredRunner.waitFor(5,TimeUnit.SECONDS)).isTrue();}
+            }
+            if(driver.isAlive()){driver.destroy();if(!driver.waitFor(5,TimeUnit.SECONDS)){driver.destroyForcibly();assertThat(driver.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
+        }
     }
     @Test void actualSharedVdChildrenCompleteFanoutAndReleaseVerifiedBatch()throws Exception{vdStreams(true,false,false);}
     @Test void actualDistinctVdsStreamAcrossSupervisorsAndReleaseVerifiedBatch()throws Exception{vdStreams(false,false,false);}
     @Test void actualSharedVdGroupRetryTransfersS3StateAndReconnectsSameSources()throws Exception{vdStreams(true,true,false);}
     @Test void actualDistinctVdGroupRetryTransfersS3StateAndReconnectsSameSources()throws Exception{vdStreams(false,true,false);}
     @Test void actualSharedVdCancellationWaitsForChildExitsAndNeverReleasesBatch()throws Exception{vdStreams(true,false,true);}
+    @Test void publicSharedVdNodeOffloadTransfersStateAndPreservesVdPeer()throws Exception{vdStreams(true,true,false,true);}
+    @Test void publicDistinctVdNodeOffloadTransfersStateAndPreservesVdPeer()throws Exception{vdStreams(false,true,false,true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
         boolean reached=condition.getAsBoolean();
         while(!reached && System.nanoTime()<end){Thread.sleep(20);reached=condition.getAsBoolean();}

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE", true]] as const) test(`running ${stream ? "STREAM " : ""}${destination} offload retains task identity and distinguishes transfer success from result success`, async ({ page }, testInfo) => {
+for (const [destination, stream, vdPeer] of [["NODE", false, false], ["REMOTE", false, false], ["NODE", true, false], ["NODE", true, true]] as const) test(`running ${stream ? "STREAM " : ""}${destination}${vdPeer ? " with VD peer" : ""} offload retains task identity and distinguishes transfer success from result success`, async ({ page }, testInfo) => {
   // Presentation/HTTP request fixture; actual PG and Kubernetes transfer have separate gates.
   const runId = "11111111-1111-4111-8111-111111111111", taskId = "22222222-2222-4222-8222-222222222222";
   const source = "33333333-3333-4333-8333-333333333333", target = "44444444-4444-4444-8444-444444444444";
@@ -15,8 +15,8 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
     const task = { id: taskId, runId, key: "analyze", state: phase === "draining" ? "OFFLOADING" : "RUNNING", createdAt: now, updatedAt: now };
     const operation = { id: operationId, kind: "TASK_OFFLOAD", taskId, sourceAttemptId: source, targetAttemptId: phase === "draining" ? null : target,
       members: stream ? [
-        { taskId, sourceAttemptId: source, targetAttemptId: phase === "draining" ? null : target, checkpointId, targetNodeId: nodeId, excludedNodeNames: [] },
-        { taskId: peerId, sourceAttemptId: peerId, targetAttemptId: phase === "draining" ? null : operationId, checkpointId: peerId, targetNodeId: null, excludedNodeNames: [] },
+        { taskId, sourceAttemptId: source, targetAttemptId: phase === "draining" ? null : target, checkpointId, targetNodeId: nodeId, targetVdId: null, excludedNodeNames: [] },
+        { taskId: peerId, sourceAttemptId: peerId, targetAttemptId: phase === "draining" ? null : operationId, checkpointId: peerId, targetNodeId: null, targetVdId: vdPeer ? peerId : null, excludedNodeNames: [] },
       ] : [],
       targetNodeId: destination === "NODE" ? nodeId : null, remoteTarget: destination === "REMOTE" ? { providerKey: "reference", sourceMode: "SYNTHETIC", configurationDigest: "sha256:" + "a".repeat(64) } : null, state: phase === "draining" ? "DRAINING" : phase === "starting" ? "STARTING" : "SUCCEEDED", failureReason: null, createdAt: now, updatedAt: now };
     if (path === `tasks/${taskId}/offload`) {
@@ -59,7 +59,7 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
   if (stream) {
     await region.getByText("함께 전환하는 스트리밍 작업 2개", { exact: true }).click();
     const group = region.locator("details").filter({ hasText: "함께 전환하는 스트리밍 작업 2개" });
-    await expect(group).toContainText("aggregate · 자동 배치");
+    await expect(group).toContainText(vdPeer ? `aggregate · 기존 VD 유지 · ${peerId}` : "aggregate · 자동 배치");
     await expect(group).toContainText("analyze · target-node");
     await expect(group).toContainText(`체크포인트 ${checkpointId}`);
     await expect(group.getByText(`체크포인트 ${checkpointId}`, { exact: true })).toBeVisible();

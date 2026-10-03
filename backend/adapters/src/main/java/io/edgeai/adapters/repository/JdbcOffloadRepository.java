@@ -22,14 +22,14 @@ public final class JdbcOffloadRepository implements OffloadRepository {
             """,o.id(),o.taskId(),o.runId(),o.sourceAttemptId(),o.targetNodeId(),o.idempotencyKey(),o.requestDigest(),o.namespace(),Timestamp.from(o.drainDeadline()),
             o.startTimeoutSeconds(),Timestamp.from(o.createdAt()),Timestamp.from(o.updatedAt()),o.trigger(),"{"+String.join(",",o.excludedNodeNames())+"}",o.decisionJson(),RemoteTargets.key(o.remoteTarget()),RemoteTargets.digest(o.remoteTarget()),RemoteTargets.source(o.remoteTarget()))==1;
         if(created)for(var m:o.members())jdbc.update("""
-            INSERT INTO edgeai.task_offload_member(operation_id,run_id,task_id,source_attempt_id,checkpoint_id,target_node_id,excluded_node_names)
-            VALUES (?,?,?,?,?,?,CAST(? AS text[]))
-            """,o.id(),o.runId(),m.taskId(),m.sourceAttemptId(),m.checkpointId(),m.targetNodeId(),"{"+String.join(",",m.excludedNodeNames())+"}");
+            INSERT INTO edgeai.task_offload_member(operation_id,run_id,task_id,source_attempt_id,checkpoint_id,target_node_id,target_vd_id,excluded_node_names)
+            VALUES (?,?,?,?,?,?,?,CAST(? AS text[]))
+            """,o.id(),o.runId(),m.taskId(),m.sourceAttemptId(),m.checkpointId(),m.targetNodeId(),m.targetVdId(),"{"+String.join(",",m.excludedNodeNames())+"}");
         return created;
     }
     private OffloadOperation members(OffloadOperation o){return o.withMembers(jdbc.query("SELECT * FROM edgeai.task_offload_member WHERE operation_id=? ORDER BY task_id",(r,n)->
         new OffloadMember(r.getObject("task_id",UUID.class),r.getObject("source_attempt_id",UUID.class),r.getObject("target_attempt_id",UUID.class),
-            r.getObject("checkpoint_id",UUID.class),r.getObject("target_node_id",UUID.class),List.of((String[])r.getArray("excluded_node_names").getArray())),o.id()));}
+            r.getObject("checkpoint_id",UUID.class),r.getObject("target_node_id",UUID.class),r.getObject("target_vd_id",UUID.class),List.of((String[])r.getArray("excluded_node_names").getArray())),o.id()));}
     public Optional<OffloadOperation> find(UUID id){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE id=?",ROW,id).stream().findFirst().map(this::members);}
     public Optional<OffloadOperation> byKey(UUID key){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE idempotency_key=?",ROW,key).stream().findFirst().map(this::members);}
     public List<OffloadOperation> forTask(UUID id){return jdbc.query("SELECT * FROM edgeai.task_offload o WHERE task_id=? OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m WHERE m.operation_id=o.id AND m.task_id=?) ORDER BY created_at DESC,id",ROW,id,id).stream().map(this::members).toList();}

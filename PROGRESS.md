@@ -2,6 +2,16 @@
 
 [STATUS]
 현재 M7 다중 장치 DAG/스트리밍을 진행한다. M0–M4·M6 완료, M5 잔여/M8–M10 미완료다.
+ADR0056/V33 VD STREAM 그룹 수동 NODE 전환을 구현했다. 선택 작업은 다른 Node로 이동하고
+동료 VD·최초 배치·체크포인트를 유지하며 전체 종료/회수 후 새 Attempt를 만든다.
+PG223·단위105·실제 저장소47·UI46·실API/Swagger10 및 기존 Task9,371개 V33 보존 PASS.
+실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S3결과6개·이동 후 취소·소유 자원 정리 PASS
+(230420Z-53281045). 후속 대기 중 API 교체·전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS
+(232628Z-8d401390). 새24개 기본 게이트 CI·배포는 후속이다.
+선행415a1ce CI37159106124의5jobs/원시17개·STREAM20/Node40·VD24/S348 감사 PASS
+(232825Z-aa072254). GitOps2227a91 실제 이미지·Ready/PVC·ArgoSynced(232742Z-d9dd8d87),
+기존 파일10개와 두PVC 보존(232742Z-f9cc7914)도 PASS. 이번 V33 이미지 증거와 구분한다.
+docs/evidence/m7-vd-stream-group-offload.md. 아래는 선행 VD STREAM 검증 이력이다.
 후속 실제 Kubernetes의 VD 교체·Pod 유실 복구·최종 처리 복구3개/VD10Pods/S3결과9개를
 통과했다(222247Z-bfb805ce). 교체 중 자식의 CANCELLED 보고를 사용자 취소로 취급하던
 문제를 RUNTIME_LOST로 분류하도록 수정했다. 전체 PG220개도 PASS(222557Z-1fe8caf0)다.

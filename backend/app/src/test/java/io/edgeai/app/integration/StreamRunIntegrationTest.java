@@ -362,6 +362,102 @@ class StreamRunIntegrationTest {
         assertThat(allocations.open(vd.runtime().id())).isEmpty();assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("CANCELLED");
         assertThat(runtimes.result(task(run,"source").id())).isEmpty();assertThat(runtimes.result(task(run,"sink").id())).isEmpty();
     }
+    @Test void vdStreamOffloadPreservesPeerPlacementAndWaitsForEveryReplacementClaim()throws Exception{
+        for(String placement:List.of("shared","distinct","node-source")){
+            Definition d;Map<String,VD> vd;
+            if(placement.equals("shared")){
+                var device=device();var spec=service(List.of("input"),false,false);var shared=readyVD(spec,2);
+                d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+                vd=Map.of("source",shared,"sink",shared);
+            }else{
+                d=definition(false,false);var all=readyVDs(d);vd=placement.equals("node-source")?Map.of("sink",all.get("sink")):all;
+            }
+            var body=request(d);var targets=new TreeMap<String,Object>();vd.forEach((name,value)->targets.put(name,vdTarget(value)));body.put("taskExecutions",targets);
+            UUID run=publicRun(body);var sink=vd.get("sink");
+            for(var v:new HashSet<>(vd.values()))poll(v,1,List.of(),List.of());
+            for(String name:List.of("source","sink"))if(vd.containsKey(name))claimVD(run,name,vd.get(name));else claim(run,name);
+            streams.prepare(run);var saved=checkpoint(run,false);var oldSource=attempt(run,"source");var oldSink=attempt(run,"sink");var producer=principal(run,"source");
+            var target=targetNode();String key=UUID.randomUUID().toString(),input=transferBody(run,"source",target);
+            var selected=new java.util.concurrent.atomic.AtomicReference<OffloadOperation>();
+            whilePeerLocked(sink,()->{selected.set(offloads.request(task(run,"source").id(),key,input).value());return null;});
+            var operation=selected.get();assertThat(operation.members()).hasSize(2);
+            var member=operation.members().stream().filter(m->m.taskId().equals(task(run,"sink").id())).findFirst().orElseThrow();
+            assertThat(member.targetVdId()).isEqualTo(sink.device().id());assertThat(member.targetNodeId()).isNull();
+            assertThat(member.checkpointId()).isEqualTo(saved.get("sink").id());
+            var reply=perform(post("/api/v1/tasks/"+task(run,"source").id()+"/offload").header("Idempotency-Key",key).contentType("application/json").content(input),200);
+            assertThat(reply).contains("\"targetVdId\":\""+sink.device().id()+"\"");
+            assertThat(parallel(i->offloads.request(task(run,"source").id(),key,input).value().id())).containsOnly(operation.id());
+            assertThatThrownBy(()->streamExecution.execution(producer,identity(producer))).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+            offloads.advance(operation.id());assertThat(executions.attempts(oldSource.taskId())).hasSize(1);
+            if(vd.containsKey("source"))poll(vd.get("source"),2,placement.equals("shared")?List.of(oldSink):List.of(),List.of(oldSource));else finishPhysical(run,"source");
+            offloads.advance(operation.id());assertThat(executions.attempts(oldSink.taskId())).hasSize(1);
+            poll(sink,placement.equals("shared")?3:2,List.of(),List.of(oldSink));
+            offloads.advance(operation.id());assertThat(offloads.find(operation.id()).state()).isEqualTo("DRAINING");
+            revokeGroup(run);parallel(i->{offloads.advance(operation.id());return true;});
+            var source=attempt(run,"source");var peer=attempt(run,"sink");
+            assertThat(source.mode()).isEqualTo("NODE");assertThat(source.nodeId()).isEqualTo(target);assertThat(source.vdId()).isNull();
+            assertThat(peer.mode()).isEqualTo("VD");assertThat(peer.vdId()).isEqualTo(sink.device().id());
+            for(var pair:List.of(List.of(oldSource,source),List.of(oldSink,peer))){
+                assertThat(pair.get(1).cause()).isEqualTo("OFFLOAD");assertThat(pair.get(1).epoch()).isEqualTo(pair.getFirst().epoch()+1);
+                assertThat(executions.attempt(pair.getFirst().id()).orElseThrow().state()).isEqualTo("OFFLOADED");
+            }
+            claimOn(run,"source",target);assertThat(offloads.find(operation.id()).state()).isEqualTo("STARTING");
+            poll(sink,placement.equals("shared")?4:3,List.of(),List.of());claimVD(run,"sink",sink);
+            assertThat(offloads.find(operation.id()).state()).isEqualTo("SUCCEEDED");
+            streams.prepare(run);assertThat(routes.forRun(run,20,0)).allMatch(r->routes.open(r.id()).orElseThrow().generation()==2);
+            assertThat(task(run,"sink").initialVdId()).isEqualTo(sink.device().id());
+            assertThat(task(run,"source").initialMode()).isEqualTo(vd.containsKey("source")?"VD":"AUTO");
+            for(var cp:saved.values())assertThat(checkpoints.latest(cp.taskId()).orElseThrow().id()).isEqualTo(cp.id());
+            runs.cancelRun(run,"{}");finishPhysical(run,"source");poll(sink,placement.equals("shared")?5:4,List.of(),List.of(peer));
+            routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));
+            revokeGroup(run);assertThat(allocations.open(sink.runtime().id())).isEmpty();
+        }
+    }
+    @Test void vdStreamTransferRejectsChangedDatabasePlanAndDrainingPeerBeforeFencing()throws Exception{
+        var d=definition(false,false);var vd=readyVDs(d);var source=vd.get("source");var sink=vd.get("sink");
+        var body=request(d);body.put("taskExecutions",Map.of("source",vdTarget(source),"sink",vdTarget(sink)));
+        UUID run=publicRun(body);for(var v:vd.values())poll(v,1,List.of(),List.of());
+        claimVD(run,"source",source);claimVD(run,"sink",sink);streams.prepare(run);var saved=checkpoint(run,false);UUID target=targetNode();
+        var sourceTask=task(run,"source");var peerTask=task(run,"sink");var now=Instant.now();
+        for(String change:List.of("valid","peer-auto","peer-vd","selected-vd")){
+            var id=UUID.randomUUID();var members=List.of(
+                new OffloadMember(sourceTask.id(),attempt(run,"source").id(),null,saved.get("source").id(),target,change.equals("selected-vd")?source.device().id():null,List.of()),
+                new OffloadMember(peerTask.id(),attempt(run,"sink").id(),null,saved.get("sink").id(),null,
+                    change.equals("peer-auto")?null:change.equals("peer-vd")?source.device().id():sink.device().id(),List.of()));
+            var op=new OffloadOperation(id,sourceTask.id(),run,attempt(run,"source").id(),null,target,id,"sha256:"+"a".repeat(64),
+                "public-stream-test","DRAINING",null,now.plusSeconds(60),60,null,now,now,"MANUAL",List.of(),null,null,members);
+            org.assertj.core.api.ThrowableAssert.ThrowingCallable insert=()->new TransactionTemplate(transactions).execute(tx->{
+                executions.run(run,true);assertThat(offloadStore.create(op)).isTrue();tx.setRollbackOnly();return null;});
+            if(change.equals("valid"))assertThatCode(insert).doesNotThrowAnyException();
+            else assertThatThrownBy(insert).as(change).isInstanceOf(DataIntegrityViolationException.class);
+            assertThat(offloadStore.find(id)).isEmpty();
+        }
+        vdLifecycle.drain(sink.device().id(),0,"drain");
+        assertThatThrownBy(()->transfer(run,target)).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThat(offloadStore.forTask(sourceTask.id())).isEmpty();
+        assertThat(executions.tasks(run)).allMatch(t->t.state().equals("RUNNING"));
+        assertThat(routes.forRun(run,20,0)).allMatch(r->routes.open(r.id()).orElseThrow().fencedAt()==null);
+        runs.cancelRun(run,"{}");for(var v:vd.entrySet())poll(v.getValue(),2,List.of(),List.of(attempt(run,v.getKey())));
+        routes.forRun(run,20,0).forEach(r->routes.open(r.id()).ifPresent(g->routeLifecycle.reconcile(g.id())));revokeGroup(run);
+    }
+    @Test void vdStreamTransferCancellationPreservesOtherRunInSharedSupervisor()throws Exception{
+        var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,3);
+        var d=new Definition(version(Map.of("source",spec,"sink",spec),List.of()),List.of(input(device,"source","input"),input(device,"sink","input")),List.of(device));
+        var body=request(d);body.put("execution",vdTarget(vd));UUID run=publicRun(body);
+        var other=device();var independent=new Definition(version(Map.of("source",spec),List.of()),List.of(input(other,"source","input")),List.of(other));
+        body=request(independent);body.put("execution",vdTarget(vd));UUID sibling=publicRun(body);
+        poll(vd,1,List.of(),List.of());claimVD(run,"source",vd);claimVD(run,"sink",vd);claimVD(sibling,"source",vd);
+        var source=attempt(run,"source");var sink=attempt(run,"sink");var retained=attempt(sibling,"source");
+        streams.prepare(run);checkpoint(run,false);var op=transfer(run,targetNode());
+        runs.cancelTask(sink.taskId(),"{}");offloads.advance(op.id());assertThat(offloads.find(op.id()).state()).isEqualTo("CANCELLING");
+        poll(vd,2,List.of(retained,sink),List.of(source));offloads.advance(op.id());assertThat(offloads.find(op.id()).state()).isEqualTo("CANCELLING");
+        poll(vd,3,List.of(retained),List.of(sink));revokeGroup(run);offloads.advance(op.id());
+        assertThat(offloads.find(op.id()).state()).isEqualTo("CANCELLED");assertThat(executions.attempts(source.taskId())).hasSize(1);
+        assertThat(executions.attempts(sink.taskId())).hasSize(1);assertThat(task(sibling,"source").state()).isEqualTo("RUNNING");
+        assertThat(allocations.open(vd.runtime().id())).hasSize(1);assertThat(supervisors.runtime(vd.runtime().id()).orElseThrow().ready(Instant.now())).isTrue();
+        var producer=principal(sibling,"source");new TransactionTemplate(transactions).execute(tx->{lifecycle.validateStreamPeer(producer.attemptId(),producer.epoch(),producer.podUid());return null;});
+        runs.cancelRun(sibling,"{}");poll(vd,4,List.of(),List.of(retained));
+    }
     @Test void drainingVdChildCancellationSchedulesGroupRecoveryButUserCancellationDoesNot()throws Exception{
         for(boolean userCancelled:List.of(false,true)){
             var device=device();var spec=service(List.of("input"),false,false);var vd=readyVD(spec,2);

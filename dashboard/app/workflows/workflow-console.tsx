@@ -212,7 +212,7 @@ export function WorkflowConsole() {
             {o.failureReason && <span className="block muted">실패 코드: {o.failureReason}</span>}
             {!!o.members?.length && <details><summary>함께 전환하는 스트리밍 작업 {o.members.length}개</summary>
               <p className="hint">선택한 작업은 새 노드로 이동하고, 다른 작업은 기존 배치 정책을 유지합니다. 모든 작업이 새 실행을 시작해야 전환 성공입니다.</p>
-              <ul>{o.members.map(m => <li key={m.taskId}><strong>{run.tasks.find(t => t.id === m.taskId)?.key || m.taskId}</strong> · {m.targetNodeId ? nodes.find(n => n.id === m.targetNodeId)?.name || m.targetNodeId : "자동 배치"}
+              <ul>{o.members.map(m => <li key={m.taskId}><strong>{run.tasks.find(t => t.id === m.taskId)?.key || m.taskId}</strong> · {m.targetVdId ? `기존 VD 유지 · ${m.targetVdId}` : m.targetNodeId ? nodes.find(n => n.id === m.targetNodeId)?.name || m.targetNodeId : "자동 배치"}
                 <p className="digest mono">체크포인트 {m.checkpointId}</p><p className="digest mono">새 Attempt {m.targetAttemptId || "이전 실행 종료 대기"}</p>
               </li>)}</ul>
             </details>}

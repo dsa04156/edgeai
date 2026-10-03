@@ -27,7 +27,11 @@ Remote 자동 측정 전환은 미지원이며 실제 외부 API 수용시험·�
 ADR0020은 기존 Run 생성에 `execution={mode:VD,vdId}`를 추가한다. Ready·동일 SERVICE 검증,
 VD 내부 Task 배정/종료와 결과의 실제 vdRuntimeId를 연결하며 공개 operation 수는39개를 유지한다.
 
-ADR0041은 공개 Run의 STREAM 선택 활성화와 그룹 단위 배정을 연결한다. 현재 AUTO/NODE만 지원하고,
-그룹 복구가 필요한 retry/offload/REMOTE/VD는 거절한다. 기본 STREAM 비활성501은 유지한다.
-별도 `stream-api.yaml`에는 Device/Runner 배정·heartbeat·checkpoint·공동 완료·복구12개 내부 operation이 있다.
-검증한 범위와 실제 Kubernetes 종단 잔여는 `docs/evidence/m7-public-stream-runs.md`를 따른다.
+ADR0041은 공개 Run의 STREAM 선택 활성화와 그룹 배정을 연결했다. 후속 ADR0047/0051/0052는
+그룹·최종 처리 retry와 수동/자동 NODE 전환, ADR0053/0054는 작업별 최초 배치를 추가한다.
+ADR0055는 VD STREAM 실행·그룹/최종 처리 복구, ADR0056은 VD 포함 그룹의 수동 NODE 전환과
+동료 VD 유지를 연결한다. Remote STREAM과 VD 자동 전환은 지원하지 않는다.
+기본 STREAM 비활성501은 유지한다. 배포별 활성화·검증 판정은 해당 evidence를 따른다.
+별도 `stream-api.yaml`에는 Device/Runner 배정·heartbeat·checkpoint·공동 완료·복구와
+Device의 Run 경로 조회를 포함한 내부13개 operation이 있다. 이번 변경은 공개 operation41개를 유지한다.
+[VD 그룹 전환 검증](evidence/m7-vd-stream-group-offload.md)에서 로컬·실제 Kubernetes와 이미지 CI·배포 범위를 구분한다.

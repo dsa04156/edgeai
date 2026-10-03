@@ -61,6 +61,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
         return startAttempt(taskId,previous.mode(),previous.nodeId(),"RETRY",previous.excludedNodeNames(),now,previous.remoteTarget(),previous.vdId());
     }
     public TaskAttempt startOffload(UUID taskId,UUID nodeId,List<String> excluded,Instant now) { return startAttempt(taskId,nodeId==null?"AUTO":"NODE",nodeId,"OFFLOAD",excluded,now,null,null); }
+    public TaskAttempt startVdOffload(UUID taskId,UUID vdId,Instant now) { return startAttempt(taskId,"VD",null,"OFFLOAD",List.of(),now,null,Objects.requireNonNull(vdId)); }
     public TaskAttempt startRemoteOffload(UUID taskId,io.edgeai.domain.remote.RemoteTarget target,Instant now){return startAttempt(taskId,"REMOTE",null,"OFFLOAD",List.of(),now,target,null);}
     private TaskAttempt startAttempt(UUID taskId,String mode,UUID nodeId,String cause,List<String> excluded,Instant now,io.edgeai.domain.remote.RemoteTarget target,UUID vdId) {
         var attempt=jdbc.query("""

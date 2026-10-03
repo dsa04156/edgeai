@@ -4,7 +4,8 @@ import json
 import uuid
 
 CASES = ('vd-shared', 'vd-distinct', 'vd-mixed', 'vd-shared-recover', 'vd-distinct-recover', 'vd-shared-cancel',
-         'vd-shared-replace', 'vd-distinct-pod-recover', 'vd-finalizer')
+         'vd-shared-replace', 'vd-distinct-pod-recover', 'vd-finalizer',
+         'vd-shared-offload', 'vd-distinct-offload', 'vd-shared-offload-cancel', 'vd-shared-offload-pending-cancel')
 
 
 def run_case(c, name):
@@ -12,6 +13,10 @@ def run_case(c, name):
     c.csrf = c.request('csrf')['token']
     shared, recover, cancel = name.startswith('vd-shared'), name.endswith('-recover') or name.endswith('-replace'), name.endswith('-cancel')
     replace, pod_fault, finalize = name.endswith('-replace'), name.endswith('-pod-recover'), name == 'vd-finalizer'
+    offload = '-offload' in name
+    pending_cancel = name.endswith('-pending-cancel')
+    hold_offload = name == 'vd-distinct-offload' or pending_cancel
+    recover = recover or offload
     prefix = 'vd-stream-' + uuid.uuid4().hex
     request, wait = c.request, c.wait
 
@@ -49,7 +54,7 @@ def run_case(c, name):
             'sources': {}, 'state': {'mode': 'STATELESS'}, 'runtime': {'maxConcurrentTasks': 2 if shared and task == 'root' else 1,
             'startupTimeoutSeconds': 180, 'drainTimeoutSeconds': 30}})
         vd = request('virtual-devices', 'POST', {'key': prefix + '-' + task, 'displayName': 'Actual VD stream acceptance',
-                     'profileVersionId': profile, 'sources': [], 'placement': {'mode': 'AUTO'}}, 201)
+                     'profileVersionId': profile, 'sources': [], 'placement': {'mode': 'NODE', 'nodeId': c.config['nodeId']} if offload else {'mode': 'AUTO'}}, 201)
         operation = request('virtual-devices/' + vd['id'] + '/provision', 'POST', {'revision': vd['revision']}, 202, str(uuid.uuid4()))
 
         def ready():
@@ -82,13 +87,15 @@ def run_case(c, name):
         'dependencies': [{'fromTask': f, 'toTask': t, 'fromPort': fp, 'toPort': tp, 'mode': m} for f, t, fp, tp, m in edges]}, 201)
     body = {'workflowVersionId': version['id'], 'execution': targets['root'], 'taskExecutions': {k: v for k, v in targets.items() if k != 'root'},
             'parameters': {}, 'streamInputs': inputs}
-    if recover or finalize:
+    if recover and not offload or finalize:
         body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600,
                          'retryOn': ['WORKLOAD_FAILED', 'RUNTIME_LOST'] if replace or pod_fault else ['WORKLOAD_FAILED']}
     run = request('workflow-runs', 'POST', body, 201, str(uuid.uuid4()))
     c.active = run['id']
     task_ids = {t['key']: t['id'] for t in request('workflow-runs/' + c.active)['tasks']}
     current = {'case': name, 'runId': c.active, 'tasks': task_ids, 'placement': targets['root'], 'taskExecutions': targets, 'vdTargets': vds}
+    initial_targets = json.loads(json.dumps(targets))
+    current['initialTaskExecutions'] = initial_targets
 
     def barrier(suffix, tick=lambda: None, **values):
         c.phase = name + '-' + suffix
@@ -133,6 +140,40 @@ def run_case(c, name):
         assert not request('tasks/' + task_ids['report'])['attempts']
         barrier('first', tick, expectedStates={'root': 9, 'sink': 9})
         if recover:
+            if offload:
+                source = request('tasks/' + task_ids['sink'])['attempts'][0]
+                target_node = c.config['targetNodeId']
+                assert target_node != vds[targets['sink']['vdId']]['nodeUid']
+                command = {'sourceAttemptId': source['id'], 'targetNodeId': target_node, 'drainTimeoutSeconds': 120, 'startTimeoutSeconds': 120}
+                key = str(uuid.uuid4())
+                operation = request('tasks/' + task_ids['sink'] + '/offload', 'POST', command, 202, key)
+                assert {m['taskId'] for m in operation['members']} == {task_ids['root'], task_ids['sink']}
+                peer = next(m for m in operation['members'] if m['taskId'] == task_ids['root'])
+                assert peer['targetVdId'] == targets['root']['vdId'] and peer['targetNodeId'] is None
+                if hold_offload:
+                    current['offload'] = operation
+                    barrier('offload-draining')
+                    c.csrf = request('csrf')['token']
+                    replay = request('tasks/' + task_ids['sink'] + '/offload', 'POST', command, 200, key)
+                    assert replay['id'] == operation['id'] and replay['state'] == 'DRAINING' and replay['members'] == operation['members']
+                    current['offloadReplayPreserved'] = True
+                    if pending_cancel:
+                        request('workflow-runs/' + c.active + '/cancel', 'POST', {})
+                        current['offload'] = request('operations/' + operation['id'])
+                        assert current['offload']['state'] == 'CANCELLING'
+                    barrier('offload-cancelling' if pending_cancel else 'offload-releasing')
+
+                def moved():
+                    value = request('operations/' + operation['id'])
+                    assert value['state'] not in ('FAILED', 'CANCELLED')
+                    return value if value['state'] == 'SUCCEEDED' else None
+
+                if not pending_cancel:
+                    current['offload'] = wait(moved, tick)
+                    replay = request('tasks/' + task_ids['sink'] + '/offload', 'POST', command, 200, key)
+                    assert replay == current['offload']
+                    current['offloadReplayPreserved'] = True
+                    targets['sink'] = {'mode': 'NODE', 'nodeId': target_node}
             if replace or pod_fault:
                 identity = targets['sink']['vdId']
                 before = dict(vds[identity])
@@ -152,16 +193,19 @@ def run_case(c, name):
                 assert after['generation'] == before['generation'] + 1 and after['podUid'] != before['podUid'] and after['id'] != before['id']
                 current['replacement'] = {'operation': operation['id'], 'action': action, 'before': before, 'after': after}
                 vds[identity] = after
-            wait(lambda: all(o.ready and o.connections == 2 for o in owners.values()), tick)
-            assert all(value.checkpoint() == checkpoints[key] for key, value in owners.items())
-            attempts = {}
-            for key in ('root', 'sink'):
-                old, new = sorted(request('tasks/' + task_ids[key])['attempts'], key=lambda a: a['number'])
-                assert old['state'] == 'FAILED' and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
-                assert old['vdId'] == new['vdId'] == targets[key]['vdId'] and new['cause'] == 'RETRY'
-                attempts[key] = new['id']
-            current['recovery'] = {'sameDeviceOwners': True, 'sensorCursorsPreserved': True, 'attempts': attempts}
-            barrier('recovered', tick, expectedStates={'root': 9, 'sink': 9}, expectedAttempts=attempts)
+            if not pending_cancel:
+                wait(lambda: all(o.ready and o.connections == 2 for o in owners.values()), tick)
+                assert all(value.checkpoint() == checkpoints[key] for key, value in owners.items())
+                attempts = {}
+                for key in ('root', 'sink'):
+                    old, new = sorted(request('tasks/' + task_ids[key])['attempts'], key=lambda a: a['number'])
+                    assert old['state'] == ('OFFLOADED' if offload else 'FAILED') and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
+                    assert old['vdId'] == initial_targets[key]['vdId']
+                    assert new['mode'] == targets[key]['mode'] and new.get('vdId') == targets[key].get('vdId') and new.get('nodeId') == targets[key].get('nodeId')
+                    assert new['cause'] == ('OFFLOAD' if offload else 'RETRY')
+                    attempts[key] = new['id']
+                current['recovery'] = {'sameDeviceOwners': True, 'sensorCursorsPreserved': True, 'attempts': attempts}
+                barrier('recovered', tick, expectedStates={'root': 9, 'sink': 9}, expectedAttempts=attempts)
         if cancel:
             request('workflow-runs/' + c.active + '/cancel', 'POST', {})
 
@@ -177,6 +221,11 @@ def run_case(c, name):
             wait(lambda: request('workflow-runs/' + c.active)['run']['state'] == 'CANCELLED' and all(o.closed for o in owners.values()), cancelled_tick)
             assert not request('tasks/' + task_ids['report'])['attempts']
             assert all(not request('tasks/' + t + '/results')['items'] for t in task_ids.values())
+            if offload:
+                assert all(len(request('tasks/' + task_ids[k])['attempts']) == (1 if pending_cancel else 2) for k in ('root', 'sink'))
+                expected = 'CANCELLED' if pending_cancel else 'SUCCEEDED'
+                wait(lambda: request('operations/' + operation['id'])['state'] == expected, cancelled_tick)
+                current['offload'] = request('operations/' + operation['id'])
             current.update(cancelled=True, results=[])
         else:
             emit(2, 3)
@@ -201,9 +250,11 @@ def run_case(c, name):
                 retried = recover and key != 'report' or finalize and key == 'sink'
                 assert len(attempts) == (2 if retried else 1) and attempts[-1]['state'] == 'SUCCEEDED'
                 if retried:
-                    assert attempts[0]['state'] == 'FAILED' and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
+                    assert attempts[0]['state'] == ('OFFLOADED' if offload else 'FAILED') and attempts[-1]['epoch'] == attempts[0]['epoch'] + 1
                 target = targets[key]
-                assert all(a['mode'] == target['mode'] and a.get('vdId') == target.get('vdId') and a.get('nodeId') == target.get('nodeId') for a in attempts)
+                for a in attempts:
+                    expected_target = initial_targets[key] if a['number'] == 1 else target
+                    assert a['mode'] == expected_target['mode'] and a.get('vdId') == expected_target.get('vdId') and a.get('nodeId') == expected_target.get('nodeId')
                 values = request('tasks/' + task + '/results')['items']
                 assert len(values) == 1
                 result = values[0]
@@ -217,7 +268,7 @@ def run_case(c, name):
                 results.append({'task': key, 'result': result, 'expected': expected})
             current.update(cancelled=False, results=results)
         current['deviceConnections'] = {key: value.connections for key, value in owners.items()}
-        assert all(value.connections == (2 if recover else 1) for value in owners.values())
+        assert all(value.connections == (2 if recover and not pending_cancel else 1) for value in owners.values())
     wait(lambda: all(r['generation']['closedAt'] for r in request('workflow-runs/' + c.active + '/streams')['items']))
     # The owner verifies exited child processes/closed allocations while VD Pods remain alive.
     barrier('children-exited')
