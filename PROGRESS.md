@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0050에서 검증된 HTTPS 이미지533d850/GitOps0472650을 바탕으로 dev TLS 컴포넌트와
+실제 배포 다중 장치 데모를 연결한다. MinIO TLS 기동·공용 driver5개 회귀·전환 전 기존파일10개/
+두PVC 기준 확인은 통과했다. 운영 활성화 뒤 보존·데모와 새 kind CI는 검증을 이어간다.
+docs/evidence/m7-deployed-multidevice-demo.md. M5 잔여/M7–M10 전체 미완료 유지.
+
+아래는 영속 기반 준비 이력이다.
 ADR0049 운영용 불변 신원4개·공개 설정3개와 영속 TLS broker를 준비했다. 실제 설치 재실행/
 복구·충돌 거절6개 및 새 Pod/동일PVC의 권한 유지·익명/오인증/신뢰 거절을 통과했다.
 선택 Kustomize 컴포넌트와 kind 게이트를 추가했으며 API/MinIO TLS 활성화·데모는 다음 단계다.

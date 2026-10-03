@@ -4,6 +4,8 @@ namespace: edgeai
 resources:
   - ../../base
   - ingress.yaml
+components:
+  - ../../components/stream
 patches:
   - path: vd-execution.yaml
 images:

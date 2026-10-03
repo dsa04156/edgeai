@@ -92,7 +92,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
 def run_case(name, placement, cancel=False, recover=False, finalize=False):
     global active, phase, csrf
     csrf = request('csrf')['token']
-    prefix = 'stream-demo-' + uuid.uuid4().hex
+    prefix = config.get('resourcePrefix', 'stream-demo-' + uuid.uuid4().hex) + '-' + name
 
     def publish(kind, suffix, spec):
         return request('profiles/' + kind, 'POST', {'key': prefix + '-' + suffix, 'version': '1.0.0', 'spec': spec}, 201)['id']
@@ -132,7 +132,7 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
     body = {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}
     if recover or finalize:
         body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['RUNTIME_LOST']}
-    run = request('workflow-runs', 'POST', body, 201, str(uuid.uuid4()))
+    run = request('workflow-runs', 'POST', body, 201, config.get('runKeys', {}).get(name, str(uuid.uuid4())))
     active = run['id']
     detail = request('workflow-runs/' + active)
     task_ids = {t['key']: t['id'] for t in detail['tasks']}
@@ -291,11 +291,11 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False):
 
 
 def main():
-    run_case('auto', {'mode': 'AUTO'})
-    run_case('node', {'mode': 'NODE', 'nodeId': config['nodeId']})
-    run_case('recover', {'mode': 'AUTO'}, recover=True)
-    run_case('finalizer', {'mode': 'AUTO'}, finalize=True)
-    run_case('cancel', {'mode': 'AUTO'}, cancel=True)
+    names = config.get('cases', ['auto', 'node', 'recover', 'finalizer', 'cancel'])
+    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel'}
+    for name in names:
+        placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' else {'mode': 'AUTO'}
+        run_case(name, placement, cancel=name == 'cancel', recover=name == 'recover', finalize=name == 'finalizer')
     save('done.json', report)
 
 
@@ -311,7 +311,7 @@ if __name__ == '__main__':
                 pass
         import traceback
         locations = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(error.__traceback__))
-        save('failure.json', {'phase': phase, 'type': type(error).__name__, 'locations': locations})
+        save('failure.json', {'phase': phase, 'runId': active, 'type': type(error).__name__, 'locations': locations})
         print('STREAM_KUBERNETES_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + locations, flush=True)
     while True:
         time.sleep(1)

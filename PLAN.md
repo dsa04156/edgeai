@@ -25,6 +25,8 @@ PC/모바일과 실제 Kubernetes 그룹·최종 처리 장애 복구를 통과�
 브로커/S3·런타임 공개 CA·개인 키 준비와 운영 다중 장치 데모를 연결한다.
 ADR0049에서 영속 TLS broker·불변 신원/CA·복구6개·실제 Pod 교체를 검증했다. 선택 컴포넌트의
 API/MinIO 활성화와 실제 운영 다중 장치 데모를 다음으로 진행한다. 새 기반 CI는 별도 게이트다.
+ADR0050은 dev 컴포넌트와 운영 API를 사용하는 demo-multidevice를 연결한다. 전환 후 원본 파일/
+PVC 보존과 실제 데모·추가 kind CI를 검증하고 M7의 전환/외부 장치 수용으로 이어간다.
 ADR0038/V24에서 서버의 경로 고정·실행 배정·Task/Device 공동 완료 허가를 연결했다.
 새 실제 HTTP/PG와 SDK/MinIO 시험, 기존 DB·Result 회귀를 통과했다. ADR0039는 DeviceSource 완료
 대기·응답 유실/재시작과 실제 Spring/PG/S3/TLS broker의 종료·Result 확정을 연결했다.

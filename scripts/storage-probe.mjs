@@ -4,15 +4,19 @@ import { Client } from 'minio';
 
 // Only a unique, synthetic test bucket is modified. Existing user buckets are untouched.
 const port = Number(process.env.EDGEAI_MINIO_PORT);
-assert(Number.isInteger(port) && port > 0 && port < 65536, 'Invalid MinIO port');
+assert(process.env.EDGEAI_STORAGE_PROBE_URL || Number.isInteger(port) && port > 0 && port < 65536, 'Invalid MinIO port');
 const accessKey = process.env.EDGEAI_MINIO_USER;
 const secretKey = process.env.EDGEAI_MINIO_PASSWORD;
 assert(accessKey && secretKey, 'Load the local MinIO credentials');
-const endpoint = `http://127.0.0.1:${port}`;
+const origin = new URL(process.env.EDGEAI_STORAGE_PROBE_URL || `http://127.0.0.1:${port}`);
+assert(['http:', 'https:'].includes(origin.protocol) && !origin.username && !origin.password && origin.pathname === '/' && !origin.search && !origin.hash,
+  'Storage probe requires a credential-free HTTP(S) origin');
+const endpoint = origin.origin;
 const health = await fetch(`${endpoint}/minio/health/live`, { signal: AbortSignal.timeout(5000) });
 assert.equal(health.status, 200, 'MinIO live health');
 
-const client = new Client({ endPoint: '127.0.0.1', port, useSSL: false, accessKey, secretKey });
+const client = new Client({ endPoint: origin.hostname, port: Number(origin.port || (origin.protocol === 'https:' ? 443 : 80)),
+  useSSL: origin.protocol === 'https:', accessKey, secretKey });
 client.setRequestOptions({ timeout: 10_000 });
 const bucket = `edgeai-probe-${randomUUID()}`;
 const key = 'artifact.bin';

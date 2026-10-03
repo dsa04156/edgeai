@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-printf "%s\n" "BLOCKED: M7 multi-device DAG is not implemented." >&2
-exit 2
+source "$(dirname "$0")/lib.sh"
+[[ $# -eq 1 ]] || blocked 'Usage: demo-multidevice.sh <explicit Kubernetes context>; requires the enabled STREAM deployment.'
+exec python3 scripts/demo-multidevice.py --context "$1"

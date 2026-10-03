@@ -240,7 +240,22 @@ def main():
             output = call([str(ROOT / '.tools/stream-venv/bin/python'), 'scripts/test-stream-platform-broker.py',
                 '--context', context, '--report', '.tools/kind-stream-broker.json'], env=env, timeout=300)
             print(output.strip(), flush=True)
-            print('PASS: isolated kind runtime, VD, multi-device STREAM and persistent TLS broker acceptance', flush=True)
+            print(call(['python3', 'scripts/test-stream-minio-tls.py', '--context', context, '--minio-image', images['minio'],
+                '--report', '.tools/kind-stream-minio-tls.json'], env=env, timeout=300).strip(), flush=True)
+            # Exercise the real component on the original persistent API/DB/storage deployment.
+            with tempfile.TemporaryDirectory(prefix='.stream-', dir=ROOT / 'deploy/kind') as overlay:
+                (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))
+                (Path(overlay) / 'kustomization.yaml').write_text(json.dumps({'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
+                    'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins,
+                    'components': ['../../kubernetes/components/stream'], 'patches': [{'path': 'remote-api.json'}]}))
+                kcall(['-n', 'edgeai', 'apply', '-k', overlay])
+            for resource in ['statefulset/edgeai-minio', 'deployment/edgeai-api']:
+                kcall(['-n', 'edgeai', 'rollout', 'status', resource, '--timeout=240s'], timeout=250)
+            result = subprocess.run(['python3', 'scripts/demo-multidevice.py', '--context', context,
+                '--runner-image', images['runner'], '--runner-source', source_revision, '--report', '.tools/kind-multidevice-demo.json'], env=env, timeout=900)
+            if result.returncode:
+                raise RuntimeError('kind persistent-deployment stream demo failed')
+            print('PASS: isolated kind runtime, VD, multi-device STREAM, persistent TLS broker and deployment demo acceptance', flush=True)
             return 0
         finally:
             for process in forwards:

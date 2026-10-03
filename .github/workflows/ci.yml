@@ -261,6 +261,8 @@ jobs:
             .tools/kind-vd.json
             .tools/kind-stream.json
             .tools/kind-stream-broker.json
+            .tools/kind-stream-minio-tls.json
+            .tools/kind-multidevice-demo.json
           include-hidden-files: true
           retention-days: 14
   gitops:

@@ -59,14 +59,22 @@ OpenSSL·JDK keytool·mosquitto_ctrl이 필요하며 기존 소유 namespace/RBA
 충돌하면 중단하며 키·CA를 자동 교체하지 않는다. CA Secret은 workload에 마운트하지 않는다.
 
 선택 컴포넌트 `deploy/kubernetes/components/stream`은 영속 TLS broker와 API/MinIO TLS 설정을
-제공한다. 아직 dev overlay에는 활성화하지 않았다. 검증된 HTTPS 지원 이미지·신원·공개 CA와
-기존 활성 실행/VD를 확인한 뒤 overlay의 `components`에 `../../components/stream`을 연결한다.
+제공하며 dev overlay의 `components`에 연결돼 있다. 다른 설치에서도 적용 전에 검증된 HTTPS
+지원 이미지·신원·공개 CA와 기존 활성 실행/VD를 확인한다. bootstrap 없이 이 overlay를 적용하지 않는다.
 기존 MinIO data PVC는 유지한다. 내부 ClusterIP/DNS 연결이며 외부 장치 라우팅은 별도다.
 신원 검사는 `python3 scripts/test-stream-bootstrap.py --context <context>`, 준비된 broker 검사는
 Paho가 설치된 Python으로 `scripts/test-stream-platform-broker.py --context <context>`를 실행한다.
 후자는 실제 broker Pod를 한 번 교체하므로 실행 중인 스트림이 없는 전용 검증 시점에 사용한다.
 [신원·영속성 계약](../../docs/adr/0049-persistent-stream-platform.md),
 [검증 범위](../../docs/evidence/m7-persistent-stream-platform.md).
+
+활성화 후 `bash scripts/demo-multidevice.sh <context>`는 배포된 API/DB/MinIO/broker를 사용해
+합성 장치2개 → STREAM 작업2개 → BATCH 결과의 AUTO·NODE·취소3개 시나리오를 실행한다.
+별도 API/DB/broker를 만들거나 공유 서비스를 재시작하지 않는다. 실제 Runner8개·체크포인트·
+S3 고정 버전6개를 확인하며, Run 생성 전에 정한 멱등 UUID로 이번 데모의 Run만 취소/정리한다.
+검증 근거인 합성 Profile/Device/Workflow/Run/Result 이력은 보존하고 임시 driver/실행 리소스만 회수한다.
+결과는 `.tools/multidevice-demo.json`이다. `test-stream-minio-tls.py --context <context>`는 렌더링된
+MinIO TLS 설정을 임시 데이터·자격으로 검사하며 기존 데이터에는 접근하지 않는다.
 
 `bash scripts/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
 검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
