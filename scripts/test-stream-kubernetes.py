@@ -20,6 +20,8 @@ import time
 import urllib.request
 import uuid
 from vd_acceptance import ROOT, wait
+from vd_stream_acceptance import CASES as VD_CASES
+from vd_stream_kubernetes import VDStreamObserver
 
 CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover')
 
@@ -43,7 +45,7 @@ def main():
     parser.add_argument('--api-source', help='Full source commit for the explicit API image')
     parser.add_argument('--minio-image', help='Explicit CI-tested project MinIO digest')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/stream-kubernetes.json')
-    parser.add_argument('--cases', nargs='+', choices=CASES, default=list(CASES), help='Explicit subset for diagnosis; CI defaults to every case')
+    parser.add_argument('--cases', nargs='+', choices=CASES + VD_CASES, default=list(CASES + VD_CASES), help='Explicit subset for diagnosis; CI defaults to every case')
     args = parser.parse_args()
     if len(args.cases) != len(set(args.cases)):
         parser.error('Duplicate acceptance cases')
@@ -66,6 +68,7 @@ def main():
     labels = {'app.kubernetes.io/part-of': 'edgeai', 'app.kubernetes.io/managed-by': 'edgeai-stream-test', 'edgeai.io/test-id': root}
     api, db, storage, broker, driver = [root + '-' + name for name in ('api', 'db', 'storage', 'broker', 'driver')]
     run_ids = set()
+    vd_ids = set()
     seen = {}
     held_jobs, private_producers = {}, {}
     succeeded = False
@@ -252,6 +255,10 @@ with response: print(response.status)
             uuid.UUID(run)
             return read(['-n', 'edgeai-runtimes', 'get', 'pods,jobs,secrets', '-l', 'edgeai.io/run-id=' + run, '-o', 'json'])['items']
 
+        def vd_resources(vd):
+            uuid.UUID(vd)
+            return read(['-n', 'edgeai-runtimes', 'get', 'pods,jobs,secrets', '-l', 'edgeai.io/vd-id=' + vd, '-o', 'json'])['items']
+
         def observe(run):
             for pod in resources(run):
                 if pod['kind'] != 'Pod' or not pod['spec'].get('nodeName'):
@@ -320,6 +327,8 @@ with response: print(response.status)
                 env('EDGEAI_STREAM_CA_FILE', '/tmp/identity/server.crt'), env('EDGEAI_STREAM_ADMIN_PASSWORD_FILE', '/tmp/identity/admin.password'),
                 env('EDGEAI_STREAM_PRINCIPAL_KEY_FILE', '/tmp/identity/principal.key'), env('EDGEAI_STREAM_DEVICE_KEY_FILE', '/tmp/identity/device.key')]
             api_env += [secret_env(name) for name in ('EDGEAI_API_USER', 'EDGEAI_API_PASSWORD', 'EDGEAI_DB_PASSWORD', 'EDGEAI_MINIO_USER', 'EDGEAI_MINIO_PASSWORD')]
+            if any(name in VD_CASES for name in args.cases):
+                api_env += [env('EDGEAI_VD_ENABLED', 'true'), env('EDGEAI_VD_LEASE_SECONDS', '60')]
             jar_path = '/app/app.jar' if jar is None else '/tmp/current-api.jar'
             api_command = 'umask 077; mkdir -p /tmp/identity; cp /bootstrap/* /tmp/identity/; chmod 600 /tmp/identity/*; '
             if jar is not None:
@@ -354,6 +363,15 @@ with response: print(response.status)
                 return pod['metadata']['uid']
 
             api_uid = start_api()
+            def restart_vd_api():
+                nonlocal api_uid
+                old = api_uid
+                remove('pod', 'edgeai', api, old); records.remove(('pod', 'edgeai', api, old))
+                api_uid = start_api()
+                assert api_uid != old
+                return {'oldUid': old, 'newUid': api_uid, 'kind': 'actual-kubernetes-api-pod'}
+
+            vd_observer = VDStreamObserver(read, call, query, snapshot, vd_resources, runner_digest, root + '-ca', restart_vd_api)
             forward(api, 18443, '/actuator/health/readiness')
             nodes = read(['get', 'nodes', '-o', 'json'])['items']
             eligible = [n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
@@ -372,7 +390,8 @@ with response: print(response.status)
                       # No synthetic telemetry, cgroup overrides, or shared node mutations.
                       'memoryPressureCommand': "import runpy,threading,time\nfrom pathlib import Path\ndef pressure():\n global allocation\n while not Path('/work/automatic-pressure').exists(): time.sleep(.05)\n allocation=bytearray(b'x')*(320*1024*1024)\nthreading.Thread(target=pressure,daemon=True).start()\nrunpy.run_path('/opt/edgeai/examples/stream_sum.py',run_name='__main__')\n",
                       'reportCommand': 'import time; time.sleep(2)\n' + (ROOT / 'runner/examples/stream_report.py').read_text()}
-            create('ConfigMap', root + '-scenario', immutable=True, data={'driver.py': (ROOT / 'scripts/stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
+            create('ConfigMap', root + '-scenario', immutable=True, data={'driver.py': (ROOT / 'scripts/stream_acceptance.py').read_text(),
+                'vd_stream_acceptance.py': (ROOT / 'scripts/vd_stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
             create('Pod', driver, spec=pod_spec([{'name': 'source-driver', 'image': snapshot['runnerImage'], 'command': ['python3', '-B', '/scenario/driver.py'],
                 'env': [secret_env('EDGEAI_API_USER'), secret_env('EDGEAI_API_PASSWORD'), env('SSL_CERT_FILE', '/scenario/ca.crt')], 'securityContext': security,
                 'resources': {'requests': {'cpu': '100m', 'memory': '128Mi'}, 'limits': {'cpu': '1', 'memory': '512Mi'}},
@@ -393,8 +412,11 @@ with response: print(response.status)
                 current = state.get('phase')
                 if current:
                     run = current['runId'];uuid.UUID(run);run_ids.add(run);observe(run)
+                    if current['case'] in VD_CASES:
+                        vd_ids.update(current['vdTargets'])
+                        vd_observer.observe(current)
                     phase = current['phase']
-                    if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-finalizer-granted', '-finalizer-restoring', '-draining', '-releasing', '-cancelling'))):
+                    if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-children-exited', '-finalizer-granted', '-finalizer-restoring', '-draining', '-releasing', '-cancelling'))):
                         if 'expectedStates' in current:
                             task_ids = [str(uuid.UUID(current['tasks'][n])) for n in current['expectedStates']]
                             attempt_filter = ''
@@ -604,6 +626,8 @@ with response: print(response.status)
                                 assert query("SELECT state FROM edgeai.task_offload WHERE id='" + str(uuid.UUID(proof['operationId'])) + "'") == 'CANCELLED'
                                 assert query("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON a.task_id=t.id WHERE t.run_id='" + run + "'") == '2'
                                 proof['cancelledWithoutNewAttempt'] = True
+                        if current['case'] in VD_CASES:
+                            vd_observer.boundary(current)
                         call(['-n', 'edgeai', 'exec', driver, '--', 'touch', '/work/' + phase + '.continue'])
                         completed.add(phase)
                         print('PASS: actual Kubernetes stream boundary ' + phase, flush=True)
@@ -633,8 +657,15 @@ with response: print(response.status)
                     artifacts = []
                     for case in snapshot['cases']:
                         for row in case['results']:
-                            result = row['result'];observed = seen[result['producerPodUid']]
+                            result = row['result']
+                            if case['case'] in VD_CASES and case['taskExecutions'][row['task']]['mode'] == 'VD':
+                                vd_observer.result(case, row)
+                                artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
+                                continue
+                            observed = seen[result['producerPodUid']]
                             assert observed['runId'] == case['runId'] and observed['attemptId'] == result['attemptId']
+                            if case['case'] in VD_CASES:
+                                assert observed['nodeUid'] == case['taskExecutions'][row['task']]['nodeId']
                             if case['case'].startswith('placement'):
                                 assert observed['nodeUid'] == case['taskExecutions'][row['task']]['nodeId']
                             if case['placement']['mode'] == 'NODE':
@@ -695,6 +726,8 @@ with response: print(response.status)
                 try:
                     rows = query('SELECT id FROM edgeai.workflow_run')
                     run_ids.update(str(uuid.UUID(row)) for row in rows.splitlines())
+                    rows = query('SELECT id FROM edgeai.virtual_device')
+                    vd_ids.update(str(uuid.UUID(row)) for row in rows.splitlines())
                 except (AssertionError, OSError, subprocess.TimeoutExpired):
                     pass
             try:
@@ -705,10 +738,12 @@ with response: print(response.status)
                             remove(*record)
                 for (name, uid), run in list(held_jobs.items()):
                     hold_job(name, uid, run, False)
-                for run in run_ids:
-                    for item in resources(run):
-                        meta = item['metadata'];assert meta['labels']['edgeai.io/run-id'] == run
-                        assert meta['labels'].get('app.kubernetes.io/managed-by') == 'edgeai-runtime-controller'
+                owned = [('edgeai.io/run-id', run, resources, 'edgeai-runtime-controller') for run in run_ids]
+                owned += [('edgeai.io/vd-id', vd, vd_resources, 'edgeai-vd-controller') for vd in vd_ids]
+                for label, identity, lookup, manager in owned:
+                    for item in lookup(identity):
+                        meta = item['metadata'];assert meta['labels'][label] == identity
+                        assert meta['labels'].get('app.kubernetes.io/managed-by') == manager
                         plural = {'Pod': 'pods', 'Job': 'jobs', 'Secret': 'secrets'}[item['kind']]
                         path = ('/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' if plural == 'jobs' else '/api/v1/namespaces/edgeai-runtimes/' + plural + '/') + meta['name']
                         # The IDs came from this invocation's isolated DB, never another API's Runs.
@@ -717,7 +752,7 @@ with response: print(response.status)
                         # A concurrent real controller may already have removed the same object.
                         if result.returncode:
                             assert not call(['-n', 'edgeai-runtimes', 'get', plural, meta['name'], '--ignore-not-found', '-o', 'name']).strip()
-                    wait(lambda: not resources(run), 90, 'Owned Run cleanup incomplete')
+                    wait(lambda: not lookup(identity), 90, 'Owned runtime cleanup incomplete')
             finally:
                 for process in forwards:
                     process.terminate()

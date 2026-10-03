@@ -415,8 +415,14 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
 
 def main():
     names = config.get('cases', ['auto', 'node', 'recover', 'finalizer', 'cancel'])
-    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover'}
+    VD_CASES = ()
+    if any(name.startswith('vd-') for name in names):
+        from vd_stream_acceptance import CASES as VD_CASES, run_case as run_vd_case
+    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover', *VD_CASES}
     for name in names:
+        if name in VD_CASES:
+            run_vd_case(sys.modules[__name__], name)
+            continue
         placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' or name.startswith('offload') else {'mode': 'AUTO'}
         task_placements = {task: {'mode': 'NODE', 'nodeId': config['nodeId'] if task == 'root' else config['targetNodeId']}
                            for task in ('root', 'sink', 'report')} if name.startswith('placement') else None

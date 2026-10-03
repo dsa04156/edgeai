@@ -4,7 +4,8 @@
 [기존 출처](sources.md)의 2026-10-01과 같았다. 이 문서는 다음 구현의 수용 범위이며
 전체 STREAM 수용 완료 기록이 아니다. [ADR0041](adr/0041-public-stream-runs.md) 이후 공개 STREAM
 Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. ADR0055는 VD를 추가해 서버·DB·UI를
-로컬 검증했으며 실제 VD 스트리밍 종단 수용은 남는다. 기본 비활성 환경은501을 반환한다.
+검증하고 실제 Kubernetes VD 스트리밍6개를 통과했다. 새 이미지 CI/배포와 아래 남은 수용은
+별도다. 기본 비활성 환경은501을 반환한다.
 
 ## 원문에서 요구하는 동작
 
@@ -37,10 +38,14 @@ ADR0054는 BATCH 작업별 VD/REMOTE를 연결하고 PG214·실제 저장소40·
 기존 Task9,359개의 업그레이드 보존과 실제 VD→NODE→VD·API 교체를 검증했다.
 후속 실제 Kubernetes의 NODE→REMOTE→NODE·REMOTE→AUTO·혼합 취소3개와 API 교체·독립
 TLS 제공자의 계산1회·고정 S3결과5개도 통과했다. V30은 abf6bfd CI37151914101·GitOps720203b
-실제 이미지/Ready·PVC·ArgoSynced·기존 데이터 보존을 확인했다. 후속 Remote3개 CI 게이트는 진행 중이다.
+실제 이미지/Ready·PVC·ArgoSynced·기존 데이터 보존을 확인했다. 후속 Remote3개도0d31eb8
+CI37154396986·GitOps8b17e24에서 원시 증거/실제 이미지와 기존 데이터 보존을 확인했다.
 ADR0055/V31–V32 VD STREAM의 자기 VD 권한·동시 용량·그룹/최종 처리 복구를 PG219·기존
 저장소40·단위105·계약·UI에서 검증했다. 새 VD의 Pod/브로커/S3 receipt는 DB 시험 fixture다.
-실제 VD 스트리밍/Kubernetes 종단·새 CI/배포, STREAM REMOTE와 VD 그룹 전환은 남는다.
+후속 실제 supervisor/자식 Runner5개·전체 저장소45개에서 TLS/S3·그룹 상태 복원·취소·결과28/37을
+확인했다. 후속 실제 Kubernetes6개/VD14Pods·Node1Pod/S3결과15개·API 교체·자식 SIGKILL 후
+복구·취소와 소유 자원 정리도 통과했다. 새 CI/배포·VD Pod 자체 교체, STREAM REMOTE와
+VD 그룹 전환은 남는다.
 [VD 스트리밍 근거](evidence/m7-vd-stream-execution.md)를 따른다.
 [작업별 배치 근거](evidence/m7-task-initial-placement.md)와
 [혼합 배치 근거](evidence/m7-mixed-task-targets.md)를 따른다.

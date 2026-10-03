@@ -1,7 +1,7 @@
 # M7 BATCH 작업별 VD·Remote 혼합 배치
 
 2026-10-04. ADR0054/V30. 아래 로컬·실제 Kubernetes 검증과 abf6bfd의 이미지·CI·배포를 통과했다.
-후속 Remote 혼합3개 CI와 실제 외부 시스템 수용은 별도이며 STREAM VD/REMOTE와 M7 전체
+후속 Remote 혼합3개 CI·배포도 아래에서 확인했다. 실제 외부 시스템 수용과 STREAM VD/REMOTE·M7 전체
 완료를 주장하지 않는다.
 
 ## 후속 CI·배포 확인
@@ -16,9 +16,13 @@ Ready·PVC Bound·Argo Synced를 `20261003T211258Z-1187337c`에서 확인했다.
 S3파일과 PostgreSQL/MinIO 두PVC UID 보존은 `20261003T211350Z-0ef63124`에서 확인했다.
 공유Ingress로 인한 aggregate health Progressing은 유지한다.
 
-이후 실제 Remote 혼합3개 kind 게이트를 GitOps 위로 재배치하여
-`0d31eb8b737de6a995b91c3cb1d715b76330ea75`를 main에 푸시했다. CI37154396986은 진행 중이다.
-아래 최초 로컬 구현 기록의 새 CI/배포 대기는 위 abf6bfd 범위에서 해소됐다. Remote3개 새 게이트와
+이후 실제 Remote 혼합3개 kind 게이트를 GitOps 위로 재배치했다.
+소스 `0d31eb8b737de6a995b91c3cb1d715b76330ea75`의 CI37154396986은5jobs/원시17개 PASS다.
+혼합Remote3개/S35·PG214·기존kind22Run/S320·VD5/S38·STREAM11/Pod39/S324 및 영속TLS/
+배포데모까지 대조했다(220028Z-1e19bb71). GitOps8b17e24의 실제3imageID·Ready/PVCBound/
+ArgoSynced(215910Z-ab971f5e), 기존10파일/두PVC 보존(215911Z-fa4598d5)도 PASS다.
+기존 공유Ingress aggregate Progressing은 유지한다. 후속 ADR0055 VD STREAM의 새 CI/배포는 별도다.
+아래 최초 로컬 구현 기록의 새 CI/배포 대기는 위 두 소스 범위에서 해소됐다.
 ADR0055의 VD STREAM 변경에는 해당 완료 판정을 적용하지 않는다.
 
 ## 연결한 계약
@@ -97,5 +101,5 @@ V30을 최초 격리 DB에 적용한 후 SHA-256은
 해당 CI5jobs/원시17개와 GitOpsaabb815의 실제 imageID·Ready/PVCBound/ArgoSynced·V29 적용,
 기존10파일/두PVC 보존은 통과했다. 이 혼합 V30 변경의 새 이미지·배포 증거가 아니다.
 저장소40개 시험의 Kubernetes 부분은 fixture이며 후속 실제 Kubernetes↔Remote3개와 구분한다.
-후속 Remote3개 CI 게이트·이미지/배포, 실제 외부 제공자·실장비, STREAM VD/REMOTE 및
+실제 외부 제공자·실장비, STREAM VD/REMOTE 및
 M5 잔여/M8–M10은 남아 있다. VD STREAM 구성 요소 후속은 [별도 근거](m7-vd-stream-execution.md)를 따른다.

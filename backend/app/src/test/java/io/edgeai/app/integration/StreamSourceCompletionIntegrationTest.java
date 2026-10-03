@@ -7,6 +7,7 @@ import io.edgeai.domain.profile.ProfileIdentity;
 import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.stream.*;
+import io.edgeai.domain.vd.*;
 import io.minio.*;
 import io.minio.messages.VersioningConfiguration;
 import java.nio.file.*;
@@ -32,9 +33,9 @@ import static org.mockito.Mockito.*;
 /** Public Run MVC, actual Spring/MinIO over TLS, PG, TLS broker, SDK and independent Runners.
  * Pod provisioning/identity are fixtures; the recovery tests additionally model peer-triggered closure. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-    "edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.stream.enabled=true",
+    "edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.stream.enabled=true","edgeai.vd.enabled=true","edgeai.vd.lease-seconds=60",
     "edgeai.stream.bindings-enabled=true","edgeai.stream.runs-enabled=true","edgeai.stream.reconcile-ms=50"})
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print=org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 @DirtiesContext(classMode=DirtiesContext.ClassMode.AFTER_CLASS)
 class StreamSourceCompletionIntegrationTest {
     private static final StreamBrokerFixture BROKER=new StreamBrokerFixture();
@@ -62,19 +63,32 @@ class StreamSourceCompletionIntegrationTest {
     @Autowired OffloadService offloads;@Autowired NodeService nodes;@Autowired NodeRepository nodeStore;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean RuntimeGateway gateway;
+    @MockitoBean VDGateway vdGateway;
+    @Autowired VirtualDeviceService virtualDevices;@Autowired VDLifecycleService vdLifecycle;@Autowired VDTokenService vdTokens;
+    @Autowired VDTaskRepository vdAllocations;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     private final JsonDocuments json=new JsonDocuments();
     private StreamTlsProxy apiTls;
     private final Map<UUID,RuntimePod> pods=new ConcurrentHashMap<>();private final List<UUID> runIds=new ArrayList<>();
+    private record Supervisor(VDRuntime runtime,UUID node,Path folder,Process process){}
+    private final Map<UUID,Supervisor> supervisors=new ConcurrentHashMap<>();
     private record Execution(UUID run,UUID task,UUID attempt,List<UUID> generations,Path folder){}
     private record DagExecution(UUID run,Map<String,UUID> tasks,Path folder){}
     @BeforeEach void setup(){apiTls=new StreamTlsProxy(BROKER,"http://127.0.0.1:"+port);runningWorker=worker;when(gateway.authenticatePod(any(),any())).thenAnswer(c->{
         RuntimeInstance r=c.getArgument(0);if(!"source-pod-proof".equals(c.getArgument(1)) || !pods.containsKey(r.attemptId()))
-            throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);return pods.get(r.attemptId());});}
+            throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);return pods.get(r.attemptId());});
+        when(vdGateway.authenticatePod(any(),any())).thenAnswer(c->{
+            VDRuntime r=c.getArgument(0);var s=supervisors.get(r.id());
+            if(!"source-vd-pod-proof".equals(c.getArgument(1)) || s==null)throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);
+            return new VDGateway.PodIdentity(s.runtime().podUid(),s.node(),"vd-fixture-node",Files.exists(s.folder().resolve("work/.vd-ready")));
+        });}
     @AfterEach void cleanup()throws Exception{try{for(var id:runIds){
         if(!Set.of("SUCCEEDED","FAILED","CANCELLED").contains(executions.run(id,false).orElseThrow().state()))runs.cancelRun(id,"{}");}
         until(()->runIds.stream().flatMap(id->routeStore.forRun(id,100,0).stream()).noneMatch(r->routeStore.open(r.id()).isPresent()));
-        }finally{if(apiTls!=null)apiTls.close();}}
+        }finally{
+            try{for(var s:supervisors.values())if(s.process()!=null && s.process().isAlive()){
+                s.process().destroy();if(!s.process().waitFor(8,TimeUnit.SECONDS)){s.process().descendants().forEach(ProcessHandle::destroyForcibly);s.process().destroyForcibly();assertThat(s.process().waitFor(5,TimeUnit.SECONDS)).isTrue();}
+            }}finally{if(apiTls!=null)apiTls.close();}}}
     @AfterAll static void stop()throws Exception{
         try{if(runningWorker!=null)runningWorker.close();
             var versions=new ArrayList<Map.Entry<String,String>>();
@@ -98,7 +112,11 @@ class StreamSourceCompletionIntegrationTest {
         return publicRun(version,inputs,retry,false);
     }
     private WorkflowRun publicRun(UUID version,List<Object> inputs,boolean retry,boolean automatic)throws Exception{
+        return publicRun(version,inputs,retry,automatic,Map.of("mode","AUTO"),Map.of());
+    }
+    private WorkflowRun publicRun(UUID version,List<Object> inputs,boolean retry,boolean automatic,Map<String,Object> execution,Map<String,Object> placements)throws Exception{
         var body=new TreeMap<String,Object>(Map.of("workflowVersionId",version.toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),"streamInputs",inputs));
+        body.put("execution",execution);if(!placements.isEmpty())body.put("taskExecutions",placements);
         if(retry)body.put("retry",Map.of("maxAttempts",2,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
         if(automatic){var policy=new TreeMap<String,Object>(Map.of("latencyMicros",1000,"consecutiveSamples",2,"maxSampleAgeSeconds",30,
             "maxGapSeconds",10,"minRunningSeconds",10,"cooldownSeconds",20,"maxTransfers",1,"drainTimeoutSeconds",60,"startTimeoutSeconds",60));
@@ -225,6 +243,7 @@ class StreamSourceCompletionIntegrationTest {
                 stream.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxPayloadBytes",262144)));
                 stream.put("outputs",Map.of());
             }
+            if(name.equals("fanout"))stream.put("outputs",Map.of());
         }
         return profiles.publish(ProfileIdentity.Kind.SERVICE,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",spec))).version().id();
     }
@@ -426,6 +445,138 @@ class StreamSourceCompletionIntegrationTest {
     @Test void realGroupRetryAutomaticallyReconnectsSameDeviceOwnersAndRestoresBothRunners()throws Exception{dagProbe(false,true);}
     @Test void publicNodeOffloadRestoresActualGroupCheckpointsAndReconnectsSameDeviceOwners()throws Exception{dagProbe(false,true,true);}
     @Test void runnerMeasurementsAutomaticallyTransferActualGroupStateAndReconnectSameDeviceOwners()throws Exception{dagProbe(false,true,true,true);}
+
+    /** Real supervisor poll and child processes. Only Kubernetes submission/Pod identity are fixtures. */
+    private Supervisor startSupervisor(UUID service,int capacity,Path parent,String name)throws Exception{
+        var vp=profiles.publish(ProfileIdentity.Kind.VD,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",
+            Map.of("apiVersion","edgeai.vd/v1","type","emulation","serviceProfileVersionId",service.toString(),"sources",Map.of(),"state",Map.of("mode","STATELESS"),
+                "runtime",Map.of("maxConcurrentTasks",capacity,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30))))).version();
+        var vd=virtualDevices.create(json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"displayName","Actual stream supervisor","profileVersionId",vp.id().toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value();
+        var op=vdLifecycle.provision(vd.id(),0,"provision",new io.edgeai.app.config.RuntimeSettings(BUCKET,"edgeai-runner",java.net.URI.create(apiTls.origin),120),false);
+        var runtime=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());
+        var folder=Files.createDirectory(parent.resolve(name),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        Files.createDirectory(folder.resolve("work"));secret(folder,"claim",vdTokens.issue(runtime));secret(folder,"pod","source-vd-pod-proof");secret(folder,"supervisor.log","");
+        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("../../runner/vd.py").toAbsolutePath().normalize().toString());
+        var env=builder.environment();env.keySet().removeIf(k->k.startsWith("EDGEAI_"));
+        env.putAll(Map.of("EDGEAI_VD_ID",vd.id().toString(),"EDGEAI_VD_RUNTIME_ID",runtime.id().toString(),"EDGEAI_VD_GENERATION",Long.toString(runtime.generation()),
+            "EDGEAI_POD_UID",runtime.podUid().toString(),"EDGEAI_CONTROL_PLANE_URL",apiTls.origin,"EDGEAI_VD_CLAIM_FILE",folder.resolve("claim").toString(),
+            "EDGEAI_POD_TOKEN_FILE",folder.resolve("pod").toString(),"EDGEAI_WORK_DIR",folder.resolve("work").toString(),"EDGEAI_VD_MAX_CONCURRENT_TASKS",Integer.toString(capacity),"EDGEAI_VD_STARTUP_SECONDS","60"));
+        env.put("EDGEAI_VD_DRAIN_SECONDS","30");env.put("SSL_CERT_FILE",BROKER.file("server.crt"));env.put("PYTHONDONTWRITEBYTECODE","1");
+        // Register identity before starting HTTP poll. The record's process is replaced before waiting for Ready.
+        var node=UUID.randomUUID();supervisors.put(runtime.id(),new Supervisor(runtime,node,folder,null));
+        Process process=builder.redirectOutput(folder.resolve("supervisor.log").toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        var result=new Supervisor(runtime,node,folder,process);supervisors.put(runtime.id(),result);
+        until(()->{assertThat(process.isAlive()).as("Actual VD supervisor stays alive").isTrue();return vdLifecycle.get(runtime.id()).ready(Instant.now());});return result;
+    }
+    private Map<String,Object> target(Supervisor s){return Map.of("mode","VD","vdId",s.runtime().vdId().toString());}
+    private boolean stateCheckpoint(UUID task,int value){
+        var cp=checkpoints.latest(task).orElse(null);if(cp==null)return false;
+        try{return ((Map<?,?>)json.decode(cp.summaryJson())).get("stateSha256").equals(HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Integer.toString(value).getBytes(java.nio.charset.StandardCharsets.UTF_8))));}
+        catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
+    }
+    private void vdStreams(boolean shared,boolean recovery,boolean cancel)throws Exception{
+        var folder=Files.createDirectory(BROKER.root.resolve("vd-stream-"+UUID.randomUUID()),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        UUID rootService=dagService(shared?"fanout":"root"),sinkService=shared?rootService:dagService("sink"),reportService=dagService("report");
+        var root=startSupervisor(rootService,shared?2:1,folder,"root-vd");
+        var sink=shared?root:startSupervisor(sinkService,1,folder,"sink-vd");var report=startSupervisor(reportService,1,folder,"report-vd");
+        var definitions=List.of(Map.of("key","root","serviceProfileVersionId",rootService.toString(),"parameters",Map.of("mode","zip")),
+            Map.of("key","sink","serviceProfileVersionId",sinkService.toString(),"parameters",shared?Map.of("mode","zip"):Map.of()),
+            Map.of("key","report","serviceProfileVersionId",reportService.toString(),"parameters",Map.of()));
+        var edges=new ArrayList<Map<String,Object>>();if(!shared)edges.add(edge("root","sink","sum","input","STREAM"));
+        edges.add(edge("root","report","result","root","BATCH"));edges.add(edge("sink","report","result","sink","BATCH"));
+        var workflow=workflows.create(json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"displayName","Actual VD stream data"))).value();
+        var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",definitions,"dependencies",edges))).value();
+        var sources=new TreeMap<String,Object>();var inputs=new ArrayList<Object>();
+        for(String name:List.of("a","b")){
+            var dp=profiles.publish(ProfileIdentity.Kind.DEVICE,json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"version","1.0.0","spec",Map.of("protocol","mqtt")))).version();
+            var device=devices.create(json.canonical(Map.of("key",BUCKET+UUID.randomUUID(),"displayName","Actual synthetic VD stream","profileVersionId",dp.id().toString(),"sourceMode","SYNTHETIC"))).value();
+            var session=devices.openSession(device.id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();secret(folder,name+".token",deviceTokens.issue(session));
+            sources.put(name,Map.of("deviceId",device.id().toString(),"sessionId",session.id().toString(),"epoch",session.epoch()));
+            for(String task:shared?List.of("root","sink"):List.of("root"))inputs.add(Map.of("deviceId",device.id().toString(),"sourcePort","samples","toTask",task,"toPort",name,"maxPayloadBytes",4096));
+        }
+        UUID run=publicRun(version.id(),inputs,recovery,false,target(root),Map.of("sink",target(sink),"report",target(report))).id();runIds.add(run);
+        var tasks=new TreeMap<String,UUID>();executions.tasks(run).forEach(t->tasks.put(t.key(),t.id()));
+        var targets=Map.of("root",root,"sink",sink,"report",report);
+        secret(folder,"request.json",json.canonical(Map.of("origin",apiTls.origin,"runId",run.toString(),"sources",sources,"shared",shared,"mode",recovery?"recover":cancel?"cancel":"complete")));
+        for(String log:List.of("probe.log","probe-error.log"))secret(folder,log,"");
+        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),"-W","error::ResourceWarning","src/test/fixtures/vd_stream_probe.py",folder.toString());
+        builder.environment().put("SSL_CERT_FILE",BROKER.file("server.crt"));
+        var driver=builder.redirectOutput(folder.resolve("probe.log").toFile()).redirectError(folder.resolve("probe-error.log").toFile()).start();
+        try{
+            until(()->Files.exists(folder.resolve("first-sent")) || !driver.isAlive());assertThat(driver.isAlive()).as("VD stream sources connected").isTrue();
+            until(()->stateCheckpoint(tasks.get("root"),9) && stateCheckpoint(tasks.get("sink"),9));
+            assertThat(executions.attempts(tasks.get("report"))).isEmpty();
+            for(String name:List.of("root","sink")){
+                var attempt=executions.attempts(tasks.get(name)).getFirst();var r=runtimes.byAttempt(attempt.id()).orElseThrow();
+                assertThat(attempt.mode()).isEqualTo("VD");assertThat(r.producerPodUid()).isEqualTo(targets.get(name).runtime().podUid());
+                assertThat(vdAllocations.byRuntime(r.id()).orElseThrow().open()).isTrue();
+            }
+            if(cancel){
+                runs.cancelRun(run,"{}");Files.writeString(folder.resolve("cancelled"),"");
+                until(()->executions.run(run,false).orElseThrow().state().equals("CANCELLED"));
+                tasks.values().forEach(id->assertThat(runtimes.result(id)).isEmpty());assertThat(executions.attempts(tasks.get("report"))).isEmpty();
+            }else{
+                if(recovery){
+                    lifecycle.observeFailure(executions.attempts(tasks.get("sink")).getFirst().id(),"RUNTIME_LOST");
+                    var old=new HashMap<String,StreamCheckpoint>();for(String name:List.of("root","sink"))old.put(name,checkpoints.latest(tasks.get(name)).orElseThrow());
+                    assertThat(lifecycle.retryTask(tasks.get("root"))).isFalse();Files.writeString(folder.resolve("fault-injected"),"");
+                    // Only actual supervisor completion polls close the old slots; no confirmStopped fixture here.
+                    until(()->old.values().stream().allMatch(cp->runtimes.runtime(cp.runtimeId()).orElseThrow().observedState().equals("TERMINATED")
+                        && !vdAllocations.byRuntime(cp.runtimeId()).orElseThrow().open()));
+                    until(()->lifecycle.retryTask(tasks.get("root")));
+                    until(()->old.entrySet().stream().allMatch(entry->{
+                        var next=executions.attempts(tasks.get(entry.getKey())).getFirst();
+                        return checkpoints.byAttemptSerial(next.id(),entry.getValue().request().serial()+1).isPresent();
+                    }));
+                    for(String name:old.keySet()){
+                        var previous=old.get(name);var next=executions.attempts(tasks.get(name)).getFirst();
+                        var transferred=checkpoints.byAttemptSerial(next.id(),previous.request().serial()+1).orElseThrow();
+                        assertThat(next.vdId()).isEqualTo(targets.get(name).runtime().vdId());assertThat(next.epoch()).isEqualTo(2);
+                        assertThat(transferred.handoverFromId()).isEqualTo(previous.id());assertThat(transferred.revision()).isEqualTo(previous.revision());
+                        assertThat(((Map<?,?>)json.decode(transferred.summaryJson())).get("stateSha256")).isEqualTo(((Map<?,?>)json.decode(previous.summaryJson())).get("stateSha256"));
+                        assertThat(transferred.artifact().versionId()).isNotBlank();assertThat(transferred.artifact().objectKey()).isNotEqualTo(previous.artifact().objectKey());
+                    }
+                    Files.writeString(folder.resolve("restored"),"");
+                }else Files.writeString(folder.resolve("first-verified"),"");
+                until(()->stateCheckpoint(tasks.get("root"),14) && stateCheckpoint(tasks.get("sink"),shared?14:23));
+                Files.writeString(folder.resolve("second-verified"),"");
+                until(()->executions.run(run,false).orElseThrow().state().equals("SUCCEEDED"));
+                for(String name:tasks.keySet()){
+                    var result=runtimes.result(tasks.get(name)).orElseThrow();var expected=targets.get(name).runtime();
+                    assertThat(result.vdRuntimeId()).isEqualTo(expected.id());assertThat(result.producerPodUid()).isEqualTo(expected.podUid());
+                    assertThat(executions.attempts(tasks.get(name))).hasSize(recovery && !name.equals("report")?2:1);
+                    var artifact=result.outputs().getFirst().artifact();assertThat(artifact.versionId()).isNotBlank().isNotEqualTo("null");
+                    try(var input=MINIO.getObject(GetObjectArgs.builder().bucket(artifact.bucket()).object(artifact.objectKey()).versionId(artifact.versionId()).build())){
+                        byte[] bytes=input.readAllBytes();assertThat(bytes.length).isEqualTo(artifact.bytes());
+                        assertThat(HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes))).isEqualTo(artifact.sha256());
+                        Object value=name.equals("report")?Map.of("sourceMode","SYNTHETIC","sum",shared?28:37,"inputs",Map.of("root",14,"sink",shared?14:23)):Map.of("sum",name.equals("root") || shared?14:23);
+                        assertThat(json.canonical(json.decode(new String(bytes,java.nio.charset.StandardCharsets.UTF_8)))).isEqualTo(json.canonical(value));
+                    }
+                }
+                var a=completions.task(executions.attempts(tasks.get("root")).getFirst().id()).orElseThrow();
+                var b=completions.task(executions.attempts(tasks.get("sink")).getFirst().id()).orElseThrow();assertThat(a.grantedAt()).isNotNull().isEqualTo(b.grantedAt());
+            }
+            assertThat(driver.waitFor(15,TimeUnit.SECONDS)).isTrue();
+            assertThat(driver.exitValue()).as("VD device driver: %s",Files.readString(folder.resolve("probe.log"))).isZero();
+            assertThat(Files.readString(folder.resolve("probe.log"))).isEqualTo(cancel?"VD_STREAM_CANCELLED\n":recovery?"VD_STREAM_RECOVERED\n":"VD_STREAM_PASS\n");
+            assertThat(Files.size(folder.resolve("probe-error.log"))).isZero();
+            until(()->supervisors.values().stream().allMatch(s->vdAllocations.open(s.runtime().id()).isEmpty()));
+            until(()->routeStore.forRun(run,20,0).stream().noneMatch(r->routeStore.open(r.id()).isPresent()));
+            assertThat(routeStore.forRun(run,20,0)).allMatch(r->routeStore.history(r.id(),20,0).size()==(recovery?2:1));
+            for(var s:supervisors.values()){
+                assertThat(s.process().isAlive()).isTrue();vdLifecycle.drain(s.runtime().vdId(),0,"drain");
+                assertThat(s.process().waitFor(10,TimeUnit.SECONDS)).isTrue();assertThat(s.process().exitValue()).isZero();
+                try(var paths=Files.list(s.folder().resolve("work/attempts"))){assertThat(paths.count()).isZero();}
+            }
+        }finally{if(driver.isAlive()){driver.destroy();if(!driver.waitFor(5,TimeUnit.SECONDS)){driver.destroyForcibly();assertThat(driver.waitFor(5,TimeUnit.SECONDS)).isTrue();}}}
+    }
+    @Test void actualSharedVdChildrenCompleteFanoutAndReleaseVerifiedBatch()throws Exception{vdStreams(true,false,false);}
+    @Test void actualDistinctVdsStreamAcrossSupervisorsAndReleaseVerifiedBatch()throws Exception{vdStreams(false,false,false);}
+    @Test void actualSharedVdGroupRetryTransfersS3StateAndReconnectsSameSources()throws Exception{vdStreams(true,true,false);}
+    @Test void actualDistinctVdGroupRetryTransfersS3StateAndReconnectsSameSources()throws Exception{vdStreams(false,true,false);}
+    @Test void actualSharedVdCancellationWaitsForChildExitsAndNeverReleasesBatch()throws Exception{vdStreams(true,false,true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
-        while(!condition.getAsBoolean() && System.nanoTime()<end)Thread.sleep(20);assertThat(condition.getAsBoolean()).as("Actual stream completion boundary reached").isTrue();}
+        boolean reached=condition.getAsBoolean();
+        while(!reached && System.nanoTime()<end){Thread.sleep(20);reached=condition.getAsBoolean();}
+        assertThat(reached).as("Actual stream completion boundary reached").isTrue();}
 }

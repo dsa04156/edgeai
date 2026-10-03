@@ -6,7 +6,11 @@ ADR0055/V31–V32 VD STREAM의 서버·DB·Swagger·UI를 구현했다. 자기 V
 재시도/취소와 완료 허가 뒤 VD 최종 처리 복구를 실제 PG 시험으로 확인했다.
 PG219(211440Z-6754e4a7)·새 VD5개 포함 STREAM/route53·단위105·기존 저장소40·계약5/MVC26 PASS.
 화면 lint/type/build·기존42개와 수정한 새 PC/모바일2개도 PASS다. 새 DB 시험의 Pod·S3·브로커
-receipt는 fixture이며 실제 VD 자식 Runner의 TLS/S3/상태 인계·Kubernetes·새 CI/배포는 남는다.
+receipt는 fixture다. 후속 실제 VD supervisor/자식 Runner5개(214323Z-d9e57d1d)·전체 실제 저장소45개
+(214448Z-27d21841) PASS. TLS/S3·같은/다른 VD·그룹 상태 복원·취소·결과28/37을 확인했다.
+이 서버 시험의 Kubernetes 제출/Pod 신원은 fixture다. 후속 실제 Kubernetes6개/VD14Pods·
+Node1Pod/S3결과15개·API 교체·자식 SIGKILL 그룹 복구·취소/자원 정리도 PASS(215558Z-8e800c29).
+새 CI17개 기본 게이트·배포와 VD Pod 자체 교체/최종 처리 Kubernetes 수용은 남는다.
 실제 API/DB/Swagger PC·모바일10개(212323Z-80951e84)와 로컬 V30→V32의 기존
 Task9,371개 신원·최초 대상 보존(212706Z-46c55521)도 PASS다.
 docs/evidence/m7-vd-stream-execution.md. M5 잔여/M7–M10 전체 미완료 유지.
@@ -15,7 +19,9 @@ docs/evidence/m7-vd-stream-execution.md. M5 잔여/M7–M10 전체 미완료 유
 STREAM11/Pod39/S324·kind22Run·영속TLS/배포데모 PASS다. GitOps720203b의 정확한imageID·
 Ready/PVCBound/ArgoSynced(211258Z-1187337c)와 기존10파일/두PVC 보존(211350Z-0ef63124)을 확인했다.
 공유Ingress aggregate Progressing은 유지한다. 후속 Remote 혼합3개 게이트는0d31eb8 main에
-푸시했고 CI37154396986은 진행 중이다. 새 VD STREAM 로컬 변경의 CI/배포 증거가 아니다.
+푸시했고 CI37154396986은5jobs/원시17개·혼합3/S35·기존STREAM11 PASS(220028Z-1e19bb71).
+GitOps8b17e24 실제imageID/Ready/PVC/ArgoSynced(215910Z-ab971f5e)와 기존10파일/두PVC
+보존(215911Z-fa4598d5)도 확인했다. 새 VD STREAM 로컬 변경의 CI/배포 증거가 아니다.
 
 아래는 선행 BATCH 혼합 배치 구현 이력이다.
 ADR0054/V30 BATCH 작업별 VD/REMOTE 혼합 배치를 공개 API·Swagger·화면에 연결했다.

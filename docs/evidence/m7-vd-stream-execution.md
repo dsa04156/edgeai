@@ -1,8 +1,9 @@
 # M7 VD 스트리밍 제어·완료·복구
 
 2026-10-04. ADR0055/V31–V32의 서버·DB·Swagger·화면을 연결했다.
-아래 구성 요소 검증과 실제 VD 자식 Runner의 스트림 종단 수용은 구분한다.
-새 VD 스트리밍의 실제 broker/S3/supervisor·Kubernetes·CI·배포 검증은 아직 남는다.
+서버·DB 시험에 이어 실제 VD supervisor/자식 Runner·TLS broker·S3 시험5개와
+전체 실제 저장소 회귀45개를 통과했다. 후속 실제 Kubernetes6개/VD Pod14개·Node Pod1개/
+고정 S3결과15개도 통과했다. 새 이미지 CI·배포와 VD Pod 자체 교체 수용은 별도다.
 
 ## 구현한 경계
 
@@ -36,11 +37,32 @@
 | 새 VD 스트리밍 PC/모바일 | 20261003T211914Z-0bb52701 | 수정 후2개 PASS. VD 선택·Remote 거절·서버 용량 오류 표시·동일 요청 키/입력 유지. 명시적 HTTP fixture |
 | 실제 API/DB·Swagger·PC/모바일 | 20261003T212323Z-80951e84 | PASS10개. 한국어 VD STREAM/용량 제한 설명·패키징된 계약·실제 CSRF, 기존 관리 흐름. 이 서버는 실행 비활성 설정 |
 | 로컬 V30→V32 업그레이드 | 20261003T212706Z-46c55521 | PASS. 기존 Task9,371개의 신원·정의·최초 대상 보존, 성공한 migration32개 |
+| 실제 VD supervisor/자식 STREAM | 20261003T214323Z-d9e57d1d | PASS5개. 같은 VD의 두 작업·다른 VD의 체인, 양쪽 그룹 재시도, 같은 VD 취소. 실제 Device SDK·Spring/PG/TLS MQTT/MinIO·VD poll·자식 프로세스와 고정 S3 결과28/37 |
+| 전체 실제 저장소 회귀 | 20261003T214448Z-27d21841 | PASS45개, 실패/오류/skip0. 신규 VD5개와 기존40개를 같은 실행에서 확인 |
+| 실제 Kubernetes VD STREAM | 20261003T215558Z-8e800c29 | PASS6개. 같은/다른 VD·VD→Node→VD·API Pod 교체·같은/다른 VD 자식 SIGKILL 후 상태 인계·취소, 실제 VD14Pods/Node1Pod/S3결과15개와 소유 자원 정리 |
+| 기존 Kubernetes AUTO 회귀 | 20261003T220351Z-8031f85d | 변경된 공통 driver/fixture의 실제 AUTO·API 교체·Node3Pods/S3결과3개·소유 자원 정리 PASS |
 
 DB 시험의 Pod 신원·프로세스 종료 보고·broker/S3 receipt는 명시적 fixture다. 그룹 retry 시험은
 새 Runner가 `HANDOVER`를 요구하고 원본 체크포인트를 보존하는 경계까지 검증한다. 새 VD의
 실제 상태 bytes 전송이나 실제 Kubernetes Pod 실행을 이 결과로 주장하지 않는다.
 모바일의 추가 VD 선택 화면을 직접 확인했고 가로 넘침이 없는 것을 브라우저에서 검사했다.
+
+새 supervisor 시험은 실제 `runner/vd.py`가 자식 Runner를 시작하고 HTTP poll로 종료를 보고한다.
+그룹 실패 주입은 서버 lifecycle 호출이며 이전 자식 종료/slot 회수는 실제 프로세스와 poll로
+확인한다. 두 장치의 같은 SDK 객체·센서 cursor가 유지되고 S3 상태9를 복원한 뒤 추가 입력으로
+14/14 또는14/23과 하위 BATCH28/37을 만든다. 실제 고정 object version의 bytes/SHA/내용과
+VD runtime/Pod provenance를 대조한다. 취소는 Result/하위 Attempt를 만들지 않으며 정상 종료 후
+자식 디렉터리와 slot을 회수한다. 이 시험의 Kubernetes 제출·Pod 신원은 명시적 fixture다.
+
+Kubernetes 후속 시험은 실제 TokenReview·VD supervisor·자식 프로세스를 사용한다. 첫 체크포인트의
+상태9를 확인한 뒤 `/proc`의 정확한 Runner 명령/cwd를 대조하고 해당 시험의 sink 자식에만
+SIGKILL을 보낸다. 실제 poll의 PROCESS_EXIT, 이전 두 runtime의 TERMINATED와 broker 세대
+종료를 확인하고 같은 VD에서 새 Attempt의 불변 상태 인계2개를 대조한다. 최종값은 fanout28,
+chain37이며 합성 입력이다. API Pod 교체 중에도 VD Pod·자식 프로세스를 유지한다.
+전체 작업 종료 후 빈 자식 디렉터리/닫힌 slot과 아직 살아 있는 supervisor를 확인하고, 공개 drain
+뒤 Pod/claim 제거를 확인한다. 이 시험은 현재 JAR SHA
+`1a2eec760f3d49d61fc88b098904413b9a227abe67efca749f7937948c9e9616`을 기존 CI 이미지의
+JRE에서 실행했다. 새 API 이미지 자체의 검증은 후속 CI17개 기본 게이트다.
 
 ## 시험으로 발견한 수정
 
@@ -52,6 +74,13 @@ DB 시험의 Pod 신원·프로세스 종료 보고·broker/S3 receipt는 명시
   (`20261003T211159Z-54bdc791`). 이미 격리 DB에 적용한 V31을 수정하지 않고 V32로 보완했다.
 - 브라우저 시험은 option의 native disabled 속성을 검사하고, 오류 영역은 Next.js 전역
   알림을 제외한 main 내부로 한정했다. 제품의 비활성 조건이나 오류 표시는 바꾸지 않았다.
+- 새 실제 VD 시험의 첫5개 중4개가 실패했다(213628Z-fd3be215). fanout 서비스에 연결하지
+  않는 출력이 선언돼 요청이400이었고, 대기 helper가 성공한 retry 명령을 두 번 호출했다.
+  fanout은 출력 없는 SERVICE로 선언하고 조건 결과를 한 번만 평가하도록 수정해5개/전체45개를 통과했다.
+- Kubernetes 시험 초기 설정이 VD lease 상한60을 초과해 시작에 실패했다(215318Z-2d8a42ad).
+  60초로 맞춘 다음 실행은 계산/자식 회수까지 통과했지만 VD 상세 응답의 `vd` 래퍼를 누락한
+  drain 코드에서 실패했다(215421Z-a45d1e42). API 계약대로 수정한 최종6개가 모두 통과했다.
+  실패한 시험의 VD Pod/claim 제거도 직접 확인했다.
 
 V31 SHA-256: `f7c0ed45000bbe6da2d6783b0a7244d3422e0f25daf04f956321a60f7b45c6f2`.
 V32 SHA-256: `222fcd6f35d8e7af131511a2b735cdd0f3ede38ff3e2386d4ec0e5bd58ad03d3`.
@@ -60,7 +89,6 @@ V32 SHA-256: `222fcd6f35d8e7af131511a2b735cdd0f3ede38ff3e2386d4ec0e5bd58ad03d3`.
 
 ## 남은 수용 범위
 
-실제 VD supervisor의 자식 Runner에서 TLS 배정·체크포인트 업로드·상태 인계·공동 완료·결과를
-연결하고, 같은 VD/다른 VD/Node 혼합을 실제 Kubernetes에서 검증해야 한다. API/VD 교체,
-물리 자식 종료·취소·그룹 복구·고정 S3 bytes/SHA/version·소유 자원 정리와 새 이미지 CI/배포가
-필수다. Remote STREAM, VD 그룹 전환, 외부 장치 수용 및 M5 잔여/M8–M10도 남는다.
+VD supervisor Pod 자체 교체 뒤 스트림 복원과 VD 최종 처리 실패의 실제 Kubernetes 수용,
+새 이미지 CI/배포가 남는다. 실제 자식 프로세스 교체 성공을 VD Pod 교체 성공으로 해석하지 않는다.
+Remote STREAM, VD 그룹 전환, 외부 장치 수용 및 M5 잔여/M8–M10도 남는다.

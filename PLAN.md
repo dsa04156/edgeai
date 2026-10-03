@@ -22,7 +22,10 @@ ADR0055/V31–V32의 VD STREAM 제어·동시 실행 용량·권한·그룹/최�
 PG219·새 VD5개를 포함한 STREAM/route53개·단위105·기존 실제 저장소40·계약5/MVC26을 통과했다.
 화면 lint/type/build·기존42개와 수정한 새 VD 선택 PC/모바일2개도 통과했다. Pod/S3/브로커
 receipt를 사용한 새 DB 시험과 실제 VD 스트리밍 종단 수용은 구분한다. 후속 실제 supervisor/
-Kubernetes·CI·배포와 Remote STREAM/VD 그룹 전환은 남는다.
+자식 Runner5개·전체 실제 저장소45개에서 TLS/S3·그룹 상태 복원·취소·결과28/37을 확인했다.
+후속 실제 Kubernetes6개/VD14Pods·Node1Pod/S3결과15개·API 교체·자식 SIGKILL 복구·취소와
+자원 정리도 PASS다(215558Z-8e800c29). 새 CI17개 기본 게이트·배포, VD Pod 자체 교체와
+Remote STREAM/VD 그룹 전환은 남는다.
 실제 API/DB/Swagger PC·모바일10개와 로컬 V30→V32의 기존 Task9,371개 보존도 확인했다.
 [VD 스트리밍 근거](docs/evidence/m7-vd-stream-execution.md)를 따른다.
 
@@ -33,7 +36,9 @@ ADR0054/V30은 BATCH 작업별 VD/REMOTE 혼합 배치를 추가했다. PG214·�
 통과했다(204108Z-330b498b). abf6bfd CI37151914101은5jobs/원시17개·PG214·VD5/S38·
 STREAM11/Pod39/S324 PASS이며 GitOps720203b 실제 이미지/Ready·PVC·ArgoSynced와
 기존10파일/두PVC 보존을 확인했다(211258Z-1187337c/211350Z-0ef63124).
-새 Remote 혼합 게이트0d31eb8을 푸시했고 CI37154396986은 진행 중이다.
+Remote 혼합 게이트0d31eb8 CI37154396986은5jobs/원시17개·혼합3/S35·기존STREAM11 PASS다
+(220028Z-1e19bb71). GitOps8b17e24 실제imageID/Ready/PVC/ArgoSynced(215910Z-ab971f5e)와
+기존10파일/두PVC 보존(215911Z-fa4598d5)도 확인했다. 새 VD STREAM의 CI/배포 증거는 아니다.
 [혼합 배치 근거](docs/evidence/m7-mixed-task-targets.md)를 따른다.
 선행fe32ed8 CI37149032705의5jobs/원시17개·STREAM11/Pod39/S324와 GitOpsaabb815 실제
 imageID·Ready/PVCBound/ArgoSynced·V29·기존10파일/두PVC 보존은 확인했다.
