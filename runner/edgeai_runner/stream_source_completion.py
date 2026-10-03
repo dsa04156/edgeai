@@ -55,6 +55,11 @@ def read(directory, run_id, actor, limits):
 def verify(value, journal):
     require(not journal.inputs and all(b.producer.kind == 'DEVICE_SESSION' for b in journal.outputs.values()))
     require(json.dumps(value['manifest'], sort_keys=True, separators=(',',':')) == journal.db.execute('SELECT manifest FROM checkpoint').fetchone()[0])
+    verify_cursors(value, journal)
+
+
+def verify_cursors(value, journal):
+    """A generation handover may change bindings, never terminal positions."""
     expected = {r['routeId']:r['sequence'] for r in value['routes']}
     rows = journal.db.execute('SELECT id,direction,received,committed,ended FROM route').fetchall()
     require(len(rows) == len(expected) and journal.usage()[0] == 0)

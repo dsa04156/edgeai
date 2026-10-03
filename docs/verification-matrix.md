@@ -47,6 +47,7 @@
 | M6-VD-KIND | scripts/test-kind.sh | 빌드된 실제 이미지로 VD 수명·Task·S3·API 재시작 | 새 게이트 CI 판정은 evidence 확인 |
 | M6-VD-DEMO | scripts/demo-vd.sh <명시적-context> | 지정한 배포 API의 VD 수명·Task·교체·취소·retry·S3 | API/저장소 환경 설정 필요, API 재시작 제외 |
 | M7-FINALIZER-RETRY | scripts/test-integration.sh + scripts/test-runtime-results.sh + scripts/test-stream.sh | 종료/회수 장벽·단독/반복 재시도·원본 허가 보존·위조 인계/취소 거절·새 Attempt Result14 | 실제 PG/Spring/S3/TLS/Runner; 정책/Pod fixture; m7-finalizer-attempt-recovery.md |
+| M7-DEVICE-RECONNECT | scripts/test-stream.sh + scripts/test-runtime-results.sh | 같은 Device owner의 경로 재조회·종료/인계·미확인 샘플/센서 커서 보존·SIGKILL/취소/세션 교체·실제 그룹9→14/23→BATCH37 | 실제 TLS MQTT/HTTPS/SQLite 및 Spring/PG/S3/Runner; 정책/Pod fixture; m7-device-reconnect.md |
 | M7-GROUP-RETRY | scripts/test-integration.sh + scripts/test-runtime-results.sh | 전체 종료/회수 장벽·동시 retry·취소/기한·새 Attempt2개·외부 상태9→14/23→BATCH37·Device journal 인계 | 실제 PG/HTTPS/MQTT/S3/Runner; Run 정책·Pod 경계 fixture, 공개 retry는 거절; m7-group-retry.md |
 | M7-DEVICE-DISCOVERY | scripts/test-integration.sh + scripts/test-runner.sh | Device 토큰·불변 세션 고정·다른 Run404·교체401/409·fanout 페이지·비밀 필드 거절·lease 불변 | 실제 PostgreSQL/MVC·실제 SDK/HTTP; m7-device-route-discovery.md |
 | M7-DEVICE-DISCOVERY-DAG | scripts/test-runtime-results.sh | 실제 HTTPS Device 조회의 route/generation으로 송신·독립 Runner2개·BATCH 결과37·취소 | 실제 Spring/PG/TLS MQTT/S3/SDK; Pod 생성/신원은 fixture |

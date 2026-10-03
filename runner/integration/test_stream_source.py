@@ -30,6 +30,8 @@ class DeviceApi:
         self.foreign_run=False;self.max_bytes=4096
         self.completion_state='WAITING';self.completion_calls=[];self.completion_status=None
         self.drop_completion=False;self.on_completion=None;self.paths=[]
+        self.generation_id=GENERATION;self.generation_state='ACTIVE';self.run_state='RUNNING'
+        self.route_status=None;self.on_routes=None;self.route_items=None
         owner=self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_): pass
@@ -38,10 +40,29 @@ class DeviceApi:
                 sequence=body.get('sequence');owner.calls.append(sequence)
                 expected=f'/internal/v1/devices/{A.producer.device_id}/sessions/{A.producer.id}/streams'
                 owner.paths.append(self.path)
+                if self.path==expected+'/routes':
+                    valid=(self.headers.get('Authorization')=='Bearer fixture-device' and not self.headers.get('X-EdgeAI-Pod-Token')
+                           and set(body)=={'epoch','runId','limit','offset'} and body['epoch']==A.producer.epoch and body['runId']==POD)
+                    status=401 if not valid else owner.route_status
+                    if status:
+                        self.send_response(status);self.send_header('Content-Length','0');self.end_headers();return
+                    items=owner.route_items if owner.route_items is not None else [
+                        {'routeId':owner.binding.route_id,'sourcePort':'samples','consumerTaskId':OUT.producer.id,'consumerPort':'a',
+                         'sourceMode':'SYNTHETIC','mediaType':'application/json','maxPayloadBytes':owner.max_bytes,
+                         'generation':None if owner.generation_state is None else {'id':owner.generation_id,'number':owner.binding.generation,
+                         'state':owner.generation_state,'leaseUntil':'2026-10-03T00:00:00Z'}}]
+                    start=body['offset'];end=start+body['limit']
+                    value={'apiVersion':'edgeai.device-routes/v1','runId':POD,'runState':owner.run_state,
+                           'deviceId':A.producer.device_id,'sessionId':A.producer.id,'epoch':A.producer.epoch,
+                           'items':items[start:end],'limit':body['limit'],'offset':start,'nextOffset':end if end<len(items) else None}
+                    if owner.on_routes:owner.on_routes(value)
+                    wire=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json')
+                    self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(wire)))
+                    self.end_headers();self.wfile.write(wire);return
                 if self.path==expected+'/complete':
                     valid=(self.headers.get('Authorization')=='Bearer fixture-device' and not self.headers.get('X-EdgeAI-Pod-Token')
                            and set(body)=={'epoch','generationId','sequence'} and body['epoch']==A.producer.epoch
-                           and body['generationId']==GENERATION and type(sequence) is int and sequence>0)
+                           and body['generationId']==owner.generation_id and type(sequence) is int and sequence>0)
                     status=401 if not valid else owner.completion_status
                     if owner.completion_state!='FINALIZE' and time.monotonic()>=owner.deadline:status=409
                     if status:
@@ -50,14 +71,14 @@ class DeviceApi:
                     if owner.on_completion:owner.on_completion()
                     if owner.drop_completion:
                         owner.drop_completion=False;self.connection.shutdown(socket.SHUT_RDWR);self.connection.close();return
-                    value={'state':owner.completion_state,'generationId':GENERATION,'sequence':sequence}
+                    value={'state':owner.completion_state,'generationId':owner.generation_id,'sequence':sequence}
                     wire=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type','application/json')
                     self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(wire)))
                     self.end_headers();self.wfile.write(wire);return
                 valid=(self.path==expected+('/heartbeat' if sequence is not None else '')
                        and self.headers.get('Authorization')=='Bearer fixture-device'
                        and not self.headers.get('X-EdgeAI-Pod-Token') and body.get('epoch')==A.producer.epoch
-                       and body.get('generationId')==GENERATION)
+                       and body.get('generationId')==owner.generation_id)
                 status=401 if not valid else owner.status
                 if time.monotonic()>=owner.deadline or sequence is not None and sequence not in (0,owner.sequence,owner.sequence+1):status=409
                 if status:
@@ -69,6 +90,7 @@ class DeviceApi:
                         owner.drop=False;self.connection.shutdown(socket.SHUT_RDWR);self.connection.close();return
                 value=document(owner.binding,duration=max(.001,owner.deadline-time.monotonic()),
                                username='source-a',secret=broker.credentials['source-a'].read_text())
+                value['generationId']=owner.generation_id
                 value['mqtt'].update(host='localhost',port=broker.port,tls=True,caPem=broker.ca.read_text())
                 value['maxPayloadBytes']=owner.max_bytes
                 if owner.foreign_run:value['runId']=OUT.route_id

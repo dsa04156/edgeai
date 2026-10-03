@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0046 DeviceRunSource 자동 재연결을 실제 SDK와 그룹 재시도에 연결했다.
+고정 세션·논리 경로·LOCAL 볼륨에서 이전 transport를 닫고 새 인증 배정으로 미확인 데이터와
+센서 커서를 인계한다. 실제 HTTPS/TLS MQTT/SQLite14개와 Spring/PG/S3/Runner6개 PASS.
+두 Device 객체를 유지하며 서버의 새 세대를 자동 발견하고 root14/sink23/BATCH37까지 확인했다.
+Runner111·최종 실제 서버6개와 신규 자동 재연결14개는 통과했다. 전체 MQTT87개는 기존 시험의
+간헐 timeout/lease 만료가 남고, 별도 빠른 종료 관측 경합은 결정적 재현 후 수정했다.
+새 CI/배포·공개 retry·Kubernetes 장애 수용은 남는다. docs/evidence/m7-device-reconnect.md.
+선행 a0fc802의 CI37124689963은5jobs/17JSON·완성 이미지의 실제 kind를 통과했다.
+GitOps77bef5b의 실제3imageID·Ready/PVC/ArgoSynced도133607Z-3eec4778에서 확인했다.
+
+아래는 선행 최종 처리 복구의 검증 이력이다.
 ADR0045/V26 완료 허가 뒤 새 Attempt의 최종 처리 복구를 구현했다. 기존 checkpoint/허가/세대는
 보존하고 실패한 Task만 종료·회수 장벽 후 재시도해 실제 S3 결과14를 새 Attempt에 확정했다.
 실제 저장소36·PG187·단위101·Runner111·계약 검증 PASS. 공개 retry는 아직 거절한다.

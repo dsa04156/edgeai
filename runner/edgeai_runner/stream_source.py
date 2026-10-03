@@ -29,7 +29,7 @@ def require(condition, code='STREAM_INVALID_DEVICE_SOURCE'):
 
 class DeviceSource:
     def __init__(self, client, run_id, generation_ids, directory, *, limits=Limits(),
-                 create=False, handover=False, timeout=3600, cancel=None, completion=True):
+                 create=False, handover=False, timeout=3600, cancel=None, completion=True, expected_bindings=None):
         self.closed = False
         self.link = self.journal = None
         self.cancel = cancel or threading.Event()
@@ -39,6 +39,10 @@ class DeviceSource:
         for identity in generation_ids:
             _uuid(identity)
         require(len(set(generation_ids)) == len(generation_ids))
+        if expected_bindings is not None:
+            require(type(expected_bindings) is dict and set(expected_bindings) == set(generation_ids)
+                    and all(type(b) is Binding and b.producer == client.actor for b in expected_bindings.values()),
+                    'STREAM_SOURCE_SCOPE_MISMATCH')
         require(type(handover) is bool and (not handover or create is False), 'STREAM_EXPLICIT_SOURCE_HANDOVER_REQUIRED')
         require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 86400)
         require(type(completion) is bool)
@@ -63,6 +67,7 @@ class DeviceSource:
                 if not handover:
                     require(set(generation_ids) == {r['generationId'] for r in previous['routes']}, 'STREAM_SOURCE_SCOPE_MISMATCH')
                     outputs = [Binding(b['routeId'],b['generation'],Producer.parse(b['producer'])) for b in previous['manifest']['outputs']]
+                    require(expected_bindings is None or set(outputs) == set(expected_bindings.values()), 'STREAM_SOURCE_SCOPE_MISMATCH')
                     self.journal = Journal(directory/'journal', [], outputs, limits, guard=self._check_owner)
                     completion_intent.verify(previous, self.journal)
                     self._set_intent(previous)
@@ -73,6 +78,7 @@ class DeviceSource:
                 self._check()
                 a = client.fetch(identity, timeout=self._request_timeout())
                 require(a.run_id == run_id and a.direction == 'PRODUCER', 'STREAM_SOURCE_SCOPE_MISMATCH')
+                require(expected_bindings is None or a.binding == expected_bindings[identity], 'STREAM_SOURCE_SCOPE_MISMATCH')
                 self.assignments[identity] = replace(a, deadline=min(self.deadline, a.deadline))
                 self.sequence[identity] = self.next_at[identity] = self.retries[identity] = 0
             self._check()
@@ -89,6 +95,7 @@ class DeviceSource:
             # Also check cancellation at both ends of every local transaction.
             self.journal.authority_guard = self._check
             if previous is not None:
+                completion_intent.verify_cursors(previous, self.journal)
                 self._capture_completion()  # Explicit, authenticated generation handover preserves terminal cursors.
         except BaseException:
             self.close()

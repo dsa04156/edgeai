@@ -1,6 +1,6 @@
 """Synthetic multi-device STREAM/BATCH driver running inside an owned Kubernetes Pod.
 
-Only public management HTTP and real DeviceSource SDK calls are made here. The
+Only public management HTTP and real DeviceRunSource SDK calls are made here. The
 outside owner observes actual Pods/checkpoints and releases the named barriers.
 """
 from contextlib import ExitStack
@@ -21,7 +21,8 @@ sys.path.insert(0, '/opt/edgeai')
 from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_journal import Emission
 from edgeai_runner.stream_protocol import Producer
-from edgeai_runner.stream_source import DeviceSource
+from edgeai_runner.stream_source import SourceError
+from edgeai_runner.stream_device_run import DeviceRunSource
 
 work = Path('/work')
 config = json.loads(Path('/scenario/config.json').read_bytes())
@@ -163,15 +164,16 @@ def run_case(name, placement, cancel=False):
             directory = work / (name + '-source-' + port)
             directory.mkdir(mode=0o700)
             directory.chmod(0o700)  # The driver owns this new directory on an fsGroup volume.
-            owners[port] = stack.enter_context(DeviceSource(binding, active, [discovered['generation']['id']], directory, create=True, timeout=600))
+            owners[port] = stack.enter_context(DeviceRunSource(binding, active, [discovered['routeId']], directory, create=True, timeout=600))
 
         def tick():
             for owner in owners.values():
                 owner.step()
 
         def emit(a, b):
+            wait(lambda: all(o.ready for o in owners.values()), tick)
             for port, number in (('a', a), ('b', b)):
-                owners[port].emit([Emission(discovered_routes[port]['routeId'], str(number).encode(), 'application/json')])
+                owners[port].emit([Emission(discovered_routes[port]['routeId'], str(number).encode(), 'application/json')], str(number).encode())
 
         emit(4, 5)
         phase = name + '-first'
@@ -186,7 +188,7 @@ def run_case(name, placement, cancel=False):
                         continue
                     try:
                         owner.step()
-                    except AssignmentError:
+                    except (AssignmentError, SourceError):
                         pass
                     assert not owner.completed
 
@@ -194,12 +196,14 @@ def run_case(name, placement, cancel=False):
             assert request('tasks/' + task_ids['sink'])['task']['state'] == 'CANCELLED'
             assert not request('tasks/' + task_ids['report'])['attempts']
             assert all(not request('tasks/' + t + '/results')['items'] for t in task_ids.values())
+            wait(lambda: all(o.closed for o in owners.values()), tick_cancel)
             current.update(cancelled=True, results=[])
         else:
             emit(2, 3)
             phase = name + '-second'
             save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 14, 'sink': 23}})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
+            wait(lambda: all(o.ready for o in owners.values()), tick)
             for port, owner in owners.items():
                 owner.emit([Emission(discovered_routes[port]['routeId'], b'', None, 'END')])
             phase = name + '-results'
@@ -221,6 +225,8 @@ def run_case(name, placement, cancel=False):
                 expected = {'sourceMode': 'SYNTHETIC', 'sum': 37, 'inputs': {'root': 14, 'sink': 23}} if key == 'report' else {'sum': 14 if key == 'root' else 23}
                 results.append({'task': key, 'result': value, 'expected': expected})
             current.update(cancelled=False, results=results)
+        current['deviceOwner'] = 'DeviceRunSource'
+        current['deviceConnections'] = {port:owner.connections for port,owner in owners.items()}
     wait(lambda: all(r['generation']['closedAt'] for r in request('workflow-runs/' + active + '/streams')['items']))
     current['closedRoutes'] = request('workflow-runs/' + active + '/streams')['items']
     report['cases'].append(current)

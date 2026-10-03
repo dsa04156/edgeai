@@ -251,7 +251,7 @@ class StreamSourceCompletionIntegrationTest {
         }
         UUID id;
         if(recovery){
-            // Internal policy fixture until finalization recovery and automatic source reconnect are connected.
+            // Internal policy fixture until public retry and actual Kubernetes fault acceptance are connected.
             id=new org.springframework.transaction.support.TransactionTemplate(transactions).execute(tx->{
                 var bindings=io.edgeai.app.support.StreamRunInput.parse(json.decode(json.canonical(inputs)));
                 var sessions=streamRuns.pin(bindings,"AUTO",RetryPolicy.disabled(),false);var now=Instant.now();
@@ -400,7 +400,7 @@ class StreamSourceCompletionIntegrationTest {
     }
     @Test void independentRunnersComputeTaskToTaskStreamAndReleaseBatchFromFixedS3Results()throws Exception{dagProbe(false);}
     @Test void cancellingLiveSinkStopsIndependentStreamRunnersAndNeverReleasesBatch()throws Exception{dagProbe(true);}
-    @Test void realGroupRetryRestoresBothIndependentRunnersAndHandsOverBothDeviceJournals()throws Exception{dagProbe(false,true);}
+    @Test void realGroupRetryAutomaticallyReconnectsSameDeviceOwnersAndRestoresBothRunners()throws Exception{dagProbe(false,true);}
     private void until(java.util.function.BooleanSupplier condition)throws Exception{long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
         while(!condition.getAsBoolean() && System.nanoTime()<end)Thread.sleep(20);assertThat(condition.getAsBoolean()).as("Actual stream completion boundary reached").isTrue();}
 }

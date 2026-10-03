@@ -28,7 +28,18 @@ class AssignmentError(RuntimeError):
 
 
 class AssignmentUnavailable(AssignmentError):
-    """A transient transport/service failure; retry only within existing authority."""
+    """A transient service failure; retrying never extends data-plane authority."""
+
+
+class AssignmentFenced(AssignmentError):
+    """HTTP rejection with a safe status, never the server's response body."""
+    def __init__(self, status):
+        super().__init__('Stream discovery fenced')
+        self.status = status
+
+
+class AssignmentExpired(AssignmentError):
+    """This authority snapshot expired; it cannot authorize further writes."""
 
 
 def require(condition, reason='Invalid stream assignment'):
@@ -85,7 +96,8 @@ class Assignment:
 
     def remaining(self):
         remaining = self.deadline - self.clock()
-        require(math.isfinite(remaining) and remaining > 0, 'Stream assignment expired')
+        if not math.isfinite(remaining) or remaining <= 0:
+            raise AssignmentExpired('Stream assignment expired')
         return remaining
 
     def verify_frame(self, frame):
@@ -302,7 +314,7 @@ class BindingClient:
         except urllib.error.HTTPError as error:
             status = error.code; error.close()
             if status in (401, 403, 404, 409):
-                raise AssignmentError('Stream discovery fenced') from None
+                raise AssignmentFenced(status) from None
             if status in (429, 500, 502, 503, 504):
                 raise AssignmentUnavailable('Stream discovery unavailable') from None
             raise AssignmentError('Stream discovery rejected') from None

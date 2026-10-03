@@ -39,6 +39,9 @@ Device 자동 재연결·공개 정책·Kubernetes 장애 수용은 [그룹 재�
 ADR0045/V26은 공동 완료 허가 뒤 실패한 Task만 새 Attempt로 재시도하고 원래 최종 상태에서
 Result를 확정한다. 실제 PG·HTTP/SDK·Spring/S3/TLS·독립 Runner의 결과14를 검증했다.
 범위·남은 MQTT 간헐 실패·공개 정책/운영 수용은 [최종 처리 인계 근거](docs/evidence/m7-finalizer-attempt-recovery.md)를 따른다.
+ADR0046은 같은 DeviceRunSource가 새 세대를 자동 조회하고 LOCAL journal을 인계하도록 연결했다.
+실제 서버·장치 SDK·독립 Runner 그룹 복구에서14/23/BATCH37을 검증했다. 공개 retry 연결과
+실제 Kubernetes 그룹/최종 처리 장애 수용은 [장치 재연결 근거](docs/evidence/m7-device-reconnect.md)를 따른다.
 새 검증 범위는 [공개 실행·그룹 배정](docs/evidence/m7-public-stream-runs.md)을 따른다.
 복구 범위와 같은 Attempt/Pod 제한은 [최종 상태 복구](docs/evidence/m7-finalizer-recovery.md)를 따른다.
 상세 검증 범위는 [서버 완료 처리](docs/evidence/m7-stream-execution-completion.md)를 따른다.

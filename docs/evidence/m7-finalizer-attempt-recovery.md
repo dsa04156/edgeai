@@ -64,3 +64,18 @@ Run 정책 생성과 Pod provisioning/identity/물리 종료 관측은 명시적
 
 공개 STREAM retry·Device 자동 재연결·실제 Kubernetes 그룹/최종 처리 장애 수용은 남는다.
 새 V26 코드의 CI·이미지 배포 검증과 선행934d003 CI를 구분한다. M5 잔여/M7–M10은 미완료다.
+
+## 후속 CI 확인
+
+source `a0fc80231eb54a2ae1d4ca7c1fc3c9abf417c627`의
+[CI37124689963](https://github.com/dsa04156/edgeai/actions/runs/37124689963)은5jobs 성공이다.
+내려받은 결과JSON17개 모두 PASS/0이며 runner/storage/scaffold 및 실제 kind 결과를 확인했다.
+완성 API 이미지 자체의 STREAM AUTO/NODE/취소3개, Device 인증 조회 각2개, 실제 Runner Pod8개,
+API 교체16.209초 동안 동일 Runner Pod2개 유지, 고정 S3 결과6개·14/23/37을 검증했다.
+실제 그룹 또는 최종 처리 Pod 장애 주입 시험으로 확대하지 않는다.
+원시 kind 보고서·기존 원본 result/log는 `docs/evidence/runs/20261003T131317Z-f6c2aa87`에 보존했다.
+Runner digest는 `sha256:e7b78cbc17edd9adc0e3b9ad9b9a94fe0948294b4763190d8598844fe1ffb592`다.
+GitOps `77bef5b93d0e38ec575490b54b68a6e542b156f8`가 이 검증 이미지들을 고정했다.
+기존 클러스터 `20261003T133607Z-3eec4778`에서 정확한 API/Dashboard/MinIO imageID3개,
+Ready·PVC Bound·Argo Synced·VD 활성화를 대조했다. 공유 Ingress 상태 제한에 따른 aggregate
+health Progressing은 유지한다. 전용 Argo Application만 새 Git revision으로 refresh했다.

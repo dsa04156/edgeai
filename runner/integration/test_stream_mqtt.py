@@ -343,6 +343,22 @@ class StreamMqttTest(unittest.TestCase):
         expected = sum(i + 100 + i for i in range(1, 21))
         full = 0
         restarted = False
+        timings = {}
+        progress = []
+        started = time.monotonic()
+        def measured(name, operation):
+            def call(*args, **kwargs):
+                before = time.monotonic()
+                try:
+                    return operation(*args, **kwargs)
+                finally:
+                    elapsed = time.monotonic() - before
+                    row = timings.setdefault(name, {'calls': 0, 'seconds': 0., 'maxSeconds': 0.})
+                    row['calls'] += 1; row['seconds'] += elapsed; row['maxSeconds'] = max(row['maxSeconds'], elapsed)
+            return call
+        for name, journal in self.journals.items():
+            journal.commit = measured(name + '-commit', journal.commit)
+            self.links[name].step = measured(name + '-mqtt', self.links[name].step)
         def cycle():
             nonlocal consumed, full, restarted
             # Burst faster than the join can consume; output queues must apply pressure.
@@ -376,11 +392,15 @@ class StreamMqttTest(unittest.TestCase):
                 restarted = True
             for journal in self.journals.values():
                 self.assertLessEqual(journal.usage()[0], 6)
+            elapsed = time.monotonic() - started
+            if len(progress) < 32 and (not progress or elapsed - progress[-1][0] >= 1):
+                progress.append([round(elapsed, 3), consumed, dict(produced)])
         try:
             eventually(cycle, lambda: consumed == 20 and all(not j.outgoing() for j in self.journals.values()), 20)
         except AssertionError:
             # Numeric protocol state only: no payload, topic, credential or endpoint.
-            state={'produced':produced,'consumed':consumed,'restarted':restarted,'peers':{}}
+            state={'produced':produced,'consumed':consumed,'restarted':restarted,'peers':{},
+                   'progress':progress,'timings':timings}
             for name,journal in self.journals.items():
                 link=self.links[name]
                 state['peers'][name]={'ready':link.ready,'socket':link._socket_open,'rejected':link.rejected,

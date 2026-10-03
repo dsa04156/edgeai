@@ -148,6 +148,7 @@ class StreamExecutionTest(unittest.TestCase):
         while not predicate():
             if time.monotonic()>deadline:self.fail('Runner integration deadline exceeded')
             if self.process is not None and self.process.poll() is not None:
+                if predicate():return  # Exit can satisfy finish() between the two observations.
                 self.fail('Runner exited before expected phase: '+self.process.communicate()[0].decode())
             for link in self.links.values():link.step(.001)
             sink=self.journals['sink'];pending=sink.pending()
@@ -199,7 +200,18 @@ class StreamExecutionTest(unittest.TestCase):
 
     def test_assignment_payload_budget_cannot_exceed_service_input(self):
         self.spec['inputs']['a']['maxPayloadBytes']=1
-        self.start();self.finish(False)
+        self.start();self.process.wait(timeout=15)
+        # Reproduce exit between the wait helper's predicate and its liveness
+        # check. The real Runner must still reject the actual oversized binding.
+        from unittest.mock import patch
+        poll=self.process.poll;first=True
+        def racing_poll():
+            nonlocal first
+            if first:
+                first=False
+                return None
+            return poll()
+        with patch.object(self.process,'poll',side_effect=racing_poll):self.finish(False)
         self.assertEqual(0,self.complete_calls);self.assertIsNone(self.artifact)
 
     def test_missing_restore_checkpoint_cannot_silently_start_new_state(self):

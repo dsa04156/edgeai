@@ -203,6 +203,15 @@ media_type)], state=adapter_cursor_bytes)`는 샘플·순번·adapter 상태를 
 자동 재시작으로 대체하지 않는다. `settled`는 END의 처리 확인이며 플랫폼 Run 성공을 뜻하지 않는다.
 자세한 실제/fixture 범위는 [Device source 검증](../docs/evidence/m7-device-source-handover.md)을 따른다.
 
+자동 전환은 `stream_device_run.DeviceRunSource(client, run_id, route_ids, directory,
+create=True)`로 선택한다. generation ID 대신 고정 논리 route ID를 전달하며, 같은 볼륨 재시작은
+`create=False`다. `step()`을 호출해 `ready`가 된 뒤 `checkpoint().state`의 센서 커서부터 이어간다.
+배정 회수·lease 만료 시 이전 transport를 닫고 같은 세션의 새 경로를 조회·인계한다.
+재연결 대기 중 emit/checkpoint의 `SourceReconnecting`은 Backpressure 하위 타입이다.
+샘플을 보관한 채 step을 계속 호출하고 준비 후 재시도한다. 다른 세션이나 없는 볼륨을 자동
+승계하지 않으며, 취소·신원·TLS·잘못된 계약은 종료한다.
+[자동 재연결 설계·실제 시험](../docs/evidence/m7-device-reconnect.md).
+
 기본값은 서버 공동 완료 대기다. END를 보낸 뒤 `while not source.completed: source.step()`으로
 진행한다. WAITING 동안 heartbeat를 유지하고 모든 송신 경로의 FINALIZE를 받으면 MQTT를 닫는다.
 `completed`는 스트림 그룹의 종료 허가이며 최종 파일 결과 저장 성공은 별도다.
@@ -238,7 +247,8 @@ Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다
 
 인증된 배정·공동 완료 서버와 DeviceSource를 연결했다. 공개 Run 생성·그룹별 동시 시작 및
 AUTO/NODE Kubernetes 데이터 흐름은 검증했다. 공개 STREAM은 명시적 opt-in이며 기본501이다.
-장치 자동 재연결·전체 그룹 장애 수용이 남아 공개 retry/offload/REMOTE/VD는 계속 거절한다.
+장치 자동 재연결은 실제 서버/SDK 시험으로 연결했다. Kubernetes의 전체 그룹 장애 수용과
+공개 정책 연결은 남아 공개 retry/offload/REMOTE/VD는 계속 거절한다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.

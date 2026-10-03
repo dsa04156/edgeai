@@ -19,8 +19,8 @@ from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_checkpoint_client import CheckpointClient
 from edgeai_runner.stream_journal import Emission
 from edgeai_runner.stream_protocol import Producer
-from edgeai_runner.stream_source import DeviceSource, SourceError
-from edgeai_runner.stream_mqtt import MqttError
+from edgeai_runner.stream_source import SourceError
+from edgeai_runner.stream_device_run import DeviceRunSource
 
 folder = Path(sys.argv[1])
 config = json.loads((folder / 'request.json').read_bytes())
@@ -77,7 +77,7 @@ def main():
         discovered_routes = {}
         checkpoints = {}
 
-        def connect(handover=False):
+        def connect_sources():
             for name, value in config['sources'].items():
                 client = BindingClient(config['origin'], Producer('DEVICE_SESSION', value['sessionId'], value['epoch'], value['deviceId']),
                                        folder / (name + '.token'))
@@ -90,10 +90,11 @@ def main():
                 assert route['generation']['id'] == routing['sources'][name]['generationId']
                 assert route['generation']['state'] == 'ACTIVE' and route['sourceMode'] == 'SYNTHETIC'
                 target = folder / ('source-' + name)
-                if not handover:
-                    target.mkdir(mode=0o700)
-                sources[name] = stack.enter_context(DeviceSource(client, config['runId'], [route['generation']['id']],
-                                                                 target, create=not handover, handover=handover, timeout=100))
+                target.mkdir(mode=0o700)
+                sources[name] = stack.enter_context(DeviceRunSource(client, config['runId'], [route['routeId']],
+                                                                    target, create=True, timeout=100))
+
+        def connect_checkpoints():
             for name in ('root', 'sink'):
                 target = directory(name)
                 value = json.loads((target / 'launch.json').read_bytes())
@@ -101,7 +102,8 @@ def main():
                                        target / 'claim', pod_uid=value['podUid'], pod_token_file=target / 'pod')
                 checkpoints[name] = CheckpointClient(client, config['runId'], routing['tasks'][name])
 
-        connect()
+        connect_sources()
+        connect_checkpoints()
 
         def step():
             for source in sources.values():
@@ -116,28 +118,26 @@ def main():
 
         def emit(a, b):
             for name, number in (('a', a), ('b', b)):
-                sources[name].emit([Emission(discovered_routes[name]['routeId'], str(number).encode(), 'application/json')])
+                sources[name].emit([Emission(discovered_routes[name]['routeId'], str(number).encode(), 'application/json')], str(number).encode())
 
         phase = 'FIRST_CHECKPOINT'
+        wait(lambda: all(s.ready for s in sources.values()), step)
         emit(4, 5)
         wait(lambda: checkpointed({'root': 9, 'sink': 9}), step)
         assert len(children) == 2 and all(p.poll() is None for p in children.values())
         if config['mode'] == 'recover':
             phase = 'GROUP_RECOVERY'
             recovering = True
+            owners = dict(sources)
+            source_checkpoints = {name:s.checkpoint() for name,s in sources.items()}
             (folder / 'recovery-request').touch()
 
             def fenced_sources():
                 for source in sources.values():
-                    if source.closed:
-                        continue
-                    try:
-                        source.step()
-                    except (AssignmentError, SourceError, MqttError):
-                        pass
-                    assert not source.completed
+                    source.step()
+                    assert not source.completed and not source.closed
 
-            wait(lambda: all(p.poll() is not None for p in children.values()) and all(s.closed for s in sources.values()), fenced_sources)
+            wait(lambda: all(p.poll() is not None for p in children.values()) and all(not s.ready for s in sources.values()), fenced_sources)
             assert all(p.wait() != 0 for p in children.values())
             assert all(not (directory(name) / 'work' / 'outputs' / 'result').exists() for name in children)
             retired.extend(children.values())
@@ -145,10 +145,14 @@ def main():
             round_number = 2
             recovering = False
             (folder / 'producers-stopped').touch()
-            wait(lambda: (folder / 'routing-2.json').exists())
+            wait(lambda: (folder / 'routing-2.json').exists(), step)
             routing = json.loads((folder / 'routing-2.json').read_bytes())
-            connect(handover=True)
-            wait(lambda: (folder / 'restored').exists(), step)
+            connect_checkpoints()
+            wait(lambda: (folder / 'restored').exists() and all(s.ready for s in sources.values()), step)
+            for name, source in sources.items():
+                assert source is owners[name] and source.connections == 2
+                assert source.checkpoint() == source_checkpoints[name]
+                assert set(source.source.assignments) == {routing['sources'][name]['generationId']}
             assert all(directory(name).name.endswith('-2') for name in ('root', 'sink'))
         if config['mode'] == 'cancel':
             phase = 'CANCEL'
@@ -161,7 +165,7 @@ def main():
                         continue
                     try:
                         source.step()
-                    except AssignmentError:
+                    except (AssignmentError, SourceError):
                         pass
                     assert not source.completed
 

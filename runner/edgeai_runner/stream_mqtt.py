@@ -26,6 +26,10 @@ class MqttError(RuntimeError):
     """Fixed reason only; do not print credentials, packets or broker diagnostics."""
 
 
+class MqttAuthorityExpired(MqttError):
+    """The Link has closed before any more queued packets can be sent."""
+
+
 class _Client(mqtt.Client):
     def _ssl_wrap_socket(self, tcp_sock):
         # Paho 2.1.0 performs a deferred handshake without closing its SSLSocket on
@@ -164,7 +168,7 @@ class Link:
             # after expiry. This also fences commits through the attached journal.
             if hasattr(self, 'client'):
                 self.close(force=True)
-            raise MqttError('Stream assignment expired') from None
+            raise MqttAuthorityExpired('Stream assignment expired') from None
 
     def refresh(self, assignments):
         """Replace only live, identical authority snapshots, atomically on the step thread.
