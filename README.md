@@ -247,8 +247,9 @@ STREAM 작업은 CHECKPOINT 선언이 필요합니다. 최초 NODE 지정 이후
 Kubernetes가 새 위치를 선택합니다. 작업 상세에서 결정에 쓴 정책·측정과 전환 이력을 확인합니다.
 미수집·오래된·누락 표본은 판단에 쓰지 않습니다. [ADR0009](docs/adr/0009-automatic-offload-policy.md).
 STREAM 자동 전환은 모든 구성원의 현재 체크포인트·대기 시간·전환 예산을 확인합니다. 함께 재개하는
-작업도 횟수를 사용하며 선택된 작업 외의 배치 정책은 유지합니다. 새 기능의 로컬/실제 Kubernetes
-검증 범위는 [ADR0052와 실행 근거](docs/evidence/m7-stream-automatic-offload.md)를 확인하세요.
+작업도 횟수를 사용하며 선택된 작업 외의 배치 정책은 유지합니다. 실제 Kubernetes에서 모델의
+메모리 부하·노드 이동·체크포인트/결과 보존·동료의 전환 한도·취소를 검증했습니다.
+전체9개 시나리오와 이미지/CI별 범위는 [ADR0052와 실행 근거](docs/evidence/m7-stream-automatic-offload.md)를 확인하세요.
 
 
 ## 가상 장치 등록·원본 연결·실행 (M6)

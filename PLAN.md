@@ -21,8 +21,12 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 ADR0052/V28에서 공개 STREAM 자동 전환을 연결한다. 모든 구성원의 체크포인트·대기 시간·
 전환 예산을 확인하고 선택 작업만 방문 노드를 제외한 AUTO로 옮긴다. Runner 측정도 스트리밍
 계산부터 최종 처리까지 이어간다. 실제 PG206·Runner111·TLS MQTT90·서버8·UI40을 로컬
-검증했다. Pod 신원/배치와 서비스 지연 입력은 서버 시험의 fixture이며 실제 Kubernetes
-자원 부하에 따른 자동 전환·새 이미지 CI/배포는 다음 게이트다.
+검증했다. Pod 신원/배치와 서비스 지연 입력은 해당 서버 시험의 fixture다. 후속 실제 Kubernetes
+시험에서 모델 프로세스의 메모리 부하→자동 그룹 전환·API 교체·취소·상태/결과 보존·동료 전환 한도를
+통과했다. 현재 JAR 전체9개/Runner Pod31개/S3결과18개 PASS(183338Z-5496a478).
+게시된 API/Runner 이미지의 자동2개도 PASS(184641Z-a6fc3e70)다. CI37142931811의5jobs/
+원시17개·기존7개 STREAM kind와 GitOpsf869da5 실제 이미지·V28·기존 데이터 보존을 확인했다.
+새9개 CI 게이트가 다음이며 단계별 실행 배치·VD/REMOTE 스트림·외부 장치 수용은 남는다.
 [자동 전환 근거](docs/evidence/m7-stream-automatic-offload.md).
 ADR0051/V27의 공개 STREAM 그룹 노드 전환을 연결했다. 전체 종료/회수 장벽·고정 체크포인트,
 같은 Task/새 OFFLOAD Attempt와 실제 독립 Runner의 상태 인계를 로컬 검증했다.

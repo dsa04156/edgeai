@@ -1,6 +1,18 @@
 # 진행 상태
 
 [STATUS]
+실제 Kubernetes의 메모리 부하→STREAM 그룹 자동 전환·취소·전환 한도를 검증했다.
+최종9개 시나리오/Runner Pod31개/고정 S3결과18개 PASS(183338Z-5496a478).
+선택 작업은 다른 노드 AUTO, 동료는 기존 NODE를 유지하고 상태9→14/23/BATCH37을 보존한다.
+대기 중 API 교체·판단/수신 표본 일치·이전 producer401·동료의 재부하에도 한도 유지·자원 정리도 통과했다.
+638d77d의 게시된 API/Runner 이미지도 새 자동2개/Pod7개/S33 PASS(184641Z-a6fc3e70)다.
+CI37142931811의5jobs/원시JSON17개·PG206·Runner111/MQTT90·kind STREAM7/24Pods/S315,
+기존22Run/VD4/영속TLS/배포데모를 확인했다(184641Z-efbfb547). GitOpsf869da5 실제3imageID·
+Ready/PVCBound/ArgoSynced·V28 적용(184641Z-7ebc102f), 기존10파일/두PVC 보존(184839Z-12c00400)도 PASS다.
+기존 공유Ingress aggregate Progressing은 유지한다. 새9개 CI 게이트는 후속이며 M5 잔여/M7–M10은 미완료다.
+docs/evidence/m7-stream-automatic-offload.md.
+
+아래는 선행 구성 요소 검증 이력이다.
 ADR0052/V28 STREAM 자동 전환: 공개 opt-in·그룹 전체 체크포인트/대기/예산과 현재 producer
 검증, 선택 작업 AUTO/방문 노드 제외·peer 배치 유지, 판단 근거와 불변 그룹 계획을 연결했다.
 Runner 측정이 스트리밍 계산부터 최종 처리까지 같은 sequence로 이어진다. 최종 PG206,

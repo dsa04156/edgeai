@@ -1,7 +1,7 @@
 # M7 STREAM 그룹 자동 전환 검증
 
 2026-10-04. ADR0052/V28. 공개 Run의 선택적 측정 정책과 그룹 체크포인트 전환을 연결한다.
-이 문서는 새 코드의 로컬 검증이며 전체 M7 또는 새 이미지/Kubernetes 수용 완료 기록이 아니다.
+이 문서는 구성 요소와 실제 Kubernetes 자동 전환의 검증 기록이다. 전체 M7 수용 완료를 뜻하지 않는다.
 
 ## 구현과 확인한 범위
 
@@ -49,6 +49,73 @@
   일시적 CheckpointUnavailable1개. 단독 재실행은 통과했으나 외부 지연 원인은 미확정이다.
   검증 도구는 기존 제한 시간 안에서 재조회하도록 보완했다. 거절/fence 오류는 계속 실패한다.
 
-새 V28은 격리 DB에서 검증했으며 공유 개발 DB 적용·새 API/Runner 이미지·CI/배포,
-실제 Kubernetes 자원 부하에 따른 자동 전환은 후속 검증이다. 기존 MQTT 간헐 재연결/lease
-문제의 원인이 이번 변경으로 해결됐다고 주장하지 않는다. M5 잔여/M7–M10 전체 목표는 유지한다.
+위 로컬 판정 시점의 새 V28은 격리 DB에서 검증했다. 이후 실제 Kubernetes 검증은 아래를 따른다.
+기존 MQTT 간헐 재연결/lease 문제의 원인이 이번 변경으로 해결됐다고 주장하지 않는다.
+M5 잔여/M7–M10 전체 목표는 유지한다.
+
+## 실제 메모리 부하와 Kubernetes 전환
+
+`20261003T181929Z-71a54feb`는 새 자동 전환/취소2개·Runner Pod7개·고정 S3파일3개를 PASS/0으로
+검증했다. API는638d77d의 현재 JAR이고 Runner는 같은 소스의 CI37142931811에서 컨테이너111개와
+TLS MQTT90개 검증 후 게시한 `sha256:eabb42b73b41b4768550ac65df2cfc783fde013cb6dd8c46157488e672502376`이다.
+전체 API 이미지 CI 완료와 이 증거를 구분한다.
+
+참조 모델 프로세스가 첫 체크포인트 뒤320MiB를 실제 할당한다. Runner는 자신의 cgroup v2를 읽고
+인증된 HTTPS로 측정값을 전송한다. 임계치는512MiB 제한의50%, 연속2개 표본이다. 시험에서 부하 전
+관측값은 약44.9MB였고 전환 결정 표본은 약371.6/371.9MB였다. 측정 API/DB에 값을 주입하거나
+cgroup 파일을 바꾸지 않는다. 실제 Pod의 제한과 판단에 포함된 연속 표본·시각·Attempt를 대조한다.
+
+전체 그룹의 종료/권한 회수 장벽, 이전 producer4개의401, 새로운 AUTO 작업의 다른 Node 배치,
+동료 작업의 기존 NODE 배치 유지, 고정 체크포인트2개 인계를 확인했다. Device SDK의 동일 owner와
+센서 커서를 유지해 상태9에서 root14/sink23/BATCH37까지 재개하고 실제 S3 version·bytes·SHA를
+대조했다. 대기 중 API Pod 교체14.881초 후 동일 Operation/구성원/결정이 유지됐다. 취소 사례는
+대기 중 공개 취소로 새 Attempt 없이 종료됐다. 시험 소유 자원과 Job 대기 finalizer도 제거했다.
+
+검증 도구의 기본 목록은 기존7개에 `offload-automatic`, `offload-automatic-cancel`을 더한9개다.
+실행 중인 기존 배포·노드 설정은 건드리지 않으며, 고유 소유 자원·실제 Pod·TLS/S3/DB를 사용하는
+검증 fixture다. 합성 정수 입력과 부하가 실제 장비·모델 정확도 또는 성능 수용을 대신하지 않는다.
+
+추가 한도 시험의 최초 전체 실행 `20261003T182319Z-d1b73dde`는 기존7개를 통과하고 자동 전환 후
+한도 검사의 부하 조건에서 실패했다. 복원 직후 입력이 없는 모델은 `Processor._begin()`에서
+프로세스를 아직 시작하지 않아, 모델 내부 할당 신호만으로 부하를 만들 수 없었다. 실제 두 번째
+데이터/체크포인트 이후 부하를 주도록 순서를 수정했다. 또한 기존 노드에 남은 동료 작업을 가압해
+두 노드 클러스터에서도 아직 방문하지 않은 목적지가 존재하도록 한다.
+
+수정 후 `20261003T183050Z-6d1e38b6`의 동일 자동 전환/취소2개는 PASS/0이다. 실제 DB에 수신된
+표본2개와 Operation의 판단 근거가 일치한다. 동료 sink의 새 Attempt에서 warmup/cooldown 이후
+연속3개 표본 약370.5/370.7/370.5MB를 확인했고, 방문하지 않은 Ready 목적지가 존재해도
+Operation1개·Attempt2개를 유지했다. API 교체10.052초·다른 노드 전환·체크포인트2개·늦은
+producer 차단·취소와 Pod7개/S3결과3개를 다시 검증했다.
+
+최종 전체 실행 `20261003T183338Z-5496a478`은9개 시나리오·Runner Pod31개·고정 S3파일18개
+PASS/0이다. AUTO/NODE·API 교체·계산 중 그룹 복구·최종 처리 복구·취소·수동/자동 그룹 전환과
+각 전환의 취소를 포함한다. 새 자동 판단 표본과 실제 DB 수신 표본2개 일치, 다른 노드 배치와
+동료 배치 보존, 고정 체크포인트2개 인계, API 재시작 후 동일 Operation/결정, 이동 가능 노드가 있는
+동료의 재부하3개 표본/전환 한도, 이전 producer8개의401 및 소유 자원 정리를 확인했다.
+처음 실패한 실행의8개 Run과 fixture 자원·Job/Pod/Secret/대기 finalizer가 남지 않은 것도 재조회했다.
+원시 보고서는 각 실행 폴더의 `stream-kubernetes.json`에 함께 보관한다.
+
+## CI·게시 이미지·실제 배포
+
+638d77d CI37142931811은5개 job 모두 success다. `20261003T184641Z-efbfb547`에서 다운로드한
+원시 결과17개 PASS/0, PostgreSQL206개 실패/오류/skip0, 컨테이너 Runner111개·TLS MQTT90개를
+확인했다. 실제 kind `20261003T182006Z-1abf66a4`는 기존 BATCH/Remote22Run/S3결과20개,
+VD4개/실제 Task/S35개, STREAM7개/Pod24개/S315개, 영속 TLS broker의 새 Pod/동일PVC·권한 유지,
+렌더링한 TLS MinIO256KiB/익명403, 실제 배포 데모3개/Pod8개/S36개를 통과했다.
+생성한 `edgeai-ci-da88eafd7ae7`만 삭제했다. 이 CI의 STREAM 목록은 기존7개이며 이번 기본9개
+변경의 CI 수용과 구분한다. 요약과6개 kind 보고서는 감사 실행 폴더에 함께 보관한다.
+
+GitOps `f869da5386a80abc90bfee570e97d324854e7584`의 실제 배포는
+`20261003T184641Z-7ebc102f`에서 정확한 API/dashboard/MinIO imageID·Ready·PVCBound·ArgoSynced를
+통과했다. DB V28 success/checksum `-423966927`, 실패 migration0개와 기존 소스 bytes 불변을 확인했다.
+`20261003T184839Z-12c00400`은 원래10개 고정 파일의 bytes/SHA/metadata와 PostgreSQL/MinIO의
+두PVC UID 보존을 확인했다. 공유 Ingress로 인한 Argo aggregate health Progressing은 기존 상태다.
+
+게시된 API `sha256:efef59865dcd2a7e77d09f7f467ee6758f22dc3d9a28b8bb284e221e6dc647b8`와 위
+Runner digest를 사용한 `20261003T184641Z-a6fc3e70`도 자동 전환/취소2개·Pod7개/S33개를 PASS/0으로
+검증했다. 이미지에 포장된 JAR를 그대로 실행했으며 별도 JAR를 주입하지 않았다. JAR SHA256은
+`cf8bae8c1405adc483bb4c0e595487c2939056765eb4338d43637eded10493d6`으로 전체9개에 사용한 JAR와
+일치한다. 대기 중 API 교체는13.289초였다. 실제 메모리/판단·
+수신 표본 일치·그룹 종료/회수·다른 노드·동료 배치/전환 한도·API 교체·checkpoint/결과·이전
+producer401·취소/정리를 다시 확인했다. 새9개 기본 게이트의 CI와 단계별 배치·VD/REMOTE 스트림,
+외부 장치/모델·M5 잔여 및 M7–M10 전체 수용은 남는다.

@@ -4,6 +4,7 @@ Only public management HTTP and real DeviceRunSource SDK calls are made here. Th
 outside owner observes actual Pods/checkpoints and releases the named barriers.
 """
 from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
 import base64
 import http.cookiejar
 import json
@@ -89,7 +90,7 @@ def wait(predicate, tick=lambda: None, seconds=180):
         time.sleep(.02)
 
 
-def run_case(name, placement, cancel=False, recover=False, finalize=False, offload=False):
+def run_case(name, placement, cancel=False, recover=False, finalize=False, offload=False, automatic=False):
     global active, phase, csrf
     csrf = request('csrf')['token']
     prefix = config.get('resourcePrefix', 'stream-demo-' + uuid.uuid4().hex) + '-' + name
@@ -101,12 +102,17 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
     for task in ('root', 'sink', 'report'):
         spec = json.loads(json.dumps(config['batchSpec' if task == 'report' else 'streamSpec']))
         spec.update(image=config['runnerImage'], timeoutSeconds=600, platform={'os': 'linux', 'architectures': ['amd64']})
+        if automatic and task != 'report':
+            spec['resources']['limits']['memory'] = '512Mi'
+            spec['stream']['command'] = ['python3', '-c', config['memoryPressureCommand']]
         if task == 'sink':
             spec['stream']['inputs'] = {'input': {'mediaType': 'application/json', 'maxPayloadBytes': 262144}}
             spec['stream']['outputs'] = {}
             if finalize:
                 spec['command'] = ['python3', '-c', config['finalizerCommand']]
         elif task == 'report':
+            if automatic:
+                spec['recovery'] = {'mode': 'RESTART'}
             spec['command'] = ['python3', '-c', config['reportCommand']]
             spec['inputs'] = {key: {'mediaType': 'application/json', 'maxBytes': 1048576, 'required': True} for key in ('root', 'sink')}
             spec['outputs'] = {'report': {'mediaType': 'application/json', 'maxBytes': 1048576}}
@@ -132,6 +138,11 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
     body = {'workflowVersionId': version['id'], 'execution': placement, 'parameters': {}, 'streamInputs': inputs}
     if recover or finalize:
         body['retry'] = {'maxAttempts': 2, 'backoffSeconds': 1, 'maxElapsedSeconds': 600, 'retryOn': ['RUNTIME_LOST']}
+    if automatic:
+        body['offload'] = {'cpuPercent': None, 'memoryPercent': 50, 'latencyMicros': None,
+            'consecutiveSamples': 2, 'maxSampleAgeSeconds': 30, 'maxGapSeconds': 15,
+            'minRunningSeconds': 10, 'cooldownSeconds': 10, 'maxTransfers': 1,
+            'drainTimeoutSeconds': 180, 'startTimeoutSeconds': 120}
     run = request('workflow-runs', 'POST', body, 201, config.get('runKeys', {}).get(name, str(uuid.uuid4())))
     active = run['id']
     detail = request('workflow-runs/' + active)
@@ -197,12 +208,33 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
         wait(lambda: (work / (phase + '.continue')).exists(), tick)
         if offload:
             before = {key: request('tasks/' + task_ids[key])['attempts'][0] for key in ('root', 'sink')}
-            target = config['targetNodeId']
-            assert placement['mode'] == 'NODE' and target != placement['nodeId']
-            command = {'sourceAttemptId': before['root']['id'], 'targetNodeId': target,
-                       'drainTimeoutSeconds': 180, 'startTimeoutSeconds': 120}
-            command_key = str(uuid.uuid4())
-            operation = request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 202, command_key)
+            if automatic:
+                def automatic_operation():
+                    values = request('tasks/' + task_ids['root'])['offloads']
+                    assert len(values) <= 1, 'Automatic decision created duplicate group operations'
+                    return values[0] if values else None
+                operation = wait(automatic_operation, tick)
+                assert operation['trigger'] == 'MEMORY' and operation['targetNodeId'] is None
+                assert operation['excludedNodeNames'] == [config['nodeName']]
+                decision = operation['decision']
+                assert decision['policy'] == body['offload']
+                samples = decision['samples']
+                assert len(samples) == 2 and samples[0]['sequence'] == samples[1]['sequence'] + 1
+                eligible = datetime.fromisoformat(decision['eligibleSince'])
+                evaluated = datetime.fromisoformat(decision['evaluatedAt'])
+                for sample in samples:
+                    assert sample['attemptId'] == before['root']['id'] and sample['resourceSource'] == 'CGROUP_V2'
+                    assert sample['memoryLimitBytes'] == 512 * 1024 * 1024 and sample['memoryBytes'] * 2 >= sample['memoryLimitBytes']
+                    assert sample['latencyMicros'] is None
+                    observed = datetime.fromisoformat(sample['observedAt'])
+                    assert eligible <= observed <= evaluated and (evaluated - observed).total_seconds() <= 30
+            else:
+                target = config['targetNodeId']
+                assert placement['mode'] == 'NODE' and target != placement['nodeId']
+                command = {'sourceAttemptId': before['root']['id'], 'targetNodeId': target,
+                           'drainTimeoutSeconds': 180, 'startTimeoutSeconds': 120}
+                command_key = str(uuid.uuid4())
+                operation = request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 202, command_key)
             assert operation['state'] == 'DRAINING' and len(operation['members']) == 2
             assert {m['sourceAttemptId'] for m in operation['members']} == {a['id'] for a in before.values()}
             assert all(m['targetAttemptId'] is None for m in operation['members'])
@@ -211,9 +243,12 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
             save('phase.json', {**current, 'phase': phase})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
             # The owner still holds only these Jobs while restarting the isolated API.
-            replay = request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 200, command_key)
+            replay = request('operations/' + operation['id']) if automatic else request('tasks/' + task_ids['root'] + '/offload', 'POST', command, 200, command_key)
             assert replay['id'] == operation['id'] and replay['state'] == 'DRAINING' and replay['members'] == operation['members']
-            current['offloadReplayPreserved'] = True
+            assert replay['decision'] == operation['decision']
+            if automatic:
+                assert all([o['id'] for o in request('tasks/' + task_ids[key])['offloads']] == [operation['id']] for key in ('root', 'sink'))
+            current['offloadDecisionPreserved' if automatic else 'offloadReplayPreserved'] = True
             if cancel:
                 request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
                 current['offload'] = request('operations/' + operation['id'])
@@ -245,7 +280,10 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
                 assert old['state'] == ('OFFLOADED' if offload else 'FAILED') and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
                 assert new['cause'] == ('OFFLOAD' if offload else 'RETRY')
                 if offload:
-                    assert new['mode'] == 'NODE' and new['nodeId'] == (config['targetNodeId'] if key == 'root' else placement['nodeId'])
+                    if automatic and key == 'root':
+                        assert new['mode'] == 'AUTO' and new['nodeId'] is None
+                    else:
+                        assert new['mode'] == 'NODE' and new['nodeId'] == (config['targetNodeId'] if key == 'root' else placement['nodeId'])
                 expected_attempts[key] = new['id']
             assert not request('tasks/' + task_ids['report'])['attempts']
             current['recovery'] = {'attempts': expected_attempts, 'sameDeviceOwners': True, 'sensorCursorsPreserved': True}
@@ -256,6 +294,7 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
             phase = name + '-recovered'
             save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 9, 'sink': 9}, 'expectedAttempts': expected_attempts})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
+
         if cancel:
             if not offload:
                 request('tasks/' + task_ids['sink'] + '/cancel', 'POST', {})
@@ -279,6 +318,33 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
             phase = name + '-second'
             save('phase.json', {**current, 'phase': phase, 'expectedStates': {'root': 14, 'sink': 23}})
             wait(lambda: (work / (phase + '.continue')).exists(), tick)
+            if automatic:
+                # Pressure the peer which stayed on the original node. Unlike the selected
+                # task, it still has an unvisited destination even on a two-node cluster.
+                # Observe fresh breaches beyond warmup/cooldown while the worker keeps polling.
+                phase = name + '-budget'
+                save('phase.json', {**current, 'phase': phase})
+                eligible_again = datetime.now(timezone.utc) + timedelta(seconds=15)
+                pressure_samples = []
+
+                def budget_preserved():
+                    detail = request('tasks/' + task_ids['sink'])
+                    assert len(detail['attempts']) == 2 and detail['attempts'][0]['state'] == 'RUNNING'
+                    assert [o['id'] for o in detail['offloads']] == [operation['id']]
+                    sample = detail['telemetry']
+                    if not sample or datetime.fromisoformat(sample['observedAt']) < eligible_again:
+                        return False
+                    assert sample['attemptId'] == expected_attempts['sink'] and sample['resourceSource'] == 'CGROUP_V2'
+                    assert sample['memoryLimitBytes'] == 512 * 1024 * 1024 and sample['memoryBytes'] * 2 >= sample['memoryLimitBytes']
+                    if not pressure_samples or sample['sequence'] != pressure_samples[-1]['sequence']:
+                        if pressure_samples and sample['sequence'] != pressure_samples[-1]['sequence'] + 1:
+                            pressure_samples.clear()
+                        pressure_samples.append(sample)
+                    return len(pressure_samples) >= 3
+
+                wait(budget_preserved, tick, seconds=80)
+                current['automaticBudget'] = {'taskId': task_ids['sink'], 'maxTransfers': 1, 'operationCount': 1, 'attemptCount': 2,
+                    'eligibleAgainAfter': eligible_again.isoformat(), 'freshPressureSamples': pressure_samples}
             wait(lambda: all(o.ready for o in owners.values()), tick)
             for port, owner in owners.items():
                 owner.emit([Emission(discovered_routes[port]['routeId'], b'', None, 'END')])
@@ -334,10 +400,10 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
 
 def main():
     names = config.get('cases', ['auto', 'node', 'recover', 'finalizer', 'cancel'])
-    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel'}
+    assert names and len(names) == len(set(names)) and set(names) <= {'auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel'}
     for name in names:
         placement = {'mode': 'NODE', 'nodeId': config['nodeId']} if name == 'node' or name.startswith('offload') else {'mode': 'AUTO'}
-        run_case(name, placement, cancel=name in ('cancel', 'offload-cancel'), recover=name == 'recover', finalize=name == 'finalizer', offload=name.startswith('offload'))
+        run_case(name, placement, cancel=name == 'cancel' or name.endswith('-cancel'), recover=name == 'recover', finalize=name == 'finalizer', offload=name.startswith('offload'), automatic=name.startswith('offload-automatic'))
     save('done.json', report)
 
 

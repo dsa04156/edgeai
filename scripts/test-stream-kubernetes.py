@@ -21,7 +21,7 @@ import urllib.request
 import uuid
 from vd_acceptance import ROOT, wait
 
-CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel')
+CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel')
 
 
 def main():
@@ -352,11 +352,15 @@ with response: print(response.status)
             assert len(eligible) >= (2 if any(name.startswith('offload') for name in args.cases) else 1), 'Two eligible nodes are required for actual stream transfer'
             node = eligible[0]
             config = {'origin': api_origin, 'runnerImage': snapshot['runnerImage'], 'nodeId': node['metadata']['uid'],
+                      'nodeName': node['metadata']['name'],
                       'targetNodeId': eligible[-1]['metadata']['uid'], 'cases': args.cases,
                       'streamSpec': json.loads((ROOT / 'contracts/profiles/service-stream.example.json').read_bytes()),
                       'batchSpec': json.loads((ROOT / 'contracts/profiles/service-execution.example.json').read_bytes()),
                       # A test workload barrier after the real server grants completion, before file output.
                       'finalizerCommand': "import os,time\nfrom pathlib import Path\nwork=Path(os.environ['EDGEAI_OUTPUT_DIR']).parent\n(work/'finalizer-entered').touch()\nwhile not (work/'finalizer-release').exists(): time.sleep(.05)\n" + (ROOT / 'runner/examples/stream_result.py').read_text(),
+                      # Allocate real memory in the model's container only after the first checkpoint.
+                      # No synthetic telemetry, cgroup overrides, or shared node mutations.
+                      'memoryPressureCommand': "import runpy,threading,time\nfrom pathlib import Path\ndef pressure():\n global allocation\n while not Path('/work/automatic-pressure').exists(): time.sleep(.05)\n allocation=bytearray(b'x')*(320*1024*1024)\nthreading.Thread(target=pressure,daemon=True).start()\nrunpy.run_path('/opt/edgeai/examples/stream_sum.py',run_name='__main__')\n",
                       'reportCommand': 'import time; time.sleep(2)\n' + (ROOT / 'runner/examples/stream_report.py').read_text()}
             create('ConfigMap', root + '-scenario', immutable=True, data={'driver.py': (ROOT / 'scripts/stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
             create('Pod', driver, spec=pod_spec([{'name': 'source-driver', 'image': snapshot['runnerImage'], 'command': ['python3', '-B', '/scenario/driver.py'],
@@ -366,7 +370,7 @@ with response: print(response.status)
                 [{'name': 'work', 'emptyDir': {}}, {'name': 'scenario', 'configMap': {'name': root + '-scenario'}}]))
             wait(lambda: running(driver), 150, 'Owned source driver did not start')
             completed = set()
-            deadline = time.monotonic() + 1050
+            deadline = time.monotonic() + 1350
             restarted = False
             while time.monotonic() < deadline:
                 running(driver)
@@ -390,7 +394,7 @@ with response: print(response.status)
                                 time.sleep(.3)
                                 continue
                             snapshot['checkpointBarriers'].append({'phase': phase, 'runId': run, 'states': current['expectedStates'], 'sha256': actual})
-                            if phase in ('offload-first', 'offload-cancel-first'):
+                            if current['case'].startswith('offload') and phase.endswith('-first'):
                                 owned = resources(run);before = [p for p in owned if p['kind'] == 'Pod']
                                 assert len(before) == 2 and all(p['metadata']['uid'] in seen for p in before)
                                 assert all(seen[p['metadata']['uid']]['nodeUid'] == config['nodeId'] for p in before)
@@ -402,8 +406,18 @@ with response: print(response.status)
                                     'runId': run, 'oldPodUids': sorted(p['metadata']['uid'] for p in before),
                                     'oldAttemptIds': sorted(p['metadata']['labels']['edgeai.io/attempt-id'] for p in before),
                                     'oldGenerationIds': sorted(r['generation']['id'] for r in current['routes']),
-                                    'sourceNodeId': config['nodeId'], 'targetNodeId': config['targetNodeId'],
+                                    'sourceNodeId': config['nodeId'], 'targetNodeId': None if current['case'].startswith('offload-automatic') else config['targetNodeId'],
                                     'heldJobUids': sorted(p['metadata']['uid'] for p in jobs)}
+                                if current['case'].startswith('offload-automatic'):
+                                    root_pod = next(p for p in before if p['metadata']['labels']['edgeai.io/task-id'] == current['tasks']['root'])
+                                    assert root_pod['spec']['containers'][0]['resources']['limits']['memory'] == '512Mi'
+                                    measurement = json.loads(call(['-n', 'edgeai-runtimes', 'exec', root_pod['metadata']['name'], '--', 'python3', '-c',
+                                        "import sys,json;sys.path.insert(0,'/opt/edgeai');from edgeai_runner.telemetry import own_cgroup;p=own_cgroup();assert p;print(json.dumps({'memoryBytes':int((p/'memory.current').read_text()),'memoryLimitBytes':int((p/'memory.max').read_text())}))"]))
+                                    assert measurement['memoryLimitBytes'] == 512 * 1024 * 1024 and measurement['memoryBytes'] * 2 < measurement['memoryLimitBytes']
+                                    assert query("SELECT count(*) FROM edgeai.task_offload WHERE run_id='" + run + "'") == '0'
+                                    snapshot['offloads'][current['case']]['memoryPressure'] = {'before': measurement, 'allocatedBytes': 320 * 1024 * 1024,
+                                        'producerPodUid': root_pod['metadata']['uid'], 'source': 'real-model-process-memory'}
+                                    call(['-n', 'edgeai-runtimes', 'exec', root_pod['metadata']['name'], '--', 'touch', '/work/automatic-pressure'])
                             if phase == 'auto-first' and not restarted:
                                 before = {p['metadata']['uid'] for p in resources(run) if p['kind'] == 'Pod'}
                                 assert len(before) == 2
@@ -438,14 +452,18 @@ with response: print(response.status)
                                 assert query('SELECT count(*) FROM edgeai.route_generation WHERE id IN(' + old_generations + ') AND closed_at IS NOT NULL') == '3'
                                 fault.update(newPodUids=sorted(after), oldRuntimesStopped=True, oldGenerationsClosed=True,
                                              restoredAttemptIds=current['expectedAttempts'])
-                            if phase == 'offload-recovered':
-                                proof = snapshot['offloads']['offload'];operation = str(uuid.UUID(proof['operationId']))
+                            if current['case'].startswith('offload') and phase.endswith('-recovered'):
+                                proof = snapshot['offloads'][current['case']];operation = str(uuid.UUID(proof['operationId']))
                                 after = [p for p in resources(run) if p['kind'] == 'Pod']
                                 assert len(after) == 2 and not {p['metadata']['uid'] for p in after}.intersection(proof['oldPodUids'])
                                 for p in after:
                                     meta = p['metadata'];observed = seen[meta['uid']]
-                                    expected_node = config['targetNodeId'] if observed['taskId'] == current['tasks']['root'] else config['nodeId']
-                                    assert observed['nodeUid'] == expected_node
+                                    if current['case'].startswith('offload-automatic') and observed['taskId'] == current['tasks']['root']:
+                                        assert observed['nodeUid'] != config['nodeId']
+                                        proof['selectedTargetNodeId'] = observed['nodeUid']
+                                    else:
+                                        expected_node = config['targetNodeId'] if observed['taskId'] == current['tasks']['root'] else config['nodeId']
+                                        assert observed['nodeUid'] == expected_node
                                 old_attempts = ','.join("'" + str(uuid.UUID(a)) + "'" for a in proof['oldAttemptIds'])
                                 old_generations = ','.join("'" + str(uuid.UUID(g)) + "'" for g in proof['oldGenerationIds'])
                                 assert query('SELECT desired_state,observed_state FROM edgeai.runtime_instance WHERE attempt_id IN(' + old_attempts + ')').splitlines() == ['STOPPED|TERMINATED'] * 2
@@ -455,8 +473,21 @@ with response: print(response.status)
                                 proof.update(newPodUids=sorted(p['metadata']['uid'] for p in after), oldRuntimesStopped=True,
                                     oldGenerationsClosed=True, immutableCheckpointHandovers=2, distinctNodeMove=True,
                                     peerNodePreserved=True, restoredAttemptIds=current['expectedAttempts'])
+                            if current['case'] == 'offload-automatic' and phase.endswith('-second'):
+                                proof = snapshot['offloads'][current['case']]
+                                after = [p for p in resources(run) if p['kind'] == 'Pod']
+                                replacement = next(p for p in after if p['metadata']['labels']['edgeai.io/task-id'] == current['tasks']['sink'])
+                                # The peer has visited only its original node; the selected task's
+                                # actual Ready destination remains a compatible unvisited choice.
+                                destination = read(['get', 'node', next(seen[p['metadata']['uid']]['nodeName'] for p in after
+                                    if p['metadata']['labels']['edgeai.io/task-id'] == current['tasks']['root']), '-o', 'json'])
+                                assert destination['metadata']['uid'] != config['nodeId'] and not destination['spec'].get('unschedulable')
+                                assert any(c['type'] == 'Ready' and c['status'] == 'True' for c in destination['status']['conditions'])
+                                proof['budgetAlternativeNodeId'] = destination['metadata']['uid']
+                                call(['-n', 'edgeai-runtimes', 'exec', replacement['metadata']['name'], '--', 'python3', '-c',
+                                    "from pathlib import Path;p=Path('/work/automatic-pressure');assert not p.exists();p.touch()"])
                         elif phase.endswith(('-draining', '-releasing', '-cancelling')):
-                            assert current['case'] in ('offload', 'offload-cancel')
+                            assert current['case'].startswith('offload')
                             proof = snapshot['offloads'][current['case']]
                             operation = str(uuid.UUID(current['offload']['id']))
                             expected_state = 'CANCELLING' if phase.endswith('-cancelling') else 'DRAINING'
@@ -468,7 +499,13 @@ with response: print(response.status)
                                 pinned = query("SELECT source_attempt_id,checkpoint_id FROM edgeai.task_offload_member WHERE operation_id='" + operation + "' ORDER BY source_attempt_id")
                                 assert pinned.splitlines() == sorted(m['sourceAttemptId'] + '|' + m['checkpointId'] for m in current['offload']['members'])
                                 proof.update(operationId=operation, pinnedCheckpoints=pinned.splitlines(), drainingObserved=True)
-                                if current['case'] == 'offload':
+                                if current['case'].startswith('offload-automatic'):
+                                    assert current['offload']['trigger'] == 'MEMORY'
+                                    assert query("SELECT count(*) FROM edgeai.task_offload WHERE run_id='" + run + "'") == '1'
+                                    assert query("SELECT count(*) FROM edgeai.task_offload o CROSS JOIN LATERAL jsonb_array_elements(o.decision->'samples') s JOIN edgeai.runtime_telemetry t ON t.attempt_id=(s->>'attemptId')::uuid AND t.sequence=(s->>'sequence')::bigint WHERE o.id='" + operation + "' AND t.memory_bytes=(s->>'memoryBytes')::bigint AND t.memory_limit_bytes=(s->>'memoryLimitBytes')::bigint AND t.observed_at=(s->>'observedAt')::timestamptz AND t.received_at=(s->>'receivedAt')::timestamptz") == '2'
+                                    proof['automaticDecision'] = current['offload']['decision']
+                                    proof['decisionSamplesMatchReceivedTelemetry'] = True
+                                if not current['case'].endswith('-cancel'):
                                     started = time.monotonic();old = api_uid
                                     remove('pod', 'edgeai', api, api_uid);records.remove(('pod', 'edgeai', api, api_uid))
                                     api_uid = start_api();assert api_uid != old
@@ -477,8 +514,12 @@ with response: print(response.status)
                                     proof['apiRestart'] = {'oldUid': old, 'newUid': api_uid, 'elapsedSeconds': round(time.monotonic() - started, 3), 'pendingOperationPreserved': True}
                                 proof['lateProducerStatuses'] = [check_old_producer(v, api_origin) for v in private_producers.pop(current['case'])]
                             else:
-                                assert current['offloadReplayPreserved']
-                                proof['publicReplayPreserved'] = True
+                                if current['case'].startswith('offload-automatic'):
+                                    assert current['offloadDecisionPreserved']
+                                    proof['publicDecisionPreserved'] = True
+                                else:
+                                    assert current['offloadReplayPreserved']
+                                    proof['publicReplayPreserved'] = True
                                 if phase.endswith('-cancelling'):
                                     proof['cancelledBeforeTargetCreation'] = True
                                 for (name, uid), held_run in list(held_jobs.items()):
@@ -533,8 +574,8 @@ with response: print(response.status)
                             call(['-n', 'edgeai-runtimes', 'exec', meta['name'], '--', 'touch', '/work/finalizer-release'])
                         else:
                             wait(lambda: not resources(run), 90, 'Actual stream runtime resources were not reclaimed')
-                            if current['case'] == 'offload-cancel':
-                                proof = snapshot['offloads']['offload-cancel']
+                            if current['case'].startswith('offload') and current['case'].endswith('-cancel'):
+                                proof = snapshot['offloads'][current['case']]
                                 assert query("SELECT state FROM edgeai.task_offload WHERE id='" + str(uuid.UUID(proof['operationId'])) + "'") == 'CANCELLED'
                                 assert query("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON a.task_id=t.id WHERE t.run_id='" + run + "'") == '2'
                                 proof['cancelledWithoutNewAttempt'] = True
@@ -550,11 +591,17 @@ with response: print(response.status)
                         assert snapshot['groupFault']['oldRuntimesStopped'] and snapshot['groupFault']['oldGenerationsClosed']
                     if 'finalizer' in args.cases:
                         assert snapshot['finalizerFault']['originalGrantPreserved'] and snapshot['finalizerFault']['checkpointHistoryPreserved']
-                    if 'offload' in args.cases:
-                        assert snapshot['offloads']['offload']['apiRestart']['pendingOperationPreserved']
-                        assert snapshot['offloads']['offload']['immutableCheckpointHandovers'] == 2
-                    if 'offload-cancel' in args.cases:
-                        assert snapshot['offloads']['offload-cancel']['cancelledWithoutNewAttempt']
+                    for name in args.cases:
+                        if name.startswith('offload'):
+                            proof = snapshot['offloads'][name]
+                            if name.endswith('-cancel'):
+                                assert proof['cancelledWithoutNewAttempt']
+                            else:
+                                assert proof['apiRestart']['pendingOperationPreserved'] and proof['immutableCheckpointHandovers'] == 2
+                                if name.startswith('offload-automatic'):
+                                    case = next(v for v in snapshot['cases'] if v['case'] == name)
+                                    assert len(case['automaticBudget']['freshPressureSamples']) >= 3
+                                    proof['automaticBudgetPreserved'] = True
                     assert not held_jobs
                     artifacts = []
                     for case in snapshot['cases']:
@@ -562,10 +609,13 @@ with response: print(response.status)
                             result = row['result'];observed = seen[result['producerPodUid']]
                             assert observed['runId'] == case['runId'] and observed['attemptId'] == result['attemptId']
                             if case['placement']['mode'] == 'NODE':
-                                expected_node = case['offload']['targetNodeId'] if case['case'] == 'offload' and row['task'] == 'root' else case['placement']['nodeId']
-                                assert observed['nodeUid'] == expected_node
+                                if case['case'] == 'offload-automatic' and row['task'] == 'root':
+                                    assert observed['nodeUid'] == snapshot['offloads'][case['case']]['selectedTargetNodeId'] != case['placement']['nodeId']
+                                else:
+                                    expected_node = case['offload']['targetNodeId'] if case['case'] == 'offload' and row['task'] == 'root' else case['placement']['nodeId']
+                                    assert observed['nodeUid'] == expected_node
                             artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
-                    assert len(artifacts) == sum(3 for case in args.cases if case not in ('cancel', 'offload-cancel'))
+                    assert len(artifacts) == sum(3 for case in args.cases if case != 'cancel' and not case.endswith('-cancel'))
                     result = subprocess.run(['node', 'scripts/verify-runtime-artifacts.mjs'], input=json.dumps(artifacts).encode(), env=verify_env, capture_output=True, timeout=60)
                     assert result.returncode == 0, 'Actual fixed-version TLS S3 results differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
