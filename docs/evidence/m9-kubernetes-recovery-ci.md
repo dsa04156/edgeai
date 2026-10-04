@@ -1,6 +1,24 @@
 # M9 Remote/Kubernetes 복구의 CI와 실제 배포 검증
 
-## 최신: ADR0081–0084 포함
+## 최신: ADR0085–0088 포함
+
+2026-10-04. 소스 `42c4094f3a3c8cf4ac0cceedac81174332650ca1`,
+[CI37209512541](https://github.com/dsa04156/edgeai/actions/runs/37209512541)의5개 job과
+다운로드한 원시34개가 모두 PASS/exit0이다. 감사 `20261004T153553Z-573e4203`.
+PostgreSQL230/단위122/Runner111/MQTT95, 실제 STREAM24개/결과54개, 복구 retirement69개,
+Remote결과15/실패15개, 장치 암호화 백업13개와 DB/journal 대조16개를 확인했다.
+
+GitOps `6d876f554160df7c553febf6757ba16c9299ac4c`의 정확한 API/dashboard/MinIO imageID,
+Ready/PVC Bound/Argo Synced는 `20261004T153534Z-5f51c056` PASS다. 공유 Ingress의
+aggregate health는 Progressing이다. 이후 `20261004T153651Z-90a91c7f`에서 기존 파일10개의
+고정 version/bytes/SHA·원래 두 PVC UID, HTTPS256KiB PUT/stat/GET·익명403과 probe 소유
+object/bucket 정리를 확인했다. 원래 storage baseline은 다시 캡처하지 않았다.
+
+대기 중이던 ADR0089–0091을 이 pin 변경 위로 rebase한 뒤 검증한 소스 `9310ad0`과의
+차이가 배포 pin2개뿐임을 확인했다. 그 변경의 장치/원본 broker/owner·STREAM경로47개와
+MQTT97개는 새 원격 CI에서 별도로 확인한다. 위34개는 이 후속 기능의 CI 성공 근거가 아니다.
+
+## 선행: ADR0081–0084 포함
 
 2026-10-04. 소스 `fd8830db36bfc329d4047af41e594a12054d8b9e`,
 [CI37204890109](https://github.com/dsa04156/edgeai/actions/runs/37204890109)의 5개 job과

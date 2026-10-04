@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+선행42c4094 CI37209512541 전체5jobs/원시34개 PASS(`153553Z-573e4203`). GitOps6d876f5의
+정확한 API/dashboard/MinIO 이미지·Ready/PVC/ArgoSynced(`153534Z-5f51c056`)와 기존10파일/
+원래PVC·HTTPS256KiB/익명403/소유probe정리(`153651Z-90a91c7f`)도 PASS다.
+공유Ingress aggregatehealth는Progressing이다. ADR0089–0091의 새47개/MQTT97 기능과는
+구분하며, pin변경 위rebase 후 테스트한 소스와pin2개만 다른 것을 확인했다.
+
 ADR0091 실제 원본 broker 차단→복원 STREAM generation 종료 결합47개
 `152904Z-e8228c9f` PASS. 새14개는 복원DB5·경로4개 종료·기존 취소 이유/시각·다른broker1개/
 42개 타 테이블 보존, 실제 잠금/SQL guard 경쟁/rollback/COMMIT응답 유실·권한 재활성화·
