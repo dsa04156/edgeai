@@ -102,6 +102,10 @@ ADR0092의 [STREAM 그룹 업무 상태 조정](recovery-stream-workflows.md)은
 fanout의 원자성·checkpoint2/고정version2 보존·잠금/원복/응답 유실과 BATCH 명령의 잘못된
 우회 처리를 재현·수정했다. 기한 전 예약·최종 처리 중인 그룹·활성 전환은 보존하며 새 실행은
 만들지 않는다. STREAM 전환/최종 처리 복구·외부 시작 권한·종합 재가동 수용은 남는다.
+ADR0093은 같은 명령의 `--offloads`로 기록된 전환 취소와 원래 drain/start 기한 만료를
+조정한다. 실제29개에서 source2→target2 종료·복원DB13개·checkpoint/배치/기한 보존과
+원복/응답 유실을 확인했다. VD/자동 전환의 복원 종단·기록된 target 실패·전환 성공의 시작
+권한·finalization·새 자격/종합 활성화는 여전히 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

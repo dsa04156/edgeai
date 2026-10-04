@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0093 전환 포함29개 `163446Z-71726657` PASS. 실제 source2→successor2 부모/자식·
+복원DB13개·종료/시작 기한 만료2·취소2·새 실행/재시도 없음·원래 source Attempt/runtime,
+member/checkpoint와 고정 배치/기한 보존·경쟁/원복/응답 유실·소유 정리를 확인했다.
+[근거](docs/evidence/m9-recovery-stream-offloads.md). 기존18개 회귀도 포함한다.
+CI kind29개 연결. VD/자동 전환의 복원 종단·기록된 target 실패/시작 권한·최종 처리·전역 writer와
+종합 활성화·전체 목표는 미완료다. c133315 CI37213721652 images는 진행 중이며 새코드는 미push다.
+
 ADR0092 실제 STREAM 그룹 복구18개 `160510Z-580c6a40` PASS. 공개 Device fanout2/복원DB5·
 실제 컨테이너 종료·TLS broker·원래 그룹 기한/취소·checkpoint2와S3고정version2 보존,
 DB경쟁/잠금/원복/응답 유실을 확인했다. 기존 BATCH 명령의 Device-only STREAM 우회를

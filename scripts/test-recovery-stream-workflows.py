@@ -36,6 +36,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--context',required=True);parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--runner-image');parser.add_argument('--runner-source')
+    parser.add_argument('--offloads',action='store_true')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-stream-workflows-test.json');args=parser.parse_args()
     token=uuid.uuid4().hex;operation=str(uuid.uuid4());namespace='edgeai-stream-recovery-'+token[:12]
@@ -62,22 +63,25 @@ def main():
     def insert(db,table,values):
         pg.sql('INSERT INTO edgeai.'+identifier(table)+' SELECT * FROM jsonb_populate_record(NULL::edgeai.'+
             identifier(table)+','+literal(json.dumps(values))+'::jsonb)',db)
-    def options(target):
+    def options(target,**extra):
         db,receipt=target
         return SimpleNamespace(context=args.context,namespace=namespace,namespace_uid=namespace_uid,recovery_id=operation,
             database=db,restore_report=receipt,termination_report=work/'termination-report.json',run_id=run_id,
             broker_digest=fixtures.digest,mqtt_state_directory=fixtures.cfg.state_directory,mqtt_ca_file=fixtures.cfg.ca_file,
-            mqtt_original_password_file=fixtures.cfg.admin_password_file,timeout=30,output=work/uuid.uuid4().hex)
-    def apply(target,plan=None):
-        values=options(target);values.output.mkdir(mode=0o700)
+            mqtt_original_password_file=fixtures.cfg.admin_password_file,timeout=30,output=work/uuid.uuid4().hex,**extra)
+    def apply(target,plan=None,**extra):
+        values=options(target,**extra);values.output.mkdir(mode=0o700)
         return workflows.apply(pg,values,plan or workflows.prepare(pg,values))
     def refused(operation,kind=(Blocked,RuntimeError)):
         try:operation()
         except kind:return
         raise AssertionError('Unproven STREAM workflow mutation accepted')
-    def cli(target):
-        values=options(target);command=[sys.executable,'scripts/recovery_stream_workflows.py','--transport',args.transport]
-        for key,value in vars(values).items():command+=['--'+key.replace('_','-'),str(value)]
+    def cli(target,**extra):
+        values=options(target,**extra);command=[sys.executable,'scripts/recovery_stream_workflows.py','--transport',args.transport]
+        for key,value in vars(values).items():
+            if isinstance(value,bool):
+                if value:command+=['--'+key.replace('_','-')]
+            else:command+=['--'+key.replace('_','-'),str(value)]
         fixtures.run(command);return json.loads((values.output/'workflows.json').read_text())
     code=1
     try:
@@ -172,6 +176,8 @@ def main():
                         'routes':[{k:v for k,v in row.items() if k!='frames'} for row in doc['routes']],
                         'stateSha256':hashlib.sha256(b'7').hexdigest(),'stateBytes':1},
                     'bucket':fixtures.bucket,'object_key':key,'object_version':version_id,'created_at':pg.sql('SELECT now()::text',source)})
+        running_backup=work/'running-stream-backup'
+        if args.offloads:backup(pg,source,running_backup)
         task_ids=','.join(literal(m['task'])+'::uuid' for m in members)
         pg.sql("BEGIN; UPDATE edgeai.task_attempt SET created_at=created_at-interval '10 seconds' WHERE id="+literal(members[0]['attempt'])+'::uuid; '
             "UPDATE edgeai.task_attempt SET state='FAILED',updated_at=now(); UPDATE edgeai.task SET state='RETRY_WAIT' WHERE id IN ("+task_ids+
@@ -183,6 +189,10 @@ def main():
             db='edgeai_restore_stream_'+name+'_'+token
             tool=Postgres(args.transport,diagnostics=work/('restore-'+name));restore(tool,work/'backup',db);remember(db)
             targets.append((db,tool.directory/'restore-report.json'))
+        offload_fixture=None
+        if args.offloads:
+            from test_recovery_stream_offloads import seed
+            offload_fixture=seed(pg,args.transport,work,running_backup,remember,drop,kube,create,namespace,pod_spec,members,run_id)
         fixtures.seal_storage()
         drop(source);report['sourceDatabaseRemoved']=True
         stopped={'formatVersion':1,'scope':'observed-kubernetes-producer-termination','status':'RUNNING','namespace':namespace,
@@ -335,12 +345,16 @@ def main():
         with mqtt.Connection(fixtures.cfg,fixtures.replacement) as connection:connection.call('disableClient',username=fixtures.device_name)
         assert not cli(pending)['databaseModified']
         passed('post-commit-authority-change-refuses-success-and-same-operation-can-be-reobserved')
+        if args.offloads:
+            from test_recovery_stream_offloads import check
+            check(pg,offload_fixture,options,apply,cli,fingerprints,refused,passed,report)
         manifest=json.loads((fixtures.bundle/'manifest.json').read_text())
         assert len(manifest['versions'])==2
         for item in manifest['versions']:assert fixtures.client.digest('replica',item)==item['sha256']
         for db,_ in targets:assert pg.sql('SELECT count(*) FROM edgeai.stream_checkpoint',db)=='2'
         passed('nonempty-immutable-checkpoints-and-two-fixed-s3-versions-survive-all-group-outcomes')
-        report.update(publicStreamRun=True,restoredDatabases=5,groupMembers=2,terminatedContainers=2,reapedChildren=2,
+        report.update(publicStreamRun=True,restoredDatabases=13 if args.offloads else 5,groupMembers=2,
+            terminatedContainers=4 if args.offloads else 2,reapedChildren=4 if args.offloads else 2,
             retriesExpired=2,tasksCancelled=2,tasksSkipped=1,runsReconciled=2,pendingRetriesPreserved=2,
             preservedTables=40,checkpointsPreserved=2,storageVersionsPreserved=2,noNewAttempts=True,image=image,imageSourceRevision=revision,
             minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest(),

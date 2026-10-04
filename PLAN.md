@@ -2,6 +2,14 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0093 STREAM 전환 복구 포함29개 `163446Z-71726657` PASS다. 원본→successor 실제4개
+부모/자식·복원DB13개·원래 source/member/checkpoint 전체 이력 보존, DRAINING/STARTING
+취소2/기한 만료2·고정 배치/기한·새 Attempt/중복 재시도 없음·원복/응답 유실·소유 정리를
+확인했다. [근거](docs/evidence/m9-recovery-stream-offloads.md). 기존18개 회귀 포함이며
+CI kind에 `--offloads`/29개를 연결했다. VD/자동 전환 복원 종단·기록된 target 실패/시작 권한·
+finalization·전역 writer/종합 활성화는 남는다. 선행 CI37213721652의 images 게이트가
+진행 중이므로 ADR0092–0093의 새 push·원격 수용은 후속이다.
+
 ADR0092 복원 STREAM 그룹의 기록된 취소/공유 retry 기한 조정 실제18개
 `160510Z-580c6a40` PASS. 실제 컨테이너2·복원DB5·checkpoint2/고정S3version2 보존,
 경쟁/잠금/원복/COMMIT응답 유실·원래 예산·BATCH 우회 거절을 확인했다.

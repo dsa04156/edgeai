@@ -34,8 +34,18 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 
 같은 Device fanout과 Task STREAM 연결은 한 그룹이다. 일부만 종료됐거나 경로가 열려
 있으면 그룹 전체를 미해결로 남긴다. 재시도는 원래 그룹 기한·횟수·실패 사유를 확인하며
-기한이 지났을 때만 전체 그룹을 실패로 확정한다. 활성 offload와 최종 처리 권한을 받은
-그룹의 재시도는 별도 복구가 필요하다. 미기록 성공을 추정하거나 새 실행을 만들지 않는다.
+기한이 지났을 때만 전체 그룹을 실패로 확정한다. 활성 offload는 아래 옵션으로 별도 조정한다.
+최종 처리 권한을 받은 그룹의 재시도는 별도 복구가 필요하다. 미기록 성공을 추정하거나
+새 실행을 만들지 않는다.
+
+기록된 전환의 취소·기한 만료도 조정하려면 같은 명령에 `--offloads`를 추가한다. claim 전
+target은 정확한 Job UID와 보존한 모든 자식의 실제 종료 증거가 있을 때 `--unclaimed-jobs`로
+검사한다. 전체 member/checkpoint/source/target/배치가 고정 계획과 맞아야 한다.
+`offloadsFailed`, `offloadsCancelled`, `attemptsFailed`가 추가 변경 수다. 기한 전 예약은
+그대로이며 종료 대기와 시작 대기의 원래 기한을 연장하지 않는다. 기한 만료는 선택한 Task만
+실패로 만들고 peer와 후속 작업을 건너뛴다. 전환 성공이나 새 시작 권한은 추정하지 않는다.
+겹친 Operation·부분 target·더 최신 Attempt·기록된 별도 실패/완료는 미해결로 남긴다.
+[ADR0093](adr/0093-restored-stream-offloads.md)에 전환 복구 계약을 기록한다.
 
 SQL 오류는 전체 원복한다. 실제 COMMIT 뒤 응답 유실이나 권한 변경이 생기면 DB가 이미
 바뀌었을 수 있으므로 `failure.json`·`intent.json`을 보존한다. 같은 복구 UUID와 새 output으로
@@ -56,3 +66,5 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 전용 namespace와 소유 DB/API·TLS MinIO/MQTT를 만들고 삭제한다. [ADR0092](adr/0092-restored-stream-workflows.md)에
 정의한 업무 상태 복구 범위이며 실제 엣지 모델·전체 서비스 재개 수용과는 별도다.
 [실제18개 검증 근거](evidence/m9-recovery-stream-workflows.md)를 참고한다.
+같은 시험에 `--offloads`를 추가하면 실제 source→target 교체와 복원 전환 검사를 포함한다.
+[전환 포함29개 근거](evidence/m9-recovery-stream-offloads.md)를 참고한다.
