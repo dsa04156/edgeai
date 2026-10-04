@@ -2,6 +2,14 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0078은 복구 S3 고정 파일과 복원 DB를 대조해 Remote Result·Task·Run을 원자적으로 확정한다.
+실제 PG16/API/Remote/TLS MinIO14개(105412Z-07ca4178) PASS: 결과2·완료Run1·대기자식1,
+동시 복구/잠금/rollback·응답 유실/0변경 재실행·Java digest 일치·38테이블 보존·조회 격리를
+확인했다. [검증 근거](docs/evidence/m9-recovery-remote-results.md). 새 CI 게이트를 추가했으며
+원격 CI/배포·실패/취소 작업·STREAM/journal·종합 활성화는 남는다.
+선행 cd1424a CI37196161670은3jobs/다운로드 원시27개·PG230·Remote17/S312개
+PASS(105951Z-05a4f945)이며 images는 진행 중이다. 완료 전 새 push는 대기한다.
+
 선행 bf1ba48의 CI37192473886은5jobs/원시27개 PASS(103252Z-838f3a6f)다.
 GitOps354c94e의 실제 이미지·Ready/PVC·Argo Synced(103223Z-dd541b3a), 새 MinIO 기동 뒤
 기존10파일/두PVC·TLS 보존(103449Z-2a468828)도 확인했다. 공유 Ingress health는 Progressing이다.

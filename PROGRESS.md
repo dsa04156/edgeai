@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0078 복원 Remote Result·Task·Run 확정의 실제 결합14개(105412Z-07ca4178) PASS다.
+원본 DB/Remote/S3 종료 뒤 결과2·완료Run1·대기자식1, 동시 복구·잠금·rollback·커밋 응답 유실·
+Java digest/기존38테이블 보존·API 조회/쓰기 차단을 확인했다. 새 runtime/명령은 만들지 않는다.
+docs/evidence/m9-recovery-remote-results.md. 새 CI/배포·실패/취소 작업·STREAM/journal·종합 활성화는 남는다.
+선행 cd1424a CI37196161670의3jobs/원시27개·PG230·Remote17/S312개 PASS를
+확인했다(105951Z-05a4f945). images가 진행 중이므로 새 변경의 push는 완료 뒤 진행한다.
+
 선행 bf1ba48의 CI37192473886은5jobs/원시27개 PASS(103252Z-838f3a6f)다.
 GitOps354c94e 실제 imageID·Ready/PVC·Argo Synced(103223Z-dd541b3a), 새 MinIO 기동 뒤
 기존10파일/두PVC·TLS 보존(103449Z-2a468828)도 PASS다. 공유 Ingress health는 Progressing이다.

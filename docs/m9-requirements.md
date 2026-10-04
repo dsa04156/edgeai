@@ -49,6 +49,10 @@ ADR0077의 [복구 파일 저장소 등록](recovery-remote-storage.md)은 실�
 artifact 버킷에 조건부 PUT하고 고정 version·bytes/SHA를 검증한다. 실제 TLS MinIO12개에서
 응답 유실·동시 등록·원래3개 version 보존·재시작·충돌/유실 거절을 확인했다. DB 결과 확정·
 키/journal·종합 활성화는 남는다.
+ADR0078의 [복원 Remote 결과 확정](recovery-remote-results.md)은 원본 없이 실제 S3 고정 파일과
+복원 DB를 확인하고 Result·Task·Run을 원자적으로 반영한다. 실제 결합14개에서 동시 복구·
+취소/새 시도 거절·rollback·응답 유실·Java digest·후속 작업 대기·격리 유지를 확인했다.
+실패/취소 작업 재조정·STREAM·장치 journal·종합 복구 활성화는 남는다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

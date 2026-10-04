@@ -122,6 +122,8 @@ jobs:
         run: bash scripts/collect-evidence.sh recovery-remote-retire bash scripts/test-recovery-remote-retire.sh --transport compose --bundle-output .tools/recovery-remote-ci-input --report docs/evidence/runs/recovery-remote-retire-report.json
       - name: Verify recovery output publication and pinned versions with the tested MinIO binary
         run: bash scripts/collect-evidence.sh recovery-remote-storage bash scripts/test-recovery-remote-storage.sh --bundle .tools/recovery-remote-ci-input --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-remote-storage-report.json
+      - name: Verify recovered Remote Result transactions with original sources offline
+        run: bash scripts/collect-evidence.sh recovery-remote-results bash scripts/test-recovery-remote-results.sh --transport compose --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-remote-results-report.json
       - name: Prepare real stream broker and SDK for storage completion tests
         run: |
           sudo apt-get update -qq

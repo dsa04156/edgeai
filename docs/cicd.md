@@ -148,6 +148,10 @@ ADR0077은 이 retirement17개를 storage job의 실제 PostgreSQL 준비 뒤로
 전달한다. 실제 TLS MinIO12개에서 조건부 PUT·응답 유실·동시 등록·고정 버전 보존/거절을
 검증하며 `recovery-remote-storage-report.json` 집계만 업로드한다. 테스트한 MinIO binary를
 재사용하고 DB/Remote 자격 없이 저장소를 검증한다. private bundle은 job 사이에 업로드하지 않는다.
+ADR0078의 `test-recovery-remote-results.sh --transport compose`는 별도 실제 DB2개·Remote·
+TLS MinIO2개를 결합해 결과 확정14개를 검사한다. 원본 종료 뒤 Result/Task/Run·대기 자식,
+동시 쓰기·잠금·rollback·응답 유실·Java digest·기존 결과 충돌/고정 파일 유실을 검증한다.
+같은 tested MinIO binary를 사용하며 `recovery-remote-results-report.json` 집계만 업로드한다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험
