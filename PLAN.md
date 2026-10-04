@@ -31,7 +31,9 @@ API/전용 PG DB에서100→300→1,000 장치의 예정 시각 기준 지연·�
 ADR0058의 성공 비교 캐시(64개/30초)와 전체 단위111개를 검증했고 실제 전체 규모 재측정에서
 1,000대 p95는54.64→8.16ms, API CPU는5.15→0.164core로 줄었다. 오류/누락0·DB정합성·
 실제 Basic/CSRF 거절·정리도 유지했다. [인증 병목 개선](docs/evidence/m8-authentication-load.md)의
-PG223·실제 저장소47·최종 네 가지 판정 회귀도 통과했다. 새 CI/배포와 합의 성능 수용은 후속이다.
+PG223·실제 저장소47·최종 네 가지 판정 회귀도 통과했다. 035eb0e CI37165270385의
+완료된3jobs/원시16개·새 부하 판정4개도 확인했다(010849Z-e860a4c3). images/kind는 진행 중이며
+새 배포와 합의 성능 수용은 후속이다.
 [실행 방법](docs/load-testing.md), [측정 근거](docs/evidence/m8-management-load.md).
 ADR0056/V33의 VD STREAM 그룹 수동 NODE 전환을 구현했다. 동료 VD 유지·전체 종료/회수 장벽·
 마지막 VD claim·Swagger/UI를 연결했다. PG223·단위105·실제 저장소47·UI46·실API/Swagger10,

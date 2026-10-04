@@ -17,7 +17,10 @@ ADR0057의 독립 M8 관리 부하 측정을 병행했다. 실제 API/전용 PG 
 54.64→8.16ms, API CPU는5.15→0.164core이며 오류/누락0·정합성·실HTTP 인증/CSRF 거절을
 유지했다. PG223(001717Z-5647c32b)·격리 실제 저장소47(002134Z-74fcd498)·최종 네 가지
 판정 회귀(002507Z-35739268)도 PASS다. docs/evidence/m8-authentication-load.md.
-새 CI/배포·합의 성능 수용은 남는다.
+035eb0e CI37165270385의 완료된 scaffold/storage/runner3개·원시16개·PG223/저장소47/
+Runner111/MQTT90·부하 판정4개를 감사했다(010849Z-e860a4c3). images/kind는 진행 중이고
+새 배포·합의 성능 수용은 남는다. 계약 시험이 전체 단위 XML을 덮어쓰는 것을 확인해
+전체 task 직후 counts를 보존하도록 수정했다(010848Z-a6761d92; 변경 없는111개 결과 재사용).
 성능 기준은 UNSET이며 M8 완료가 아니다.
 docs/evidence/m8-management-load.md.
 ADR0056/V33 VD STREAM 그룹 수동 NODE 전환을 구현했다. 선택 작업은 다른 Node로 이동하고
