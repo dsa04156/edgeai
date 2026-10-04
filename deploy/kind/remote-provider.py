@@ -14,12 +14,13 @@ def main():
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8443)
+    parser.add_argument('--recovery-token-file', help='Separate operator credential; disabled when absent')
     args = parser.parse_args()
     os.umask(0o077)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(args.cert_file, args.key_file)
-    provider = Provider(args.state_dir, args.token_file)
+    provider = Provider(args.state_dir, args.token_file, recovery_token_file=args.recovery_token_file)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.socket = tls.wrap_socket(server.socket, server_side=True)
     server.provider = provider

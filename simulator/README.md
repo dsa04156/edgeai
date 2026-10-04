@@ -13,6 +13,7 @@
 시험은 임시 디렉터리/임의 포트/임시 자격을 만들고 종료 시 프로세스를 정리한다. PostgreSQL은 필요 없다.
 
 프로토콜은 [remote-reference-api.yaml](../contracts/openapi/remote-reference-api.yaml),
+전체 계산의 복구 차단은 [별도 운영 절차](../docs/recovery-remote-fence.md),
 경계와 후속 연결은 [ADR0010](../docs/adr/0010-remote-adapter-boundary.md)을 따른다.
 실제 2세부 API·OCI 실행·GPU/NPU·하드웨어 성능 수용을 대신하지 않는다. `sourceMode=SYNTHETIC`이다.
 

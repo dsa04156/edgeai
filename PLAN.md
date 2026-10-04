@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0073은 참조 Remote 전체의 새 요청을 영속 차단하고 실제 계산 스레드 종료를 확인한다.
+TLS7개(090831Z-b7537085)·기존 Java gateway13·실제 별도 PG/MinIO27개 PASS다.
+늦은 인증 예약/입력·완료/실패 이력·응답 유실/재개·기존 SQLite 업그레이드·SIGKILL 후 차단 유지·
+timeout을 검증했다. [Remote 복구 근거](docs/evidence/m9-recovery-remote-fence.md).
+기존 CI scaffold에 포함하며 새 변경의 원격 CI/배포는 후속이다. 실제 외부 Remote 계약·
+복원 DB 실행 이력 조정·장치 journal·종합 복원 활성화와 전체 M5/M7–M10 수용은 남는다.
+
 ADR0072는 root 차단 이전에 이미 인증된 S3 요청의 소진을 별도로 확인한다.
 실제 PUT2개를 유지한 뒤 차단하고, 진행2→1에서는BLOCKED, 하나의 늦은 완료·다른 연결 종료 뒤
 새 완료 counter와 진행0을 확인했다. 기존18개를 포함한25개 PASS(083947Z-c4e158e0).

@@ -4,6 +4,9 @@
 SYNTHETIC 계산용이며 실제2세부 API·OCI 실행·실장비를 대신하지 않는다. 사용 가능한 연산과 수동 시작은
 [simulator README](../simulator/README.md)를 따른다.
 
+제공자 전체의 복구 차단·계산 종료 확인은 별도 운영 자격을 쓰는
+[참조 Remote 복구 절차](recovery-remote-fence.md)를 따른다. 기본 비활성이며 일반 API 자격으로 실행하지 않는다.
+
 ## 환경 설정
 
 기존 PostgreSQL, 실행 기능, 영속 Runner 서명 키와 versioned MinIO 설정이 먼저 필요하다.

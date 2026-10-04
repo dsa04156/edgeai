@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: EdgeAI reference Remote provider contract
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     플랫폼 내부 RemoteGateway를 시험하는 참조 프로토콜입니다. 실제 2세부 API의 정의가 아닙니다.
-    모든 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. JSON은 256KiB 이하,
+    할당 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. 복구 API는 별도 운영 자격과
+    providerId/recoveryId를 사용합니다. JSON은 256KiB 이하,
     개별 파일은 플랫폼 상한 256MiB 이하이며 제공자가 지원하는 더 작은 한도를 적용합니다.
     loopback 시뮬레이터는 SYNTHETIC 선형 계산·입출력 각 1MiB·동시 계산8개만 지원하고
     OCI 이미지·자원 예약·GPU/NPU를 실행하지 않습니다. 실제 TaskResult 확정은 별도 플랫폼 책임입니다.
@@ -13,6 +14,45 @@ servers:
 security:
   - providerBearer: []
 paths:
+  /reference/v1/recovery:
+    get:
+      operationId: referenceRemoteRecoveryInspect
+      summary: 제공자 설치 신원·전체 할당 상태·실제 실행 스레드 조회
+      description: >-
+        별도 recovery-token-file을 설정한 경우만 활성화합니다. 일반 제공자 bearer는 거절합니다.
+        영속 providerId는 운영자가 TLS CA/인증서 지문과 함께 확인한 뒤 복구 대상에 고정합니다.
+        전체 SQLite 할당을 집계하므로 플랫폼 DB에서 유실한 할당도 포함합니다. 조회는 차단을 실행하지 않습니다.
+        실제 외부 제공자·컨테이너·장비 종료 계약을 대신하지 않습니다.
+      security: [{recoveryBearer: []}]
+      responses:
+        '200': {$ref: '#/components/responses/RecoveryStatus'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: referenceRemoteRecoveryFence
+      summary: 일반 접근을 영속 차단하고 기존 전체 계산 중단 요청
+      description: >-
+        providerId와 recoveryId의 정규 UUID를 받습니다. 제공자 신원이 다르거나 이미 다른 복구에
+        속하면409입니다. 같은 복구 재전송은 멱등입니다. 일반 요청과 출력 발행의 잠금 안에서
+        차단 marker와 ALLOCATED→CANCELLED·RUNNING→CANCELLING을 함께 commit합니다.
+        이후 일반 bearer 요청은403 PROVIDER_FENCED이며 늦게 도착한 예약/입력 본문도 거절합니다.
+        완료된 결과·입력·취소 이력은 보존하고 재시작으로 차단을 해제하지 않습니다. 해제 API는 없습니다.
+        응답200은 차단 접수이며 종료 증거가 아닙니다. GET의 quiescent=true는 전체 할당이 terminal이고
+        실제 계산 스레드가 모두 종료한 경우만 반환합니다. 시간 초과에도 차단은 유지합니다.
+      security: [{recoveryBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [providerId, recoveryId]
+              properties:
+                providerId: {type: string, format: uuid}
+                recoveryId: {type: string, format: uuid}
+      responses:
+        '200': {$ref: '#/components/responses/RecoveryStatus'}
+        default: {$ref: '#/components/responses/Error'}
   /reference/v1/allocations/{allocationId}:
     parameters: &identityParameters
       - $ref: '#/components/parameters/AllocationId'
@@ -127,6 +167,13 @@ paths:
         default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
+    recoveryBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        일반 API와 값이 다른 별도 운영 자격 파일. 매 요청 읽어 회전을 지원합니다.
+        플랫폼 API에 전달하지 않습니다. 운영 CLI는 HTTPS CA/hostname 및 실제 요청 socket의
+        인증서 SHA256을 확인한 뒤 자격을 전송합니다.
     providerBearer:
       type: http
       scheme: bearer
@@ -165,6 +212,11 @@ components:
       required: true
       schema: &port {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
   responses:
+    RecoveryStatus:
+      description: 현재 설치의 전체 할당 집계와 실제 계산 스레드 종료 여부
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RecoveryStatus'}
     Status:
       description: identity/digest/deadline이 고정된 현재 제공자 상태
       content:
@@ -184,6 +236,32 @@ components:
             properties:
               code: {type: string, maxLength: 64}
   schemas:
+    RecoveryStatus:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, providerId, recoveryId, sourceMode, fenced, allocationCount, states, activeWorkers, quiescent]
+      properties:
+        apiVersion: {const: edgeai.remote.recovery/v1}
+        providerId: {type: string, format: uuid}
+        recoveryId: {type: [string, 'null'], format: uuid}
+        sourceMode: {const: SYNTHETIC}
+        fenced: {type: boolean}
+        allocationCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        states:
+          type: object
+          additionalProperties: false
+          required: [ALLOCATED, RUNNING, CANCELLING, SUCCEEDED, FAILED, CANCELLED]
+          properties:
+            ALLOCATED: {type: integer, minimum: 0, maximum: 9007199254740991}
+            RUNNING: {type: integer, minimum: 0, maximum: 9007199254740991}
+            CANCELLING: {type: integer, minimum: 0, maximum: 9007199254740991}
+            SUCCEEDED: {type: integer, minimum: 0, maximum: 9007199254740991}
+            FAILED: {type: integer, minimum: 0, maximum: 9007199254740991}
+            CANCELLED: {type: integer, minimum: 0, maximum: 9007199254740991}
+        activeWorkers: {type: integer, minimum: 0, maximum: 8}
+        quiescent:
+          type: boolean
+          description: fenced이고 ALLOCATED/RUNNING/CANCELLING/activeWorkers가 모두0인 경우에만 true
     Identity:
       type: object
       additionalProperties: false

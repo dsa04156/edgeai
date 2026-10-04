@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0073 참조 Remote 제공자 전체 차단·계산 종료 검증을 추가했다. 실제 TLS7개
+PASS(090831Z-b7537085), Python 전체12개·Java gateway13개·별도 PG/MinIO27개도 통과했다.
+별도 운영 자격/설치 UUID·늦은 인증 예약/입력 차단·실제 worker 종료·완료 파일/이력 보존·
+SIGKILL 재시작·응답 유실/같은 ID 재개·기존 DB 업그레이드·timeout 차단 유지를 확인했다.
+docs/evidence/m9-recovery-remote-fence.md. 기존 CI test-remote 게이트에 포함되며 새 원격
+CI/배포는 후속이다. 실제 외부 계약·복원 DB 조정·장치 journal·전체 복구 활성화는 남는다.
+
 ADR0072 원본 S3 요청 소진 검증을 추가했다. 실제 PUT2개가 root 차단 후에도 진행하며,
 하나는200/64KiB 저장 완료·다른 하나는 연결 종료로 끝나는 것을 확인했다. 새 counter의0 관측
 두 번만 성공으로 인정하고 오래된0/누락/혼합server/여러server/timeout을 거절한다.

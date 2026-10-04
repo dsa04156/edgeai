@@ -39,7 +39,8 @@ class TlsFixtureTest(unittest.TestCase):
     def start(self):
         self.process = subprocess.Popen(['python3',str(ROOT/'deploy/kind/remote-provider.py'),
             '--host','127.0.0.1','--port',str(self.port),'--state-dir',str(self.root/'state'),
-            '--token-file',str(self.root/'token'),'--cert-file',str(self.root/'cert.pem'),'--key-file',str(self.root/'key.pem')],
+            '--token-file',str(self.root/'token'),'--cert-file',str(self.root/'cert.pem'),'--key-file',str(self.root/'key.pem'),
+            *self.provider_options()],
             env={**os.environ,'PYTHONPATH':str(ROOT/'simulator'),'PYTHONDONTWRITEBYTECODE':'1'},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         deadline=time.monotonic()+10
         while time.monotonic()<deadline and self.process.poll() is None:
@@ -48,6 +49,9 @@ class TlsFixtureTest(unittest.TestCase):
             except OSError:pass
             time.sleep(.05)
         self.fail('TLS fixture did not become ready; private output suppressed')
+
+    def provider_options(self):
+        return []
 
     def stop(self):
         if self.process and self.process.poll() is None:
@@ -69,6 +73,7 @@ class TlsFixtureTest(unittest.TestCase):
         with socket.create_connection(('127.0.0.1',self.port),timeout=3) as sock:
             with self.assertRaises(ssl.SSLCertVerificationError):self.tls.wrap_socket(sock,server_hostname='wrong.example.test')
         self.assertEqual(404,self.request('/',headers={'Authorization':'Bearer '+self.token})[0])
+        self.assertEqual(404,self.request('/reference/v1/recovery',headers={'Authorization':'Bearer '+self.token})[0])
         self.token=secrets.token_urlsafe(32);(self.root/'token').write_text(self.token)
         self.assertEqual(404,self.request('/',headers={'Authorization':'Bearer '+self.token})[0])
 

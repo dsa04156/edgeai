@@ -89,9 +89,10 @@ def file_metadata(value):
 
 
 class Provider:
-    def __init__(self, root, token_file, fault_file=None):
+    def __init__(self, root, token_file, fault_file=None, recovery_token_file=None):
         self.root, self.token_file = Path(root).resolve(), Path(token_file)
         self.fault_file = Path(fault_file) if fault_file else None
+        self.recovery_token_file = Path(recovery_token_file) if recovery_token_file else None
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.ownership = (self.root / '.server.lock').open('a')
         fcntl.flock(self.ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -102,6 +103,8 @@ class Provider:
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.execute('CREATE TABLE IF NOT EXISTS allocations (id TEXT PRIMARY KEY, identity TEXT NOT NULL, digest TEXT, work TEXT, state TEXT NOT NULL, revision INTEGER NOT NULL, failure TEXT, outputs TEXT NOT NULL, executions INTEGER NOT NULL DEFAULT 0)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS recovery (singleton INTEGER PRIMARY KEY CHECK(singleton=1), provider_id TEXT NOT NULL, recovery_id TEXT)')
+        self.db.execute('INSERT OR IGNORE INTO recovery VALUES (1,?,NULL)', (str(uuid.uuid4()),))
         self.db.execute("UPDATE allocations SET state='FAILED',failure='PROVIDER_RESTART',revision=revision+1,outputs='[]' WHERE state='RUNNING'")
         self.db.execute("UPDATE allocations SET state='CANCELLED',failure=NULL,revision=revision+1,outputs='[]' WHERE state='CANCELLING'")
         self.db.commit()
@@ -112,6 +115,46 @@ class Provider:
     def transaction(self):
         with self.lock, self.db:
             yield
+
+    def require_active(self):
+        # Called under the same lock as admission/publication, including after HTTP body reads.
+        if self.db.execute('SELECT recovery_id FROM recovery WHERE singleton=1').fetchone()[0] is not None:
+            raise Rejected(403, 'PROVIDER_FENCED')
+
+    def live_workers(self):
+        # Keep a thread until is_alive() is false, not merely until its finally block begins.
+        self.workers.intersection_update(worker for worker in list(self.workers) if worker.is_alive())
+        return len(self.workers)
+
+    def recovery_status(self):
+        with self.transaction():
+            provider_id, recovery_id = self.db.execute('SELECT provider_id,recovery_id FROM recovery WHERE singleton=1').fetchone()
+            counts = dict.fromkeys(['ALLOCATED', 'RUNNING', 'CANCELLING', 'SUCCEEDED', 'FAILED', 'CANCELLED'], 0)
+            counts.update(self.db.execute('SELECT state,count(*) FROM allocations GROUP BY state').fetchall())
+            workers = self.live_workers()
+            return {'apiVersion': 'edgeai.remote.recovery/v1', 'providerId': provider_id,
+                    'recoveryId': recovery_id, 'sourceMode': 'SYNTHETIC', 'fenced': recovery_id is not None,
+                    'allocationCount': sum(counts.values()), 'states': counts, 'activeWorkers': workers,
+                    'quiescent': recovery_id is not None and workers == 0 and
+                    all(counts[state] == 0 for state in ('ALLOCATED', 'RUNNING', 'CANCELLING'))}
+
+    def fence(self, value):
+        object_fields(value, ['providerId', 'recoveryId'])
+        try:
+            if any(str(uuid.UUID(value[key])) != value[key] for key in value):
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise Rejected(400, 'INVALID_IDENTITY') from None
+        with self.transaction():
+            provider_id, recovery_id = self.db.execute('SELECT provider_id,recovery_id FROM recovery WHERE singleton=1').fetchone()
+            if value['providerId'] != provider_id:
+                raise Rejected(409, 'PROVIDER_IDENTITY_CONFLICT')
+            if recovery_id is not None and recovery_id != value['recoveryId']:
+                raise Rejected(409, 'RECOVERY_IDENTITY_CONFLICT')
+            self.db.execute('UPDATE recovery SET recovery_id=? WHERE singleton=1', (value['recoveryId'],))
+            self.db.execute("UPDATE allocations SET state='CANCELLED',failure=NULL,outputs='[]',revision=revision+1 WHERE state='ALLOCATED'")
+            self.db.execute("UPDATE allocations SET state='CANCELLING',failure=NULL,outputs='[]',revision=revision+1 WHERE state='RUNNING'")
+        return self.recovery_status()
 
     def row(self, expected):
         value = self.db.execute('SELECT identity,digest,work,state,revision,failure,outputs FROM allocations WHERE id=?', (expected['allocationId'],)).fetchone()
@@ -146,6 +189,7 @@ class Provider:
         if digest != actual:
             raise Rejected(400, 'DIGEST_MISMATCH')
         with self.transaction():
+            self.require_active()
             previous = self.expire(expected)
             if previous:
                 if previous[1] != digest:
@@ -195,6 +239,7 @@ class Provider:
 
     def upload(self, expected, port, raw, media_type):
         with self.transaction():
+            self.require_active()
             row = self.expire(expected)
             if row is None:
                 raise Rejected(404, 'NOT_FOUND')
@@ -230,6 +275,7 @@ class Provider:
 
     def start(self, expected):
         with self.transaction():
+            self.require_active()
             row = self.expire(expected)
             if row is None:
                 raise Rejected(404, 'NOT_FOUND')
@@ -237,7 +283,7 @@ class Provider:
                 raise Rejected(409, 'NOT_ACTIVE')
             if row[3] != 'ALLOCATED':
                 return self.status(expected)
-            if len(self.workers) >= 8:
+            if self.live_workers() >= 8:
                 raise Rejected(503, 'CAPACITY_UNAVAILABLE')
             work = json.loads(row[2])
             for f in work['inputs']:
@@ -255,6 +301,7 @@ class Provider:
 
     def cancel(self, expected):
         with self.transaction():
+            self.require_active()
             row = self.expire(expected)
             if row is None:
                 self.db.execute("INSERT INTO allocations(id,identity,state,revision,outputs) VALUES (?,?,'CANCELLED',1,'[]')", (expected['allocationId'], json.dumps(expected)))
@@ -310,9 +357,6 @@ class Provider:
             with self.transaction():
                 if not self.interrupted(expected, work):
                     self.update(expected, 'FAILED', 'WORKLOAD_FAILED')
-        finally:
-            with self.lock:
-                self.workers.discard(threading.current_thread())
 
     def expire_loop(self):
         while not self.stopping.wait(.1):
@@ -326,7 +370,7 @@ class Provider:
             worker.join(5)
         self.expirer.join(5)
         with self.lock:
-            if self.workers:
+            if self.live_workers():
                 raise RuntimeError('Reference computation failed to stop')
             self.db.close()
         self.ownership.close()
@@ -362,12 +406,62 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Connection', 'close')
         self.end_headers(); self.wfile.write(data); self.close_connection = True
 
+    def authenticate(self, recovery=False):
+        p = self.server.provider
+        if recovery and p.recovery_token_file is None:
+            raise Rejected(404, 'NOT_FOUND')
+        token = (p.recovery_token_file if recovery else p.token_file).read_text().strip()
+        if recovery and hmac.compare_digest(token, p.token_file.read_text().strip()):
+            raise Rejected(503, 'RECOVERY_CREDENTIAL_NOT_SEPARATE')
+        if not re.fullmatch('[A-Za-z0-9_-]{32,256}', token) or not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + token):
+            raise Rejected(401, 'UNAUTHORIZED')
+
+    def handle_expect_100(self):
+        try:
+            recovery = self.path == '/reference/v1/recovery'
+            self.authenticate(recovery)
+            if not recovery:
+                with self.server.provider.transaction():
+                    self.server.provider.require_active()
+            return super().handle_expect_100()
+        except Rejected as error:
+            self.reply(error.status, {'code': error.code})
+            return False
+        except Exception:
+            self.reply(503, {'code': 'PROVIDER_UNAVAILABLE'})
+            return False
+
+    def recovery(self):
+        self.authenticate(recovery=True)
+        lengths = self.headers.get_all('Content-Length', [])
+        if len(lengths) > 1 or 'Transfer-Encoding' in self.headers:
+            raise Rejected(400, 'INVALID_REQUEST')
+        try:
+            size = int(lengths[0]) if lengths else 0
+        except ValueError:
+            raise Rejected(400, 'INVALID_REQUEST') from None
+        if not 0 <= size <= 1024:
+            raise Rejected(413, 'TOO_LARGE')
+        if self.command == 'GET' and size == 0:
+            self.reply(200, self.server.provider.recovery_status())
+        elif self.command == 'PUT' and self.headers.get('Content-Type') == 'application/json':
+            raw = self.rfile.read(size)
+            if len(raw) != size:
+                raise Rejected(400, 'INCOMPLETE_BODY')
+            self.authenticate(recovery=True)
+            self.reply(200, self.server.provider.fence(decode(raw)))
+        else:
+            raise Rejected(405, 'METHOD_NOT_ALLOWED')
+
     def dispatch(self):
         p = self.server.provider
         try:
-            token = p.token_file.read_text().strip()
-            if not re.fullmatch('[A-Za-z0-9_-]{32,256}', token) or not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + token):
-                raise Rejected(401, 'UNAUTHORIZED')
+            if self.path == '/reference/v1/recovery':
+                self.recovery()
+                return
+            self.authenticate()
+            with p.transaction():
+                p.require_active()
             match = re.fullmatch(r'/reference/v1/allocations/([a-f0-9-]{36})(?:/(start|cancel|inputs/[a-z0-9._-]+|outputs/[a-z0-9._-]+))?', self.path)
             if not match:
                 raise Rejected(404, 'NOT_FOUND')
@@ -400,6 +494,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200, p.start(expected) if suffix == 'start' else p.cancel(expected))
             elif self.command == 'GET' and not raw:
                 with p.transaction():
+                    p.require_active()
                     row = p.expire(expected)
                     value = p.status(expected, row)
                     if not suffix:
@@ -432,9 +527,10 @@ def main():
     parser.add_argument('--port', type=int, default=0)
     parser.add_argument('--ready-file', required=True, help='Private local test rendezvous file; contains only the loopback port')
     parser.add_argument('--fault-file', help='Optional private test file of one-shot faults; never a production setting')
+    parser.add_argument('--recovery-token-file', help='Separate operator credential; recovery API disabled when absent')
     args = parser.parse_args()
     os.umask(0o077)
-    provider = Provider(args.state_dir, args.token_file, args.fault_file)
+    provider = Provider(args.state_dir, args.token_file, args.fault_file, args.recovery_token_file)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
     server.provider = provider
     server.daemon_threads = True

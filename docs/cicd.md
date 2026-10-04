@@ -127,6 +127,11 @@ scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비
 재시작·페이지 조회 보존15개를 검증한다. `recovery-mqtt-fence-report.json` 요약만 업로드하며 새 관리자
 자격을 포함하는 recovery state·인증서 개인 키·관리 응답은 `.tools`에 남긴다.
 
+scaffold의 기존 `test-remote.sh`에는 ADR0073 참조 Remote 복구 TLS7개도 포함된다.
+별도 운영 자격·늦은 예약/입력·실제 스레드 종료·timeout·SIGKILL/restart·기존 DB 업그레이드를
+시험한다. 일반 제공자 동작의 Java gateway 회귀도 유지한다. 자격과 SQLite/파일은 소유 임시
+디렉터리에서 정리하고 시험 이름/결과만 evidence에 기록한다. 실제 외부 제공자 수용은 별도다.
+
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험
 결과로 바뀔 수 있다. 전체 시험의 수와 마지막 필터 시험의 수를 서로 대체하지 않는다.
