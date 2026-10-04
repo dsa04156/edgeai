@@ -17,6 +17,7 @@ import uuid
 from postgres_backup import Postgres, ROOT, backup, restore, identifier, literal, private_file
 from recovery_remote_inventory import canonical
 from recovery_remote_retire import prepare, apply, durable_json
+import recovery_remote_outputs as output_recovery
 
 sys.path.insert(0, str(ROOT / 'simulator/tests'))
 from test_remote_recovery import RemoteRecoveryTest
@@ -109,6 +110,19 @@ def main():
         except RuntimeError: pass
         else: raise AssertionError('Stale or faulted transaction was accepted')
         assert fingerprints(database) == before and not (a.output / 'retirement.json').exists()
+
+    def output_cli(a=None, bundle=None, expected=0, extra=()):
+        command = [sys.executable, 'scripts/recovery_remote_outputs.py']
+        if bundle is not None: command += ['verify', '--input', str(bundle)]
+        else:
+            command += ['recover']
+            for key, value in vars(a).items():
+                if value is not None: command += ['--' + key.replace('_', '-'), str(value)]
+        result = subprocess.run(command + list(extra), capture_output=True, timeout=90,
+            env={k:v for k,v in os.environ.items() if bundle is None or not (k.startswith('EDGEAI_DB_') or k.startswith('PG'))})
+        with private_file(work / ('output-command-' + uuid.uuid4().hex + '.log')) as log: log.write(result.stdout + result.stderr)
+        assert result.returncode == expected, 'Remote output CLI outcome differs; private diagnostics retained'
+        assert fixture.token.encode() not in result.stdout + result.stderr and fixture.operator.encode() not in result.stdout + result.stderr
 
     code = 1
     try:
@@ -268,7 +282,63 @@ def main():
         assert not resumed['databaseModified'] and fingerprints(target2) == lost_after
         passed('lost COMMIT reply leaves private intent and a fresh live rerun proves completion without duplicate changes')
 
+        recovered = options(target, receipt); output_cli(a=recovered)
+        manifest = json.loads((recovered.output / 'manifest.json').read_text())
+        assert len(manifest['allocations']) == 1 and manifest['committedResultsRetained'] == 1
+        recovered_status = manifest['allocations'][0]
+        assert recovered_status['identity'] == bodies['success']['identity']
+        output_meta = recovered_status['outputs'][0]
+        source_file = fixture.root / 'state' / bodies['success']['identity']['allocationId'] / 'outputs/output'
+        original_bytes = source_file.read_bytes()
+        object_file = recovered.output / 'objects' / (output_meta['sha256'] + '.bin')
+        assert object_file.read_bytes() == original_bytes and object_file.stat().st_mode & 0o777 == 0o600
+        assert fingerprints(target) == after and fixture.rows() == provider_before
+        passed('actual restored DB and fenced TLS success file form a private verified bundle while committed results remain untouched')
+
+        for extra in (['--provider-id', str(uuid.uuid4())], ['--certificate-sha256', '0' * 64], ['--provider-key', 'other-provider']):
+            rejected = options(target, receipt); output_cli(a=rejected, expected=2, extra=extra)
+            assert not (rejected.output / 'manifest.json').exists()
+        source_file.write_bytes(b'x' * len(original_bytes))
+        rejected = options(target, receipt); output_cli(a=rejected, expected=2)
+        assert not (rejected.output / 'manifest.json').exists()
+        source_file.write_bytes(original_bytes)
+        assert fingerprints(target) == after and fixture.rows() == provider_before
+        passed('output recovery refuses wrong live identity, binding, TLS and corrupt source content without a completed manifest')
+
+        changed = options(target, receipt); changed.output.mkdir(mode=0o700)
+        original_download = output_recovery.download
+        download_race_applied = False
+        def racing_download(*positional, **keywords):
+            nonlocal download_race_applied
+            raw = original_download(*positional, **keywords)
+            pg.sql('UPDATE edgeai.runtime_command SET attempts=attempts+1', target)
+            download_race_applied = True
+            return raw
+        output_recovery.download = racing_download
+        try:
+            try: output_recovery.recover(pg, changed)
+            except output_recovery.Blocked: pass
+            else: raise AssertionError('Database changes during file download were accepted')
+        finally:
+            output_recovery.download = original_download
+            if download_race_applied: pg.sql('UPDATE edgeai.runtime_command SET attempts=attempts-1', target)
+        assert not (changed.output / 'manifest.json').exists() and fingerprints(target) == after
+        passed('real database changes during a real TLS download prevent publishing a complete recovery bundle')
+
         fixture.process.kill(); fixture.process.wait(timeout=5)
+        output_cli(bundle=recovered.output)
+        object_file.write_bytes(b'x' * len(original_bytes)); output_cli(bundle=recovered.output, expected=1)
+        object_file.unlink(); object_file.symlink_to(source_file); output_cli(bundle=recovered.output, expected=2); object_file.unlink()
+        with private_file(object_file) as output: output.write(original_bytes)
+        manifest_path = recovered.output / 'manifest.json'; saved_manifest = manifest_path.read_bytes()
+        manifest['allocations'] = []; manifest_path.write_text(json.dumps(manifest))
+        output_cli(bundle=recovered.output, expected=1); manifest_path.write_bytes(saved_manifest)
+        extra_file = recovered.output / 'objects' / 'unreferenced.bin'
+        with private_file(extra_file) as output: output.write(b'not part of the snapshot')
+        output_cli(bundle=recovered.output, expected=1); extra_file.unlink()
+        output_cli(bundle=recovered.output)
+        assert fingerprints(target) == after
+        passed('offline bundle verification works without source provider or DB credentials and rejects altered, symlinked, omitted and unreferenced data')
         assert cli(options(target, receipt), expected=2)['databaseModified'] is False
         fixture.start()
         assert not cli(options(target, receipt))['databaseModified'] and fingerprints(target) == after
@@ -289,6 +359,7 @@ def main():
         report.update(status='PASS', restoredTables=43, restoredDatabases=2, providerInstallations=1, allocations=4,
                       observationsUpdated=3, runtimesRetired=3, commandsCompleted=4,
                       retainedResults=1, retainedArtifactReferences=1,
+                      recoveredFiles=1, recoveredOutputBytes=len(original_bytes), offlineBundleVerified=True,
                       serverMajor=int(pg.sql('SHOW server_version_num', 'postgres')) // 10000,
                       jarSha256=hashlib.sha256((ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code = 0

@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0076은 차단된 Remote의 미반영 성공 파일을 개인 묶음으로 회수하고 독립 검증한다.
+최종 실제 PG16/TLS 결합17개(100728Z-2813d1a2), Python17/Java gateway13개(100728Z-f6d01f72) PASS다.
+원본 변조/경로·DB 경쟁·원본 없는 파일 검증과 이력 보존을 확인했다.
+[검증 근거](docs/evidence/m9-recovery-remote-outputs.md). S3 등록·고정 version·Result/Task/Run
+확정·journal·전체 활성화는 남는다. 새 코드의 CI/배포는 별도 확인한다.
+
 ADR0075는 실제 종료한 Remote의 복원 DB 관측·runtime·기존 명령을 원자적으로 정리한다.
 실제 PG16/TLS13개(095215Z-59a4cda4), 기존 이력10개 회귀(095133Z-eaa68841) PASS다.
 DB 경쟁·잠금 제한·중간 오류 rollback·커밋 응답 유실·0변경 재실행·43테이블/결과/다른 DB 보존·

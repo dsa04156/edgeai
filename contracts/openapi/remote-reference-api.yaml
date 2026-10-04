@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EdgeAI reference Remote provider contract
-  version: 0.3.0
+  version: 0.4.0
   description: >-
     플랫폼 내부 RemoteGateway를 시험하는 참조 프로토콜입니다. 실제 2세부 API의 정의가 아닙니다.
     할당 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. 복구 API는 별도 운영 자격과
@@ -14,6 +14,32 @@ servers:
 security:
   - providerBearer: []
 paths:
+  /reference/v1/recovery/allocations/{allocationId}/outputs/{port}:
+    get:
+      operationId: referenceRemoteRecoveryDownloadOutput
+      summary: 차단된 제공자의 완료 출력 파일을 복구 자격으로 조회
+      description: >-
+        별도 운영 자격과 확인한 providerId/recoveryId를 요구합니다. 전체 제공자가 차단되고
+        실제 계산 스레드가 모두 종료한 경우만 조회합니다. 일반 bearer의 차단은 계속 유지합니다.
+        같은 복구의 SUCCEEDED 할당·선언된 port만 허용하며 파일을 읽기 전에 각 경로의 symlink와
+        비정규 파일을 거절합니다. 제공자는 고정 metadata의 실제 크기·SHA256을 대조하고
+        누락/변조는409 OUTPUT_UNAVAILABLE로 반환합니다. 이 요청은 할당 상태를 변경하지 않습니다.
+        클라이언트도 전체 이력의 작업 신원·revision·요청 digest와 응답 Content-Type/Length·실제
+        bytes/SHA를 대조해야 합니다. 참조 제공자는 파일당1MiB, application/json만 지원합니다.
+        조회 성공은 플랫폼 Result 확정·S3 발행·서비스 재개를 뜻하지 않습니다.
+      security: [{recoveryBearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/AllocationId'
+        - $ref: '#/components/parameters/Port'
+        - {name: providerId, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: recoveryId, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 고정 관측의 실제 파일. Content-Type/Length는 선언된 값과 일치해야 합니다.
+          content:
+            application/json:
+              schema: {type: string, format: binary}
+        default: {$ref: '#/components/responses/Error'}
   /reference/v1/recovery/allocations:
     get:
       operationId: referenceRemoteRecoveryInventory

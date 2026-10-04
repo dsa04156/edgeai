@@ -139,6 +139,10 @@ ADR0075의 `test-recovery-remote-retire.sh --transport compose`는 같은 실제
 종료 관측·runtime·명령 원자적 반영, 동시 변경·잠금 제한·rollback·커밋 응답 유실·재실행·격리
 유지13개를 확인한다. 공개 산출물은 `recovery-remote-retire-report.json` 집계뿐이며 intent/SQL/
 receipt·자격·개인 로그는 `.tools`에 남긴다. workflow 결과 확정과 종합 복구 활성화는 후속이다.
+ADR0076은 같은 gate를17개로 확장한다. 실제 미확정 성공 파일 회수·원본 변조·DB 경쟁·
+독립 bundle 검증4개를 추가하며 보고서에 파일 개수/bytes·독립 검증 여부만 기록한다.
+`test-remote.sh`에는 새 복구 파일 TLS3개가 더해져 Python17개/복구12개이며 Java gateway도 유지한다.
+개인 intent·manifest·파일 본문은 artifact 업로드 대상에 넣지 않는다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험

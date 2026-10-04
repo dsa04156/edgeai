@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0076 Remote 미반영 성공 파일의 실제 bytes 회수·독립 검증을 추가했다. PG16/TLS 결합17개
+(100728Z-2813d1a2)·Python17/Java gateway13개(100728Z-f6d01f72) PASS다. 원본 파일 변조/경로·응답 경계·
+DB 경쟁·제공자 종료/DB 자격 없는 검증·43테이블/제공자 이력 보존을 확인했다.
+docs/evidence/m9-recovery-remote-outputs.md. S3 등록·고정 version·결과/Task/Run 확정과 종합
+활성화는 남는다. 새 CI/배포는 후속이며 선행 실행과 구분한다.
+
 ADR0075 복원 Remote 관측·runtime·기존 명령의 원자적 정리를 추가했다. 실제 PG16/TLS13개
 (095215Z-59a4cda4), 기존 이력10개 회귀(095133Z-eaa68841) PASS다. 실제 DB 경쟁·marker 변경·
 잠금 제한·중간 오류 rollback·커밋 응답 유실·0변경 재실행·43테이블/확정 결과/다른 DB 보존과

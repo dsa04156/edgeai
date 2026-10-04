@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import signal
 import sqlite3
+import stat
 import threading
 import time
 import uuid
@@ -22,6 +23,11 @@ LIMIT = 262144
 FILE_LIMIT = 1048576  # Explicit reference-provider capability, not the platform's 256 MiB ceiling.
 TERMINAL = {'SUCCEEDED', 'FAILED', 'CANCELLED'}
 PORT = re.compile(r'[a-z][a-z0-9]*([._-][a-z0-9]+)*\Z')
+RECOVERY_OUTPUT = re.compile(r'/reference/v1/recovery/allocations/([a-f0-9-]{36})/outputs/([a-z0-9._-]+)\Z')
+
+
+def recovery_path(path):
+    return path == '/reference/v1/recovery' or path.startswith('/reference/v1/recovery/')
 
 
 class Rejected(Exception):
@@ -189,6 +195,50 @@ class Provider:
         if value and json.loads(value[0]) != expected:
             raise Rejected(409, 'IDENTITY_CONFLICT')
         return value
+
+    def recovery_output(self, allocation_id, port, query):
+        if set(query) != {'providerId', 'recoveryId'} or any(len(v) != 1 for v in query.values()):
+            raise Rejected(400, 'INVALID_REQUEST')
+        try:
+            for value in (allocation_id, query['providerId'][0], query['recoveryId'][0]):
+                if str(uuid.UUID(value)) != value:
+                    raise ValueError()
+            if not PORT.fullmatch(port): raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise Rejected(400, 'INVALID_REQUEST') from None
+        with self.transaction():
+            status = self.recovery_status()
+            if status['providerId'] != query['providerId'][0] or status['recoveryId'] != query['recoveryId'][0]:
+                raise Rejected(409, 'RECOVERY_IDENTITY_CONFLICT')
+            if not status['quiescent']:
+                raise Rejected(409, 'RECOVERY_NOT_QUIESCENT')
+            row = self.db.execute('SELECT state,outputs FROM allocations WHERE id=?', (allocation_id,)).fetchone()
+            if row is None: raise Rejected(404, 'NOT_FOUND')
+            output = next((item for item in json.loads(row[1]) if item['port'] == port), None)
+            if row[0] != 'SUCCEEDED' or output is None:
+                raise Rejected(409, 'OUTPUT_NOT_READY')
+            descriptors = []
+            try:
+                # Resolve each directory from an open descriptor. Never follow a replaced parent/file symlink.
+                descriptors.append(os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+                for component in (allocation_id, 'outputs'):
+                    descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptors[-1]))
+                descriptor = os.open(port, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptors[-1])
+                with os.fdopen(descriptor, 'rb') as source:
+                    before = os.fstat(source.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size != output['bytes'] or not 0 <= before.st_size <= FILE_LIMIT:
+                        raise Rejected(409, 'OUTPUT_UNAVAILABLE')
+                    raw = source.read(FILE_LIMIT + 1)
+                    after = os.fstat(source.fileno())
+                if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                    raise Rejected(409, 'OUTPUT_UNAVAILABLE')
+                if len(raw) != output['bytes'] or hashlib.sha256(raw).hexdigest() != output['sha256']:
+                    raise Rejected(409, 'OUTPUT_UNAVAILABLE')
+                return raw, output['mediaType']
+            except OSError:
+                raise Rejected(409, 'OUTPUT_UNAVAILABLE') from None
+            finally:
+                for descriptor in reversed(descriptors): os.close(descriptor)
 
     def status(self, expected, row=None):
         row = row or self.row(expected)
@@ -446,7 +496,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_expect_100(self):
         try:
-            recovery = urlsplit(self.path).path in ('/reference/v1/recovery', '/reference/v1/recovery/allocations')
+            recovery = recovery_path(urlsplit(self.path).path)
             self.authenticate(recovery)
             if not recovery:
                 with self.server.provider.transaction():
@@ -471,11 +521,20 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 <= size <= 1024:
             raise Rejected(413, 'TOO_LARGE')
         parsed = urlsplit(self.path)
+        output = RECOVERY_OUTPUT.fullmatch(parsed.path)
+        if output:
+            if self.command != 'GET' or size:
+                raise Rejected(405, 'METHOD_NOT_ALLOWED')
+            raw, media_type = self.server.provider.recovery_output(output[1], output[2], parse_qs(parsed.query, keep_blank_values=True))
+            self.reply(200, raw, media_type)
+            return
         if parsed.path == '/reference/v1/recovery/allocations':
             if self.command != 'GET' or size:
                 raise Rejected(405, 'METHOD_NOT_ALLOWED')
             self.reply(200, self.server.provider.recovery_inventory(parse_qs(parsed.query, keep_blank_values=True)))
             return
+        if parsed.path != '/reference/v1/recovery':
+            raise Rejected(404, 'NOT_FOUND')
         if parsed.query:
             raise Rejected(400, 'INVALID_REQUEST')
         if self.command == 'GET' and size == 0:
@@ -492,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self):
         p = self.server.provider
         try:
-            if urlsplit(self.path).path in ('/reference/v1/recovery', '/reference/v1/recovery/allocations'):
+            if recovery_path(urlsplit(self.path).path):
                 self.recovery()
                 return
             self.authenticate()

@@ -4,6 +4,7 @@ import hashlib
 import http.client
 import json
 import os
+import os
 import secrets
 import socket
 import sqlite3
@@ -23,6 +24,7 @@ import remote_server
 sys.path.insert(0, str(fixture.ROOT / 'scripts'))
 import recovery_remote_inventory as inventory
 from recovery_remote_fence import Client
+from recovery_remote_outputs import download
 from postgres_backup import Blocked
 
 
@@ -344,6 +346,77 @@ class RemoteRecoveryTest(unittest.TestCase):
             self.assertTrue(all(not worker.is_alive() for worker in original_workers))
         finally:
             release.set(); exit_thread.set(); server.shutdown(); serving.join(3); server.server_close(); provider.close()
+
+    def output_fixture(self):
+        path, headers, _, _ = self.allocate(start=True)
+        deadline = time.monotonic() + 5
+        while True:
+            code, value = self.rpc(path, headers=headers, credential=self.token)
+            self.assertEqual(200, code)
+            if value['state'] == 'SUCCEEDED': break
+            self.assertLess(time.monotonic(), deadline); time.sleep(.01)
+        binding = self.binding()
+        args = SimpleNamespace(endpoint='https://127.0.0.1:' + str(self.port), ca_file=self.root / 'cert.pem',
+            certificate_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert((self.root / 'cert.pem').read_text())).hexdigest(),
+            timeout=30, provider_id=binding['providerId'], recovery_id=binding['recoveryId'])
+        route = '/reference/v1/recovery/allocations/' + value['identity']['allocationId'] + '/outputs/output?' + urlencode(binding)
+        return path, headers, value, binding, args, route
+
+    def test_recovery_output_requires_operator_identity_quiescence_and_preserves_fence(self):
+        path, headers, value, binding, args, route = self.output_fixture()
+        self.assertEqual(409, self.rpc(route)[0])
+        self.assertEqual(401, self.rpc(route, credential=self.token)[0])
+        cancelled = self.allocate()[0]
+        self.cli(binding); before = self.rows()
+        raw = download(Client(args), self.operator, args, value['identity']['allocationId'], value['outputs'][0])
+        self.assertEqual(value['outputs'][0]['sha256'], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(403, self.rpc(path + '/outputs/output', headers=headers, credential=self.token)[0])
+        self.assertEqual(405, self.rpc(route, 'PUT')[0])
+        self.assertEqual(400, self.rpc(route + '&providerId=' + binding['providerId'])[0])
+        self.assertEqual(409, self.rpc(route.replace(binding['recoveryId'], str(uuid.uuid4())))[0])
+        self.assertEqual(409, self.rpc(route.replace('/outputs/output?', '/outputs/missing?'))[0])
+        self.assertEqual(409, self.rpc(route.replace(value['identity']['allocationId'], cancelled.split('/')[-1]))[0])
+        self.assertEqual(404, self.rpc(route.replace(value['identity']['allocationId'], str(uuid.uuid4())))[0])
+        self.process.kill(); self.process.wait(timeout=5); self.start()
+        self.assertEqual(raw, download(Client(args), self.operator, args, value['identity']['allocationId'], value['outputs'][0]))
+        self.assertEqual(before, self.rows())
+
+    def test_recovery_output_rejects_changed_missing_symlink_directory_and_fifo(self):
+        _, _, value, binding, _, route = self.output_fixture()
+        self.cli(binding); before = self.rows()
+        output = self.root / 'state' / value['identity']['allocationId'] / 'outputs/output'
+        original = output.read_bytes()
+        output.write_bytes(b'x' * len(original))
+        self.assertEqual(409, self.rpc(route)[0])
+        output.unlink(); self.assertEqual(409, self.rpc(route)[0])
+        outside = self.root / 'outside-output'; outside.write_bytes(original)
+        output.symlink_to(outside); self.assertEqual(409, self.rpc(route)[0]); output.unlink()
+        os.mkfifo(output); self.assertEqual(409, self.rpc(route)[0]); output.unlink()
+        output.write_bytes(original)
+        renamed = output.parent.with_name('saved-outputs')
+        output.parent.rename(renamed); output.parent.symlink_to(renamed, target_is_directory=True)
+        self.assertEqual(409, self.rpc(route)[0])
+        output.parent.unlink(); renamed.rename(output.parent)
+        self.assertEqual(200, self.rpc(route)[0])
+        self.assertEqual(before, self.rows())
+
+    def test_recovery_download_rejects_response_metadata_and_content_corruption(self):
+        _, _, value, binding, args, _ = self.output_fixture()
+        self.cli(binding)
+        actual = Client(args)
+        for mode in ('truncated', 'hash', 'length', 'duplicate-header', 'encoding', 'status'):
+            class Altered:
+                def request(inner, *pos, **kw):
+                    code, headers, raw = actual.request(*pos, **kw)
+                    if mode == 'truncated': raw = raw[:-1]
+                    if mode == 'hash': raw = b'x' * len(raw)
+                    if mode == 'length': headers = [(k, '0' if k.lower() == 'content-length' else v) for k,v in headers]
+                    if mode == 'duplicate-header': headers += [('Content-Type', 'application/json')]
+                    if mode == 'encoding': headers += [('Content-Encoding', 'gzip')]
+                    if mode == 'status': code = 302
+                    return code, headers, raw
+            with self.subTest(mode=mode), self.assertRaises(Blocked):
+                download(Altered(), self.operator, args, value['identity']['allocationId'], value['outputs'][0])
 
 
 if __name__ == '__main__':
