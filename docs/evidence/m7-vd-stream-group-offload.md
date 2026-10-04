@@ -1,7 +1,7 @@
 # M7 — VD가 포함된 스트림 그룹의 노드 전환
 
-2026-10-04 KST. ADR0056/V33의 로컬 구현·검증 기록이다. M7 전체 완료 판정이나 새 코드의
-CI·배포 완료를 의미하지 않는다. 실제 외부 장치·모델 대신 합성 Device 입력을 사용한다.
+2026-10-04 KST. ADR0056/V33의 로컬·CI·실제 배포 검증 기록이다. M7 전체 완료 판정은 아니다.
+실제 외부 장치·모델 대신 합성 Device 입력을 사용한다.
 
 ## 구현 범위
 
@@ -73,5 +73,21 @@ ArgoSynced를 확인했다(232742Z-d9dd8d87). 기존 고정 파일10개의 versi
 두PVC UID도 보존됐다(232742Z-f9cc7914). 기존 공유 Ingress의 aggregate Progressing은 유지한다.
 이 판정은 V31–V32의 선행 이미지이며 이번 V33 변경의 CI·배포 검증을 대신하지 않는다.
 
-Remote STREAM, VD 공유 자원의 자동 전환, 실제 외부 장치·모델 수용, 새 이미지 CI·배포는
-별도 남은 범위다. M5 잔여와 M7–M10 전체 목표는 미완료다.
+## V33 이미지 CI·실제 배포
+
+소스 `c3b71225ff5fc83b32468db2c1602a0120dfcad8`의 CI37162109091은5jobs 모두 성공했다.
+원시JSON17개를 직접 감사했다(20261004T002842Z-60817531). PG223·실제 저장소47·
+Runner111/MQTT90·실제 kind22Run/S3결과20개, VD5개/S38개·혼합 Remote3개/S35개를 확인했다.
+STREAM 기본24개는 Node43Pods·VD33Pods·S3결과54개이며 새 VD 그룹 전환4개와
+API 교체/전환 취소·고정 상태 인계·자원 회수까지 포함한다. 영속 TLS broker의 실제 Pod 교체,
+MinIO TLS와 배포 데모3개/Runner8개/S3결과6개, 소유 kind 삭제도 확인했다.
+
+GitOps `ce9b834971ece40d67879c0046bcd0944f837c54`의 정확한 API/dashboard/MinIO imageID,
+Ready·PVCBound·VD 활성화·ArgoSynced를 확인했다(20261004T002756Z-b7ddced1).
+배포 Ready 확인 후 기존 파일10개의 고정 version/bytes/SHA와 PostgreSQL/MinIO의
+원래 두PVC UID 보존도 확인했다(20261004T003127Z-fb775559).
+기존 공유 Ingress의 aggregate health는 Progressing으로 유지된다. 이 증거는 M8 인증 캐시
+변경의 CI·이미지·배포 성공으로 확대하지 않는다.
+
+Remote STREAM, VD 공유 자원의 자동 전환, 실제 외부 장치·모델 수용은 별도 남은 범위다.
+M5 잔여와 M7–M10 전체 목표는 미완료다.

@@ -32,7 +32,10 @@ ADR0056/V33의 VD STREAM 그룹 수동 NODE 전환을 구현했다. 동료 VD �
 마지막 VD claim·Swagger/UI를 연결했다. PG223·단위105·실제 저장소47·UI46·실API/Swagger10,
 V33 업그레이드의 기존 Task9,371개 보존과 실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S36개를
 통과했다. 후속 대기 중 API 교체·전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS다
-(232628Z-8d401390). 새24개 기본 게이트의 CI·배포는 후속 확인한다.
+(232628Z-8d401390). c3b7122의 CI37162109091은5jobs/원시17개·STREAM24개/Node43·VD33/S354
+PASS다(002842Z-60817531). GitOpsce9b834의 정확한 이미지·Ready/PVC·ArgoSynced도 확인했다
+(002756Z-b7ddced1). 배포 후 기존10파일/두PVC 보존도 PASS(003127Z-fb775559)다.
+M8 인증 캐시의 새 CI/배포와 구분한다.
 [VD 그룹 전환 근거](docs/evidence/m7-vd-stream-group-offload.md)를 따른다.
 
 아래는 선행 VD STREAM 구현·검증 이력이다.

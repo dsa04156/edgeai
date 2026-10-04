@@ -19,7 +19,10 @@ ADR0056/V33 VD STREAM 그룹 수동 NODE 전환을 구현했다. 선택 작업�
 PG223·단위105·실제 저장소47·UI46·실API/Swagger10 및 기존 Task9,371개 V33 보존 PASS.
 실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S3결과6개·이동 후 취소·소유 자원 정리 PASS
 (230420Z-53281045). 후속 대기 중 API 교체·전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS
-(232628Z-8d401390). 새24개 기본 게이트 CI·배포는 후속이다.
+(232628Z-8d401390). c3b7122 CI37162109091은5jobs/원시17개·PG223·실제 저장소47·
+STREAM24개/Node43·VD33/S354 PASS(002842Z-60817531)다. GitOpsce9b834의 정확한 이미지·
+Ready/PVC·ArgoSynced(002756Z-b7ddced1)와 배포 후 기존10파일/두PVC 보존(003127Z-fb775559)도
+확인했다. 이번 M8 새 이미지의 근거와 구분한다.
 선행415a1ce CI37159106124의5jobs/원시17개·STREAM20/Node40·VD24/S348 감사 PASS
 (232825Z-aa072254). GitOps2227a91 실제 이미지·Ready/PVC·ArgoSynced(232742Z-d9dd8d87),
 기존 파일10개와 두PVC 보존(232742Z-f9cc7914)도 PASS. 이번 V33 이미지 증거와 구분한다.
