@@ -21,7 +21,7 @@ import uuid
 import xml.etree.ElementTree as ET
 
 from postgres_backup import Blocked, ROOT, private_file
-from recovery_storage_fence import Client, MARKER, execute, persist, policy, presigned_path
+from recovery_storage_fence import Client, MARKER, canonical, execute, persist, policy, presigned_path
 
 
 def main():
@@ -137,8 +137,11 @@ def main():
         foreign=copy(cfg);foreign.recovery_id=str(uuid.uuid4())
         foreign_policy=work/'foreign-policy.json';persist(foreign_policy,policy(foreign))
         mc(['admin','policy','create','origin',MARKER,str(foreign_policy)])
-        before=mc(['admin','policy','info','origin',MARKER]).stdout
-        cli('foreign-marker',1);assert mc(['admin','policy','info','origin',MARKER]).stdout==before
+        before=json.loads(mc(['admin','policy','info','origin',MARKER]).stdout)
+        assert canonical(before['policyInfo']['Policy'])==canonical(policy(foreign))
+        cli('foreign-marker',1)
+        # MinIO policy sets can be returned in a different order without a write.
+        assert canonical(json.loads(mc(['admin','policy','info','origin',MARKER]).stdout))==canonical(before)
         mc(['admin','policy','rm','origin',MARKER])
         passed('another-recovery-policy-refused-without-overwrite')
         for key in ('late-complete.bin','late-abort.bin'):

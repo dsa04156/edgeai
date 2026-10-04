@@ -1,6 +1,11 @@
 # 진행 상태
 
 [STATUS]
+새5a313e1 CI37203679354의 storage는 정책 JSON 원문 순서 비교에서 실패했다.
+격리 TLS MinIO40회 조회에서 원문2종/내용동일을 재현하고 의미 비교로 수정했다.
+실제25개 전체130621Z-a3eb3fd3 PASS·소유 프로세스 정리 확인.
+[근거](docs/evidence/m9-storage-policy-order.md). 새 소스 CI/배포 검증은 후속이다.
+
 선행 be41a8b CI37200100790 전체5jobs/원시32개 PASS(125138Z-05565ce2), GitOps2f88205
 실제API/dashboard/MinIO imageID·Ready/PVC/ArgoSynced(125137Z-ff9020e5), 이후 원래10파일/
 PVCUID·TLS256KiB/익명403·probe정리(125229Z-73489f8b) PASS. 공유Ingress health Progressing 유지.
