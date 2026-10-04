@@ -1,6 +1,10 @@
 # 진행 상태
 
 [STATUS]
+M10 읽기 전용 [자원 관측](docs/evidence/m10-hardware-inventory.md): 노드10/Ready4,
+amd64/arm64·Ready GPU3/NPU1 등록. edge label6개는 모두Ready 아님.
+등록 정보이며 실제 모델/장치 접근 검증은 후속이고 전체 하드웨어 gate는 미완료다.
+
 ADR0094 기록된 target 실패 포함36개 `170123Z-963eee1a` PASS. 실제 복원DB16/부모자식4쌍·
 선택/peer 실패2·원래 실패/전환/체크포인트 이력 보존·retry0·원복/응답 유실·소유 정리 확인.
 불일치 실패 이력을 기본 취소로 우회하는 오류를 재현·수정했다.
