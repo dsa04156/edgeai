@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from image_identity import verify_image_id
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -129,7 +130,7 @@ class VDScenario:
             if len(containers) != 1 or not containers[0]['ready']: return None
             assert pod['spec']['restartPolicy'] == 'Never' and containers[0]['restartCount'] == 0
             assert pod['spec']['containers'][0]['command'] == ['python3', '/opt/edgeai/vd.py']
-            assert containers[0]['imageID'].endswith(self.image.split('@')[1]), 'VD did not run the tested digest'
+            verify_image_id(self.image,containers[0]['imageID'])
             node = self.kube(['get', 'node', pod['spec']['nodeName'], '-o', 'json'])
             assert runtime['nodeUid'] == node['metadata']['uid'] and runtime['nodeName'] == node['metadata']['name']
             claims = [r for r in resources if r['kind'] == 'Secret']
@@ -328,7 +329,7 @@ class VDScenario:
             pod = pods[0]; actual = self.kube(['get', 'node', pod['spec']['nodeName'], '-o', 'json'])
             assert actual['metadata']['uid'] == node
             assert pod['metadata']['labels']['edgeai.io/task-id'] == task_ids['bridge']
-            assert pod['status']['containerStatuses'][0]['imageID'].endswith(self.image.split('@')[1])
+            verify_image_id(self.image,pod['status']['containerStatuses'][0]['imageID'])
             return {'podUid': pod['metadata']['uid'], 'attemptId': task['attempts'][0]['id'], 'nodeUid': node}
         bridge = wait(bridge_running, 60, 'Mixed Node bridge did not claim after the first VD result')
         restart_proof = None

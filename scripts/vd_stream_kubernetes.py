@@ -2,6 +2,7 @@
 import json
 import uuid
 from vd_acceptance import wait
+from image_identity import verify_image_id
 
 
 class VDStreamObserver:
@@ -28,7 +29,8 @@ class VDStreamObserver:
                     # The next checkpoint barrier must identify and validate the new generation explicitly.
                     continue
                 assert meta['uid'] == runtime['podUid'] and meta['labels']['edgeai.io/vd-runtime-id'] == runtime['id']
-                assert status[0]['imageID'].endswith('@' + self.digest) and status[0]['restartCount'] == 0
+                verify_image_id('ghcr.io/dsa04156/edgeai-runner@'+self.digest,status[0]['imageID'])
+                assert status[0]['restartCount'] == 0
                 assert spec['serviceAccountName'] == 'edgeai-runner' and spec['automountServiceAccountToken'] is False
                 container = spec['containers'][0]
                 assert container['command'] == ['python3', '/opt/edgeai/vd.py'] and container['securityContext']['readOnlyRootFilesystem']
