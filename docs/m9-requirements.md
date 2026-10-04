@@ -116,7 +116,10 @@ ADR0097은 [봉인된 최종 저장 재시도](evidence/m9-restored-stream-final
 ADR0098은 [명시적 소유 S3 resync](evidence/m9-storage-explicit-resync.md)로 백업의
 배경 scanner 의존성을 제거했다. 느린 scanner의11개와 위44개 결합 회귀를 통과했다.
 ADR0099의 [Remote 시작 기록](evidence/m9-remote-start-authority.md)은 계산 전에 원래
-권한과 실제 접수 시각을 영속화한다. 복원 DB의 STARTING 성공 판정에 연결하는 단계는 남는다.
+권한과 실제 접수 시각을 영속화한다. ADR0100의 [시작 기록 복구](evidence/m9-recovery-remote-start-receipts.md)는
+실제79개에서 원래 전환/기한/최신 Attempt·종료 증거를 대조해 전환1개와 고정 S3 Result1개를
+순서대로 확정했다. 누락/변형/취소/새 시도·경쟁/원복/응답 유실·변경0 재실행을 검증했으며
+실제 외부 계약·Kubernetes/STREAM 시작 권한·종합 활성화와 새 CI/배포는 별도다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

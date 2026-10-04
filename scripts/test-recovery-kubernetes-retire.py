@@ -46,6 +46,7 @@ def main():
     p.add_argument('--offloads',action='store_true',help='Include explicit restored BATCH transfer recovery fixtures')
     p.add_argument('--unclaimed-jobs',action='store_true',help='Exercise recorded Jobs whose Pod never claimed its runtime')
     p.add_argument('--remote-offloads',action='store_true',help='Combine actual reference Remote and Kubernetes offload evidence')
+    p.add_argument('--remote-start-receipts',action='store_true',help='Include actual timely Remote start receipts and recovered successful Results')
     p.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
@@ -53,6 +54,7 @@ def main():
     if args.offloads and not args.workflows: p.error('--offloads requires --workflows')
     if args.unclaimed_jobs and not args.offloads: p.error('--unclaimed-jobs requires --offloads')
     if args.remote_offloads and not args.unclaimed_jobs: p.error('--remote-offloads requires --unclaimed-jobs')
+    if args.remote_start_receipts and not args.remote_offloads: p.error('--remote-start-receipts requires --remote-offloads')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -262,7 +264,7 @@ def main():
             provider=RemoteRecoveryTest('test_separate_credentials_identity_tls_pin_and_inspection')
             providers.append(provider);provider.setUp()
             remote_fixtures=seed_remote(pg,targets[5][0],kube,create,namespace,operation,pod_spec,
-                vd_work,attempt,run['id'],runtime,provider,work)
+                vd_work,attempt,run['id'],runtime,provider,work,start_receipts=args.remote_start_receipts)
             remote_fixtures['minioBinary']=args.minio_binary
         passed('real-running-parent-child-containers-backed-up-to-isolated-restores-and-source-database-removed')
 

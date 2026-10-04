@@ -4,7 +4,7 @@ from recovery_remote_inventory import canonical
 
 
 def transaction_sql(plan, tables, guard_query, proven_runtimes=None):
-    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START','FAIL_REMOTE_OFFLOAD')
+    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START','FAIL_REMOTE_OFFLOAD','COMPLETE_REMOTE_OFFLOAD')
     if any(entry['action'] not in ('CANCEL', 'CHECK_RETRY', 'FINAL_FAILURE', 'FAIL', 'RECONCILE_RUN', *offload_actions) for entry in plan['entries']):
         raise ValueError('Unsupported failure reconciliation action')
     if any(e['action'] in offload_actions for e in plan['entries']) and (proven_runtimes is None or not plan.get('reconcileOffloads')):
@@ -24,7 +24,7 @@ DECLARE entry jsonb; task_id_to_change uuid; affected_run uuid; victim edgeai.ta
  first_created timestamptz; used integer; changed integer; terminal text; cancellation text; run_state text;
  failed_tasks uuid[]:='{{}}'; cancel_tasks uuid[]:='{{}}'; run_ids uuid[]:='{{}}';
  failures integer:=0; scheduled integer:=0; expired integer:=0; cancelled integer:=0; skipped integer:=0; runs integer:=0;
- operation edgeai.task_offload; offloads_failed integer:=0; offloads_cancelled integer:=0;
+ operation edgeai.task_offload; offloads_failed integer:=0; offloads_cancelled integer:=0; offloads_completed integer:=0;
 BEGIN
 {identity}
 IF ({guard}) IS DISTINCT FROM {before}::jsonb THEN
@@ -37,7 +37,13 @@ FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
   WHERE id=(entry->>'operationId')::uuid;
   offloads_failed:=offloads_failed+1;
  END IF;
- IF entry->>'action' IN ('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
+ IF entry->>'action'='COMPLETE_REMOTE_OFFLOAD' THEN
+  UPDATE edgeai.task_offload SET state='SUCCEEDED',updated_at=transaction_timestamp()
+  WHERE id=(entry->>'operationId')::uuid AND state='STARTING' AND failure_reason IS NULL;
+  GET DIAGNOSTICS changed=ROW_COUNT;
+  IF changed<>1 THEN RAISE EXCEPTION 'Original Remote transfer is no longer pending'; END IF;
+  offloads_completed:=offloads_completed+1;
+ ELSIF entry->>'action' IN ('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
   SELECT * INTO STRICT operation FROM edgeai.task_offload WHERE id=(entry->>'operationId')::uuid;
   IF entry->>'action'='CANCEL_OFFLOAD' THEN
    UPDATE edgeai.task_offload SET state='CANCELLED',failure_reason=NULL,updated_at=transaction_timestamp() WHERE id=operation.id;
@@ -150,7 +156,7 @@ END LOOP;
 {identity}
 INSERT INTO failure_result VALUES(jsonb_build_object('attemptsFailed',failures,'retriesScheduled',scheduled,
  'retriesExpired',expired,'tasksCancelled',cancelled,'tasksSkipped',skipped,'runsReconciled',runs,
- 'offloadsFailed',offloads_failed,'offloadsCancelled',offloads_cancelled,'afterGuard',({guard})));
+ 'offloadsFailed',offloads_failed,'offloadsCancelled',offloads_cancelled,'offloadsCompleted',offloads_completed,'afterGuard',({guard})));
 END
 """.format(identity=identity, guard=guard_query, producer_guard=producer_guard, before=literal(canonical(plan['beforeGuard']).decode()),
            entries=literal(canonical(plan['entries']).decode()),

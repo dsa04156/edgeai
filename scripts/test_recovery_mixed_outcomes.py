@@ -154,5 +154,8 @@ def check(pg,db,receipt,options,cli,fingerprints,passed,work,fixture,row,report)
         assert row('task',pending['target']['task'])['state']=='RUNNING'
         assert not cli(options())['databaseModified'] and fingerprints(db)==after
         passed('actual-fixed-s3-success-cannot-bypass-an-active-offload-or-invent-missing-start-authority')
+        if fixture.get('startReceipts'):
+            from test_recovery_remote_start_receipts import check as check_starts
+            check_starts(pg,db,options,cli,fingerprints,passed,fixture,row,report,a)
     report.update(mixedRemoteFailureOutcomesVerified=True,mixedRemoteTargetFailures=2,mixedRemoteTargetRetries=1,
         mixedRemoteActiveSuccessBlocked=True,mixedRemoteFailurePreservedTables=37)

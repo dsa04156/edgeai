@@ -25,7 +25,7 @@ from test_remote_recovery import RemoteRecoveryTest
 def q(value):return literal(value)+'::uuid'
 
 
-def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,kube_run,kube_runtime,provider,work):
+def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,kube_run,kube_runtime,provider,work,start_receipts=False):
     binding=provider.binding();binding['recoveryId']=recovery_id
     remote=SimpleNamespace(endpoint='https://127.0.0.1:'+str(provider.port),ca_file=provider.root/'cert.pem',
         certificate_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert((provider.root/'cert.pem').read_text())).hexdigest(),
@@ -39,7 +39,7 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
     def clone(table,origin,changes):
         pg.sql('INSERT INTO edgeai.'+table+' SELECT (jsonb_populate_record(NULL::edgeai.'+table+',to_jsonb(t)||'+
             literal(json.dumps(changes))+'::jsonb)).* FROM edgeai.'+table+' t WHERE id='+q(origin),db)
-    def allocate(row,epoch,mode):
+    def allocate(row,epoch,mode,offload=None):
         allocation=str(uuid.uuid4());row['allocation']=allocation
         _,_,raw,_=provider.work(delay=60000 if mode=='running' else 0,bad=mode=='failed')
         body=json.loads(raw)
@@ -56,7 +56,12 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
         path='/reference/v1/allocations/'+allocation
         assert provider.rpc(path,'PUT',raw,headers,provider.token)[0]==201
         if mode!='allocated':
-            assert provider.rpc(path+'/start','POST',headers=headers,credential=provider.token)[0]==200
+            authority=None
+            if offload is not None:
+                deadline=pg.sql('SELECT to_json(start_deadline) FROM edgeai.task_offload WHERE id='+q(offload),db)
+                authority=canonical({'apiVersion':'edgeai.remote.start/v1','identity':body['identity'],
+                    'requestDigest':request_digest,'expiresAt':body['expiresAt'],'offloadId':offload,'startDeadline':json.loads(deadline)})
+            assert provider.rpc(path+'/start','POST',value=authority,headers=headers,credential=provider.token)[0]==200
             deadline=time.monotonic()+5
             while True:
                 value=provider.rpc(path,headers=headers,credential=provider.token)[1]
@@ -79,13 +84,16 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
             ("'RUN_CANCELLED'" if cancelling else 'NULL')+' WHERE id='+q(source['task'])+
             '; UPDATE edgeai.workflow_run SET state='+literal('CANCELLING' if cancelling else 'RUNNING')+' WHERE id='+q(source['run']),db)
         target={**source,'runtime':str(uuid.uuid4()),'attempt':str(uuid.uuid4())}
-        remote_attempt(target,2,'OFFLOAD');allocate(target,2,mode)
+        remote_attempt(target,2,'OFFLOAD')
+        authorized=start_receipts and name=='success-pending'
         op=str(uuid.uuid4())
         pg.sql('INSERT INTO edgeai.task_offload(id,task_id,run_id,source_attempt_id,target_attempt_id,idempotency_key,request_digest,namespace,state,drain_deadline,'
             'start_timeout_seconds,start_deadline,remote_provider_key,remote_configuration_digest,remote_source_mode,created_at,updated_at) VALUES ('+
             ','.join(q(v) for v in (op,source['task'],source['run'],source['attempt'],target['attempt'],str(uuid.uuid4())))+','+literal('sha256:'+'e'*64)+','+
-            literal(namespace)+','+literal('CANCELLING' if cancelling else 'STARTING')+",now()-interval '2 minutes',60,now()-interval '1 second','reference',"+
+            literal(namespace)+','+literal('CANCELLING' if cancelling else 'STARTING')+",now()-interval '2 minutes',60,"+
+            ("now()+interval '60 seconds'" if authorized else "now()-interval '1 second'")+",'reference',"+
             literal(digest)+",'SYNTHETIC',now()-interval '3 minutes',now())",db)
+        allocate(target,2,mode,op if authorized else None)
         fixtures[name]={'source':source,'target':target,'operation':op}
     source={k:str(uuid.uuid4()) for k in ('runtime','attempt','task','run')}
     frozen={'remote_provider_key':'reference','remote_configuration_digest':digest,'remote_source_mode':'SYNTHETIC'}
@@ -153,7 +161,8 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
     fenced=provider.cli(binding)
     assert fenced['workersStopped'] and fenced['controllerRejected']
     assert fenced['observed']['states']=={'ALLOCATED':0,'RUNNING':0,'CANCELLING':0,'SUCCEEDED':1,'FAILED':2,'CANCELLED':3}
-    return {'provider':provider,'remote':remote,'connection':connection,'fixtures':fixtures,'failureFixtures':failure_fixtures,'bindingDigest':digest}
+    return {'provider':provider,'remote':remote,'connection':connection,'fixtures':fixtures,'failureFixtures':failure_fixtures,
+        'bindingDigest':digest,'startReceipts':start_receipts}
 
 
 def check(pg,db,receipt,options,retire_cli,fingerprints,passed,work,fixture,report):

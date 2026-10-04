@@ -186,6 +186,7 @@ def main():
     parser.add_argument('--offloads',action='store_true',help='Also reconcile proven BATCH transfer cancellations and original deadlines')
     parser.add_argument('--unclaimed-jobs',action='store_true',help='Accept retained terminal children of recorded Jobs without inventing producer claims')
     parser.add_argument('--remote-connection',type=Path,help='Private reference Remote connection for fresh mixed BATCH offload evidence')
+    parser.add_argument('--remote-start-receipts',action='store_true',help='Reconcile successful Remote transfers using original bounded start admission receipts')
     args=parser.parse_args(); args.output.mkdir(mode=0o700,parents=True,exist_ok=False); submitted=False
     try:
         if not 1<=args.timeout<=1800: raise ValueError('Timeout must be between 1 and 1800 seconds')

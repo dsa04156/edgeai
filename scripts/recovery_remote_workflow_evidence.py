@@ -5,10 +5,14 @@ from types import SimpleNamespace
 from postgres_backup import Blocked
 from recovery_remote_inventory import compare
 from recovery_remote_storage import private_json
+from recovery_remote_start_receipts import observe as observe_starts
 
 
 def observe(catalog, args):
     path=getattr(args,'remote_connection',None)
+    use_starts=getattr(args,'remote_start_receipts',False)
+    if use_starts and (path is None or not getattr(args,'offloads',False)):
+        raise ValueError('--remote-start-receipts requires --offloads and --remote-connection')
     if path is None:return None,{}
     if not getattr(args,'offloads',False):raise ValueError('Remote workflow evidence requires --offloads')
     value,digest=private_json(path)
@@ -24,6 +28,7 @@ def observe(catalog, args):
     inventory=compare(snapshot,connection)
     if inventory['status']!='OBSERVED_REMOTE_INVENTORY':
         raise Blocked('Complete Remote allocation and frozen binding inventory must match')
+    starts=observe_starts(inventory,connection) if use_starts else None
     contexts={c['allocationId']:c for c in catalog['remoteContexts']}
     outcomes={}
     for item in inventory['allocations']:
@@ -37,8 +42,10 @@ def observe(catalog, args):
             raise Blocked('Retire every Remote runtime against its exact provider observation before workflow reconciliation')
         if context['namespace']==args.namespace:
             outcomes[context['runtimeId']]={'state':observed['state'],'failureReason':observed['failureReason']}
+            if starts is not None:outcomes[context['runtimeId']]['startReceipt']=starts[item['allocationId']]
     if private_json(path)[1]!=digest:raise Blocked('Remote connection changed during observation')
     evidence={'connectionSha256':digest,'providerId':connection.provider_id,'recoveryId':args.recovery_id,
         'providerInventorySha256':inventory['providerInventorySha256'],'binding':inventory['selectedTarget'],
         'providerStatus':inventory['providerStatus'],'provenRuntimes':sorted(outcomes)}
+    if starts is not None:evidence['startReceipts']=starts
     return evidence,outcomes

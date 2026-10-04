@@ -34,3 +34,10 @@ API가 발급한 허가를 유지한 채 원래 전환 기한이 지난 뒤 양�
 `20261004T192914Z-3de1b62b`도 PASS다. 새 CI/배포는 별도로 확인한다.
 기존 복구 CLI가 이 기록을 복원 DB 전환 성공에 반영하는 기능, Kubernetes 시작 권한,
 실제 외부 제공자·종합 복구 활성화는 별도 수용 대상이다.
+
+후속 ADR0100은 [복원 전환·S3 결과 결합](m9-recovery-remote-start-receipts.md)79개로
+이 기록의 소비 경로를 검증했다. 새 변경의 원격 수용과는 구분한다.
+선행 f66c4cd CI37228787573의 완료4jobs·원시23개를 `20261004T195601Z-44a7cf78`에서
+감사했다. 단위122·PG230·Remote Python24/Java13과 native ARM/x86 각각Runner111/MQTT97이
+PASS다. index artifact의 platform digest 대조를 포함하며 별도 registry 조회·전체 CI·
+새 API/GitOps 배포는 이 부분 감사의 범위가 아니다.

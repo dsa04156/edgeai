@@ -1,5 +1,6 @@
 """Classify recorded BATCH transfers using the caller's retained Kubernetes termination proof."""
 from postgres_backup import Blocked
+from recovery_remote_start_receipts import instant
 
 QUERY = """
 SELECT coalesce(jsonb_agg(jsonb_build_object(
@@ -24,7 +25,7 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
         op, task, source, target = (row[k] for k in ('operation','task','source','target'))
         runtimes = {r['attempt_id']:r for r in row['runtimes']}
         required = [source] + ([target] if target else [])
-        reason,remote_failure = None,None
+        reason,remote_failure,remote_success = None,None,False
         if op['namespace'] != namespace:
             reason='OUTSIDE_SELECTED_NAMESPACE'
         elif row['hasStream'] or row['hasMembers']:
@@ -63,8 +64,17 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
                     if remote_failure not in ('RUNTIME_TIMEOUT','RUNTIME_LOST','WORKLOAD_FAILED','INPUT_INVALID','OUTPUT_INVALID'):
                         raise Blocked('Unsupported Remote target failure')
                 elif outcome.get('state')=='SUCCEEDED':
-                    unresolved.append({'operationId':op['id'],'reason':'REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION'})
-                    blocked_runs.add(task['run_id']);continue
+                    receipt=outcome.get('startReceipt')
+                    if receipt is None:
+                        unresolved.append({'operationId':op['id'],'reason':'REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION'})
+                        blocked_runs.add(task['run_id']);continue
+                    authority=receipt['authority']
+                    if (task['state']!='RUNNING' or row['runState']!='RUNNING' or target['state'] not in ('DISPATCHING','RUNNING') or
+                            task['cancellation_reason'] is not None or runtimes[target['id']]['failure_reason'] is not None or
+                            authority['offloadId']!=op['id'] or instant(authority['startDeadline'])!=instant(op['start_deadline']) or
+                            instant(receipt['acceptedAt'])<max(instant(op['created_at']),instant(target['created_at']),instant(op['updated_at']))):
+                        raise Blocked('Remote start admission contradicts its original transfer or active work')
+                    remote_success=True
         if row['latestEpoch'] != (target or source)['epoch']:
             unresolved.append({'operationId':op['id'],'reason':'NEWER_ATTEMPT_RECORDED'}); blocked_runs.add(task['run_id']); continue
         if (op['state']=='DRAINING' and (target is not None or op['start_deadline'] is not None) or
@@ -82,6 +92,8 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
             action='CHECK_OFFLOAD_DRAIN'
         elif remote_failure is not None:
             action='FAIL_REMOTE_OFFLOAD'
+        elif remote_success:
+            action='COMPLETE_REMOTE_OFFLOAD'
         elif op['state']=='STARTING' and task['state'] in ('READY','RUNNING') and target['state'] in ('QUEUED','DISPATCHING'):
             action='CHECK_OFFLOAD_START'
         else:

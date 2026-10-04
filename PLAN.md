@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0100 원래 Remote 시작 기록→복원 BATCH 전환 성공→고정 S3 Result 확정을 연결했다.
+실제79개 `195042Z-fa32af0a` PASS: 복원DB6·부모/자식5쌍·Remote할당6·전환1/결과1,
+기한/취소/최신시도·관측변경/경쟁/원복/COMMIT응답유실·재실행0·42테이블/소유정리 확인.
+기존 실패15개 `194916Z-94803bf0`·결과15개 `195043Z-d0759979`도 PASS다.
+[근거](docs/evidence/m9-recovery-remote-start-receipts.md). kind79개를 연결했으며 새 CI·배포,
+Kubernetes/STREAM 시작 권한·전역writer/종합 활성화와 전체 M5 잔여/M7–M10 수용은 남는다.
+선행 f66c4cd CI37228787573 완료 전 후속 push는 대기한다.
+완료4jobs/원시23개·단위122/PG230/Remote24+13/native각111+97의 부분 감사
+`195601Z-44a7cf78` PASS. 전체 CI·새 배포 검증은 남는다.
+
 선행60c8be3 CI37223827513은5jobs성공/images실패/gitops생략으로 종료했다.
 원시39개 중37개 PASS, STREAM복구 업무case0에서 S3 고정버전 복제대기120초 실패다.
 실패 범위/소유정리 감사193318Z-cfe2641f PASS. ADR0098 적용 전 소스이며 아래 로컬

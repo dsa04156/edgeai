@@ -61,11 +61,21 @@ bearer와 작업 본문은 포함하지 않는다. 현재 한 DB의 단일 SYNTH
 기록된 실패 사유에 원래 재시도 횟수·첫 시도 기준 기한·backoff를 적용한다. 실제 실패는
 시작 기한 만료보다 우선한다. `attemptsFailed`/`retriesScheduled`와 `offloadsFailed`는
 같은 transaction의 실제 변경 수다. 재실행은 새 예약이나 기한을 만들지 않는다.
-SUCCEEDED인데 전환이 STARTING이면 시작 허가가 누락된 상태이므로
+기본 경로에서 SUCCEEDED인데 전환이 STARTING이면 시작 허가를 대조하지 않았으므로
 `REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION`에 남긴다. 파일 회수·S3 등록은
 가능하지만 별도 Result 복구도 진행 중인 전환이 있는 Run을 성공으로 확정하지 않는다.
 [ADR0085](adr/0085-recovery-mixed-remote-offloads.md),
 [ADR0086](adr/0086-recovery-remote-offload-outcomes.md)을 참고한다.
+
+제공자가 [ADR0099](adr/0099-remote-start-authority-receipt.md)의 시작 기록을 보존한다면
+위 Remote 옵션에 `--remote-start-receipts`를 추가한다. 전체 할당의 기록을 실제 TLS로
+다시 조회하고 원래 전환 UUID·기한·할당/Attempt·digest·lease와 접수 시각을 대조한다.
+기한 안의 정당한 시작과 실제 성공·종료가 증명된 전환만 SUCCEEDED로 반영한다.
+`offloadsCompleted`는 실제 전환 변경 수이며 `remoteEvidence.startReceipts`와 개인 intent에
+증거가 남는다. Task/Attempt·Result는 아직 성공으로 바뀌지 않는다. 이후 기존
+[Remote 결과 복구](recovery-remote-results.md)로 고정 S3 파일과 출력 계약을 검증한다.
+기록 부재는 미해결, 신원/원래 기한 불일치·미지원 제공자는 거절한다. 이 옵션도 격리를
+유지하며 새 실행이나 권한을 만들지 않는다. [ADR0100](adr/0100-recovery-remote-start-receipts.md).
 
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.

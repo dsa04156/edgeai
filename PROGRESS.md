@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0100 Remote 시작 기록 복구: 실제79개195042Z-fa32af0a PASS. 복원DB6/부모자식5쌍·
+기한 내 실제 접수→전환 성공1→고정S3 Result1, 최신시도/취소/기한변경/응답유실·재실행0·
+42테이블/소유정리 확인. 기존 실패15개194916Z-94803bf0·결과15개195043Z-d0759979 PASS.
+[근거](docs/evidence/m9-recovery-remote-start-receipts.md). kind79개 연결·새CI/배포는 후속,
+Kubernetes/STREAM 권한·전역writer·종합활성화/전체단계 미완료.
+선행 f66c4cd CI37228787573 진행 중이며 새 변경의 push는 해당 CI 종료 후 진행한다.
+완료4jobs의 원시23개·단위122/PG230/Remote24+13/native각111+97 부분 감사
+195601Z-44a7cf78 PASS. 전체CI·새API/GitOps배포 미확인.
+
+아래는 선행 구현·검증 이력이다.
 ADR0099 Remote 시작 권한 기록: API worker·참조 제공자의 원래 기한 확인과 계산 전
 영속 접수 기록 구현. Python24개/Java HTTP연동13개192155Z-4c060e15 PASS.
 공개 API/PG/S3 결합48개192333Z-a87e3730 PASS/소유정리. 단위122개192819Z-56af45a4·
