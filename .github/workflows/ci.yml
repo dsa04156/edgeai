@@ -60,6 +60,10 @@ jobs:
         run: bash scripts/collect-evidence.sh management-audit bash scripts/test-management-audit.sh --transport compose --report docs/evidence/runs/management-audit-report.json
       - name: Verify source database connection fencing and unrelated database preservation
         run: bash scripts/collect-evidence.sh recovery-database-fence bash scripts/test-recovery-database-fence.sh --transport compose --report docs/evidence/runs/recovery-database-fence-report.json
+      - name: Verify broker controller retirement and durable principal fencing with real TLS
+        env:
+          EDGEAI_STREAM_PYTHON: .tools/stream-venv/bin/python
+        run: bash scripts/collect-evidence.sh recovery-mqtt-fence bash scripts/test-recovery-mqtt-fence.sh --report docs/evidence/runs/recovery-mqtt-fence-report.json
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh

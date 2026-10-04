@@ -2,6 +2,14 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0070 원본 MQTT 차단의 실제 TLS15개가 PASS(075002Z-74d8ac1a)다. 기존 관리자 자격을
+교체한 뒤35계정·실제 Device/Task 연결2개의 재접속을 차단하고 부분 중단/동일 ID 재개·역할 이력·broker
+재시작 보존을 확인했다. [브로커 차단 근거](docs/evidence/m9-recovery-mqtt-fence.md).
+새 CI gate를 추가했으며 journal·Remote/S3 writer·복원 실행 조정/활성화는 남는다.
+선행5ed7b03 CI37185328851은3jobs/원시22개·PG230·Runner111·MQTT95·Compose DB fence10개
+PASS를 확인했다. images의 실제 Kubernetes gate는 진행 중이다. 새 MQTT 복구15개는 해당
+CI에 포함되지 않으며 전체 CI·신규 배포 또는 전체 M9 수용 완료로 판정하지 않는다.
+
 ADR0069 원본 DB 연결 차단의 실제 PG/API10개가 PASS(065711Z-4d27de4e)다. API pool과
 미완료 쓰기 연결3개 종료·새 연결 거절·다른 DB 보존·동일 복구 재개·DB 교체 경쟁 rollback을
 확인했다. [연결 차단 근거](docs/evidence/m9-recovery-database-fence.md). 새 Compose CI gate를

@@ -122,6 +122,11 @@ scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비
 `.tools`에 보존한다. 원본의 DB 연결 차단 게이트이며 전체 writer 중지·서비스 활성화는 별도다.
 `test-stream-failure-evidence.py`는 Kubernetes 실패 보고서의 허용 필드와 비밀값 배제를 확인한다.
 
+`test-recovery-mqtt-fence.sh`는 이미 설치한 Mosquitto·고정 Paho 환경에서 별도 TLS 브로커를
+실행한다. 관리자 자격 회수·Device/Task 연결 종료·재접속 거절·부분 중단/재개·권한 파일
+재시작·페이지 조회 보존15개를 검증한다. `recovery-mqtt-fence-report.json` 요약만 업로드하며 새 관리자
+자격을 포함하는 recovery state·인증서 개인 키·관리 응답은 `.tools`에 남긴다.
+
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험
 결과로 바뀔 수 있다. 전체 시험의 수와 마지막 필터 시험의 수를 서로 대체하지 않는다.

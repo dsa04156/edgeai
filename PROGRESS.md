@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0070 원본 MQTT 차단15개 실제 TLS 회귀 PASS(075002Z-74d8ac1a).
+관리자 교체/기존 연결 종료·35계정/실연결2개 차단·재접속 거절·중단/같은 ID 재개·역할 보존·
+broker SIGKILL 재시작과 소유 프로세스/연결 정리를 확인했다. 새 CI gate를 연결했다.
+docs/evidence/m9-recovery-mqtt-fence.md. journal·Remote/S3 writer·복원 활성화/M9전체는 남는다.
+선행5ed7b03 CI37185328851은3jobs/원시22개·PG230·Runner111·MQTT95·Compose DB fence10개
+PASS 확인, images 실제 Kubernetes gate 진행 중이다. 새 MQTT복구15개 CI/전체배포는 후속이다.
+
 ADR0069 원본 DB 연결 차단10개 실제 PG/API 회귀 PASS(065711Z-4d27de4e).
 기존 연결3개 종료·새 연결 거절·미완료 쓰기 rollback·다른 DB 보존·같은 복구 재개·DB 교체
 경쟁 보존·소유 API/client/DB 정리를 확인했다. Compose CI gate를 추가했다.

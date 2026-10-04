@@ -28,7 +28,9 @@ Spring Boot의 [환경 변수 변환 규칙](https://docs.spring.io/spring-boot/
 `3968964d694d6291cc69fb60ce545d540b0d0d379f6ae108f65439554f7174b7`이다.
 
 CI scaffold에 Compose PostgreSQL17의 동일10개 gate와 공개 요약 수집을 추가했다.
-이 새 CI의 성공은 아직 확인하지 않았다. 실제 prepared transaction이 있는 서버·다른 locale의
+선행5ed7b03 CI37185328851의 scaffold 성공과 원시 보고서에서 Compose PostgreSQL17의
+같은10개·backend3개 종료·소유 자원 정리를 확인했다. 완료된3jobs의 원시22개와 PG230도
+PASS이며 images 전체 Kubernetes gate는 아직 진행 중이다. 실제 prepared transaction이 있는 서버·다른 locale의
 오류·운영 권한별 검증은 이번10개에 포함하지 않았다. 준비된 transaction이 있으면 구현상
 BLOCKED를 반환하며, 이를 자동 정리하는 계약은 없다.
 

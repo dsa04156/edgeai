@@ -23,6 +23,9 @@ ADR0064의 [producer 중지](recovery-producer-stop.md)는 전용 namespace에�
 ADR0069의 [원본 DB 연결 차단](recovery-database-fence.md)은 명시한 DB 이름/OID/복구 UUID로
 새 연결을 막고 기존 API/쓰기 backend 종료를 확인한다. 실제 PG/API10개에서 다른 DB 보존과
 대상 교체 경쟁 rollback을 검증했다. DB 밖의 권한·기존 외부 요청 회수와 활성화는 후속이다.
+ADR0070의 [원본 MQTT 차단](recovery-mqtt-fence.md)은 API의 브로커 관리 자격을 먼저
+교체하고 기존 Device/Task 연결과 재접속을 막는다. 실제 TLS15개에서 중단/재개·역할 보존·
+브로커 재시작을 검증했다. 키/journal과 복원 DB 실행 조정·새 자격의 운영 적용은 후속이다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.
