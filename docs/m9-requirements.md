@@ -12,7 +12,7 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 | 감사 | Run/Task/Attempt·전환·작업 이력 | 사용자 행위/권한 거절/설정 변경의 감사 주체·보존·조회·비밀값 제외 검증 |
 | 전송 보호 | dev API·MinIO·MQTT TLS 및 CA 전달·인증서 오류 시험 | 실제 접근 경로 전체와 인증서 갱신·만료·키 유실 시 절차 |
 | DB 백업·복원 | ADR0059의 실제 archive·새 DB 복원 구성 요소 | 배포 환경 복원·별도 장애 영역 저장·암호화·보관 정책·주기 실행 |
-| 파일·상태·키 복원 | DB의 고정 S3 참조와 기존 파일/버전 보존 시험 | 결과/checkpoint의 정확한 bytes/version, Secret/CA와 broker·장치 journal을 포함한 복원 |
+| 파일·상태·키 복원 | ADR0060 별도 TLS MinIO에 정확한 version/bytes/SHA 복제·원본 종료·replica 재시작 검증 | 복원 DB의 모든 result/checkpoint 참조 대조, Secret/CA와 broker·장치 journal을 포함한 복원 |
 | 종합 장애 수용 | 구성 요소별 실제 PostgreSQL/S3/TLS/Kubernetes 회귀 | `test-fault.sh`의 종합 장애 게이트·허용 데이터 유실과 복구 시간 측정 |
 
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래

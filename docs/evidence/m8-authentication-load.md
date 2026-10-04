@@ -57,5 +57,14 @@ Runner111·MQTT90, 새 부하 판정4개를 확인했다. 판정별 실제 요�
 `UNIT_TEST_COUNTS`를 출력한다. `20261004T010848Z-a6761d92`는 변경 없는 로컬 Gradle 결과를
 UP-TO-DATE로 재사용해111개·실패/오류/skip0의 즉시 기록을 확인했다.
 
-새 전체 CI/배포 판정은 후속 결과를 확인한다.
+후속 전체 감사 `20261004T012601Z-ccc48b9c`에서 동일 CI37165270385의5jobs/원시18개 PASS를
+확인했다. 새 부하 판정4개와 PG223/실제 저장소47/Runner111/MQTT90뿐 아니라 kind22Run/
+S320개·VD5/S38·혼합Remote3/S35·STREAM24개/Node43·VD33Pods/S354, 영속 TLS broker
+교체·배포 데모3개/8Pods/S36까지 통과했다. 소유 kind cluster 삭제도 확인했다.
+GitOps `a7702d7a3cfb5b41c2cabcdbf11ec85bdf76a3ce`의 실제3개 imageID·Ready·PVC Bound·
+VD 활성·Argo Synced는 `20261004T012450Z-5bd5ecac`에서 확인했다. Ready 확인 뒤 실행한
+`20261004T012817Z-4bf104a3`에서 기존10파일의 고정 version/bytes/SHA와 두PVC UID 보존도
+통과했다. 공유 Ingress 때문에 Argo aggregate health는 Progressing을 유지한다.
+
+이는 M8 코드035eb0e의 CI/배포 근거이며 새 M9 백업 코드의 원격 검증 결과는 아니다.
 성능 예산은 UNSET이며 M8 전체 또는 M5/M7 잔여·M9/M10을 완료 처리하지 않는다.

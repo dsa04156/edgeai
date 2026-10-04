@@ -7,15 +7,17 @@
 
 | 단계 | 남은 구현·검증 게이트 |
 |---|---|
+| M0 | 완료 — 초기 개발 환경·저장소·Swagger·GitHub Actions/GHCR·ArgoCD 연결 |
+| M1 | 완료 — DEVICE/SERVICE/VD Profile 등록·불변 버전 관리·API/UI·실DB 검증 |
 | M2 | 완료 — Device/Node/Observation, UI·실DB·CI·실 Kubernetes 읽기·배포 검증 |
 | M3 | 완료 — DAG/Run/Task/Attempt·로컬·CI·이미지·ArgoCD·실제 Ingress 검증 |
 | M4 | 완료 — 실제 kind·기존 클러스터 Runner/MinIO/Result·실패/취소·CI/배포 검증 |
 | M5 | 재시도·전환·참조 Remote 검증 완료. 상태형 checkpoint 복원과 실제 외부 시스템 계약 수용은 남음 |
 | M6 | 완료 — 영속 VD·원본/실행 이력·Operation·실제 자식 Task/Result·교체/취소/재시도·CI·배포·UI 검증 |
-| M7 | 다중 장치 BATCH/STREAM DAG, 데이터 route/generation, backpressure·재연결·실제 데이터 흐름 |
-| M8 | 100→300→1,000 장치 부하, 측정 환경·지연·오류·자원 증거 및 병목 개선 |
-| M9 | outbox/reconciliation/restart recovery, identity/RBAC, 감사, TLS, backup/restore·fault 시험 |
-| M10 | 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
+| M7 | 진행 중 — 다중 장치 BATCH/STREAM DAG·전환·복구 구현/시험, 외부 계약·전체 수용 잔여 |
+| M8 | 부분 검증 — 100→300→1,000 장치 관리 부하·인증 병목 개선, 합의 성능 수용 기준 잔여 |
+| M9 | 일부 구현 — TLS·재시작 복구·DB/S3 백업 구성 요소, identity/RBAC·감사·종합 복구 잔여 |
+| M10 | 미완료 — 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
 
 M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검증과 M7 구현을 진행한다.
 독립 M9 DB 백업·복원도 ADR0059로 구현했다. 실제 PostgreSQL16/패키징 API의10개 시험에서
@@ -23,6 +25,10 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 통과했다(010138Z-7ebea0c3). Compose17 CI 게이트를 추가했으며 새 CI 검증은 후속이다.
 S3/키/journal·운영 활성화와 종합 복구는 남는다. [M9 수용 범위](docs/m9-requirements.md),
 [DB 검증 근거](docs/evidence/m9-postgres-backup.md).
+ADR0060은 별도 MinIO에 고정 S3 version을 복제하고 독립 검증한다. 실제 TLS source/replica의
+11개 시험에서4개 version/262,176bytes, 원본 종료·replica 재시작·기존 설정/미연결 대상 보존·실패 정리를
+통과했다(013635Z-8b24378d). CI storage 게이트를 추가했으며 새 CI와 복원 DB의 모든
+result/checkpoint 참조 대조는 후속이다. [저장소 검증](docs/evidence/m9-storage-backup.md).
 M7 외부 계약·전체 수용을 유지한 채 독립 M8 관리 부하 측정을 병행한다. ADR0057은 실제
 API/전용 PG DB에서100→300→1,000 장치의 예정 시각 기준 지연·오류·누락·정합성·자원을 기록한다.
 전체60초씩의9,240요청·오류/누락0·DB정합성·자원 정리를 확인했다(234836Z-e9dbbb5f).
@@ -31,9 +37,10 @@ API/전용 PG DB에서100→300→1,000 장치의 예정 시각 기준 지연·�
 ADR0058의 성공 비교 캐시(64개/30초)와 전체 단위111개를 검증했고 실제 전체 규모 재측정에서
 1,000대 p95는54.64→8.16ms, API CPU는5.15→0.164core로 줄었다. 오류/누락0·DB정합성·
 실제 Basic/CSRF 거절·정리도 유지했다. [인증 병목 개선](docs/evidence/m8-authentication-load.md)의
-PG223·실제 저장소47·최종 네 가지 판정 회귀도 통과했다. 035eb0e CI37165270385의
-완료된3jobs/원시16개·새 부하 판정4개도 확인했다(010849Z-e860a4c3). images/kind는 진행 중이며
-새 배포와 합의 성능 수용은 후속이다.
+PG223·실제 저장소47·최종 네 가지 판정 회귀도 통과했다. 035eb0e CI37165270385의5jobs/
+원시18개·새 부하 판정4개·STREAM24개/Node43·VD33Pods/S354도 확인했다(012601Z-ccc48b9c).
+GitOpsa7702d7의 실제 imageID·Ready/PVC·ArgoSynced(012450Z-5bd5ecac), 이후 기존10파일/
+두PVC 보존(012817Z-4bf104a3)도 PASS다. 합의 성능 수용은 남는다.
 [실행 방법](docs/load-testing.md), [측정 근거](docs/evidence/m8-management-load.md).
 ADR0056/V33의 VD STREAM 그룹 수동 NODE 전환을 구현했다. 동료 VD 유지·전체 종료/회수 장벽·
 마지막 VD claim·Swagger/UI를 연결했다. PG223·단위105·실제 저장소47·UI46·실API/Swagger10,

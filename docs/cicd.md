@@ -119,3 +119,8 @@ scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험
 결과로 바뀔 수 있다. 전체 시험의 수와 마지막 필터 시험의 수를 서로 대체하지 않는다.
+
+storage job은 빌드한 MinIO 이미지에서 동일 binary를 추출하고 고정 SHA의 공식 mc와 함께
+`test-storage-backup.sh`를 실행한다. 격리 TLS source/replica의 버전 ID·bytes/SHA 보존,
+원본 종료·replica 재시작·거절/실패 정리를 확인한다. `storage-backup-report.json`만 공개
+요약으로 업로드하고 원본 파일·CA 개인 키·자격 증명·mc 진단 로그는 `.tools`에 남긴다.

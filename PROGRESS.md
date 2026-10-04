@@ -8,6 +8,11 @@
 소유 DB/API를 정리했고 원본 archive/SQL 로그는 비공개다. Compose17 CI 게이트를 추가했으나
 원격 통과는 후속 확인한다. docs/evidence/m9-postgres-backup.md, docs/m9-requirements.md.
 DB만의 복원이며 S3/키/journal·외부 실행의 일치·RBAC/감사·전체 M9 수용은 남는다.
+ADR0060 고정 S3 version 백업도 실제 TLS MinIO 두 개의11개 시험을 통과했다
+(013635Z-8b24378d).4개 version/262,176bytes의ID/SHA, 원본 종료·replica 재시작·기존
+대상/설정과 미연결 remote target 보존·실제 rule 정리/실패 manifest 미발행을 확인했다. CI storage 게이트를 추가했고,
+복원 DB의 result/checkpoint 전체 참조 대조·Secret/journal·운영 활성화는 남는다.
+docs/evidence/m9-storage-backup.md. 새 백업 코드의 CI/배포는 별도 후속이다.
 ADR0057의 독립 M8 관리 부하 측정을 병행했다. 실제 API/전용 PG DB에서100→300→1,000대,
 각60초·11/33/110RPS·9,240요청의 오류/누락0, 정확한 관측/세션·재접속·자원 정리를 확인했다
 (234836Z-e9dbbb5f). 예정 시각 기준 p95는65.54/53.28/54.64ms다. 단위3개와 실제 API/DB의
@@ -17,9 +22,10 @@ ADR0057의 독립 M8 관리 부하 측정을 병행했다. 실제 API/전용 PG 
 54.64→8.16ms, API CPU는5.15→0.164core이며 오류/누락0·정합성·실HTTP 인증/CSRF 거절을
 유지했다. PG223(001717Z-5647c32b)·격리 실제 저장소47(002134Z-74fcd498)·최종 네 가지
 판정 회귀(002507Z-35739268)도 PASS다. docs/evidence/m8-authentication-load.md.
-035eb0e CI37165270385의 완료된 scaffold/storage/runner3개·원시16개·PG223/저장소47/
-Runner111/MQTT90·부하 판정4개를 감사했다(010849Z-e860a4c3). images/kind는 진행 중이고
-새 배포·합의 성능 수용은 남는다. 계약 시험이 전체 단위 XML을 덮어쓰는 것을 확인해
+035eb0e CI37165270385의5jobs/원시18개·PG223/저장소47/Runner111/MQTT90·부하 판정4개·
+kind STREAM24개/Node43·VD33Pods/S354를 감사했다(012601Z-ccc48b9c). GitOpsa7702d7의
+실제 imageID·Ready/PVC·ArgoSynced(012450Z-5bd5ecac)와 이후 기존10파일/두PVC 보존
+(012817Z-4bf104a3)도 확인했다. 합의 성능 수용은 남는다. 계약 시험이 전체 단위 XML을 덮어쓰는 것을 확인해
 전체 task 직후 counts를 보존하도록 수정했다(010848Z-a6761d92; 변경 없는111개 결과 재사용).
 성능 기준은 UNSET이며 M8 완료가 아니다.
 docs/evidence/m8-management-load.md.
