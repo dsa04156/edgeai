@@ -2,13 +2,17 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+선행 c133315 CI37213721652 전체5jobs/원시35개 `164536Z-08054170` PASS다.
+GitOps11958d6의 정확한3이미지·Ready/PVC/ArgoSynced `164522Z-268fbe82`, 기존10파일/
+원래PVC·HTTPS 보존 `164612Z-dbe48fdd`도 PASS다. ADR0092–0093을 pin 위로 rebase했고
+검증한469ffeb와 pin2개 외 차이가 없다. 새 STREAM 복구29개 원격 CI/배포는 후속 확인한다.
+
 ADR0093 STREAM 전환 복구 포함29개 `163446Z-71726657` PASS다. 원본→successor 실제4개
 부모/자식·복원DB13개·원래 source/member/checkpoint 전체 이력 보존, DRAINING/STARTING
 취소2/기한 만료2·고정 배치/기한·새 Attempt/중복 재시도 없음·원복/응답 유실·소유 정리를
 확인했다. [근거](docs/evidence/m9-recovery-stream-offloads.md). 기존18개 회귀 포함이며
 CI kind에 `--offloads`/29개를 연결했다. VD/자동 전환 복원 종단·기록된 target 실패/시작 권한·
-finalization·전역 writer/종합 활성화는 남는다. 선행 CI37213721652의 images 게이트가
-진행 중이므로 ADR0092–0093의 새 push·원격 수용은 후속이다.
+finalization·전역 writer/종합 활성화는 남는다. ADR0092–0093의 원격 수용은 후속이다.
 
 ADR0092 복원 STREAM 그룹의 기록된 취소/공유 retry 기한 조정 실제18개
 `160510Z-580c6a40` PASS. 실제 컨테이너2·복원DB5·checkpoint2/고정S3version2 보존,

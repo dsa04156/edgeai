@@ -1,12 +1,17 @@
 # 진행 상태
 
 [STATUS]
+선행 c133315 CI37213721652 전체5jobs/원시35개 `164536Z-08054170` PASS.
+GitOps11958d6 정확한 이미지·Ready/ArgoSynced `164522Z-268fbe82`, 기존10파일/원래PVC·
+HTTPS 보존 `164612Z-dbe48fdd` PASS다. 새 ADR0092–0093을 pin 위로 rebase했으며
+검증한469ffeb와 pin2개 외 변경 없음. 새 STREAM 복구29개의 원격 CI/배포는 별도 확인한다.
+
 ADR0093 전환 포함29개 `163446Z-71726657` PASS. 실제 source2→successor2 부모/자식·
 복원DB13개·종료/시작 기한 만료2·취소2·새 실행/재시도 없음·원래 source Attempt/runtime,
 member/checkpoint와 고정 배치/기한 보존·경쟁/원복/응답 유실·소유 정리를 확인했다.
 [근거](docs/evidence/m9-recovery-stream-offloads.md). 기존18개 회귀도 포함한다.
 CI kind29개 연결. VD/자동 전환의 복원 종단·기록된 target 실패/시작 권한·최종 처리·전역 writer와
-종합 활성화·전체 목표는 미완료다. c133315 CI37213721652 images는 진행 중이며 새코드는 미push다.
+종합 활성화·전체 목표는 미완료다. 새코드는 로컬 커밋 완료이며 원격 검증은 후속이다.
 
 ADR0092 실제 STREAM 그룹 복구18개 `160510Z-580c6a40` PASS. 공개 Device fanout2/복원DB5·
 실제 컨테이너 종료·TLS broker·원래 그룹 기한/취소·checkpoint2와S3고정version2 보존,
