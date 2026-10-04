@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import shutil
 import ssl
 import subprocess
 import sys
@@ -28,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--transport', choices=['native', 'compose'], default='native')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/recovery-remote-retire-test.json')
+    parser.add_argument('--bundle-output', type=Path, help='Optional new private .tools path for downstream storage verification')
     args = parser.parse_args()
     work = ROOT / '.tools' / ('recovery-remote-retire-test-' + uuid.uuid4().hex)
     work.mkdir(mode=0o700)
@@ -356,6 +358,11 @@ def main():
         inspector.close()
         assert fingerprints(target) == after
         passed('ordinary packaged API remains blocked while inspection permits reads and rejects writes')
+        if args.bundle_output is not None:
+            destination = args.bundle_output.resolve()
+            if not destination.is_relative_to(ROOT / '.tools'): raise ValueError('Test bundle must remain under private .tools')
+            shutil.copytree(recovered.output, destination)
+            assert output_recovery.verify(destination)['uniqueFiles'] == 1
         report.update(status='PASS', restoredTables=43, restoredDatabases=2, providerInstallations=1, allocations=4,
                       observationsUpdated=3, runtimesRetired=3, commandsCompleted=4,
                       retainedResults=1, retainedArtifactReferences=1,

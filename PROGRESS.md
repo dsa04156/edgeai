@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+선행 bf1ba48의 CI37192473886은5jobs/원시27개 PASS(103252Z-838f3a6f)다.
+GitOps354c94e 실제 imageID·Ready/PVC·Argo Synced(103223Z-dd541b3a), 새 MinIO 기동 뒤
+기존10파일/두PVC·TLS 보존(103449Z-2a468828)도 PASS다. 공유 Ingress health는 Progressing이다.
+ADR0075–0077의 새 CI/배포 결과는 이 선행 검증과 구분한다.
+
+ADR0077 Remote 복구 파일의 조건부 S3 등록·고정 version 검증을 추가했다. 실제 TLS MinIO12개
+(102527Z-eead97ca) PASS, 입력은 실제 PG/Remote17개(101935Z-11915ad3)의 회수 묶음이다.
+응답 유실/재실행·동시 쓰기1version·기존3개 version 보존·재시작·충돌/유실·대상 거절을 확인했다.
+docs/evidence/m9-recovery-remote-storage.md. 같은 CI storage job에서 묶음 생성→저장소 검증을
+연결했으며 새 CI/배포·DB 결과 확정·journal·종합 활성화는 후속이다.
+
 ADR0076 Remote 미반영 성공 파일의 실제 bytes 회수·독립 검증을 추가했다. PG16/TLS 결합17개
 (100728Z-2813d1a2)·Python17/Java gateway13개(100728Z-f6d01f72) PASS다. 원본 파일 변조/경로·응답 경계·
 DB 경쟁·제공자 종료/DB 자격 없는 검증·43테이블/제공자 이력 보존을 확인했다.

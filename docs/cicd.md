@@ -143,6 +143,11 @@ ADR0076은 같은 gate를17개로 확장한다. 실제 미확정 성공 파일 �
 독립 bundle 검증4개를 추가하며 보고서에 파일 개수/bytes·독립 검증 여부만 기록한다.
 `test-remote.sh`에는 새 복구 파일 TLS3개가 더해져 Python17개/복구12개이며 Java gateway도 유지한다.
 개인 intent·manifest·파일 본문은 artifact 업로드 대상에 넣지 않는다.
+ADR0077은 이 retirement17개를 storage job의 실제 PostgreSQL 준비 뒤로 옮긴다. 새 private
+`.tools/recovery-remote-ci-input` 묶음을 생성하고 같은 job의 `test-recovery-remote-storage.sh`에
+전달한다. 실제 TLS MinIO12개에서 조건부 PUT·응답 유실·동시 등록·고정 버전 보존/거절을
+검증하며 `recovery-remote-storage-report.json` 집계만 업로드한다. 테스트한 MinIO binary를
+재사용하고 DB/Remote 자격 없이 저장소를 검증한다. private bundle은 job 사이에 업로드하지 않는다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험

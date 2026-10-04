@@ -2,6 +2,17 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+선행 bf1ba48의 CI37192473886은5jobs/원시27개 PASS(103252Z-838f3a6f)다.
+GitOps354c94e의 실제 이미지·Ready/PVC·Argo Synced(103223Z-dd541b3a), 새 MinIO 기동 뒤
+기존10파일/두PVC·TLS 보존(103449Z-2a468828)도 확인했다. 공유 Ingress health는 Progressing이다.
+아래 ADR0075–0077 변경의 새 CI/배포는 별도 확인한다.
+
+ADR0077은 회수한 실제 Remote 파일을 기존 artifact 버킷에 등록하고 고정 version을 확인한다.
+TLS MinIO12개(102527Z-eead97ca) PASS: 조건부 PUT·응답 유실/재실행·동시 업로드1version·
+원래3개 version 보존·SIGKILL·잘못된 대상/충돌/고정 version 유실 거절을 확인했다.
+[검증 근거](docs/evidence/m9-recovery-remote-storage.md). 실제 PG/Remote17개가 만든 묶음을
+같은 CI storage job에서 전달하도록 연결했다. DB Result/Task/Run 확정·journal·종합 활성화는 남는다.
+
 ADR0076은 차단된 Remote의 미반영 성공 파일을 개인 묶음으로 회수하고 독립 검증한다.
 최종 실제 PG16/TLS 결합17개(100728Z-2813d1a2), Python17/Java gateway13개(100728Z-f6d01f72) PASS다.
 원본 변조/경로·DB 경쟁·원본 없는 파일 검증과 이력 보존을 확인했다.

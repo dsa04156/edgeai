@@ -45,6 +45,10 @@ ADR0075의 [복원 Remote 실행 정리](recovery-remote-retirement.md)는 새 �
 ADR0076의 [Remote 성공 파일 회수](recovery-remote-outputs.md)는 미확정 성공의 실제 bytes를
 검증·보존하고 원본/DB 자격 없이 bundle의 전체 일치를 확인한다. S3 등록·고정 version·
 Result/Task/Run 확정과 종합 복구 활성화는 후속이다.
+ADR0077의 [복구 파일 저장소 등록](recovery-remote-storage.md)은 실제 회수 파일을 기존
+artifact 버킷에 조건부 PUT하고 고정 version·bytes/SHA를 검증한다. 실제 TLS MinIO12개에서
+응답 유실·동시 등록·원래3개 version 보존·재시작·충돌/유실 거절을 확인했다. DB 결과 확정·
+키/journal·종합 활성화는 남는다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.
