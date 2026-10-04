@@ -152,6 +152,10 @@ ADR0078의 `test-recovery-remote-results.sh --transport compose`는 별도 실�
 TLS MinIO2개를 결합해 결과 확정14개를 검사한다. 원본 종료 뒤 Result/Task/Run·대기 자식,
 동시 쓰기·잠금·rollback·응답 유실·Java digest·기존 결과 충돌/고정 파일 유실을 검증한다.
 같은 tested MinIO binary를 사용하며 `recovery-remote-results-report.json` 집계만 업로드한다.
+ADR0079의 `test-recovery-remote-failures.sh --transport compose`는 실제 API/PG/Remote의
+할당9개·복원DB2개로 실패/취소/원래 재시도 예산·만료·후손·rollback·응답 유실15개를 검사한다.
+`recovery-remote-failures-report.json`만 공개하며 성공 Result14개와 함께 storage job에서
+실행한다. 추가 결합 게이트 시간을 포함해 storage job 상한은30분이다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험

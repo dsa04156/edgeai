@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0079는 복원 Remote 실패·취소·원래 기한의 재시도 대기를 정리한다. 실제 결합15개
+(111817Z-b771e368) PASS: 실패5·예약2·취소2·후손2·완료Run5, guard/잠금/rollback·응답 유실·
+새 epoch/기존 취소 사유 보존·기한 만료·38테이블 보존을 확인했다. 공통 검사 추출 뒤
+기존 Result14개(110815Z-f311735c)도 PASS다. [근거](docs/evidence/m9-recovery-remote-failures.md).
+새 CI 게이트를 추가했다. 진행 중 offload·STREAM/journal·다른 producer·종합 활성화는 남는다.
+
 ADR0078은 복구 S3 고정 파일과 복원 DB를 대조해 Remote Result·Task·Run을 원자적으로 확정한다.
 실제 PG16/API/Remote/TLS MinIO14개(105412Z-07ca4178) PASS: 결과2·완료Run1·대기자식1,
 동시 복구/잠금/rollback·응답 유실/0변경 재실행·Java digest 일치·38테이블 보존·조회 격리를

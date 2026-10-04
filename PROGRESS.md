@@ -1,6 +1,11 @@
 # 진행 상태
 
 [STATUS]
+ADR0079 복원 Remote 실패·취소·재시도 대기의 실제15개(111817Z-b771e368) PASS다.
+실패5·원래 기한 예약2·취소2·후손2·완료Run5, SQLrollback/잠금/응답 유실·새 시도/기존 사유/
+38테이블 보존과 기한 만료를 확인했다. 기존 Result14개(110815Z-f311735c) 회귀도 PASS다.
+docs/evidence/m9-recovery-remote-failures.md. 새 CI/배포·offload·STREAM/journal·종합 활성화는 남는다.
+
 ADR0078 복원 Remote Result·Task·Run 확정의 실제 결합14개(105412Z-07ca4178) PASS다.
 원본 DB/Remote/S3 종료 뒤 결과2·완료Run1·대기자식1, 동시 복구·잠금·rollback·커밋 응답 유실·
 Java digest/기존38테이블 보존·API 조회/쓰기 차단을 확인했다. 새 runtime/명령은 만들지 않는다.

@@ -66,10 +66,8 @@ def evidence(storage, args):
                               'publicationSha256': receipt_sha}
 
 
-def prepare(pg, storage, args):
-    manifest, publication, hashes = evidence(storage, args)
-    catalog = database_inventory(pg, args.database, args.restore_report, CATALOG_SQL)
-    intent, _ = private_json(args.bundle / 'intent.json')
+def retired_snapshot(catalog, manifest, intent, args):
+    """Validate the complete frozen Remote inventory against one current, quarantined DB snapshot."""
     if (manifest['targetDatabase'] != args.database or manifest['databaseOid'] != catalog['oid'] or
             manifest['restoreReportSha256'] != catalog['restoreReportSha256'] or intent['marker'] != catalog['marker']):
         raise Blocked('Output bundle belongs to another restored database')
@@ -87,6 +85,14 @@ def prepare(pg, storage, args):
                 row['provider_revision'] != observed['revision'] or row['provider_state'] != observed['state'] or
                 context['desiredState'] != 'STOPPED' or context['runtimeState'] != 'TERMINATED' or context['pendingCommands']):
             raise Blocked('All recovered Remote runtimes must retain their exact retired observation and commands')
+    return actual, contexts
+
+
+def prepare(pg, storage, args):
+    manifest, publication, hashes = evidence(storage, args)
+    catalog = database_inventory(pg, args.database, args.restore_report, CATALOG_SQL)
+    intent, _ = private_json(args.bundle / 'intent.json')
+    actual, contexts = retired_snapshot(catalog, manifest, intent, args)
     entries = []
     for allocation in manifest['allocations']:
         identity = allocation['identity']; context = contexts[identity['allocationId']]
