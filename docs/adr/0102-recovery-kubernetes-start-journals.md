@@ -1,6 +1,6 @@
 # ADR 0102: 원래 Kubernetes 시작 기록으로 복원된 BATCH 전환을 조정한다
 
-상태: 채택, 결합90개·기존 Remote 결과15개/실패15개 PASS. 2026-10-05.
+상태: 채택, 최초 결합90개·실제 API 확장91개·기존 Remote 결과15개/실패15개 PASS. 2026-10-05.
 
 ADR0101의 기록은 최초 실행 허가를 증명한다. 백업 DB에는 아직 claim과 전환 성공이
 없을 수 있으므로, 복원된 STARTING 상태나 현재의 기한 만료만으로 시작 실패를 단정할 수 없다.
@@ -39,6 +39,8 @@ STARTING target은 `KUBERNETES_START_AUTHORITY_NOT_PROVEN`으로 남기고 시�
 
 DB/S3/클러스터/API 시계와 관리자 권한은 신뢰 경계다. 전역 원본 writer 차단·서비스 재활성화,
 VD 독립 시작 기록, STREAM 그룹 및 Kubernetes Result 복구는 이 단계의 증거가 아니다.
-결합 시험의 실제 컨테이너·PG dump/restore·TLS S3 복제와 명시적 DB/시작 허가 fixture를
-구분한다. 실제 정상 claim의 기록 생성은 ADR0101 시험이 별도로 검증한다.
+최초90개는 실제 컨테이너·PG dump/restore·TLS S3 복제에 명시적 DB/시작 허가 fixture를
+결합했다. 후속91개는 명시적 DB binding을 유지하고 실제 TLS API·Pod-bound TokenReview로
+시작 기록을 생성해 복구 CLI에 연결했다. 시험 클라이언트의 claim이며 실제 Runner 업무
+프로세스의 계산·Result·종합 복구는 별도다. ADR0101의 실제 정상 Runner claim 시험도 유지한다.
 [검증 근거](../evidence/m9-recovery-kubernetes-start-journals.md)를 따른다. 새 CI/배포는 후속이다.

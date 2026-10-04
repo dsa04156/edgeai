@@ -2,6 +2,15 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0102의 실제 TLS API·Pod-bound TokenReview 시작 기록을 백업·복원 CLI까지 검증했다.
+기본68개210516Z-76adc3e9·최종 혼합91개210855Z-97f6fc1e PASS/소유 정리.
+[근거](docs/evidence/m9-recovery-kubernetes-start-journals.md). 실제 Runner 업무의 Result 복구,
+STREAM/VD 권한·전역writer 차단·새 권한과 종합 활성화를 이어간다. 전체 단계 목표는 유지한다.
+선행8b964d6 CI37234177387의 native3jobs/원시4개·registry 감사211207Z-b74ae060 PASS.
+전체 CI·새 배포는 미확인이고 신규91개 push는 선행 CI 종료 뒤 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0102 시작 기록→복원 BATCH 전환 조정을 구현했다. 실제 PG/보존 Pod/TLS S3 백업
 결합90개205153Z-094ba230·Java해시17입력·Remote 실패/결과 각15개 회귀 PASS다.
 [근거](docs/evidence/m9-recovery-kubernetes-start-journals.md). 명시적 시작 허가 fixture와

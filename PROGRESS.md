@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0102 실제 API 확장: TLS claim·실제 Pod-bound TokenReview가 생성한 S3 기록을
+별도 백업/원본 제거→복원DB/보존 Pod→복구 CLI에 연결했다. 기본68개210516Z-76adc3e9,
+최종 혼합91개210855Z-97f6fc1e PASS/소유 정리. claim 재요청은 최초 version 보존,
+복원 전환1/claim0/Result0·42테이블·경쟁/원복/응답 유실·재실행0을 확인했다.
+[근거](docs/evidence/m9-recovery-kubernetes-start-journals.md). DB/배치 이력은 fixture이며
+실제 Runner 계산/Result·STREAM/VD/전역writer·종합 활성화와 전체 단계는 미완료다.
+선행8b964d6 CI37234177387의 native3jobs/원시4개·registry 두manifest 감사
+211207Z-b74ae060 PASS. scaffold/storage는 진행 중이며 신규91개 push는 선행 CI 종료 뒤다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
 ADR0102 Kubernetes 시작 기록 복구: 별도 S3 백업의 원래 허가·작업 digest·기한·실제
 보존 Pod 종료를 복원 DB와 대조해 BATCH 전환만 조정한다. 최종 결합90개
 205153Z-094ba230·Java해시17입력·Remote 실패15개205154Z-38c5569a/결과15개

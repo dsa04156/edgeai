@@ -48,6 +48,7 @@ def main():
     p.add_argument('--remote-offloads',action='store_true',help='Combine actual reference Remote and Kubernetes offload evidence')
     p.add_argument('--remote-start-receipts',action='store_true',help='Include actual timely Remote start receipts and recovered successful Results')
     p.add_argument('--runtime-start-journals',action='store_true',help='Verify Kubernetes admission fixtures with actual restored DB, retained Pods and replicated TLS S3')
+    p.add_argument('--runtime-start-api',action='store_true',help='Generate the start journal through the actual TLS API and Kubernetes TokenReview')
     p.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
@@ -57,6 +58,7 @@ def main():
     if args.remote_offloads and not args.unclaimed_jobs: p.error('--remote-offloads requires --unclaimed-jobs')
     if args.remote_start_receipts and not args.remote_offloads: p.error('--remote-start-receipts requires --remote-offloads')
     if args.runtime_start_journals and not args.unclaimed_jobs: p.error('--runtime-start-journals requires --unclaimed-jobs')
+    if args.runtime_start_api and not args.runtime_start_journals: p.error('--runtime-start-api requires --runtime-start-journals')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -278,8 +280,9 @@ def main():
             passed('packaged-java-and-recovery-work-digests-agree-on-precision-unicode-and-invalid-json')
             start_fixture=Fixture('test_separate_credentials_identity_tls_pin_and_inspection')
             providers.append(start_fixture);start_fixture.setUp();start_fixture.configure(work,args.minio_binary)
-            start_fixture.seed(pg,targets[4][0],owned,args.transport,kube,namespace,unclaimed_fixtures)
-            passed('explicit-kubernetes-admission-fixture-backed-up-to-distinct-tls-minio-with-source-db-and-storage-removed')
+            start_fixture.seed(pg,targets[4][0],owned,args.transport,kube,namespace,unclaimed_fixtures,
+                api_claim=args.runtime_start_api,create=create)
+            passed(('actual-api' if args.runtime_start_api else 'explicit')+'-kubernetes-admission-backed-up-to-distinct-tls-minio-with-source-db-and-storage-removed')
 
         extra_vr=str(uuid.uuid4())
         unbound=copy.deepcopy(pod_spec)

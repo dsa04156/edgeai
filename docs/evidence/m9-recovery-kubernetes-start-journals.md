@@ -51,3 +51,39 @@ Pod name/UID를 포함한 형태와 컨테이너 종료 정보만 반환하는 �
 kind CI에90개 경로를 연결했다. 새 CI/배포는 별도이며, 실제 API가 생성한 기록부터의 전체
 복원 종단, Kubernetes Result 확정·VD 독립 기록·STREAM 그룹의 시작 권한, 전역 writer
 차단·새 권한·종합 활성화 및 전체 M9 수용은 남는다.
+
+## 실제 API가 만든 시작 기록
+
+위 명령에 `--runtime-start-api`를 추가하면 S3 시작 기록을 직접 주입하지 않고 실제
+패키징된 API의 HTTPS claim으로 생성한다. Kubernetes 신원 검증도 mock하지 않는다.
+기존 런타임/배치 이력은 명시적 DB fixture이며 업무 계산이나 결과 생성의 증거는 아니다.
+
+기본68개 `20261004T210516Z-76adc3e9`는 PASS/exit0이다. 실제 API·MinIO·namespace·DB를
+정리했으며, 원본 API 종료·시작 기록의 실제 API 생성 및 복원 대조를 보고서로 확인했다.
+
+- 별도 소유 시험 DB를 fixture DB에서 복제하고, claim 전의 DB snapshot을 보관한다.
+  격리된 복원 DB의 활성화 설정을 해제하는 방식은 사용하지 않는다.
+- bootstrapped control-plane 서비스 계정의10분 토큰과 소유 namespace 안의 Pod/Job GET
+  RoleBinding을 사용한다. 클러스터 관리자 인증서를 API에 제공하지 않는다.
+- 실제 실행 중인 Pod에 묶인 `edgeai-runner` audience 토큰을 발급해 실제 TokenReview와
+  Pod/Job/controller/노드 조회로 검증한다. 시험 클라이언트가 직접 claim을 호출하며
+  실제 Runner 업무 프로세스가 HTTP 요청을 보냈다고 주장하지 않는다.
+- HTTPS API에서 잘못된 Pod proof는401이고 S3 기록이 없다. 실제 proof의 claim200 후
+  DB producer/노드·전환 성공과 S3 기록을 확인한다. 두 번째 claim200은 같은 원래
+  version과 바이트를 유지한다.
+- API를 종료한 뒤 별도 TLS MinIO에 원래 version을 복제하고 원본 저장 디렉터리와
+  source DB를 제거한다. claim 전 DB2개를 복원하고 실제 Pod 종료 후 ADR0102 경로를
+  사용한다. 실제 API의 나노초 시각·Java 작업 digest·원래 기한이 복원 대조를 통과한다.
+
+최종 Remote 포함91개 `20261004T210855Z-97f6fc1e`도 PASS/exit0이다. 정상 반영은 실제
+복구 CLI로 실행했고 모든 파라미터·개인 intent/SQL/report 및 재실행 변경0을 확인했다.
+고정 version의 실제 원본 바이트를 읽어 동일 바이트의 새 version을 만들어 교체 거절을
+검증했다. 명시적 fixture의14종 변형, 실제 DB 경쟁·원복·커밋 응답 유실도 포함한다.
+소유 namespace·DB·API·Remote/MinIO 정리 및 짧은 수명의 API 인증 파일 삭제를 확인했다.
+
+현재 API JAR 및 production 복구 코드는 위90개 검증 때와 동일하다. 이 확장은 시험의
+시작 허가 생성 경로를 실제 API로 바꾼 것이다. kind CI에도91개를 연결했다.
+선행 소스8b964d6 CI37234177387의 native3jobs/원시4개·각Runner111/MQTT97과 실제
+registry의 amd64/arm64 manifest를 `20261004T211207Z-b74ae060`에서 감사했다.
+전체 CI·새 배포·신규91개 원격 실행은 아직 확인하지 않았다. 선행 CI 종료 전 후속 push는
+대기한다. Kubernetes Result·실제 Runner 업무부터의 종합 복구·STREAM/VD·활성화는 남는다.

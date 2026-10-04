@@ -126,8 +126,9 @@ ADR0101의 [Kubernetes 시작 기록](evidence/m9-kubernetes-start-journal.md)�
 기록을 검증했다. ADR0102의 [복원 시작 기록 대조](evidence/m9-recovery-kubernetes-start-journals.md)는
 별도 S3 백업·원래 작업/기한·실제 종료를 대조해 BATCH 전환만 조정한다. 결합90개와
 Remote 결과/실패 각15개 회귀를 통과했으며 claim/Result·42테이블을 보존한다.
-시작 허가는 명시적 fixture다. 실제 API부터 복원 종단·Kubernetes Result·VD 독립 시작
-증거·STREAM 그룹 및 종합 활성화는 남는다.
+최초90개의 시작 허가는 명시적 fixture다. 후속91개는 실제 TLS API·Pod-bound TokenReview로
+생성한 기록을 별도 S3 백업/원본 제거·복원 DB와 복구 CLI까지 연결했다. DB/배치 이력은
+fixture이며 실제 Runner 업무/Result 복구·VD 독립 시작 증거·STREAM 그룹 및 종합 활성화는 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

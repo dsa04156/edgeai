@@ -1,4 +1,4 @@
-"""Real retained Pods, restored PostgreSQL and replicated TLS S3; explicit admission fixtures."""
+"""Real retained Pods, restored PostgreSQL and TLS S3; explicit or actual API start authority."""
 import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -71,18 +71,27 @@ class Fixture(RemoteRecoveryTest):
             except OSError:time.sleep(.1)
         raise AssertionError('Owned start journal storage failed readiness')
 
-    def seed(self,pg,source_db,owned,transport,kube,namespace,fixture):
+    def seed(self,pg,source_db,owned,transport,kube,namespace,fixture,api_claim=False,create=None):
         self.fixture=fixture;target=fixture['target']
-        backup(pg,source_db,self.work/'base')
+        self.api_claim=api_claim
         def restored(bundle):
             db='edgeai_restore_start_'+uuid.uuid4().hex
             restoring=Postgres(transport,diagnostics=self.work/('restore-'+uuid.uuid4().hex))
             result=restore(restoring,bundle,db);owned[db]=result['databaseOid']
             return db,restoring.directory/'restore-report.json'
-        source,_=restored(self.work/'base')
+        if api_claim:
+            # This is a fresh owned test source cloned from explicitly seeded
+            # fixture rows, not activation of a quarantined recovery database.
+            source='edgeai_backup_start_'+uuid.uuid4().hex
+            pg.sql('CREATE DATABASE '+identifier(source)+' TEMPLATE '+identifier(source_db),'postgres')
+            owned[source]=pg.sql('SELECT oid::text FROM pg_database WHERE datname='+literal(source),'postgres')
+            assert pg.sql("SELECT shobj_description(oid,'pg_database') IS NULL FROM pg_database WHERE datname=current_database()",source)=='t'
+        else:
+            backup(pg,source_db,self.work/'base')
+            source,_=restored(self.work/'base')
         # Record an original deadline while the actual fixture process is alive.
-        # The process does not use the Runner claim protocol; admission is an
-        # explicit fixture, independently of ADR0101's actual API claim tests.
+        # Workload/placement history is explicitly seeded. Admission is either a
+        # fixture or produced by the real TLS API and Kubernetes TokenReview.
         pg.sql("UPDATE edgeai.runtime_instance SET expires_at=now()+interval '1 hour' WHERE id="+q(target['runtime'])+
             "; UPDATE edgeai.task_offload SET start_deadline=now()+interval '30 seconds',updated_at=now() WHERE id="+q(fixture['operation']),source)
         backup(pg,source,self.work/'before-admission')
@@ -98,10 +107,11 @@ class Fixture(RemoteRecoveryTest):
             'offloadId':op['id'],'startDeadline':op['start_deadline'],'admittedAt':datetime.now(timezone.utc).isoformat()}
         assert starts.instant_ns(self.authority['admittedAt'])<starts.instant_ns(op['start_deadline'])
         # Demonstrate the post-snapshot DB history that the restored DB loses.
-        pg.sql('UPDATE edgeai.runtime_instance SET producer_pod_uid='+q(pod['metadata']['uid'])+',node_uid='+q(node['metadata']['uid'])+
-            ',node_name='+literal(node['metadata']['name'])+",observed_state='RUNNING' WHERE id="+q(target['runtime'])+
-            "; UPDATE edgeai.task_attempt SET state='RUNNING' WHERE id="+q(target['attempt'])+
-            "; UPDATE edgeai.task_offload SET state='SUCCEEDED',updated_at=now() WHERE id="+q(op['id']),source)
+        if not api_claim:
+            pg.sql('UPDATE edgeai.runtime_instance SET producer_pod_uid='+q(pod['metadata']['uid'])+',node_uid='+q(node['metadata']['uid'])+
+                ',node_name='+literal(node['metadata']['name'])+",observed_state='RUNNING' WHERE id="+q(target['runtime'])+
+                "; UPDATE edgeai.task_attempt SET state='RUNNING' WHERE id="+q(target['attempt'])+
+                "; UPDATE edgeai.task_offload SET state='SUCCEEDED',updated_at=now() WHERE id="+q(op['id']),source)
         origin=self.storage('origin');self.storage('replica')
         self.bundle=self.work/'storage-backup';self.bundle.mkdir(mode=0o700)
         with patch.dict(os.environ,self.environment):
@@ -109,11 +119,15 @@ class Fixture(RemoteRecoveryTest):
             client.call(['mb','origin/'+self.bucket]);client.call(['version','enable','origin/'+self.bucket])
             origin_env={key.replace('EDGEAI_BACKUP_SOURCE_','EDGEAI_BACKUP_STORAGE_'):value
                         for key,value in self.environment.items() if key.startswith('EDGEAI_BACKUP_SOURCE_')}
-            with patch.dict(os.environ,origin_env):
-                code,_,_=Storage(SimpleNamespace(certificate_sha256=self.pin,timeout=30)).request('PUT',
-                    '/'+self.bucket+'/authority/runtime-start/'+target['runtime']+'.json',
-                    body=json.dumps(self.authority).encode(),extra={'content-type':starts.MEDIA_TYPE,'if-none-match':'*'})
-                assert code==200
+            if api_claim:
+                from test_runtime_start_api import admit
+                self.authority=admit(self,pg,source,context,pod,kube,create,namespace)
+            else:
+                with patch.dict(os.environ,origin_env):
+                    code,_,_=Storage(SimpleNamespace(certificate_sha256=self.pin,timeout=30)).request('PUT',
+                        '/'+self.bucket+'/authority/runtime-start/'+target['runtime']+'.json',
+                        body=json.dumps(self.authority).encode(),extra={'content-type':starts.MEDIA_TYPE,'if-none-match':'*'})
+                    assert code==200
             storage_backup(client,[self.bucket],120)
         origin.terminate();origin.wait(timeout=15);shutil.rmtree(self.work/'origin-data')
         self.targets=[restored(self.work/'before-admission') for _ in range(2)]
@@ -147,7 +161,7 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     assert starts.instant_ns(fixture.authority['startDeadline'])<starts.instant_ns(datetime.now(timezone.utc).isoformat())
     assert all(row('runtime_instance',target['runtime'])[k] is None for k in ('producer_pod_uid','node_uid','node_name'))
     assert fingerprints(db)==pristine and not (fixture.work/'origin-data').exists()
-    passed('replicated-fixed-start-version-and-real-retained-pod-prove-fixture-admission-after-source-db-and-storage-are-removed')
+    passed('replicated-fixed-start-version-and-real-retained-pod-prove-original-admission-after-source-db-and-storage-are-removed')
 
     original_validate=starts.validate
     variants=[('workDigest','sha256:'+'0'*64),('podUid',str(uuid.uuid4())),('nodeUid',str(uuid.uuid4())),
@@ -209,7 +223,7 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     passed('actual-deadline-cancellation-and-newer-attempt-rows-prevent-an-older-admission-from-overriding-history')
 
     # Change actual latest S3 version after preparation, retaining original bytes.
-    raw=json.dumps(fixture.authority).encode()
+    code,_,raw=store.request('GET',path,{'versionId':item['versionId']},max_bytes=8192);assert code==200
     code,headers,_=store.request('PUT',path,body=raw,extra={'content-type':starts.MEDIA_TYPE});assert code==200
     replacement=header(headers,'x-amz-version-id');a.output.mkdir(mode=0o700)
     try:workflows.apply(pg,a,plan)
@@ -243,8 +257,15 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     assert fingerprints(db)==pristine
     passed('actual-write-failure-rolls-back-the-admission-reconciliation-without-changing-any-table')
 
-    before=row('task_offload',operation);a=opts();a.output.mkdir(mode=0o700)
-    completed=workflows.apply(pg,a,workflows.prepare(pg,a));after=fingerprints(db)
+    before=row('task_offload',operation);a=opts()
+    command=[sys.executable,'scripts/recovery_kubernetes_workflows.py']
+    for key,value in vars(a).items():
+        if value is True:command+=['--'+key.replace('_','-')]
+        elif value is not None and value is not False:command+=['--'+key.replace('_','-'),str(value)]
+    response=subprocess.run(command,capture_output=True,timeout=180)
+    with private_file(fixture.work/'workflow-cli.log') as log:log.write(response.stdout+response.stderr)
+    assert response.returncode==0,'Start journal recovery CLI failed; private evidence retained'
+    completed=json.loads((a.output/'workflows.json').read_text());after=fingerprints(db)
     assert completed['offloadsCompleted']==1 and not completed['activated'] and not completed['globalQuiescenceProven']
     assert {t for t in pristine if pristine[t]!=after[t]}=={'task_offload'}
     assert row('task_offload',operation)['state']=='SUCCEEDED'
@@ -267,7 +288,12 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     a=opts(1);a.output.mkdir(mode=0o700)
     assert not workflows.apply(pg,a,workflows.prepare(pg,a))['databaseModified']
     passed('actual-commit-reply-loss-recovers-with-original-start-version-and-zero-duplicate-writes')
-    report.update(runtimeStartJournalFixtures=1,runtimeStartAuthoritySource='EXPLICIT_ADMISSION_FIXTURE',
+    report.update(runtimeStartJournalFixtures=1,
+        runtimeStartAuthoritySource='ACTUAL_API_WITH_KUBERNETES_TOKENREVIEW' if fixture.api_claim else 'EXPLICIT_ADMISSION_FIXTURE',
         runtimeStartBackupSourcesRemoved=True,runtimeStartRestoredDatabases=2,runtimeStartOffloadsCompleted=1,
         runtimeStartResultsCreated=0,runtimeStartClaimsCreated=0,runtimeStartPreservedTables=42,
         runtimeStartAlteredObservations=len(variants))
+    if fixture.api_claim:
+        assert fixture.api_claim_verified and fixture.api_claim_source_stopped
+        report.update(runtimeStartApiClaimsVerified=True,runtimeStartSourceApiStopped=True)
+        passed('actual-tls-api-and-kubernetes-tokenreview-generate-the-original-start-journal-consumed-by-restored-transfer-recovery')
