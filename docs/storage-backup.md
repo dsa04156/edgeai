@@ -64,8 +64,8 @@ delete-marker에 따른 bucket 최신 조회 상태·DB snapshot과의 일치·�
 확인해 정리한다. 자격 증명/서버 정보/파일 이름이 포함될 수 있는 원문 로그를 공개하지 않는다.
 
 현재 backup 데이터의 암호화·별도 장애 영역/보관 기간/주기 실행은 운영 설정이 남아 있다.
-새 DB의 `result_artifact`·`stream_checkpoint`가 참조하는 version/bytes/SHA를 이 백업과
-대조하는 후속 게이트를 통과해야 DB와 파일을 함께 복구했다고 판정할 수 있다.
+새 DB의 `result_artifact`·`stream_checkpoint` 전체 version/bytes/SHA는
+[DB/S3 대조 명령](recovery-references.md)으로 확인한다. 이 대조 이후에도 운영 활성화 게이트는 남는다.
 
 ## 시험
 

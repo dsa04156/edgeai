@@ -94,6 +94,8 @@ jobs:
           bash scripts/collect-evidence.sh storage-backup bash scripts/test-storage-backup.sh --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/storage-backup-report.json
       - name: Start PostgreSQL for real storage-to-result transactions
         run: bash scripts/dev-up.sh
+      - name: Verify restored database references with independent TLS backup storage
+        run: bash scripts/collect-evidence.sh recovery-references bash scripts/test-recovery-references.sh --transport compose --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-references-report.json
       - name: Prepare real stream broker and SDK for storage completion tests
         run: |
           sudo apt-get update -qq

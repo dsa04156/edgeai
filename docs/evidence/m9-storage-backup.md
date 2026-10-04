@@ -39,7 +39,7 @@ CI storage job에 같은 테스트를 추가했다. 그 job이 만든 MinIO 이�
 source/replica TLS 시험에 사용한다. 로컬 Docker 권한이 없어 해당 추출 경로와 새 CI 실행은
 후속 확인한다. 테스트 성공을 배포 환경의 DR 설치 완료로 해석하지 않는다.
 
-다음 게이트는 새 DB로 복원한 `result_artifact`·`stream_checkpoint` 전체 참조를 replica의
-정확한 버전과 대조하는 것이다. S3 목록만의 보존으로 DB와의 교차 정합성을 주장하지 않는다.
+새 DB로 복원한 `result_artifact`·`stream_checkpoint` 전체 참조와 replica의 정확한 버전 대조는
+[ADR0061 후속 시험](m9-recovery-references.md)에 기록했다. S3 목록만의 보존으로 DB와의 교차 정합성을 주장하지 않는다.
 IAM/CA/Secret·broker/device journal·실행 중 외부 상태·운영 활성화·백업 저장 위치/보존 정책은
 [M9 수용 범위](../m9-requirements.md)에 남아 있다.

@@ -180,7 +180,10 @@ def restore(pg, bundle, target):
             history = json.loads(pg.sql("SELECT json_build_object('total',count(*),'failed',count(*) FILTER(WHERE NOT success)) "
                 'FROM edgeai.flyway_schema_history', target))
             if history['total'] < 1 or history['failed'] != 0: raise ValueError('Restored migration history is incomplete')
-            report.update(status='RESTORED_DB_ONLY', migrationCount=history['total'], archiveSha256=manifest['archiveSha256'])
+            restore_identity = uuid.uuid4().hex
+            pg.sql('COMMENT ON DATABASE '+identifier(target)+' IS '+literal('edgeai-restore:'+restore_identity), 'postgres')
+            report.update(status='RESTORED_DB_ONLY', migrationCount=history['total'], archiveSha256=manifest['archiveSha256'],
+                          restoreIdentity=restore_identity)
     except Exception as error:
         report.update(status='FAIL', failureType=type(error).__name__)
         if created:

@@ -129,12 +129,14 @@ bash scripts/test-load-acceptance.sh # 실제 API/DB로 측정·미정·실패·
 bash scripts/test-postgres-backup.sh # 전용 DB/API의 실제 백업·새 DB 복원; Compose PG는 --transport compose
 bash scripts/install-minio-client.sh # object version을 유지하는 백업용 공식 mc 설치·SHA 검증
 bash scripts/test-storage-backup.sh # 격리 TLS MinIO 두 개: 버전 복제·원본 유실·백업 재시작·거절 시험
+bash scripts/test-recovery-references.sh # 실제 DB 복원·전체 결과/checkpoint 참조 대조·원본 유실·누락 거절
 ```
 
 `verify-all.sh local|full`은 미구현 fault/hardware 시험과 부하 성능 기준 미정을 숨기지 않고 nonzero를 반환합니다.
 관리 부하의 측정 범위·실행 방법·합격 판정은 [부하 시험 문서](docs/load-testing.md)를 따릅니다.
 DB 백업과 새 DB로의 복원은 [백업 실행 문서](docs/postgres-backup.md)를 따릅니다.
 고정 S3 버전 복제와 독립 검증은 [MinIO 백업 문서](docs/storage-backup.md)를 따릅니다.
+복원 DB의 모든 결과/checkpoint 참조 대조는 [DB/S3 복원 검증](docs/recovery-references.md)을 따릅니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

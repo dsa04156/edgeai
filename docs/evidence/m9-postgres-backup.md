@@ -25,6 +25,11 @@
 요약 report는 해당 evidence 폴더의 `postgres-backup-report.json`에 보존한다.
 archive·manifest·API/SQL 원문 로그는 비공개 `.tools`에만 남긴다.
 
+ADR0061의 새 DB comment/보고서 `restoreIdentity` 추가 후 동일10개 시험을 다시 실행한
+`20261004T014814Z-0a42874e`도 PASS다.41테이블·Flyway34행, archive527,874bytes, 위와 같은
+JAR이며 소유 DB/API 정리까지 확인했다. [DB/S3 대조](m9-recovery-references.md)는 식별자
+불일치 거절과 실제 복원 참조의 별도 저장소 읽기를 검증한다.
+
 첫 `20261004T005336Z-49fa11e4`는8개 PASS였으며 복원 client 종료를 주입했다.
 위 최종 실행은 실제 pg_restore 제약 오류로 강화하고 파일 권한과 dump 경고 거절을 추가했다.
 

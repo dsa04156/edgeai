@@ -23,12 +23,16 @@ M0–M4 및 M6 범위의 구현·검증을 완료했으며 현재 M5 잔여 검�
 독립 M9 DB 백업·복원도 ADR0059로 구현했다. 실제 PostgreSQL16/패키징 API의10개 시험에서
 41테이블·복원 조회·불변 제약·백업 시점 경계·기존 DB/손상/권한 거절·실제 복원 오류 정리를
 통과했다(010138Z-7ebea0c3). Compose17 CI 게이트를 추가했으며 새 CI 검증은 후속이다.
-S3/키/journal·운영 활성화와 종합 복구는 남는다. [M9 수용 범위](docs/m9-requirements.md),
+키/journal·운영 활성화와 배포 환경의 종합 복구는 남는다. [M9 수용 범위](docs/m9-requirements.md),
 [DB 검증 근거](docs/evidence/m9-postgres-backup.md).
 ADR0060은 별도 MinIO에 고정 S3 version을 복제하고 독립 검증한다. 실제 TLS source/replica의
 11개 시험에서4개 version/262,176bytes, 원본 종료·replica 재시작·기존 설정/미연결 대상 보존·실패 정리를
-통과했다(013635Z-8b24378d). CI storage 게이트를 추가했으며 새 CI와 복원 DB의 모든
-result/checkpoint 참조 대조는 후속이다. [저장소 검증](docs/evidence/m9-storage-backup.md).
+통과했다(013635Z-8b24378d). [저장소 검증](docs/evidence/m9-storage-backup.md).
+ADR0061로 복원 DB의 모든 result/checkpoint를 별도 MinIO의 고정 버전과 대조한다.
+실제PG16/TLS의9개 시험(014850Z-ae31f51c)은 원본 DB/MinIO 없이 전체4참조/1,287bytes와
+누락·불일치·다른 복원 신원·미지원 schema 거절을 확인했다. 복원 식별자를 추가한 DB10개
+회귀도 PASS(014814Z-0a42874e)다. 새 CI·운영 Secret/journal·producer 재조정/활성화는
+남는다. [참조 대조 검증](docs/evidence/m9-recovery-references.md).
 M7 외부 계약·전체 수용을 유지한 채 독립 M8 관리 부하 측정을 병행한다. ADR0057은 실제
 API/전용 PG DB에서100→300→1,000 장치의 예정 시각 기준 지연·오류·누락·정합성·자원을 기록한다.
 전체60초씩의9,240요청·오류/누락0·DB정합성·자원 정리를 확인했다(234836Z-e9dbbb5f).

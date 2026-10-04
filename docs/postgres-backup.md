@@ -51,6 +51,8 @@ dump에 stderr 진단이 있거나 archive 검사가 실패하면 manifest를 �
 SHA-256이 archive 출처를 인증하지는 않으므로 자신이 신뢰하는 백업만 복원한다.
 
 성공하면 `RESTORED_DB_ONLY`, 비공개 `restore-report.json`에는 `activated: false`가 기록된다.
+새 DB의 comment와 보고서에는 임의 `restoreIdentity`를 남긴다. 후속 [DB/S3 참조 대조](recovery-references.md)는
+이 식별자와 DB 이름/OID를 확인해 다른 복원 DB의 보고서를 잘못 사용하지 않게 한다.
 복원 DB는 점검을 위해 남는다. 현재 API 연결을 바꾸거나 실행 worker를 켜기 전에 S3 고정
 버전·인증 키·외부 실행 주체와의 일치 확인이 필요하다. 현재 명령은 이를 자동으로 수행하지 않는다.
 

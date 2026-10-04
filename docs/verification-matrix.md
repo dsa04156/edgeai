@@ -80,7 +80,8 @@
 | M7-PUBLIC-UI | scripts/test-ui.sh + scripts/test-profiles-stack.sh | PC/모바일 입력 재전송·오류/경로/페이지/출처, 실제 BATCH 빈 경로 조회와 Swagger41개 | STREAM 화면은 명시적 HTTP fixture, 실제 API 시험은 기본 비활성 |
 | M5/M9-FAULT | scripts/test-fault.sh | 기존 구성 요소 시험을 넘어선 플랫폼 종합 장애 수용 | BLOCKED; 위 취소·fencing·복구 시험과 별개 |
 | M9-POSTGRES-BACKUP | scripts/test-postgres-backup.sh [--transport compose] | 실제 archive·새 DB의 테이블/이력·패키징 API·불변 제약·덮어쓰기/손상/권한 거절·복원 실패 정리 | 합성 업무 데이터·실제 PostgreSQL; docs/evidence/m9-postgres-backup.md. 전체 플랫폼 복구는 별도 |
-| M9-STORAGE-BACKUP | scripts/test-storage-backup.sh | 별도 TLS MinIO에 고정 version/bytes/SHA 복제·기존 대상/설정 거절·원본 유실·replica 재시작·오류 정리 | 합성 파일·실제 MinIO; docs/evidence/m9-storage-backup.md. 복원 DB 참조 대조·키/journal·운영 활성화는 후속 |
+| M9-STORAGE-BACKUP | scripts/test-storage-backup.sh | 별도 TLS MinIO에 고정 version/bytes/SHA 복제·기존 대상/설정 거절·원본 유실·replica 재시작·오류 정리 | 합성 파일·실제 MinIO; docs/evidence/m9-storage-backup.md. DB 참조는 아래 별도 게이트, 키/journal·활성화는 후속 |
+| M9-RECOVERY-REFERENCES | scripts/test-recovery-references.sh [--transport compose] | 실제 복원 DB의 전체 결과/checkpoint 참조·고정 버전/SHA·원본 유실·누락/신원/schema 거절 | 실제 PG/TLS MinIO, Pod/broker 경계 SQL fixture; docs/evidence/m9-recovery-references.md. 키/journal·실행 재조정·활성화는 후속 |
 | M8-LOAD | scripts/test-load.sh | 실제 API/PG의100→300→1,000 장치·고정 발송·지연/누락·DB정합성·재접속·자원/정리 | --measure-only는 측정 범위; 합의 성능 예산은 별도, docs/load-testing.md |
 | M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과를 구분하고 종료 코드/정리 확인 | 10대/2초 회귀; 전체 규모·장비 성능 수용과 구분 |
 | M8-AUTH-CACHE | scripts/test-unit.sh + scripts/test-load.sh --measure-only | 성공 비교64개/30초·고정 만료·hash/비밀번호/권한/잠금 변경·실HTTP401/403·동일 규모 지연/CPU 측정 | 단위111개·실제9,240요청/오류0·DB정합성 PASS; docs/evidence/m8-authentication-load.md |
