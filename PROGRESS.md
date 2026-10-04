@@ -1,9 +1,17 @@
 # 진행 상태
 
 [STATUS]
-M10 읽기 전용 [자원 관측](docs/evidence/m10-hardware-inventory.md): 노드10/Ready4,
-amd64/arm64·Ready GPU3/NPU1 등록. edge label6개는 모두Ready 아님.
-등록 정보이며 실제 모델/장치 접근 검증은 후속이고 전체 하드웨어 gate는 미완료다.
+M10 최종 전체7개 `174327Z-583d0e77` PASS. 선행 전체 재실행의 GPU 노드 DiskPressure
+퇴거 실패는 보존하며, 건강 상태 변경 시각을 기준으로 안정적인 후보를 먼저 선택한다.
+branch CI4개 성공/3개 생략·원시35개/PG230/단위122 감사 `174542Z-e978bc85` PASS.
+architecture 선택 공개 데모의 기존amd648Pod/S36개 `174227Z-17088dc7` PASS.
+native index 발행·새 배포·ARM 공개 API 데모는 남는다.
+M10 [실장비 구성 요소](docs/evidence/m10-hardware-components.md)7개 PASS:
+서버amd64/arm64 CPU·RTX5080/GB10 CUDA·ARIES 비루트 접근 `173534Z-ccbf4ed5`,
+KubeEdge Tinker CPU/Orin CUDA `173721Z-fcb13cc9`. 고정 이미지·실제 계산·UID·소유 정리 확인.
+과거 Ready4 관측은 현재 상태가 아니다. NPU 추론·공개 API 실제 모델/외부 계약·전체 수용은 남는다.
+ADR0095 native amd64/arm64 각각 Runner111/MQTT97·원시 감사 `173754Z-71f9acbd` PASS.
+소스6853fd87의 branch 검증이며 새 index 발행·실제 kind/배포는 후속이다.
 
 ADR0094 기록된 target 실패 포함36개 `170123Z-963eee1a` PASS. 실제 복원DB16/부모자식4쌍·
 선택/peer 실패2·원래 실패/전환/체크포인트 이력 보존·retry0·원복/응답 유실·소유 정리 확인.

@@ -27,6 +27,8 @@ from edgeai_runner.stream_device_run import DeviceRunSource
 
 work = Path('/work')
 config = json.loads(Path('/scenario/config.json').read_bytes())
+architecture=config.get('architecture','amd64')
+assert architecture in ('amd64','arm64')
 origin = config['origin']
 auth = 'Basic ' + base64.b64encode((os.environ['EDGEAI_API_USER'] + ':' + os.environ['EDGEAI_API_PASSWORD']).encode()).decode()
 client = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
@@ -101,7 +103,8 @@ def run_case(name, placement, cancel=False, recover=False, finalize=False, offlo
     profiles = {}
     for task in ('root', 'sink', 'report'):
         spec = json.loads(json.dumps(config['batchSpec' if task == 'report' else 'streamSpec']))
-        spec.update(image=config['runnerImage'], timeoutSeconds=600, platform={'os': 'linux', 'architectures': ['amd64']})
+        spec.update(image=config['runnerImage'], timeoutSeconds=600, platform={'os': 'linux', 'architectures': [architecture]})
+        if 'runnerNodeSelector' in config:spec['nodeSelector']=config['runnerNodeSelector']
         if automatic and task != 'report':
             spec['resources']['limits']['memory'] = '512Mi'
             spec['stream']['command'] = ['python3', '-c', config['memoryPressureCommand']]
