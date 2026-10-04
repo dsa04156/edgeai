@@ -18,7 +18,8 @@ from recovery_remote_storage import Storage, inputs, private_json, verify as ver
 # Composite-key tables use their whole JSON row for stable ordering. No raw work or nonce in intent.
 TABLES = ('flyway_schema_history', 'remote_allocation', 'runtime_instance', 'runtime_command',
           'task_attempt', 'task_result', 'result_artifact', 'task', 'workflow_run', 'task_retry',
-          'task_definition', 'task_dependency', 'workflow_version', 'profile_version')
+          'task_definition', 'task_dependency', 'workflow_version', 'profile_version',
+          'task_offload', 'task_offload_member')
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
     "encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text)"
@@ -29,6 +30,7 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
  'failureReason',r.failure_reason,'attempt',to_jsonb(p),'task',to_jsonb(t),'runState',w.state,
  'outputs',v.spec->'outputs','latestEpoch',(SELECT max(epoch) FROM edgeai.task_attempt WHERE task_id=t.id),
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),
+ 'activeOffload',EXISTS(SELECT FROM edgeai.task_offload WHERE run_id=t.run_id AND state IN ('DRAINING','STARTING','CANCELLING')),
  'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM'),
  'pendingCommands',EXISTS(SELECT FROM edgeai.runtime_command c WHERE c.runtime_id=r.id
    AND (NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL)),
@@ -97,6 +99,10 @@ def prepare(pg, storage, args):
     for allocation in manifest['allocations']:
         identity = allocation['identity']; context = contexts[identity['allocationId']]
         attempt, task = context['attempt'], context['task']
+        # Provider success cannot supply a missing, timely target start authorization.
+        # Block the whole Run so child readiness cannot bypass another active transfer.
+        if context['activeOffload']:
+            raise Blocked('Active offload requires recorded start authority before result recovery')
         outputs = sorted([{k: item[k] for k in ('port', 'bucket', 'key', 'versionId', 'bytes', 'sha256', 'mediaType')}
                           for item in publication['objects'] if item['allocationId'] == identity['allocationId']],
                          key=lambda item: item['port'])

@@ -46,6 +46,7 @@ def main():
     p.add_argument('--offloads',action='store_true',help='Include explicit restored BATCH transfer recovery fixtures')
     p.add_argument('--unclaimed-jobs',action='store_true',help='Exercise recorded Jobs whose Pod never claimed its runtime')
     p.add_argument('--remote-offloads',action='store_true',help='Combine actual reference Remote and Kubernetes offload evidence')
+    p.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
     if args.workflows and not args.vd_tasks: p.error('--workflows requires --vd-tasks')
@@ -262,6 +263,7 @@ def main():
             providers.append(provider);provider.setUp()
             remote_fixtures=seed_remote(pg,targets[5][0],kube,create,namespace,operation,pod_spec,
                 vd_work,attempt,run['id'],runtime,provider,work)
+            remote_fixtures['minioBinary']=args.minio_binary
         passed('real-running-parent-child-containers-backed-up-to-isolated-restores-and-source-database-removed')
 
         extra_vr=str(uuid.uuid4())

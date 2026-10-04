@@ -221,6 +221,24 @@ def main():
         passed('actual outbox update between live verification and commit invalidates the complete row guard')
 
         a = options(); a.output.mkdir(mode=0o700); plan = results.prepare(pg, storage.Storage(a), a)
+        operation = str(uuid.uuid4())
+        pg.sql('INSERT INTO edgeai.task_offload(id,task_id,run_id,source_attempt_id,idempotency_key,request_digest,namespace,'
+               'state,drain_deadline,start_timeout_seconds,remote_provider_key,remote_configuration_digest,remote_source_mode,created_at,updated_at) '
+               'SELECT ' + literal(operation) + '::uuid,r.task_id,r.run_id,r.attempt_id,gen_random_uuid(),'
+               + literal('sha256:' + '1' * 64) + ",r.namespace,'DRAINING',now()+interval '1 minute',60,"
+               'p.remote_provider_key,p.remote_configuration_digest,p.remote_source_mode,now(),now() '
+               'FROM edgeai.runtime_instance r JOIN edgeai.task_attempt p ON p.id=r.attempt_id WHERE p.id='
+               + literal(bodies[0]['identity']['attemptId']) + '::uuid', db)
+        refuse_prepared(a, plan)
+        for state in ('DRAINING', 'CANCELLING'):
+            pg.sql('UPDATE edgeai.task_offload SET state=' + literal(state) + ' WHERE id=' + literal(operation) + '::uuid', db)
+            before = fingerprints(db)
+            assert cli(options(), 2)['databaseModified'] is False and fingerprints(db) == before
+        pg.sql('DELETE FROM edgeai.task_offload WHERE id=' + literal(operation) + '::uuid', db)
+        assert fingerprints(db) == pristine
+        passed('actual transfer inserted after verification invalidates the transaction guard and active transfer states block result recovery')
+
+        a = options(); a.output.mkdir(mode=0o700); plan = results.prepare(pg, storage.Storage(a), a)
         pg.sql('COMMENT ON DATABASE ' + identifier(db) + " IS 'owned-wrong-marker'", db)
         refuse_prepared(a, plan)
         pg.sql('COMMENT ON DATABASE ' + identifier(db) + ' IS ' + literal(plan['marker']), db)

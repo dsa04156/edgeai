@@ -4,6 +4,7 @@ from postgres_backup import Blocked
 QUERY = """
 SELECT coalesce(jsonb_agg(jsonb_build_object(
  'operation',to_jsonb(o),'task',to_jsonb(t),'source',to_jsonb(s),'target',to_jsonb(a),
+ 'runState',(SELECT state FROM edgeai.workflow_run WHERE id=t.run_id),
  'latestEpoch',(SELECT max(epoch) FROM edgeai.task_attempt WHERE task_id=t.id),
  'runtimes',(SELECT coalesce(jsonb_agg(to_jsonb(r)),'[]'::jsonb) FROM edgeai.runtime_instance r WHERE r.task_id=t.id),
  'hasResult',EXISTS(SELECT FROM edgeai.task_result WHERE task_id=t.id),
@@ -22,7 +23,7 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
         op, task, source, target = (row[k] for k in ('operation','task','source','target'))
         runtimes = {r['attempt_id']:r for r in row['runtimes']}
         required = [source] + ([target] if target else [])
-        reason = None
+        reason,remote_failure = None,None
         if op['namespace'] != namespace:
             reason='OUTSIDE_SELECTED_NAMESPACE'
         elif row['hasStream'] or row['hasMembers']:
@@ -51,8 +52,16 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
                     any(target['remote_'+key]!=op['remote_'+key] for key in ('provider_key','configuration_digest','source_mode'))):
                 raise Blocked('Offload target differs from its frozen placement')
             if remote_target and op['state']=='STARTING' and task['state'] in ('READY','RUNNING'):
-                outcome=(remote_outcomes or {}).get(runtimes[target['id']]['id'])
-                if outcome in ('SUCCEEDED','FAILED'):
+                outcome=(remote_outcomes or {}).get(runtimes[target['id']]['id'],{})
+                if outcome.get('state')=='FAILED':
+                    if (task['state']!='RUNNING' or row['runState']!='RUNNING' or target['state'] not in ('DISPATCHING','RUNNING') or
+                            task['cancellation_reason'] is not None or runtimes[target['id']]['failure_reason'] is not None):
+                        raise Blocked('Remote target failure contradicts the recorded active work')
+                    remote_failure={'LEASE_EXPIRED':'RUNTIME_TIMEOUT','PROVIDER_RESTART':'RUNTIME_LOST'}.get(
+                        outcome['failureReason'],outcome['failureReason'])
+                    if remote_failure not in ('RUNTIME_TIMEOUT','RUNTIME_LOST','WORKLOAD_FAILED','INPUT_INVALID','OUTPUT_INVALID'):
+                        raise Blocked('Unsupported Remote target failure')
+                elif outcome.get('state')=='SUCCEEDED':
                     unresolved.append({'operationId':op['id'],'reason':'REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION'})
                     blocked_runs.add(task['run_id']);continue
         if row['latestEpoch'] != (target or source)['epoch']:
@@ -70,6 +79,8 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
             action='CANCEL_OFFLOAD' if op['state']=='CANCELLING' else 'FAIL_OFFLOAD'
         elif op['state']=='DRAINING' and task['state']=='OFFLOADING':
             action='CHECK_OFFLOAD_DRAIN'
+        elif remote_failure is not None:
+            action='FAIL_REMOTE_OFFLOAD'
         elif op['state']=='STARTING' and task['state'] in ('READY','RUNNING') and target['state'] in ('QUEUED','DISPATCHING'):
             action='CHECK_OFFLOAD_START'
         else:
@@ -77,6 +88,6 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
             blocked_runs.add(task['run_id']); continue
         current=target or source
         entries.append({'runtimeId':runtimes[current['id']]['id'],'attemptId':current['id'],
-            'taskId':task['id'],'runId':task['run_id'],'action':action,'reason':None,'operationId':op['id']})
+            'taskId':task['id'],'runId':task['run_id'],'action':action,'reason':remote_failure,'operationId':op['id']})
     # Do not partially resolve a Run whose other transfers still lack producer authority.
     return [e for e in entries if e['runId'] not in blocked_runs], unresolved

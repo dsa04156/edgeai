@@ -15,7 +15,7 @@ from recovery_remote_results import TABLES as RESULT_TABLES, CONTEXT_QUERY, reti
 from recovery_remote_storage import private_json
 from recovery_workflow_failures import transaction_sql as workflow_transaction
 
-TABLES = (*RESULT_TABLES, 'task_offload', 'task_offload_member')
+TABLES = RESULT_TABLES
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
     "encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text)"

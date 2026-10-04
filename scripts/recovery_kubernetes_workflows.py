@@ -38,7 +38,7 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
 ) ORDER BY r.id),'[]'::jsonb)
 FROM edgeai.runtime_instance r JOIN edgeai.task_attempt a ON a.id=r.attempt_id
 JOIN edgeai.task t ON t.id=r.task_id JOIN edgeai.workflow_run w ON w.id=t.run_id
-WHERE r.runtime_kind IN ('KUBERNETES','VD')
+WHERE r.runtime_kind IN ('KUBERNETES','VD','REMOTE')
 """
 CATALOG_SQL = ("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SELECT jsonb_build_object("
     "'database',current_database(),'oid',(SELECT oid::text FROM pg_database WHERE datname=current_database()),"

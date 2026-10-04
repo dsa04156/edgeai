@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0086 실제 Remote target 실패를 원래 재시도 정책과 같은 transaction으로 조정했다.
+STARTING 성공의 별도 Result 우회를 실제 S3로 재현 후 수정했다. 혼합69개
+134212Z-7fca0d0d·전환 경쟁 포함 Result15개134221Z-9f81f337·실패15개134221Z-e1e9e102 PASS.
+원복/응답 유실·변경0·원래 예산/37테이블·소유 정리를 확인했다.
+[근거](docs/evidence/m9-recovery-remote-offload-outcomes.md). kind69개/검증 이미지의 MinIO
+추출을 연결했다. 새 CI/배포·시작 허가 journal·STREAM/group·종합 활성화와 전체 목표는 남는다.
+
 ADR0085 혼합 Remote 전환 복구64개132134Z-7df3eacf PASS. 복원DB6/부모자식5쌍·Remote
 실제할당4/실행2종료, 양방향기한만료2·취소1·성공1보존, 신원/접속거절·22테이블경쟁/
 원복/응답유실/변경0·소유정리를 검증했다. Remote 결과14개132150Z-a211a1f9/실패15개

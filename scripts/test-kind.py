@@ -266,6 +266,7 @@ def main():
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-kubernetes-retire',
                 'bash', 'scripts/test-recovery-kubernetes-retire.sh', '--context', context, '--transport', 'compose',
                 '--vd-tasks', '--workflows', '--offloads', '--unclaimed-jobs', '--remote-offloads',
+                '--minio-binary', '.tools/minio-recovery-tested',
                 '--runner-image', images['runner'], '--runner-source', source_revision,
                 '--report', '.tools/kind-recovery-kubernetes-retire.json'], env=env, timeout=600)
             if result.returncode:

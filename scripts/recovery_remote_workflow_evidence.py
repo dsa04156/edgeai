@@ -35,7 +35,8 @@ def observe(catalog, args):
                 context['attempt']['mode']!='REMOTE' or any(context['attempt']['remote_'+key]!=row[key]
                     for key in ('provider_key','configuration_digest','source_mode'))):
             raise Blocked('Retire every Remote runtime against its exact provider observation before workflow reconciliation')
-        if context['namespace']==args.namespace:outcomes[context['runtimeId']]=observed['state']
+        if context['namespace']==args.namespace:
+            outcomes[context['runtimeId']]={'state':observed['state'],'failureReason':observed['failureReason']}
     if private_json(path)[1]!=digest:raise Blocked('Remote connection changed during observation')
     evidence={'connectionSha256':digest,'providerId':connection.provider_id,'recoveryId':args.recovery_id,
         'providerInventorySha256':inventory['providerInventorySha256'],'binding':inventory['selectedTarget'],

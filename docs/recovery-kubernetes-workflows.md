@@ -57,10 +57,15 @@ Remote/STREAM/group은 여전히 별도다. [ADR0083](adr/0083-recovery-batch-of
 이 명령은 제공자를 실제로 다시 조회하며 접속 불가/다른 binding/미완료 retirement이면
 진행하지 않는다. `remoteEvidence`에 확인한 binding·provider 상태·runtime ID가 남으며
 bearer와 작업 본문은 포함하지 않는다. 현재 한 DB의 단일 SYNTHETIC 참조 제공자 계약을
-지원한다. 아직 활성 Task의 Remote target이 SUCCEEDED/FAILED이면 시작 기한으로
-덮어쓰지 않고 `REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION`에 남긴다.
+지원한다. 활성 Task의 Remote target이 실제 FAILED이면 전환을 TARGET_FAILED로 닫고
+기록된 실패 사유에 원래 재시도 횟수·첫 시도 기준 기한·backoff를 적용한다. 실제 실패는
+시작 기한 만료보다 우선한다. `attemptsFailed`/`retriesScheduled`와 `offloadsFailed`는
+같은 transaction의 실제 변경 수다. 재실행은 새 예약이나 기한을 만들지 않는다.
+SUCCEEDED인데 전환이 STARTING이면 시작 허가가 누락된 상태이므로
+`REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION`에 남긴다. 파일 회수·S3 등록은
+가능하지만 별도 Result 복구도 진행 중인 전환이 있는 Run을 성공으로 확정하지 않는다.
 [ADR0085](adr/0085-recovery-mixed-remote-offloads.md),
-[실제64개 검증](evidence/m9-recovery-mixed-remote-offloads.md)을 참고한다.
+[ADR0086](adr/0086-recovery-remote-offload-outcomes.md)을 참고한다.
 
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.

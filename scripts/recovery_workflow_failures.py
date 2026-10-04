@@ -4,7 +4,7 @@ from recovery_remote_inventory import canonical
 
 
 def transaction_sql(plan, tables, guard_query, proven_runtimes=None):
-    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START')
+    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START','FAIL_REMOTE_OFFLOAD')
     if any(entry['action'] not in ('CANCEL', 'CHECK_RETRY', 'FINAL_FAILURE', 'FAIL', 'RECONCILE_RUN', *offload_actions) for entry in plan['entries']):
         raise ValueError('Unsupported failure reconciliation action')
     if any(e['action'] in offload_actions for e in plan['entries']) and (proven_runtimes is None or not plan.get('reconcileOffloads')):
@@ -32,6 +32,11 @@ IF ({guard}) IS DISTINCT FROM {before}::jsonb THEN
 FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
  task_id_to_change:=(entry->>'taskId')::uuid;
  run_ids:=array_append(run_ids,(entry->>'runId')::uuid);
+ IF entry->>'action'='FAIL_REMOTE_OFFLOAD' THEN
+  UPDATE edgeai.task_offload SET state='FAILED',failure_reason='TARGET_FAILED',updated_at=transaction_timestamp()
+  WHERE id=(entry->>'operationId')::uuid;
+  offloads_failed:=offloads_failed+1;
+ END IF;
  IF entry->>'action' IN ('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
   SELECT * INTO STRICT operation FROM edgeai.task_offload WHERE id=(entry->>'operationId')::uuid;
   IF entry->>'action'='CANCEL_OFFLOAD' THEN

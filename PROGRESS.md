@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0086 혼합69개134212Z-7fca0d0d·Result15개134221Z-9f81f337·실패15개134221Z-e1e9e102
+PASS. 실제 Remote target 실패2/재시도1·원래 예산·원복/응답 유실/변경0을 확인했다.
+실제 S3 성공이 STARTING 전환을 우회하는 문제를 재현 후 차단하고 전환 삽입 경쟁도 검증했다.
+소유 namespace/DB/API/Remote/MinIO 정리 완료. [근거](docs/evidence/m9-recovery-remote-offload-outcomes.md).
+kind69개 및 검증 이미지 MinIO 추출 연결. 새 CI/배포·시작 권한 journal·STREAM/group·
+종합 복구 활성화·전체 목표는 미완료다.
+
 ADR0085 Kubernetes/참조Remote 혼합64개132134Z-7df3eacf PASS. 복원DB6·부모자식5쌍,
 실제Remote할당4/실행2종료·양방향시작기한만료2/취소1·성공1보존·22테이블경쟁/원복/
 응답유실/변경0·소유정리. Remote 결과14개132150Z-a211a1f9/실패15개132149Z-1ac3b571

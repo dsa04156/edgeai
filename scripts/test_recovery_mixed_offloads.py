@@ -40,7 +40,7 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
             literal(json.dumps(changes))+'::jsonb)).* FROM edgeai.'+table+' t WHERE id='+q(origin),db)
     def allocate(row,epoch,mode):
         allocation=str(uuid.uuid4());row['allocation']=allocation
-        _,_,raw,_=provider.work(delay=60000 if mode=='running' else 0)
+        _,_,raw,_=provider.work(delay=60000 if mode=='running' else 0,bad=mode=='failed')
         body=json.loads(raw)
         body['identity']={'allocationId':allocation,'runId':row['run'],'taskId':row['task'],'attemptId':row['attempt'],'epoch':epoch}
         body['expiresAt']=(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()
@@ -59,7 +59,7 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
             deadline=time.monotonic()+5
             while True:
                 value=provider.rpc(path,headers=headers,credential=provider.token)[1]
-                if value['state']==('RUNNING' if mode=='running' else 'SUCCEEDED'):break
+                if value['state']==('RUNNING' if mode=='running' else 'FAILED' if mode=='failed' else 'SUCCEEDED'):break
                 assert time.monotonic()<deadline;time.sleep(.02)
         return row
     def remote_attempt(row,epoch,cause):
@@ -116,6 +116,29 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
         ','.join(q(v) for v in (op,source['task'],source['run'],source['attempt'],target['attempt'],node_id,str(uuid.uuid4())))+','+
         literal('sha256:'+'f'*64)+','+literal(namespace)+",'STARTING',now()-interval '2 minutes',60,now()-interval '1 second',now()-interval '3 minutes',now())",db)
     fixtures['to-node']={'source':source,'target':target,'operation':op}
+    failure_fixtures={}
+    template=vd_work['claimed']
+    template_runtime=json.loads(pg.sql('SELECT to_jsonb(r) FROM edgeai.runtime_instance r WHERE id='+q(template['runtime']),db))
+    allocation=json.loads(pg.sql('SELECT to_jsonb(a) FROM edgeai.vd_task_allocation a WHERE runtime_id='+q(template['runtime']),db))
+    for name,budget in [('final',1),('retry',3)]:
+        source={k:str(uuid.uuid4()) for k in ('runtime','attempt','task','run')}
+        clone('workflow_run',template['run'],{'id':source['run'],'state':'RUNNING','idempotency_key':str(uuid.uuid4()),
+            'retry_max_attempts':budget,'retry_backoff_seconds':7,'retry_max_elapsed_seconds':3600,'retry_on':['WORKLOAD_FAILED']})
+        clone('task',template['task'],{'id':source['task'],'run_id':source['run'],'state':'RUNNING','cancellation_reason':None})
+        clone('task_attempt',template['attempt'],{'id':source['attempt'],'task_id':source['task'],'state':'DISPATCHING'})
+        pg.sql('INSERT INTO edgeai.runtime_instance(id,attempt_id,task_id,run_id,epoch,namespace,claim_nonce,desired_state,observed_state,expires_at,vd_id,created_at,updated_at) VALUES ('+
+            ','.join(q(source[k]) for k in ('runtime','attempt','task','run'))+',1,'+literal(namespace)+','+q(str(uuid.uuid4()))+
+            ",'RUNNING','PENDING',now()+interval '1 hour',"+q(template_runtime['vd_id'])+',now(),now()); '+
+            'INSERT INTO edgeai.vd_task_allocation(id,runtime_id,vd_id,vd_runtime_id,generation,session_id,pod_uid,slot,assigned_sequence,assigned_at) VALUES ('+
+            ','.join(q(v) for v in (str(uuid.uuid4()),source['runtime'],allocation['vd_id'],allocation['vd_runtime_id']))+','+str(allocation['generation'])+','+
+            q(allocation['session_id'])+','+q(allocation['pod_uid'])+',4,0,now()); '+
+            "UPDATE edgeai.runtime_instance SET desired_state='STOPPED',observed_state='TERMINATED',producer_pod_uid="+q(template_runtime['producer_pod_uid'])+
+            ',node_uid='+q(template_runtime['node_uid'])+',node_name='+literal(template_runtime['node_name'])+' WHERE id='+q(source['runtime'])+
+            "; UPDATE edgeai.vd_task_allocation SET closed_at=now(),close_reason='PROCESS_EXIT',completion_sequence=1,exit_code=0 WHERE runtime_id="+q(source['runtime'])+
+            "; UPDATE edgeai.task_attempt SET state='OFFLOADED' WHERE id="+q(source['attempt']),db)
+        target={**source,'runtime':str(uuid.uuid4()),'attempt':str(uuid.uuid4())}
+        remote_attempt(target,2,'OFFLOAD');allocate(target,2,'failed')
+        failure_fixtures[name]={'source':source,'target':target,'operation':str(uuid.uuid4())}
     deadline=time.monotonic()+150
     while time.monotonic()<deadline:
         pods=[p for p in kube.items(namespace,'Pod')[0] if any(o.get('uid')==job['metadata']['uid'] for o in p['metadata'].get('ownerReferences',[]))]
@@ -128,8 +151,8 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
     assert provider.rpc()[1]['activeWorkers']==2
     fenced=provider.cli(binding)
     assert fenced['workersStopped'] and fenced['controllerRejected']
-    assert fenced['observed']['states']=={'ALLOCATED':0,'RUNNING':0,'CANCELLING':0,'SUCCEEDED':1,'FAILED':0,'CANCELLED':3}
-    return {'provider':provider,'remote':remote,'connection':connection,'fixtures':fixtures}
+    assert fenced['observed']['states']=={'ALLOCATED':0,'RUNNING':0,'CANCELLING':0,'SUCCEEDED':1,'FAILED':2,'CANCELLED':3}
+    return {'provider':provider,'remote':remote,'connection':connection,'fixtures':fixtures,'failureFixtures':failure_fixtures,'bindingDigest':digest}
 
 
 def check(pg,db,receipt,options,retire_cli,fingerprints,passed,work,fixture,report):
@@ -177,7 +200,7 @@ def check(pg,db,receipt,options,retire_cli,fingerprints,passed,work,fixture,repo
     expected={fixtures['to-node']['operation']:'CHECK_OFFLOAD_START',fixtures['to-remote']['operation']:'CHECK_OFFLOAD_START',
         fixtures['cancel-remote']['operation']:'CANCEL_OFFLOAD'}
     assert {e['operationId']:e['action'] for e in plan['entries'] if e.get('operationId')}==expected
-    assert len(plan['remoteEvidence']['provenRuntimes'])==4
+    assert len(plan['remoteEvidence']['provenRuntimes'])==6
     passed('fresh-reference-evidence-proves-both-transfer-directions-and-preserves-successful-target-output-for-separate-reconciliation')
 
     original_call=pg.call
@@ -240,5 +263,7 @@ def check(pg,db,receipt,options,retire_cli,fingerprints,passed,work,fixture,repo
     assert row('runtime_instance',pending['target']['runtime'])==old_pending
     assert all(row('runtime_instance',fixtures['to-node']['target']['runtime'])[k] is None for k in ('producer_pod_uid','node_uid','node_name'))
     passed('actual-mixed-commit-reply-loss-replays-with-zero-changes-and-preserves-37-tables-source-history-and-successful-remote-work')
-    report.update(mixedRemoteOffloadsVerified=True,mixedRemoteAllocations=4,mixedRemoteStartTimeouts=2,
+    report.update(mixedRemoteOffloadsVerified=True,mixedRemoteAllocations=6,mixedRemoteStartTimeouts=2,
         mixedRemoteCancellations=1,mixedRemoteSuccessesPending=1,mixedRemotePreservedTables=37)
+    from test_recovery_mixed_outcomes import check as check_outcomes
+    check_outcomes(pg,db,receipt,opts,cli,fingerprints,passed,work,fixture,row,report)

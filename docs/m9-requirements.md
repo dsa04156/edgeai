@@ -70,6 +70,10 @@ ADR0082–0084는 기록된 workflow 취소·재시도/전환 기한과 claim �
 [실제64개](evidence/m9-recovery-mixed-remote-offloads.md)에서 양방향 시작 만료/취소,
 성공 결과 보존·접속/신원 거절·경쟁/원복/응답 유실을 검증했다. 전환 이력은 DB fixture이며
 Remote 성공/실패의 종합 결과 조정·STREAM/group/journal·활성화는 남는다.
+ADR0086은 [혼합69개/Result15개/실패15개](evidence/m9-recovery-remote-offload-outcomes.md)로
+실제 Remote 전환 대상 실패에 원래 재시도 예산을 적용하고 원자적 반영/원복을 확인했다.
+STARTING 성공 파일만으로 누락된 시작 권한을 대신하지 않으며 별도 Result 우회와
+검사 뒤 전환 삽입 경쟁도 거절한다. 성공의 시작 권한 복원·STREAM/group/journal·활성화는 남는다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

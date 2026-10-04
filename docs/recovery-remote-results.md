@@ -29,7 +29,10 @@ bash scripts/recovery-remote-results.sh \
 READY/QUEUED까지만 전환하며 자동 실행하지 않는다. 일반 API 기동 격리도 해제하지 않는다.
 
 취소·실패·다음 epoch·다른 복원 DB·달라진 기존 Result·종료되지 않은 runtime·고정 파일 유실은
-거절한다. exit2는 조건 미충족/접속 문제, 다른 nonzero는 검증/DB 오류다. `failure.json`과
+거절한다. 같은 Run에 DRAINING/STARTING/CANCELLING 전환이 있어도 거절한다. 실제 성공
+파일은 원래 기한 안의 시작 허가를 대신하지 않으므로 전환 상태를 임의로 완료 처리하지 않는다.
+검사 뒤 전환이 추가되는 경쟁도 전체 행 guard로 거절한다. [ADR0086](adr/0086-recovery-remote-offload-outcomes.md).
+exit2는 조건 미충족/접속 문제, 다른 nonzero는 검증/DB 오류다. `failure.json`과
 `intent.json`을 개인 경로에 보존한다. `databaseModified:null`이면 쓰기가 반영됐을 수 있다.
 같은 입력을 새 출력 경로로 재실행해 실제 상태를 확인하며 파일·결과를 임의로 지우지 않는다.
 
