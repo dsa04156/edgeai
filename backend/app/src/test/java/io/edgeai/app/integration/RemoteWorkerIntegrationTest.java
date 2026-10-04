@@ -111,6 +111,12 @@ class RemoteWorkerIntegrationTest {
     RemoteWorker worker(){return new RemoteWorker(runtimes,lifecycle,commits,artifacts,provider,settings,clock);}
     void until(BooleanSupplier done) throws Exception {long end=System.nanoTime()+Duration.ofSeconds(15).toNanos();while(!done.getAsBoolean() && System.nanoTime()<end){worker().commands();worker().reconcile();for(var task:lifecycle.dueRetries(SCOPE))lifecycle.retryTask(task);for(var op:offloads.active(SCOPE))offloads.advance(op);Thread.sleep(30);}assertThat(done.getAsBoolean()).isTrue();}
     RemoteStatus providerStatus(UUID attempt){var d=lifecycle.remoteDispatch(attempt);return provider.gateway(d.allocation().target()).inspect(d.work().identity()).orElseThrow();}
+    Map<?,?> startReceipt(UUID allocation) throws Exception {
+        var query="import json,sqlite3,sys;db=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True);r=db.execute('SELECT authority,accepted_at FROM start_receipts WHERE allocation_id=?',(sys.argv[2],)).fetchone();print(json.dumps(None if r is None else {'authority':json.loads(r[0]),'acceptedAt':r[1]}));db.close()";
+        var process=new ProcessBuilder("python3","-c",query,root.resolve("provider/allocations.sqlite").toString(),allocation.toString()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        assertThat(process.waitFor(5,TimeUnit.SECONDS)).isTrue();assertThat(process.exitValue()).isZero();
+        return (Map<?,?>)JSON.decode(new String(process.getInputStream().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
+    }
     void finishKubernetesCreate(UUID runtime){
         // No Kubernetes gateway is invoked in this fixture. Drain only this class's synthetic K8s commands.
         boolean found=false;for(int i=0;i<100;i++){var next=runtimes.leaseCommand(SCOPE,UUID.randomUUID(),clock.instant(),Duration.ofSeconds(30));if(next.isEmpty())break;var leased=next.get();if(leased.runtimeId().equals(runtime) && leased.kind().equals("CREATE"))found=true;assertThat(runtimes.finishCommand(leased.id(),leased.leaseOwner(),clock.instant())).isTrue();}assertThat(found).isTrue();
@@ -168,6 +174,10 @@ class RemoteWorkerIntegrationTest {
         for(UUID task:List.of(f.task(),f.child())) {
             var result=runtimes.result(task).orElseThrow();assertThat(result.producerPodUid()).isNull();assertThat(result.remoteAllocationId()).isNotNull();
             var a=executions.taskDetail(task).attempts().getFirst();assertThat(a.remoteTarget()).isEqualTo(binding);
+            var receipt=startReceipt(result.remoteAllocationId());var authority=(Map<?,?>)receipt.get("authority");
+            assertThat(authority.get("offloadId")).isNull();assertThat(authority.get("startDeadline")).isNull();
+            assertThat(authority.get("requestDigest")).isEqualTo(remotes.find(result.remoteAllocationId()).orElseThrow().requestDigest());
+            assertThat(((Map<?,?>)authority.get("identity")).get("attemptId")).isEqualTo(a.id().toString());
             Path file=root.resolve(UUID.randomUUID()+".json");artifacts.downloadFile(result.outputs().getFirst().artifact(),file);assertThat(Files.readString(file)).contains("8.0");
             var view=call("GET","/api/v1/tasks/"+task+"/results",null,null,200);assertThat(JSON.canonical(view)).contains("SYNTHETIC",result.remoteAllocationId().toString());
         }
@@ -259,6 +269,27 @@ class RemoteWorkerIntegrationTest {
         assertThat(offloads.find(id).remoteTarget()).isEqualTo(provider.select("reference"));offloads.advance(id);assertThat(offloads.find(id).state()).isEqualTo("DRAINING");
         lifecycle.confirmStopped(f.attempt());until(()->executions.detail(f.run()).run().state().equals("SUCCEEDED"));assertThat(offloads.find(id).state()).isEqualTo("SUCCEEDED");
         assertThat(runtimes.result(f.task()).orElseThrow().producerPodUid()).isNull();assertThat(executions.taskDetail(f.task()).attempts().getFirst().cause()).isEqualTo("OFFLOAD");
+        var receipt=startReceipt(runtimes.result(f.task()).orElseThrow().remoteAllocationId());var authority=(Map<?,?>)receipt.get("authority");
+        assertThat(authority.get("offloadId")).isEqualTo(id.toString());
+        assertThat(Instant.parse((String)authority.get("startDeadline"))).isEqualTo(offloads.find(id).startDeadline());
+        assertThat(Instant.parse((String)receipt.get("acceptedAt"))).isBefore(offloads.find(id).startDeadline());
+    }
+    @Test void transferStartAuthorityExpiresBeforeActualProviderCanLaunch() throws Exception {
+        var f=create(false,false,0,false);var r=runtimes.byAttempt(f.attempt()).orElseThrow();var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),"fixture-node");
+        lifecycle.submitted(f.attempt(),pod.jobUid());lifecycle.claim(f.attempt(),1,pod);finishKubernetesCreate(r.id());
+        var body=JSON.canonical(Map.of("sourceAttemptId",f.attempt().toString(),"targetProviderKey","reference","drainTimeoutSeconds",30,"startTimeoutSeconds",2));
+        UUID id=UUID.fromString((String)call("POST","/api/v1/tasks/"+f.task()+"/offload",body,UUID.randomUUID().toString(),202).get("id"));
+        lifecycle.confirmStopped(f.attempt());offloads.advance(id);
+        var operation=offloads.find(id);assertThat(operation.state()).isEqualTo("STARTING");
+        var dispatch=lifecycle.remoteDispatch(operation.targetAttemptId());var gateway=provider.gateway(dispatch.allocation().target());
+        lifecycle.observeRemote(gateway.reserve(dispatch.work()));var authority=lifecycle.remoteStart(operation.targetAttemptId());
+        assertThat(authority.offloadId()).isEqualTo(id);assertThat(authority.startDeadline()).isEqualTo(operation.startDeadline());
+        Thread.sleep(Math.max(0,Duration.between(clock.instant(),operation.startDeadline()).toMillis())+30);
+        assertThatThrownBy(()->lifecycle.remoteStart(operation.targetAttemptId())).isInstanceOf(io.edgeai.app.exception.ControlPlaneException.class);
+        assertThatThrownBy(()->gateway.start(authority)).isInstanceOf(RemoteGatewayException.class);
+        assertThat(startReceipt(dispatch.allocation().id())).isNull();assertThat(gateway.inspect(authority.identity()).orElseThrow().state()).isEqualTo(RemoteStatus.State.ALLOCATED);
+        call("POST","/api/v1/workflow-runs/"+f.run()+"/cancel","{}",null,200);
+        until(()->runtimes.byAttempt(operation.targetAttemptId()).orElseThrow().observedState().equals("TERMINATED"));
     }
     @Test void publicTransferFromActualRemoteWaitsForCancellationThenCreatesNodeAttempt() throws Exception {
         var f=create(true,false,5000,false);worker().commands();assertThat(providerStatus(f.attempt()).state()).isEqualTo(RemoteStatus.State.RUNNING);

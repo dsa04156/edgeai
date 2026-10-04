@@ -7,6 +7,12 @@ SYNTHETIC 계산용이며 실제2세부 API·OCI 실행·실장비를 대신하�
 제공자 전체의 복구 차단·계산 종료 확인은 별도 운영 자격을 쓰는
 [참조 Remote 복구 절차](recovery-remote-fence.md)를 따른다. 기본 비활성이며 일반 API 자격으로 실행하지 않는다.
 
+API worker는 계산 시작 전에 원래 작업·lease와 전환의 start deadline을 담은 권한을 보낸다.
+참조 제공자는 실제 입력 검증 뒤 이를 접수한 시각을 SQLite에 먼저 기록한다. 응답 유실과
+제공자 재시작 뒤에도 같은 기록을 유지하며 늦은 시작과 다른 권한의 재전송을 거절한다.
+새 worker를 사용하기 전에 제공자를 시작 권한 본문을 지원하는 버전으로 올린다. 지원하지 않는
+제공자에 본문 없는 요청으로 자동 재시도하지 않는다. [ADR0099](adr/0099-remote-start-authority-receipt.md).
+
 ## 환경 설정
 
 기존 PostgreSQL, 실행 기능, 영속 Runner 서명 키와 versioned MinIO 설정이 먼저 필요하다.

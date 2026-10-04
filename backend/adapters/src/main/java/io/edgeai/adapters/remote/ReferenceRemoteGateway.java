@@ -65,6 +65,13 @@ public final class ReferenceRemoteGateway implements RemoteGateway {
         }catch(IOException e){throw new RemoteGatewayException(INVALID_INPUT);}
     }
     @Override public RemoteStatus start(RemoteIdentity identity){return metadata(request(identity,"/start").POST(HttpRequest.BodyPublishers.noBody()),identity,false).orElseThrow();}
+    @Override public RemoteStatus start(RemoteStart authority){
+        var body=new TreeMap<String,Object>();body.put("apiVersion","edgeai.remote.start/v1");body.put("identity",identity(authority.identity()));
+        body.put("requestDigest",authority.requestDigest());body.put("expiresAt",authority.expiresAt().toString());
+        body.put("offloadId",authority.offloadId()==null?null:authority.offloadId().toString());body.put("startDeadline",authority.startDeadline()==null?null:authority.startDeadline().toString());
+        return metadata(request(authority.identity(),"/start").header("Content-Type","application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(canonical(body,0))),authority.identity(),false).orElseThrow();
+    }
     @Override public Optional<RemoteStatus> inspect(RemoteIdentity identity){return metadata(request(identity,"").GET(),identity,true);}
     @Override public RemoteStatus cancel(RemoteIdentity identity){return metadata(request(identity,"/cancel").POST(HttpRequest.BodyPublishers.noBody()),identity,false).orElseThrow();}
     @Override public void downloadOutput(RemoteIdentity identity,RemoteFile output,Path destination) {

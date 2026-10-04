@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EdgeAI reference Remote provider contract
-  version: 0.4.0
+  version: 0.5.0
   description: >-
     플랫폼 내부 RemoteGateway를 시험하는 참조 프로토콜입니다. 실제 2세부 API의 정의가 아닙니다.
     할당 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. 복구 API는 별도 운영 자격과
@@ -14,6 +14,28 @@ servers:
 security:
   - providerBearer: []
 paths:
+  /reference/v1/recovery/allocations/{allocationId}/start-receipt:
+    get:
+      operationId: referenceRemoteRecoveryStartReceipt
+      summary: 계산 전에 영속 기록한 원래 시작 허가 조회
+      description: >-
+        별도 운영 자격과 동일 providerId/recoveryId, 전체 제공자 차단 및 실제 스레드 종료를
+        요구합니다. 최초 시작 때 기록한 authority와 acceptedAt을 그대로 반환합니다.
+        본문 없는 이전 프로토콜로 실행한 작업에는 기록을 소급 생성하지 않으며404
+        START_RECEIPT_NOT_RECORDED입니다. 기록은 계산 성공이나 복원 DB의 전환 완료를
+        대신하지 않습니다. 복원할 때 원래 전환·작업 신원·기한·취소·출력과 별도로 대조해야 합니다.
+      security: [{recoveryBearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/AllocationId'
+        - {name: providerId, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: recoveryId, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 최초 시작 접수의 불변 기록
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StartReceipt'}
+        default: {$ref: '#/components/responses/Error'}
   /reference/v1/recovery/allocations/{allocationId}/outputs/{port}:
     get:
       operationId: referenceRemoteRecoveryDownloadOutput
@@ -179,10 +201,21 @@ paths:
       operationId: referenceRemoteStart
       summary: 모든 고정 입력을 확인한 후 계산 시작
       description: >-
-        본문 없이 요청합니다. start 동시 호출·재전송은 동일 계산을 한 번만 시작합니다.
+        플랫폼 worker는 StartAuthority JSON을 보냅니다. 전체 identity·예약 digest·원래 lease와
+        선택적 offloadId/startDeadline을 대조합니다. 모든 입력 검증 뒤 실제 접수 시각이
+        lease와 시작 기한보다 앞서야 합니다. authority·acceptedAt·RUNNING 전이를 같은
+        transaction으로 영속 저장한 다음 계산 스레드를 시작합니다. 동시 호출·동일 권한 재전송은
+        동일 계산을 한 번만 시작하며 원래 기록을 바꾸지 않습니다. 다른 권한은409입니다.
+        이전 본문 없는 요청은 호환용이며 시작 기록을 만들지 않습니다. 이미 실행한 legacy
+        작업에 권한을 뒤늦게 붙이거나 기록된 권한을 생략하는 요청은409입니다.
         입력 누락·손상·마감 초과·취소는409입니다. 같은 RUNNING/SUCCEEDED 재전송은 현재 상태입니다.
         참조 계산은 features·weights 내적+bias이며 고정 input 파일이 있으면 그 features를 사용합니다.
         simulationDelayMillis는0..60000의 시험 전용 값입니다. 성능 측정값으로 사용하지 않습니다.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StartAuthority'}
       responses:
         '200': {$ref: '#/components/responses/Status'}
         default: {$ref: '#/components/responses/Error'}
@@ -291,6 +324,35 @@ components:
             properties:
               code: {type: string, maxLength: 64}
   schemas:
+    StartAuthority:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, identity, requestDigest, expiresAt, offloadId, startDeadline]
+      description: offloadId와 startDeadline은 함께 null이거나 함께 설정합니다. 모든 시각은 UTC입니다.
+      oneOf:
+        - properties:
+            offloadId: {type: 'null'}
+            startDeadline: {type: 'null'}
+        - properties:
+            offloadId: {type: string, format: uuid}
+            startDeadline: {type: string, format: date-time}
+      properties:
+        apiVersion: {const: edgeai.remote.start/v1}
+        identity: {$ref: '#/components/schemas/Identity'}
+        requestDigest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        expiresAt: {type: string, format: date-time}
+        offloadId: {type: [string, 'null'], format: uuid}
+        startDeadline: {type: [string, 'null'], format: date-time}
+    StartReceipt:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, providerId, recoveryId, authority, acceptedAt]
+      properties:
+        apiVersion: {const: edgeai.remote.start-receipt/v1}
+        providerId: {type: string, format: uuid}
+        recoveryId: {type: string, format: uuid}
+        authority: {$ref: '#/components/schemas/StartAuthority'}
+        acceptedAt: {type: string, format: date-time}
     RecoveryInventory:
       type: object
       additionalProperties: false

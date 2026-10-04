@@ -192,6 +192,19 @@ public class RuntimeLifecycleService {
         return new RemoteDispatch(r,allocation,work,inputs(c,spec(c)));
     }
     @Transactional
+    public RemoteStart remoteStart(UUID attemptId) {
+        var c=lock(attemptId);var r=runtime(attemptId);active(c,r,c.attempt().epoch());
+        if(!r.remote())throw fenced();
+        var allocation=remotes.find(r.remoteAllocationId()).orElseThrow();
+        var transfers=offloads.forTask(c.task().id()).stream().filter(o->attemptId.equals(o.targetAttemptId()) ||
+            o.members().stream().anyMatch(m->attemptId.equals(m.targetAttemptId()))).toList();
+        if(transfers.size()>1)throw fenced();
+        var transfer=transfers.isEmpty()?null:transfers.getFirst();
+        if(transfer!=null && (transfer.startDeadline()==null || !Set.of("STARTING","SUCCEEDED").contains(transfer.state())))throw fenced();
+        return new RemoteStart(remoteIdentity(r),allocation.requestDigest(),r.expiresAt(),
+            transfer==null?null:transfer.id(),transfer==null?null:transfer.startDeadline());
+    }
+    @Transactional
     public RuntimeInstance observeRemote(RemoteStatus status) {
         var allocation=remotes.find(status.identity().allocationId()).orElseThrow(RuntimeLifecycleService::fenced);
         var initial=runtimes.runtime(allocation.runtimeId()).orElseThrow();var c=lock(initial.attemptId());var r=runtime(initial.attemptId());

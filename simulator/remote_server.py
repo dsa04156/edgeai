@@ -24,6 +24,7 @@ FILE_LIMIT = 1048576  # Explicit reference-provider capability, not the platform
 TERMINAL = {'SUCCEEDED', 'FAILED', 'CANCELLED'}
 PORT = re.compile(r'[a-z][a-z0-9]*([._-][a-z0-9]+)*\Z')
 RECOVERY_OUTPUT = re.compile(r'/reference/v1/recovery/allocations/([a-f0-9-]{36})/outputs/([a-z0-9._-]+)\Z')
+RECOVERY_START = re.compile(r'/reference/v1/recovery/allocations/([a-f0-9-]{36})/start-receipt\Z')
 
 
 def recovery_path(path):
@@ -111,6 +112,9 @@ class Provider:
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.execute('CREATE TABLE IF NOT EXISTS allocations (id TEXT PRIMARY KEY, identity TEXT NOT NULL, digest TEXT, work TEXT, state TEXT NOT NULL, revision INTEGER NOT NULL, failure TEXT, outputs TEXT NOT NULL, executions INTEGER NOT NULL DEFAULT 0)')
         self.db.execute('CREATE TABLE IF NOT EXISTS recovery (singleton INTEGER PRIMARY KEY CHECK(singleton=1), provider_id TEXT NOT NULL, recovery_id TEXT)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS start_receipts (allocation_id TEXT PRIMARY KEY, authority TEXT NOT NULL, accepted_at TEXT NOT NULL)')
+        self.db.execute("CREATE TRIGGER IF NOT EXISTS start_receipts_immutable_update BEFORE UPDATE ON start_receipts BEGIN SELECT RAISE(ABORT,'Immutable start receipt'); END")
+        self.db.execute("CREATE TRIGGER IF NOT EXISTS start_receipts_immutable_delete BEFORE DELETE ON start_receipts BEGIN SELECT RAISE(ABORT,'Immutable start receipt'); END")
         self.db.execute('INSERT OR IGNORE INTO recovery VALUES (1,?,NULL)', (str(uuid.uuid4()),))
         self.db.execute("UPDATE allocations SET state='FAILED',failure='PROVIDER_RESTART',revision=revision+1,outputs='[]' WHERE state='RUNNING'")
         self.db.execute("UPDATE allocations SET state='CANCELLED',failure=NULL,revision=revision+1,outputs='[]' WHERE state='CANCELLING'")
@@ -351,23 +355,72 @@ class Provider:
         finally:
             temporary.unlink(missing_ok=True)
 
-    def start(self, expected):
+    def recovery_start_receipt(self, allocation_id, query):
+        if set(query) != {'providerId', 'recoveryId'} or any(len(v) != 1 for v in query.values()):
+            raise Rejected(400, 'INVALID_REQUEST')
+        try:
+            if any(str(uuid.UUID(v)) != v for v in (allocation_id, query['providerId'][0], query['recoveryId'][0])):
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise Rejected(400, 'INVALID_REQUEST') from None
+        with self.transaction():
+            status = self.recovery_status()
+            if status['providerId'] != query['providerId'][0] or status['recoveryId'] != query['recoveryId'][0]:
+                raise Rejected(409, 'RECOVERY_IDENTITY_CONFLICT')
+            if not status['quiescent']:
+                raise Rejected(409, 'RECOVERY_NOT_QUIESCENT')
+            row = self.db.execute('SELECT authority,accepted_at FROM start_receipts WHERE allocation_id=?', (allocation_id,)).fetchone()
+            if row is None:
+                raise Rejected(404, 'START_RECEIPT_NOT_RECORDED')
+            return {'apiVersion': 'edgeai.remote.start-receipt/v1', 'providerId': status['providerId'],
+                    'recoveryId': status['recoveryId'], 'authority': json.loads(row[0]), 'acceptedAt': row[1]}
+
+    def start(self, expected, authority=None):
         with self.transaction():
             self.require_active()
             row = self.expire(expected)
             if row is None:
                 raise Rejected(404, 'NOT_FOUND')
+            work = json.loads(row[2]) if row[2] else None
+            recorded = self.db.execute('SELECT authority FROM start_receipts WHERE allocation_id=?', (expected['allocationId'],)).fetchone()
+            if authority is not None:
+                object_fields(authority, ['apiVersion', 'identity', 'requestDigest', 'expiresAt', 'offloadId', 'startDeadline'])
+                identity(authority['identity'])
+                if (authority['apiVersion'] != 'edgeai.remote.start/v1' or authority['identity'] != expected or
+                        authority['requestDigest'] != row[1] or work is None or instant(authority['expiresAt']) != instant(work['expiresAt'])):
+                    raise Rejected(409, 'START_AUTHORITY_CONFLICT')
+                if (authority['offloadId'] is None) != (authority['startDeadline'] is None):
+                    raise Rejected(400, 'INVALID_REQUEST')
+                if authority['offloadId'] is not None:
+                    try:
+                        if str(uuid.UUID(authority['offloadId'])) != authority['offloadId']:
+                            raise ValueError()
+                    except (ValueError, TypeError, AttributeError):
+                        raise Rejected(400, 'INVALID_REQUEST') from None
+                    instant(authority['startDeadline'])
+                if recorded is not None and json.loads(recorded[0]) != authority:
+                    raise Rejected(409, 'START_AUTHORITY_CONFLICT')
+                if row[3] != 'ALLOCATED' and recorded is None:
+                    raise Rejected(409, 'START_RECEIPT_NOT_RECORDED')
+            elif recorded is not None:
+                raise Rejected(409, 'START_AUTHORITY_REQUIRED')
             if row[3] in {'CANCELLED', 'CANCELLING', 'FAILED'}:
                 raise Rejected(409, 'NOT_ACTIVE')
             if row[3] != 'ALLOCATED':
                 return self.status(expected)
             if self.live_workers() >= 8:
                 raise Rejected(503, 'CAPACITY_UNAVAILABLE')
-            work = json.loads(row[2])
             for f in work['inputs']:
                 path = self.root / expected['allocationId'] / 'inputs' / f['port']
                 if not path.is_file() or path.stat().st_size != f['bytes'] or hashlib.sha256(path.read_bytes()).hexdigest() != f['sha256']:
                     raise Rejected(409, 'INCOMPLETE_INPUTS')
+            if authority is not None:
+                accepted_at = datetime.now(timezone.utc)
+                if (instant(authority['expiresAt']) <= accepted_at.timestamp() or
+                        authority['startDeadline'] is not None and instant(authority['startDeadline']) <= accepted_at.timestamp()):
+                    raise Rejected(409, 'START_AUTHORITY_EXPIRED')
+                self.db.execute('INSERT INTO start_receipts VALUES (?,?,?)',
+                    (expected['allocationId'], json.dumps(authority, sort_keys=True, separators=(',', ':')), accepted_at.isoformat()))
             self.update(expected, 'RUNNING')
             self.db.execute('UPDATE allocations SET executions=executions+1 WHERE id=?', (expected['allocationId'],))
             # Commit before launching. A crash in this gap becomes PROVIDER_RESTART, never a duplicate launch.
@@ -522,6 +575,12 @@ class Handler(BaseHTTPRequestHandler):
             raise Rejected(413, 'TOO_LARGE')
         parsed = urlsplit(self.path)
         output = RECOVERY_OUTPUT.fullmatch(parsed.path)
+        start = RECOVERY_START.fullmatch(parsed.path)
+        if start:
+            if self.command != 'GET' or size:
+                raise Rejected(405, 'METHOD_NOT_ALLOWED')
+            self.reply(200, self.server.provider.recovery_start_receipt(start[1], parse_qs(parsed.query, keep_blank_values=True)))
+            return
         if output:
             if self.command != 'GET' or size:
                 raise Rejected(405, 'METHOD_NOT_ALLOWED')
@@ -585,8 +644,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(201 if created else 200, value)
             elif self.command == 'PUT' and suffix.startswith('inputs/'):
                 self.reply(200, p.upload(expected, suffix[7:], raw, self.headers.get('Content-Type')))
-            elif self.command == 'POST' and not raw and suffix in {'start', 'cancel'}:
-                self.reply(200, p.start(expected) if suffix == 'start' else p.cancel(expected))
+            elif self.command == 'POST' and suffix == 'start':
+                if raw and self.headers.get('Content-Type') != 'application/json':
+                    raise Rejected(400, 'INVALID_REQUEST')
+                authority = decode(raw) if raw else None
+                if raw and not isinstance(authority, dict):
+                    raise Rejected(400, 'INVALID_REQUEST')
+                self.reply(200, p.start(expected, authority))
+            elif self.command == 'POST' and not raw and suffix == 'cancel':
+                self.reply(200, p.cancel(expected))
             elif self.command == 'GET' and not raw:
                 with p.transaction():
                     p.require_active()

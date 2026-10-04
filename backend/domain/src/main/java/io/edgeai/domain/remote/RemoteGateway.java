@@ -6,6 +6,7 @@ public interface RemoteGateway extends AutoCloseable {
     RemoteStatus reserve(RemoteWork work);
     RemoteStatus uploadInput(RemoteIdentity identity,RemoteFile input,Path source);
     RemoteStatus start(RemoteIdentity identity);
+    default RemoteStatus start(RemoteStart authority){throw new RemoteGatewayException(RemoteGatewayException.Reason.UNSUPPORTED);}
     Optional<RemoteStatus> inspect(RemoteIdentity identity);
     RemoteStatus cancel(RemoteIdentity identity);
     void downloadOutput(RemoteIdentity identity,RemoteFile output,Path destination);

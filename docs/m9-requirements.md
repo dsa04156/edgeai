@@ -110,6 +110,13 @@ ADR0094는 [기록된 STREAM target 실패](evidence/m9-recorded-stream-target-f
 Operation/Attempt/runtime 일관성을 검사한다. 원래 실패 이력은 보존하고 남은 peer 취소와
 Run만 조정하며, 모순된 실패 사유/재시도/최신 시도는 미해결로 남긴다. 명시적 실패 fixture를
 포함한36개를 검증하며 미기록 실패·시작 권한·종합 재가동은 별도다.
+ADR0097은 [봉인된 최종 저장 재시도](evidence/m9-restored-stream-finalizers.md)의 원래
+작업별 기한·grant/checkpoint·실패를 대조하고 만료/취소만 조정한다. 기존 전환을 포함한44개,
+복원DB18·고정S3version2·원복/COMMIT응답 유실·소유정리를 검증했다. 새 실행/권한은 별도다.
+ADR0098은 [명시적 소유 S3 resync](evidence/m9-storage-explicit-resync.md)로 백업의
+배경 scanner 의존성을 제거했다. 느린 scanner의11개와 위44개 결합 회귀를 통과했다.
+ADR0099의 [Remote 시작 기록](evidence/m9-remote-start-authority.md)은 계산 전에 원래
+권한과 실제 접수 시각을 영속화한다. 복원 DB의 STARTING 성공 판정에 연결하는 단계는 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

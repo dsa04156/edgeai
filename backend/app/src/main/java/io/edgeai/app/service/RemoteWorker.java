@@ -46,7 +46,7 @@ public final class RemoteWorker {
                                     var declaration=dispatch.work().inputs().stream().filter(f->f.port().equals(input.port())).findFirst().orElseThrow();
                                     lifecycle.observeRemote(gateway.uploadInput(dispatch.work().identity(),declaration,file));
                                 }
-                                if(current(runtime))lifecycle.observeRemote(gateway.start(dispatch.work().identity()));
+                                if(current(runtime))lifecycle.observeRemote(gateway.start(lifecycle.remoteStart(runtime.attemptId())));
                             }
                         }
                     }
