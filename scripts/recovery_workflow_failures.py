@@ -4,8 +4,11 @@ from recovery_remote_inventory import canonical
 
 
 def transaction_sql(plan, tables, guard_query, proven_runtimes=None):
-    if any(entry['action'] not in ('CANCEL', 'CHECK_RETRY', 'FINAL_FAILURE', 'FAIL', 'RECONCILE_RUN') for entry in plan['entries']):
+    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START')
+    if any(entry['action'] not in ('CANCEL', 'CHECK_RETRY', 'FINAL_FAILURE', 'FAIL', 'RECONCILE_RUN', *offload_actions) for entry in plan['entries']):
         raise ValueError('Unsupported failure reconciliation action')
+    if any(e['action'] in offload_actions for e in plan['entries']) and (proven_runtimes is None or not plan.get('reconcileOffloads')):
+        raise ValueError('Offload recovery requires explicit producer evidence')
     producer_guard = '' if proven_runtimes is None else (
         'r.id NOT IN (SELECT value::uuid FROM jsonb_array_elements_text(' +
         literal(canonical(sorted(proven_runtimes)).decode()) + '::jsonb)) OR EXISTS ('
@@ -21,6 +24,7 @@ DECLARE entry jsonb; task_id_to_change uuid; affected_run uuid; victim edgeai.ta
  first_created timestamptz; used integer; changed integer; terminal text; cancellation text; run_state text;
  failed_tasks uuid[]:='{{}}'; cancel_tasks uuid[]:='{{}}'; run_ids uuid[]:='{{}}';
  failures integer:=0; scheduled integer:=0; expired integer:=0; cancelled integer:=0; skipped integer:=0; runs integer:=0;
+ operation edgeai.task_offload; offloads_failed integer:=0; offloads_cancelled integer:=0;
 BEGIN
 {identity}
 IF ({guard}) IS DISTINCT FROM {before}::jsonb THEN
@@ -28,7 +32,33 @@ IF ({guard}) IS DISTINCT FROM {before}::jsonb THEN
 FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
  task_id_to_change:=(entry->>'taskId')::uuid;
  run_ids:=array_append(run_ids,(entry->>'runId')::uuid);
- IF entry->>'action'='CANCEL' THEN
+ IF entry->>'action' IN ('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
+  SELECT * INTO STRICT operation FROM edgeai.task_offload WHERE id=(entry->>'operationId')::uuid;
+  IF entry->>'action'='CANCEL_OFFLOAD' THEN
+   UPDATE edgeai.task_offload SET state='CANCELLED',failure_reason=NULL,updated_at=transaction_timestamp() WHERE id=operation.id;
+   offloads_cancelled:=offloads_cancelled+1;
+   IF EXISTS(SELECT FROM edgeai.task WHERE id=task_id_to_change AND state='CANCELLING') THEN
+    cancel_tasks:=array_append(cancel_tasks,task_id_to_change);
+   ELSIF EXISTS(SELECT FROM edgeai.task WHERE id=task_id_to_change AND state='FAILED') THEN
+    failed_tasks:=array_append(failed_tasks,task_id_to_change);
+   END IF;
+  ELSIF entry->>'action'='FAIL_OFFLOAD' OR
+   (entry->>'action'='CHECK_OFFLOAD_DRAIN' AND transaction_timestamp()>=operation.drain_deadline) OR
+   (entry->>'action'='CHECK_OFFLOAD_START' AND transaction_timestamp()>=operation.start_deadline) THEN
+   cancellation:=CASE entry->>'action' WHEN 'FAIL_OFFLOAD' THEN 'TARGET_FAILED'
+    WHEN 'CHECK_OFFLOAD_DRAIN' THEN 'SOURCE_DRAIN_TIMEOUT' ELSE 'TARGET_START_TIMEOUT' END;
+   IF entry->>'action'='CHECK_OFFLOAD_START' THEN
+    UPDATE edgeai.runtime_instance SET failure_reason=cancellation,updated_at=transaction_timestamp() WHERE attempt_id=operation.target_attempt_id;
+    UPDATE edgeai.task_attempt SET state='FAILED',updated_at=transaction_timestamp() WHERE id=operation.target_attempt_id;
+    failures:=failures+1;
+   END IF;
+   IF entry->>'action'<>'FAIL_OFFLOAD' THEN
+    UPDATE edgeai.task SET state='FAILED',updated_at=transaction_timestamp() WHERE id=task_id_to_change;
+   END IF;
+   UPDATE edgeai.task_offload SET state='FAILED',failure_reason=cancellation,updated_at=transaction_timestamp() WHERE id=operation.id;
+   offloads_failed:=offloads_failed+1; failed_tasks:=array_append(failed_tasks,task_id_to_change);
+  END IF;
+ ELSIF entry->>'action'='CANCEL' THEN
   cancel_tasks:=array_append(cancel_tasks,task_id_to_change);
  ELSIF entry->>'action'='RECONCILE_RUN' THEN
   NULL; -- Retain immutable terminal Task/Attempt history; complete only a stale active Run.
@@ -96,6 +126,7 @@ FOR victim IN
  UPDATE edgeai.task_attempt SET state='CANCELLED',updated_at=transaction_timestamp()
  WHERE task_id=victim.id AND state IN ('QUEUED','DISPATCHING','RUNNING','CANCELLING');
  UPDATE edgeai.task SET state=terminal,cancellation_reason=cancellation,updated_at=transaction_timestamp() WHERE id=victim.id;
+ {cancel_offloads}
  IF terminal='SKIPPED' THEN skipped:=skipped+1; ELSE cancelled:=cancelled+1; END IF;
 END LOOP;
 FOR affected_run IN SELECT DISTINCT unnest(run_ids) LOOP
@@ -113,10 +144,15 @@ FOR affected_run IN SELECT DISTINCT unnest(run_ids) LOOP
 END LOOP;
 {identity}
 INSERT INTO failure_result VALUES(jsonb_build_object('attemptsFailed',failures,'retriesScheduled',scheduled,
- 'retriesExpired',expired,'tasksCancelled',cancelled,'tasksSkipped',skipped,'runsReconciled',runs,'afterGuard',({guard})));
+ 'retriesExpired',expired,'tasksCancelled',cancelled,'tasksSkipped',skipped,'runsReconciled',runs,
+ 'offloadsFailed',offloads_failed,'offloadsCancelled',offloads_cancelled,'afterGuard',({guard})));
 END
 """.format(identity=identity, guard=guard_query, producer_guard=producer_guard, before=literal(canonical(plan['beforeGuard']).decode()),
-           entries=literal(canonical(plan['entries']).decode()))
+           entries=literal(canonical(plan['entries']).decode()),
+           cancel_offloads=("UPDATE edgeai.task_offload SET state='CANCELLED',failure_reason=NULL,updated_at=transaction_timestamp()"
+               " WHERE task_id=victim.id AND state IN ('DRAINING','STARTING','CANCELLING');"
+               " GET DIAGNOSTICS changed=ROW_COUNT; offloads_cancelled:=offloads_cancelled+changed;"
+               if plan.get('reconcileOffloads') else ''))
     return ("BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; LOCK TABLE " +
             ','.join('edgeai.' + name for name in tables) + ' IN SHARE ROW EXCLUSIVE MODE;\n'
             'CREATE TEMP TABLE failure_result(value jsonb) ON COMMIT DROP; DO ' + literal(body) +

@@ -43,9 +43,11 @@ def main():
     p.add_argument('--runner-image'); p.add_argument('--runner-source')
     p.add_argument('--vd-tasks',action='store_true',help='Include explicit VD allocation and immutable outcome history fixtures')
     p.add_argument('--workflows',action='store_true',help='Reconcile recorded workflow state after VD/Kubernetes retirement')
+    p.add_argument('--offloads',action='store_true',help='Include explicit restored BATCH transfer recovery fixtures')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
     if args.workflows and not args.vd_tasks: p.error('--workflows requires --vd-tasks')
+    if args.offloads and not args.workflows: p.error('--offloads requires --workflows')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -466,6 +468,12 @@ def main():
         if args.workflows:
             from test_recovery_kubernetes_workflows import check
             check(pg,targets,options,fingerprints,passed,work,workflow_fixtures,vd_work,attempt,report)
+        if args.offloads:
+            from test_recovery_batch_offloads import check as check_offloads
+            offload_db,offload_receipt=targets[3]
+            offload_retirement=cli(options(offload_db,offload_receipt))
+            assert offload_retirement['vdTaskRuntimesRetired']==4 and offload_retirement['allocationsClosed']==4
+            check_offloads(pg,offload_db,offload_receipt,options,fingerprints,passed,work,vd_work,attempt,report)
 
         inspection=Api(db,work,inspection=True); apis.append(inspection)
         inspection.request('GET','workflow-runs/'+run['id'])

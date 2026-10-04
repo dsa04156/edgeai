@@ -18,11 +18,12 @@ Ubuntu24.04에서 `mosquitto_ctrl`은 `mosquitto` 패키지에 포함된다. Git
 시험마다 별도 DB를 만든다. CI의 `Prepare restored-database recovery fixtures` 단계가
 JAR 복사와 `compose up -d --wait postgres`를 담당한다. 필수 파일/DB가 없으면 클러스터 생성
 전에 BLOCKED로 끝난다. 이후 실제 종료 Pod·quota와 복원 runtime/VD/명령/binding을
-대조하고 기록된 취소·재시도·후속 작업을 정리하는37개 시험(`--vd-tasks --workflows`)과
+대조하고 기록된 취소·재시도·후속 작업·전환 기한을 정리하는46개 시험(`--vd-tasks --workflows --offloads`)과
 소유 자원 정리를 수행한다.
 [기본 복구 검증](../../docs/evidence/m9-recovery-kubernetes-retirement.md),
 [VD 내부 할당 검증](../../docs/evidence/m9-recovery-vd-tasks.md),
-[작업 상태 복구](../../docs/evidence/m9-recovery-kubernetes-workflows.md).
+[작업 상태 복구](../../docs/evidence/m9-recovery-kubernetes-workflows.md),
+[전환 복구](../../docs/evidence/m9-recovery-batch-offloads.md).
 
 GitHub Actions는 이미지 job에서 API/화면 발행 전에 이 시험을 수행한다. kind v0.33.0 바이너리의
 SHA-256과 해당 릴리스의 Kubernetes1.35.8 node image digest를 고정한다. 노드는 control-plane1개와

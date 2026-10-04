@@ -12,6 +12,7 @@ import recovery_kubernetes_retire as retirement
 from recovery_remote_inventory import canonical
 from recovery_remote_retire import durable_json
 from recovery_workflow_failures import transaction_sql as workflow_transaction
+import recovery_batch_offloads as offloads
 
 TABLES = (*retirement.TABLES, 'task_retry', 'task_definition', 'task_dependency',
           'workflow_version', 'profile_version', 'task_offload', 'task_offload_member')
@@ -26,6 +27,8 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),
  'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM'),
  'activeOffload',EXISTS(SELECT FROM edgeai.task_offload WHERE run_id=w.id AND state IN ('DRAINING','STARTING','CANCELLING')),
+ 'failedDrain',EXISTS(SELECT FROM edgeai.task_offload WHERE task_id=t.id AND source_attempt_id=a.id
+   AND target_attempt_id IS NULL AND state='FAILED' AND failure_reason='SOURCE_DRAIN_TIMEOUT'),
  'pendingCommands',EXISTS(SELECT FROM edgeai.runtime_command WHERE runtime_id=r.id
    AND (NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL)),
  'allocation',(SELECT to_jsonb(v) FROM edgeai.vd_task_allocation v WHERE v.runtime_id=r.id),
@@ -40,7 +43,7 @@ CATALOG_SQL = ("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SEL
     "'marker',(SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()),"
     "'readOnly',current_setting('transaction_read_only'),'migrations',(SELECT json_agg(json_build_object("
     "'version',version,'success',success)) FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),"
-    "'guard',(" + GUARD_QUERY + "),'contexts',(" + CONTEXT_QUERY + ')); COMMIT;')
+    "'guard',(" + GUARD_QUERY + "),'contexts',(" + CONTEXT_QUERY + "),'offloads',(" + offloads.QUERY + ')); COMMIT;')
 
 
 def entry_for(context, action):
@@ -58,6 +61,9 @@ def prepare(pg, args):
         raise Blocked('Restored retirement inventory changed during workflow snapshot')
     proven = set(retired['selected']['runtimes'] + retired['selected']['vdTasks'])
     entries, unresolved, retained = [], [], 0
+    reconcile_offloads=getattr(args,'offloads',False)
+    offload_entries, unresolved_offloads = (offloads.classify(catalog['offloads'],proven,args.namespace)
+        if reconcile_offloads else ([],[]))
     for context in catalog['contexts']:
         runtime, attempt, task = (context[k] for k in ('runtime','attempt','task'))
         rid = runtime['id']
@@ -93,7 +99,8 @@ def prepare(pg, args):
                 raise Blocked('Retry queue differs from recorded failure')
             action = 'CHECK_RETRY'
         elif task['state'] == 'FAILED':
-            if attempt['state'] != 'FAILED' or context['retryPending'] or not reason:
+            failed_drain=attempt['state']=='OFFLOADED' and context['failedDrain']
+            if context['retryPending'] or not failed_drain and (attempt['state'] != 'FAILED' or not reason):
                 raise Blocked('Final failure differs from recorded attempt')
             action = 'FINAL_FAILURE'
         elif task['state'] in ('CANCELLED','SKIPPED'):
@@ -111,8 +118,9 @@ def prepare(pg, args):
     return {'formatVersion':1, 'scope':'restored-kubernetes-workflow-reconciliation',
         'targetDatabase':args.database, 'databaseOid':catalog['oid'], 'marker':catalog['marker'],
         'restoreReportSha256':catalog['restoreReportSha256'], 'beforeGuard':catalog['guard'],
-        'evidence':retired['evidence'], 'provenRuntimes':sorted(proven), 'entries':entries,
+        'evidence':retired['evidence'], 'provenRuntimes':sorted(proven), 'entries':entries+offload_entries,
         'unresolvedProducers':retired['unresolved'], 'unresolvedWorkflows':unresolved,
+        'reconcileOffloads':reconcile_offloads, 'unresolvedOffloads':unresolved_offloads,
         'historiesRetained':retained, 'preparedAt':datetime.now(timezone.utc).isoformat()}
 
 
@@ -141,10 +149,14 @@ def apply(pg, args, plan):
         namespaceUid=args.namespace_uid, recoveryId=args.recovery_id,
         pendingRetries=sum(e['action']=='CHECK_RETRY' for e in after['entries']),
         unresolvedProducers=after['unresolvedProducers'], unresolvedWorkflows=after['unresolvedWorkflows'],
+        unresolvedOffloads=after['unresolvedOffloads'],
+        pendingOffloads=sum(e['action'].startswith('CHECK_OFFLOAD_') for e in after['entries']),
+        reconcileOffloads=after['reconcileOffloads'],
         historiesRetained=after['historiesRetained'],
         intentSha256=hashlib.sha256((args.output/'intent.json').read_bytes()).hexdigest(),
         verifiedAt=datetime.now(timezone.utc).isoformat(),
-        excluded=['unknown-outcomes','retry-dispatch','result-recovery','active-offload-and-stream-recovery',
+        excluded=['unknown-outcomes','retry-dispatch','result-recovery',
+                  'unproven-offloads-and-stream-recovery' if after['reconcileOffloads'] else 'active-offload-and-stream-recovery',
                   'device-journals','global-recovery-acceptance','service-activation'])
     durable_json(args.output/'workflows.json', report)
     return report
@@ -159,6 +171,7 @@ def main():
     parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--pg-bin',type=Path)
     parser.add_argument('--timeout',type=int,default=120)
+    parser.add_argument('--offloads',action='store_true',help='Also reconcile proven BATCH transfer cancellations and original deadlines')
     args=parser.parse_args(); args.output.mkdir(mode=0o700,parents=True,exist_ok=False); submitted=False
     try:
         if not 1<=args.timeout<=1800: raise ValueError('Timeout must be between 1 and 1800 seconds')

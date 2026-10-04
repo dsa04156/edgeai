@@ -1,5 +1,9 @@
 # 검증 증거
 
+ADR0083 [복원 BATCH 전환 조정](m9-recovery-batch-offloads.md): 기존37개와 전환 복구9개를
+합친 실제46개·공통 Remote15개 PASS. 취소/drain 만료·미기록 target/새 epoch 보존과
+원복/응답 유실을 검증했다. 새 CI/전체 target 복구·종합 활성화는 별도다.
+
 ADR0082 [복원 Kubernetes/VD 작업 상태 조정](m9-recovery-kubernetes-workflows.md):
 실제 PG/Kubernetes37개·공통 Remote 회귀15개 PASS. 기록된 취소·재시도 기한·후손/Run을
 정리하며 미확정 결과·새 시도·기존 결과를 보존한다. 새 CI/배포와 종합 복구는 별도다.

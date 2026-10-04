@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0083으로 BATCH offload 취소·기록된 기한 조정을 `--offloads`로 연결했다.
+실제46개(124649Z-b0e9247f)·공통 Remote15개(124502Z-1302d13a) PASS.
+전환 취소2·drain 만료2·39테이블/원본 OFFLOADED 보존, source claim 누락 거절,
+미기록 target/새 epoch 미해결, 실제 경쟁/원복/COMMIT응답 유실·변경0을 확인했다.
+[근거](docs/evidence/m9-recovery-batch-offloads.md). kind46개 gate의 새 CI/배포,
+claim 전 target·Remote/STREAM/group/checkpoint/journal·전역 writer·종합 활성화는 남는다.
+
 ADR0082로 실제 Kubernetes/VD 종료 뒤 기록된 취소·원래 재시도 기한·후손/Run 조정을 연결했다.
 실제37개(122910Z-58941ebc)·공통 Remote 회귀15개(122911Z-4233255d) PASS.
 취소2/만료1/후손2/Run5·39테이블 보존, 결과 미기록1·원래 예약1·미배정은 유지한다.

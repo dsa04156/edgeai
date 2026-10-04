@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0083 BATCH offload 복구를 포함한 실제46개(124649Z-b0e9247f)와 Remote 공통 회귀15개
+(124502Z-1302d13a) PASS. 취소2·drain 만료2·원본 OFFLOADED/고정 target/39테이블 보존,
+source claim 거절·미기록 target/새 epoch 미해결, 경쟁/마지막 쓰기 원복/실COMMIT응답 유실·
+변경0·소유 자원 정리를 확인했다. docs/evidence/m9-recovery-batch-offloads.md.
+kind를46개로 확장했다. 새 CI/배포와 claim 전 target/Remote/STREAM/group/checkpoint/journal·
+전역 writer·종합 활성화·M5 잔여/M7–M10 전체 수용은 남는다.
+
 ADR0082 복원 Kubernetes/VD 작업 상태 조정37개(122910Z-58941ebc)와 공통 Remote 회귀15개
 (122911Z-4233255d) PASS. 기록된 취소2·원래 기한 만료1·후손2·Run5,39테이블 보존,
 결과 미기록/미배정·기존 결과/새 시도·원래 예약 보존, 실제 잠금/경쟁/원복/COMMIT응답 유실·

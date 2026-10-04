@@ -26,6 +26,15 @@ bash scripts/recovery-kubernetes-workflows.sh \
 STREAM/진행 중 offload 등 별도 복구가 필요한 작업이다. 두 목록이 남아 있어도 안전하게
 처리할 수 있는 기록은 반영될 수 있으므로 성공 코드를 전체 복구 완료로 해석하지 않는다.
 
+기록된 BATCH 전환도 조정하려면 같은 명령에 `--offloads`를 추가한다. source claim·종료 증거와
+고정 target을 대조하고 취소를 확정하거나 기록된 drain/start 기한을 검사한다. 유효한 전환은
+새 target이나 기한을 만들지 않고 유지한다. `offloadsCancelled`/`offloadsFailed`는 반영 수,
+`pendingOffloads`는 증명 범위 안에서 아직 대기 중인 전환 수다. `unresolvedOffloads`는
+target 증거 누락·Remote/STREAM 또는 새 epoch 등 별도 처리가 필요한 전환이다. 이 계수는
+`--offloads`를 적용한 범위이며 기본 명령의0을 전체 전환 부재로 해석하지 않는다.
+현재 실제 시험은 취소와 drain 만료 및 미기록 target 보존을 검증한다. claim 전 target의
+종료 증거 회수와 전체 STARTING 복구 수용은 남는다. [ADR0083](adr/0083-recovery-batch-offloads.md).
+
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.
 
