@@ -90,7 +90,9 @@ def prepare(pg,args):
         members=[tasks[identity] for identity in ids];reason=None
         routes={r['id'] for r in catalog['routes'] if r['consumer_task_id'] in ids}
         generations=[g for g in catalog['generations'] if g['route_id'] in routes]
-        if catalog['activeOffload'] and not getattr(args,'offloads',False):reason='ACTIVE_STREAM_TRANSFER_REQUIRES_RECONCILIATION'
+        transfer_required=catalog['activeOffload'] or bool(offloads.recorded_failures(catalog,ids))
+        if transfer_required and not getattr(args,'offloads',False):
+            reason='ACTIVE_STREAM_TRANSFER_REQUIRES_RECONCILIATION' if catalog['activeOffload'] else 'RECORDED_STREAM_TARGET_FAILURE_REQUIRES_RECONCILIATION'
         elif any(g['closed_at'] is None or g['broker_digest']!=args.broker_digest for g in generations):
             reason='ORIGINAL_STREAM_GENERATIONS_NOT_RETIRED'
         elif any(row['pendingCommands'] or row['openAllocation'] or any(
@@ -106,7 +108,7 @@ def prepare(pg,args):
                     raise Blocked('STREAM success must retain its exact immutable Result')
             elif result is not None:raise Blocked('STREAM outcome conflicts with an existing Result')
         action=None
-        if reason is None and catalog['activeOffload']:
+        if reason is None and transfer_required:
             transfer,reason=offloads.classify(catalog,ids,members)
             if transfer is not None:groups.append(transfer);continue
         elif reason is None and states=={'RETRY_WAIT'}:

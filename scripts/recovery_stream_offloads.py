@@ -8,14 +8,22 @@ def instant(value):
     return datetime.fromisoformat(value.replace('Z','+00:00'))
 
 
+def recorded_failures(catalog,ids):
+    return [o for o in catalog['offloads'] if o['state']=='FAILED' and o['failure_reason']=='TARGET_FAILED' and
+        (o['task_id'] in ids or any(m['task_id'] in ids for m in o['members']))]
+
+
 def classify(catalog,ids,members):
     operations=[o for o in catalog['offloads'] if o['state'] in ('DRAINING','STARTING','CANCELLING') and
         (o['task_id'] in ids or any(m['task_id'] in ids for m in o['members']))]
+    operations+=recorded_failures(catalog,ids)
     if len(operations)!=1:return None,'STREAM_TRANSFER_IDENTITY_REQUIRES_RECONCILIATION'
     operation=operations[0];plan=operation['members'];tasks={r['task']['id']:r for r in members}
+    failed=operation['state']=='FAILED'
     if set(ids)!={m['task_id'] for m in plan}:return None,'INCOMPLETE_STREAM_TRANSFER_MEMBERSHIP'
     if (operation['task_id'] not in ids or operation['remote_provider_key'] is not None or
-            operation['namespace']!=catalog['configuration']['namespace'] or operation['failure_reason'] is not None):
+            operation['namespace']!=catalog['configuration']['namespace'] or
+            operation['failure_reason']!=('TARGET_FAILED' if failed else None)):
         raise Blocked('Recorded STREAM transfer identity or state is inconsistent')
     selected=next(m for m in plan if m['task_id']==operation['task_id'])
     if any(selected[k]!=operation[k] for k in ('source_attempt_id','target_attempt_id','target_node_id','excluded_node_names')):
@@ -28,7 +36,7 @@ def classify(catalog,ids,members):
     if any(has_targets)!=all(has_targets):return None,'INCOMPLETE_STREAM_TRANSFER_TARGETS'
     targets=all(has_targets)
     if (operation['state']=='DRAINING' and (targets or operation['start_deadline'] is not None) or
-            operation['state']=='STARTING' and (not targets or operation['start_deadline'] is None)):
+            (operation['state']=='STARTING' or failed) and (not targets or operation['start_deadline'] is None)):
         raise Blocked('Recorded STREAM transfer phase differs from its target history')
     checkpoints={c['id']:c for c in catalog['checkpoints']};starts=set()
     for member in plan:
@@ -61,6 +69,25 @@ def classify(catalog,ids,members):
         raise Blocked('STREAM transfer start deadline differs from its original group start')
     states={r['task']['state'] for r in members}
     action=None
+    if failed:
+        # RuntimeLifecycleService.recordFailure and JdbcOffloadRepository.failedAttempt
+        # record this outcome atomically. Never repair a contradictory snapshot by guessing.
+        reasons={'WORKLOAD_FAILED','TIMEOUT','INPUT_INVALID','OUTPUT_INVALID','STORAGE_FAILED','CANCELLED',
+            'RUNNER_FAILED','DISPATCH_TIMEOUT','RUNTIME_TIMEOUT','RUNTIME_LOST','JOB_FAILED','RESULT_MISSING','OWNERSHIP_CONFLICT'}
+        if 'FAILED' not in states or not states<= {'FAILED','CANCELLING','CANCELLED','SKIPPED'}:
+            return None,'INCOMPLETE_RECORDED_STREAM_TARGET_FAILURE'
+        for row in members:
+            attempt=row['attempts'][0]
+            runtime=next(r for r in row['runtimes'] if r['attempt_id']==attempt['id'])
+            if row['task']['state']=='FAILED':
+                if attempt['state']!='FAILED' or runtime['failure_reason'] not in reasons:
+                    return None,'INCONSISTENT_RECORDED_STREAM_TARGET_FAILURE'
+            elif (not row['task']['cancellation_reason'] or
+                    attempt['state'] not in ('CANCELLING','CANCELLED','FAILED')):
+                return None,'INCOMPLETE_RECORDED_STREAM_FAILURE_CANCELLATION'
+        # The failed Operation, Attempt and runtime already contain the authoritative result.
+        # Only recorded peer cancellation and the stale Run state may need completion.
+        return {'taskIds':ids,'action':'CANCEL_GROUP','recordedFailureOperationId':operation['id']},None
     if operation['state']=='CANCELLING' or states & {'CANCELLING','CANCELLED','SKIPPED'}:
         if not states<= {'CANCELLING','CANCELLED','SKIPPED','FAILED'} or any(
                 r['task']['state'] in ('CANCELLING','CANCELLED','SKIPPED') and not r['task']['cancellation_reason'] for r in members):

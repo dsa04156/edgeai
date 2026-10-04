@@ -44,8 +44,14 @@ target은 정확한 Job UID와 보존한 모든 자식의 실제 종료 증거�
 `offloadsFailed`, `offloadsCancelled`, `attemptsFailed`가 추가 변경 수다. 기한 전 예약은
 그대로이며 종료 대기와 시작 대기의 원래 기한을 연장하지 않는다. 기한 만료는 선택한 Task만
 실패로 만들고 peer와 후속 작업을 건너뛴다. 전환 성공이나 새 시작 권한은 추정하지 않는다.
-겹친 Operation·부분 target·더 최신 Attempt·기록된 별도 실패/완료는 미해결로 남긴다.
+겹친 Operation·부분 target·더 최신 Attempt·미기록 실패/완료는 미해결로 남긴다.
 [ADR0093](adr/0093-restored-stream-offloads.md)에 전환 복구 계약을 기록한다.
+
+같은 `--offloads`는 이미 FAILED/TARGET_FAILED인 Operation의 실패한 target Attempt/runtime과
+peer 취소도 대조한다. 원래 실패 사유나 최신 Attempt가 맞지 않거나 retry queue가 남아 있으면
+그룹을 미해결로 유지한다. 일관된 실패 이력은 보존하고 남은 peer 취소·Run만 조정한다.
+이미 실패한 Operation을 취소로 덮어쓰거나 새 재시도를 만들지 않는다. 옵션이 없으면 이
+검사를 기본 취소로 우회할 수 없다. [ADR0094](adr/0094-recorded-stream-target-failures.md)를 따른다.
 
 SQL 오류는 전체 원복한다. 실제 COMMIT 뒤 응답 유실이나 권한 변경이 생기면 DB가 이미
 바뀌었을 수 있으므로 `failure.json`·`intent.json`을 보존한다. 같은 복구 UUID와 새 output으로
@@ -68,3 +74,5 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 [실제18개 검증 근거](evidence/m9-recovery-stream-workflows.md)를 참고한다.
 같은 시험에 `--offloads`를 추가하면 실제 source→target 교체와 복원 전환 검사를 포함한다.
 [전환 포함29개 근거](evidence/m9-recovery-stream-offloads.md)를 참고한다.
+기록된 target 실패 검사를 더한 [최신36개 근거](evidence/m9-recorded-stream-target-failures.md)도
+같은 `--offloads` 시험으로 실행한다.
