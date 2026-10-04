@@ -35,8 +35,8 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 같은 Device fanout과 Task STREAM 연결은 한 그룹이다. 일부만 종료됐거나 경로가 열려
 있으면 그룹 전체를 미해결로 남긴다. 재시도는 원래 그룹 기한·횟수·실패 사유를 확인하며
 기한이 지났을 때만 전체 그룹을 실패로 확정한다. 활성 offload는 아래 옵션으로 별도 조정한다.
-최종 처리 권한을 받은 그룹의 재시도는 별도 복구가 필요하다. 미기록 성공을 추정하거나
-새 실행을 만들지 않는다.
+최종 처리 권한을 받은 작업의 재시도는 아래 `--finalizers` 옵션으로 별도 검사한다.
+미기록 성공을 추정하거나 새 실행을 만들지 않는다.
 
 기록된 전환의 취소·기한 만료도 조정하려면 같은 명령에 `--offloads`를 추가한다. claim 전
 target은 정확한 Job UID와 보존한 모든 자식의 실제 종료 증거가 있을 때 `--unclaimed-jobs`로
@@ -52,6 +52,14 @@ peer 취소도 대조한다. 원래 실패 사유나 최신 Attempt가 맞지 �
 그룹을 미해결로 유지한다. 일관된 실패 이력은 보존하고 남은 peer 취소·Run만 조정한다.
 이미 실패한 Operation을 취소로 덮어쓰거나 새 재시도를 만들지 않는다. 옵션이 없으면 이
 검사를 기본 취소로 우회할 수 없다. [ADR0094](adr/0094-recorded-stream-target-failures.md)를 따른다.
+
+`--finalizers`는 봉인된 계산의 최종 저장 재시도에 원래 **작업별** 기한을 적용한다.
+원래 grant/checkpoint·최신 실패·상속·실패 사유와 queue를 대조하며 일반 그룹의 가장 이른
+기한으로 바꾸지 않는다. 기한 전에는 queue를 유지하고 기한이 지나면 첫 실패와 미완료
+peer/후속 작업만 정리한다. `finalizerRetriesExpired`는 그 실패 수이며 `retriesExpired`에도
+포함된다. 새 최종 저장 실행이나 권한을 만들지는 않는다. 옵션 없이 일반 그룹 재시도로
+우회할 수 없으며 계산 중 peer·봉인되지 않은 retry·미기록 결과는 별도 복구가 필요하다.
+[ADR0097](adr/0097-restored-stream-finalizer-retries.md)에 범위를 기록한다.
 
 SQL 오류는 전체 원복한다. 실제 COMMIT 뒤 응답 유실이나 권한 변경이 생기면 DB가 이미
 바뀌었을 수 있으므로 `failure.json`·`intent.json`을 보존한다. 같은 복구 UUID와 새 output으로
@@ -76,3 +84,5 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 [전환 포함29개 근거](evidence/m9-recovery-stream-offloads.md)를 참고한다.
 기록된 target 실패 검사를 더한 [최신36개 근거](evidence/m9-recorded-stream-target-failures.md)도
 같은 `--offloads` 시험으로 실행한다.
+`--finalizers`를 함께 지정하면 봉인된 작업별 재시도의 원래 기한·경쟁·원복·이력 보존도
+실제 복원 DB에서 검사한다. 검증 결과는 해당 실행 증거를 확인한다.

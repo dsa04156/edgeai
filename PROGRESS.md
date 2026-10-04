@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+로컬 ADR0097 최종 저장 재시도 복구를 추가, 기본26개 `184620Z-1eb595e3` PASS.
+실제복원DB7/고정S32개·원래grant/실패/기한 보존·경쟁/원복/응답유실·소유정리 확인.
+전환 포함44개 `185953Z-272d4e46` PASS: 복원DB18/부모자식4쌍·고정S32개·
+최종처리8개/만료1/새Attempt0·실제COMMIT응답유실·소유정리를 확인했다.
+ADR0098 S3 소유target 명시적resync: 느린scanner의 수정 전 timeout 재현 후
+백업11개 `185831Z-0be128f4`와 위44개 결합 회귀 PASS.
+새코드원격CI·종합활성화는 미완료다.
+선행60c8be3 CI37223827513의 완료5jobs·원시35개/PG230/단위122/Device47 감사
+`184444Z-bfa04fa3` PASS. images실kind가 진행 중이며 전체CI/새배포는 후속이다.
+
 최신main소스60c8be3 CI37223827513: native ARM/x86와index발행3jobs 성공.
 `182346Z-6cf4c91c` 원시4개/각Runner111·MQTT97/두manifest 감사 PASS.
 새index8a2f8067의 공개 ARM서버GPU 실행·S3결과·소유정리 PASS. 같은

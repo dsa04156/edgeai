@@ -273,7 +273,7 @@ def main():
                 raise RuntimeError('kind restored Kubernetes runtime retirement acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-workflows',
                 'bash', 'scripts/test-recovery-stream-workflows.sh', '--context', context, '--transport', 'compose',
-                '--offloads', '--minio-binary', '.tools/minio-recovery-tested',
+                '--offloads', '--finalizers', '--minio-binary', '.tools/minio-recovery-tested',
                 '--runner-image', images['runner'], '--runner-source', source_revision,
                 '--report', '.tools/kind-recovery-stream-workflows.json'],
                 env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)

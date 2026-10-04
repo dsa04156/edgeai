@@ -14,6 +14,7 @@ from recovery_remote_retire import durable_json
 import recovery_kubernetes_retire as producers
 import recovery_stream_retire as broker
 import recovery_stream_offloads as offloads
+import recovery_stream_finalizers as finalizers
 
 TABLES=tuple(dict.fromkeys((*producers.TABLES,*broker.TABLES,'workflow_version','task_dependency',
     'stream_finalization_recovery','remote_allocation')))
@@ -39,6 +40,8 @@ def query(run):
         "(SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.task_id),'[]'::jsonb) FROM edgeai.task_offload_member m WHERE m.operation_id=o.id)) ORDER BY o.id),'[]'::jsonb)"
         " FROM edgeai.task_offload o WHERE o.run_id="+rid+"),"
         "'checkpoints',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.id),'[]'::jsonb) FROM edgeai.stream_checkpoint c WHERE c.run_id="+rid+"),"
+        "'completions',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.attempt_id),'[]'::jsonb) FROM edgeai.stream_task_completion c JOIN edgeai.task_attempt a ON a.id=c.attempt_id JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id="+rid+"),"
+        "'finalizationRecoveries',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.attempt_id),'[]'::jsonb) FROM edgeai.stream_finalization_recovery c JOIN edgeai.task_attempt a ON a.id=c.attempt_id JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id="+rid+"),"
         "'routes',(SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id),'[]'::jsonb) FROM edgeai.data_route r WHERE run_id="+rid+"),"
         "'generations',(SELECT coalesce(jsonb_agg(to_jsonb(g) ORDER BY g.id),'[]'::jsonb) FROM edgeai.route_generation g WHERE run_id="+rid+"),"
         "'tasks',(SELECT coalesce(jsonb_agg(jsonb_build_object('task',to_jsonb(t),"
@@ -111,6 +114,12 @@ def prepare(pg,args):
         if reason is None and transfer_required:
             transfer,reason=offloads.classify(catalog,ids,members)
             if transfer is not None:groups.append(transfer);continue
+        elif reason is None and 'RETRY_WAIT' in states and any(row['finalizing'] for row in members):
+            if not getattr(args,'finalizers',False):
+                reason='COMPONENT_RETRY_OR_FINALIZATION_HISTORY_REQUIRES_RECONCILIATION'
+            else:
+                finalizer,reason=finalizers.classify(catalog,ids,members)
+                if finalizer is not None:groups.append(finalizer);continue
         elif reason is None and states=={'RETRY_WAIT'}:
             if catalog['run']['state']!='RUNNING' or any(not row['attempts'] or row['retry'] is None or row['result'] or
                     row['finalizing'] or row['attempts'][0]['state']!='FAILED' or
@@ -130,6 +139,7 @@ def prepare(pg,args):
         'databaseOid':catalog['oid'],'marker':catalog['marker'],'restoreReportSha256':catalog['restoreReportSha256'],
         'runId':args.run_id,'beforeGuard':catalog['guard'],'groups':groups,'unresolvedGroups':unresolved,
         'reconcileOffloads':getattr(args,'offloads',False),
+        'reconcileFinalizers':getattr(args,'finalizers',False),
         'producerEvidence':retired['evidence'],'provenRuntimes':sorted(proven),'brokerEvidence':authority['broker'],
         'recoveryId':args.recovery_id,'preparedAt':datetime.now(timezone.utc).isoformat()}
 
@@ -141,7 +151,7 @@ def transaction_sql(plan):
     body="""
 DECLARE component jsonb; ids uuid[]; affected uuid[]:='{}'; victim edgeai.task;
  policy edgeai.workflow_run; group_cutoff timestamptz; terminal text; changed integer;
- expired integer:=0; cancelled integer:=0; skipped integer:=0; runs integer:=0;
+ expired integer:=0; cancelled integer:=0; skipped integer:=0; runs integer:=0; finalizer_expired integer:=0;
  operation edgeai.task_offload; offload_failures integer:=0; offload_cancellations integer:=0; attempt_failures integer:=0;
 BEGIN
 __IDENTITY__
@@ -162,6 +172,17 @@ FOR component IN SELECT * FROM jsonb_array_elements(__GROUPS__::jsonb) LOOP
    UPDATE edgeai.task SET state='FAILED',updated_at=transaction_timestamp() WHERE id=operation.task_id;
    UPDATE edgeai.task_offload SET state='FAILED',failure_reason=terminal,updated_at=transaction_timestamp() WHERE id=operation.id;
    offload_failures:=offload_failures+1; affected:=affected||ids;
+  END IF;
+ ELSIF component->>'action'='CHECK_FINALIZER_RETRIES' THEN
+  -- One expired finalizer fails first; the existing affected-component traversal
+  -- cancels its unfinished peers and descendants, just as retryTask does online.
+  SELECT t.* INTO victim FROM edgeai.task t JOIN edgeai.task_retry q ON q.task_id=t.id
+   WHERE t.id IN (SELECT value::uuid FROM jsonb_array_elements_text(component->'retryTaskIds'))
+    AND q.deadline<=transaction_timestamp() ORDER BY q.deadline,t.id LIMIT 1;
+  IF FOUND THEN
+   DELETE FROM edgeai.task_retry WHERE task_id=victim.id;
+   UPDATE edgeai.task SET state='FAILED',updated_at=transaction_timestamp() WHERE id=victim.id;
+   expired:=expired+1; finalizer_expired:=finalizer_expired+1; affected:=affected||victim.id;
   END IF;
  ELSIF component->>'action'='CHECK_GROUP_RETRY' THEN
   SELECT min(a.created_at+make_interval(secs=>policy.retry_max_elapsed_seconds)) INTO group_cutoff
@@ -236,7 +257,7 @@ END IF;
 __IDENTITY__
 INSERT INTO stream_workflow_result VALUES(jsonb_build_object('retriesExpired',expired,'tasksCancelled',cancelled,
  'tasksSkipped',skipped,'runsReconciled',runs,'offloadsFailed',offload_failures,'offloadsCancelled',offload_cancellations,
- 'attemptsFailed',attempt_failures,'afterGuard',(__GUARD__)));
+ 'attemptsFailed',attempt_failures,'finalizerRetriesExpired',finalizer_expired,'afterGuard',(__GUARD__)));
 END
 """
     for name,value in {'IDENTITY':identity,'GUARD':GUARD,'BEFORE':literal(canonical(plan['beforeGuard']).decode()),
@@ -266,7 +287,9 @@ def apply(pg,args,plan):
         unresolvedGroups=after['unresolvedGroups'],groups=after['groups'],activated=False,globalQuiescenceProven=False,
         intentSha256=hashlib.sha256((args.output/'intent.json').read_bytes()).hexdigest(),verifiedAt=datetime.now(timezone.utc).isoformat(),
         reconcileOffloads=plan['reconcileOffloads'],
-        excluded=['unrecorded-outcomes','new-retry-attempts','new-offload-attempts','finalization-recovery',
+        reconcileFinalizers=plan['reconcileFinalizers'],
+        excluded=['unrecorded-outcomes','new-retry-attempts','new-offload-attempts','new-finalizer-attempts',
+            'unproven-finalization-history' if plan['reconcileFinalizers'] else 'finalization-recovery',
             'unproven-stream-offloads' if plan['reconcileOffloads'] else 'active-stream-offloads','device-authority','service-activation'])
     durable_json(args.output/'workflows.json',report);return report
 
@@ -279,6 +302,7 @@ def main():
     parser.add_argument('--transport',choices=['native','compose'],default='native');parser.add_argument('--pg-bin',type=Path)
     parser.add_argument('--timeout',type=int,default=60);parser.add_argument('--unclaimed-jobs',action='store_true')
     parser.add_argument('--offloads',action='store_true',help='Reconcile recorded STREAM group transfer cancellations and original deadline expiry')
+    parser.add_argument('--finalizers',action='store_true',help='Validate sealed finalizer retry history and reconcile its original task deadline expiry')
     args=parser.parse_args();args.output.mkdir(mode=0o700);submitted=False
     try:
         pg=Postgres(args.transport,args.pg_bin,diagnostics=args.output/'postgres');plan=prepare(pg,args);submitted=True

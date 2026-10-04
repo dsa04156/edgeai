@@ -2,6 +2,18 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0097의 복원된 최종 저장 재시도 `--finalizers`를 추가했다. 원래 grant/checkpoint·
+작업별 기한/실패/상속을 대조하고 만료된 작업과 미완료 peer/후속 작업을 조정한다.
+기본26개 `184620Z-1eb595e3`와 기존전환 포함44개 `185953Z-272d4e46` PASS.
+최종복원DB18/부모자식4쌍/고정S32개·만료COMMIT응답유실·소유정리를 확인했다.
+새Attempt/권한·종합활성화 및 새코드의 원격CI는 별도다.
+[근거](docs/evidence/m9-restored-stream-finalizers.md).
+
+ADR0098은 소유한 S3 복제 target의 기존 버전 resync를 명시적으로 시작한다.
+느린 scanner에서 수정 전 timeout 재현 `185737Z-e4681f78`, 수정 후11개
+`185831Z-0be128f4`와 위44개 결합 회귀 PASS. 제한 시간과 version/bytes/SHA 검증은
+유지한다. [근거](docs/evidence/m9-storage-explicit-resync.md).
+
 소스60c8be3의 main CI37223827513에서 native amd64/arm64 Runner와 index 발행3jobs가
 성공했다. 원시4개·각Runner111/MQTT97·실제registry의 두manifest를 `182346Z-6cf4c91c`
 감사 PASS. 새 index8a2f8067로 공개 API→ARM서버 GB10→고정S3결과1개 검증도 PASS다.

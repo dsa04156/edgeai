@@ -37,6 +37,7 @@ def main():
     parser.add_argument('--context',required=True);parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--runner-image');parser.add_argument('--runner-source')
     parser.add_argument('--offloads',action='store_true')
+    parser.add_argument('--finalizers',action='store_true')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-stream-workflows-test.json');args=parser.parse_args()
     token=uuid.uuid4().hex;operation=str(uuid.uuid4());namespace='edgeai-stream-recovery-'+token[:12]
@@ -185,8 +186,8 @@ def main():
             "::uuid THEN 'WORKLOAD_FAILED' ELSE 'STREAM_GROUP_RESTART' END; INSERT INTO edgeai.task_retry(task_id,failed_attempt_id,namespace,available_at,deadline) "
             'SELECT a.task_id,a.id,'+literal(namespace)+",a.updated_at+interval '1 second',(SELECT min(created_at)+interval '3600 seconds' FROM edgeai.task_attempt) FROM edgeai.task_attempt a; COMMIT",source)
         backup(pg,source,work/'backup');targets=[]
-        for name in ('pending','expired','cancel','missing','final'):
-            db='edgeai_restore_stream_'+name+'_'+token
+        for name in ('pending','expired','cancel','missing','final')+(('finwait','finend') if args.finalizers else ()):
+            db='edgeai_restore_stream_'+name.replace('-','_')+'_'+token
             tool=Postgres(args.transport,diagnostics=work/('restore-'+name));restore(tool,work/'backup',db);remember(db)
             targets.append((db,tool.directory/'restore-report.json'))
         offload_fixture=None
@@ -224,7 +225,7 @@ def main():
         passed('open-restored-stream-generations-block-group-outcomes-despite-proven-physical-stop')
         for target in targets:
             values=options(target);values.output.mkdir(mode=0o700);routes.apply(pg,values,routes.prepare(pg,values))
-        pending,expired,cancelling,_,finalizing=targets
+        pending,expired,cancelling,_,finalizing=targets[:5]
         original=fingerprints(pending[0]);result=cli(pending)
         assert not result['databaseModified'] and len(result['groups'])==1 and len(result['groups'][0]['taskIds'])==2
         assert fingerprints(pending[0])==original
@@ -350,12 +351,15 @@ def main():
             check(pg,offload_fixture,options,apply,cli,fingerprints,refused,passed,report)
             from test_recovery_stream_failures import check as check_failures
             check_failures(pg,offload_fixture,options,apply,cli,fingerprints,refused,passed,report)
+        if args.finalizers:
+            from test_recovery_stream_finalizers import check as check_finalizers
+            check_finalizers(pg,targets[-2:],members,options,apply,cli,fingerprints,refused,passed,report)
         manifest=json.loads((fixtures.bundle/'manifest.json').read_text())
         assert len(manifest['versions'])==2
         for item in manifest['versions']:assert fixtures.client.digest('replica',item)==item['sha256']
         for db,_ in targets:assert pg.sql('SELECT count(*) FROM edgeai.stream_checkpoint',db)=='2'
         passed('nonempty-immutable-checkpoints-and-two-fixed-s3-versions-survive-all-group-outcomes')
-        report.update(publicStreamRun=True,restoredDatabases=6+len(offload_fixture['targets']) if args.offloads else 5,groupMembers=2,
+        report.update(publicStreamRun=True,restoredDatabases=(6+len(offload_fixture['targets']) if args.offloads else 5)+2*int(args.finalizers),groupMembers=2,
             terminatedContainers=4 if args.offloads else 2,reapedChildren=4 if args.offloads else 2,
             retriesExpired=2,tasksCancelled=2,tasksSkipped=1,runsReconciled=2,pendingRetriesPreserved=2,
             preservedTables=40,checkpointsPreserved=2,storageVersionsPreserved=2,noNewAttempts=True,image=image,imageSourceRevision=revision,
