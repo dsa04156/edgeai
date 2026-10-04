@@ -17,6 +17,9 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 
 ADR0063의 [Kubernetes 복구 점검](recovery-kubernetes.md)은 DB에 없는 실행까지 조회하고
 UID·소유 충돌을 구분한다. 실제 DB/클러스터 메타데이터 검증은 완료했으며 실행 회수는 후속이다.
+ADR0064의 [producer 중지](recovery-producer-stop.md)는 전용 namespace에서 새 Pod/Job
+생성을 막고 관측한 컨테이너의 종료를 확인한다. 실제7개·판정5개를 검증했으며 quota/종료
+기록을 보존한다. 전역 쓰기 차단, Remote/broker/장치 회수와 해제/활성화는 후속이다.
 
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,

@@ -249,6 +249,11 @@ def main():
             print(output.strip(), flush=True)
             print(call(['python3', 'scripts/test-stream-minio-tls.py', '--context', context, '--minio-image', images['minio'],
                 '--report', '.tools/kind-stream-minio-tls.json'], env=env, timeout=300).strip(), flush=True)
+            result = subprocess.run(['python3', 'scripts/test-recovery-stop-live.py', '--context', context,
+                '--runner-image', images['runner'], '--runner-source', source_revision,
+                '--report', '.tools/kind-recovery-stop.json'], env=env, timeout=480)
+            if result.returncode:
+                raise RuntimeError('kind recovery producer termination acceptance failed')
             # Exercise the real component on the original persistent API/DB/storage deployment.
             with tempfile.TemporaryDirectory(prefix='.stream-', dir=ROOT / 'deploy/kind') as overlay:
                 (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))

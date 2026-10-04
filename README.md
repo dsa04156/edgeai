@@ -132,6 +132,8 @@ bash scripts/test-storage-backup.sh # 격리 TLS MinIO 두 개: 버전 복제·�
 bash scripts/test-recovery-references.sh # 실제 DB 복원·전체 결과/checkpoint 참조 대조·원본 유실·누락 거절
 python3 scripts/test-recovery-kubernetes.py # 복원 DB/실행 목록 분류·페이지 경계 회귀
 bash scripts/test-recovery-kubernetes-live.sh --context <시험-context> # 실제 복원 DB와 별도 Kubernetes namespace
+python3 scripts/test-recovery-stop.py # 종료 상태·신원·불확실한 종료 거절 판정
+bash scripts/test-recovery-stop-live.sh --context <시험-context> # 실제 부모/자식 종료·생성 차단·timeout/재개
 ```
 
 `verify-all.sh local|full`은 미구현 fault/hardware 시험과 부하 성능 기준 미정을 숨기지 않고 nonzero를 반환합니다.
@@ -141,6 +143,7 @@ DB 백업과 새 DB로의 복원은 [백업 실행 문서](docs/postgres-backup.
 복원 DB의 모든 결과/checkpoint 참조 대조는 [DB/S3 복원 검증](docs/recovery-references.md)을 따릅니다.
 복원 DB의 일반 API 기동은 차단하며, 조회는 [복구 점검 모드](docs/recovery-inspection.md)를 사용합니다.
 DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/recovery-kubernetes.md)을 제공합니다.
+관측한 실행의 [생성 차단과 종료 확인](docs/recovery-producer-stop.md)은 전용 namespace에서 수행합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.
