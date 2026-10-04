@@ -137,6 +137,7 @@ bash scripts/test-recovery-references.sh # 실제 DB 복원·전체 결과/check
 DB 백업과 새 DB로의 복원은 [백업 실행 문서](docs/postgres-backup.md)를 따릅니다.
 고정 S3 버전 복제와 독립 검증은 [MinIO 백업 문서](docs/storage-backup.md)를 따릅니다.
 복원 DB의 모든 결과/checkpoint 참조 대조는 [DB/S3 복원 검증](docs/recovery-references.md)을 따릅니다.
+복원 DB의 일반 API 기동은 차단하며, 조회는 [복구 점검 모드](docs/recovery-inspection.md)를 사용합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

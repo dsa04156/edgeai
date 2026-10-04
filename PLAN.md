@@ -33,6 +33,12 @@ ADR0061로 복원 DB의 모든 result/checkpoint를 별도 MinIO의 고정 버�
 누락·불일치·다른 복원 신원·미지원 schema 거절을 확인했다. 복원 식별자를 추가한 DB10개
 회귀도 PASS(014814Z-0a42874e)다. 새 CI·운영 Secret/journal·producer 재조정/활성화는
 남는다. [참조 대조 검증](docs/evidence/m9-recovery-references.md).
+ADR0062는 복원 DB의 일반 기동을 차단하고 명시적 조회 전용 점검만 허용한다. DataSource
+단계에서 Flyway 비활성 우회도 거절하고, 실행/inventory 비활성·schema 검증·새 연결의 실제
+읽기 전용 설정·인증/CSRF 쓰기403을 연결했다. 단위113·실제PG226·패키징 API/백업13·계약은
+PASS다. 격리 실제 저장소47(020809Z-89d0fd0c)·새 JAR 참조 대조9(021137Z-d86797ad)도
+통과했다. 새 CI/배포와 외부 producer 회수/운영 활성화는 남는다.
+[격리 검증](docs/evidence/m9-recovery-quarantine.md), [점검 실행](docs/recovery-inspection.md).
 M7 외부 계약·전체 수용을 유지한 채 독립 M8 관리 부하 측정을 병행한다. ADR0057은 실제
 API/전용 PG DB에서100→300→1,000 장치의 예정 시각 기준 지연·오류·누락·정합성·자원을 기록한다.
 전체60초씩의9,240요청·오류/누락0·DB정합성·자원 정리를 확인했다(234836Z-e9dbbb5f).

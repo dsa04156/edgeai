@@ -37,5 +37,10 @@ MinIO binary SHA-256은 `a18c259d800694d3d48b5d4d25091b053359be11d8e8c834b8481e4
 CI storage job에 Compose PostgreSQL17과 같은 job의 MinIO binary로 이 시험을 추가했으며,
 신규 코드의 원격 통과 판정은 별도다.
 
+ADR0062 격리 기동/조회 모드가 들어간 JAR
+`1b7b33f6a797c11a49e07b4127bcee33293ed5ec3d2eb2fe38e0dd2792e50b96`으로도 동일9개를
+`20261004T021137Z-d86797ad`에서 재검증해 PASS했다.4고정버전/1,287bytes·원본 유실·
+거절·소유 DB/프로세스 정리를 유지했다. [격리 검증](m9-recovery-quarantine.md).
+
 이 결과는 DB snapshot과 고정 S3 참조의 대조다. 운영 Secret/CA·broker/device journal·
 원래 producer 권한 회수·중복 실행 방지·서비스 활성화·RPO/RTO를 포함한 전체 M9 수용은 남는다.

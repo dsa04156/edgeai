@@ -3,6 +3,7 @@
 [DB 복원](postgres-backup.md)과 [MinIO 백업](storage-backup.md)을 만든 다음, 새 DB의 모든
 결과 파일·체크포인트 참조를 백업 저장소에서 읽어 확인한다. 원본 DB/MinIO는 필요하지 않다.
 이 명령은 조회만 하며 API·worker를 활성화하지 않는다.
+API로 복원 내용을 조회하려면 [조회 전용 점검 모드](recovery-inspection.md)를 사용한다.
 
 ## 입력
 

@@ -28,6 +28,8 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  recovery:
+    inspect-only: ${EDGEAI_RECOVERY_INSPECT_ONLY:false}
   api-tls:
     enabled: ${EDGEAI_API_TLS_ENABLED:false}
     port: ${EDGEAI_API_TLS_PORT:18443}

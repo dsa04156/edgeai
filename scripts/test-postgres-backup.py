@@ -23,19 +23,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Api:
-    def __init__(self, database, directory):
+    def __init__(self, database, directory, inspection=False, extra_env=None):
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]
         user, password = 'backup-test', secrets.token_hex(24)
         self.url = 'http://127.0.0.1:'+str(port)
         self.headers = {'Authorization': 'Basic '+base64.b64encode((user+':'+password).encode()).decode()}
         env = {**os.environ, 'EDGEAI_DB_NAME': database, 'EDGEAI_API_PORT': str(port), 'EDGEAI_BIND_ADDRESS': '127.0.0.1',
-            'EDGEAI_API_USER': user, 'EDGEAI_API_PASSWORD': password}
+            'EDGEAI_API_USER': user, 'EDGEAI_API_PASSWORD': password,
+            'EDGEAI_RECOVERY_INSPECT_ONLY':str(inspection).lower()}
         env.update({k:'false' for k in ['EDGEAI_RUNTIME_ENABLED','EDGEAI_VD_ENABLED','EDGEAI_KUBE_ENABLED',
             'EDGEAI_REMOTE_ENABLED','EDGEAI_STREAM_ENABLED','EDGEAI_STREAM_BINDINGS_ENABLED','EDGEAI_STREAM_RUNS_ENABLED','EDGEAI_API_TLS_ENABLED']})
+        env.update(extra_env or {})
         self.process = None
         try:
-            with private_file(directory/('api-'+database+'.log')) as log:
+            with private_file(directory/('api-'+database+'-'+uuid.uuid4().hex+'.log')) as log:
                 self.process = subprocess.Popen(['java','-Xmx512m','-jar',str(ROOT/'backend/app/build/libs/edgeai-control-plane.jar')],
                     env=env, stdout=log, stderr=log)
             deadline = time.monotonic()+90
@@ -153,7 +155,28 @@ def main():
             migrationCount=int(pg.sql('SELECT count(*) FROM edgeai.flyway_schema_history',target)),
             jarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         passed('actual archive preserves all table contents, migrations and snapshot boundary; source remains unchanged')
-        restored = Api(target,work); apis.append(restored)
+
+        def rejected_api(database, inspection, extra_env, expected_message):
+            previous_logs = set(work.glob('api-*.log'))
+            try:
+                unexpected = Api(database,work,inspection=inspection,extra_env=extra_env)
+            except AssertionError as failure:
+                assert str(failure) == 'Owned API exited; private log retained'
+            else:
+                unexpected.close()
+                raise AssertionError('Unsafe API startup was accepted')
+            new_logs = set(work.glob('api-*.log')) - previous_logs
+            assert len(new_logs) == 1
+            assert expected_message in next(iter(new_logs)).read_text()
+
+        rejected_api(target,False,{},'Restored database is quarantined')
+        rejected_api(target,False,{'SPRING_FLYWAY_ENABLED':'false'},'Restored database is quarantined')
+        assert fingerprints(target) == before
+        passed('restored database refuses normal packaged API startup even with Flyway disabled; no database rows change')
+        rejected_api(source,True,{},'Recovery inspection requires a marked restored database')
+        assert fingerprints(source) == source_after
+        passed('recovery inspection cannot mistake the original unmarked database for a restored copy')
+        restored = Api(target,work,inspection=True); apis.append(restored)
         assert {path:restored.request('GET',path) for path in fixed_paths} == expected_api
         assert fingerprints(target) == before
         for sql in ["UPDATE edgeai.profile_version SET version='9.9.9' WHERE id='"+profile['id']+"'",
@@ -163,6 +186,14 @@ def main():
             else: raise AssertionError('Restored immutable profile constraints were bypassed')
         assert fingerprints(target) == before
         passed('restored packaged API reads identical registry/workflow/run history and immutable constraints remain active')
+        try:
+            restored.request('POST','profiles/DEVICE',{'key':'forbidden-write','version':'1.0.0','spec':{'protocol':'synthetic'}},201)
+        except urllib.error.HTTPError as error:
+            assert error.code == 403
+        else:
+            raise AssertionError('Inspection API accepted an authenticated CSRF-protected write')
+        assert fingerprints(target) == before
+        passed('inspection API rejects an otherwise valid authenticated write with CSRF and preserves all table contents')
         cli('restore',['--input',bundle,'--target-database',target],1)
         assert fingerprints(target) == before
         passed('existing restore target is refused without changing any row')

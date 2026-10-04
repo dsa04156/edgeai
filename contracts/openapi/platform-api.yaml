@@ -4,6 +4,7 @@ info:
   version: 0.1.0
   description: Profile → Device/Node → Workflow DAG → Run/Task/Attempt와 검증된 결과 조회 API입니다.
     실제 Kubernetes 실행은 서버의 runtime 설정이 활성화된 환경에서 동작합니다. 쓰기 요청은 실제 DB에 반영되고 Swagger의 CSRF 토큰/쿠키는 자동 연결됩니다.
+    복원 DB의 조회 전용 점검 모드에서는 실행 기능이 비활성화되고 인증·CSRF가 유효한 쓰기 요청도 403으로 거절됩니다.
 servers:
 - url: /
 security:

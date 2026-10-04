@@ -18,6 +18,13 @@ ADR0061 DB/S3 전체 참조 대조는 실제PG16/TLS의9개 사례014850Z-ae31f5
 복원 식별자를 추가한 기존DB10개 회귀014814Z-0a42874e도 PASS다. Pod/broker 경계는 SQL fixture,
 DB 제약은 유지했다. 소유 DB/프로세스 정리 확인. 새 CI·운영 Secret/journal·외부 producer
 재조정·활성화와 전체 M9 수용은 남는다. docs/evidence/m9-recovery-references.md.
+ADR0062 복원 DB 격리: 일반 기동·Flyway 비활성 우회를 DataSource 초기화에서 거절하고,
+유효한 marker/실행 비활성 조건의 조회 모드만 허용한다. 단위113(015814Z-a341a724),
+실제PG226(020031Z-c21892d0:격리3개 포함), 패키징API/백업13(015909Z-df643a3e),
+계약(020353Z-baad79de) PASS다. 실제 두 PG 연결의 autocommit/transaction 쓰기25006,
+조회 응답·인증/CSRF 쓰기403·41테이블 불변을 확인했다. 격리 실제 저장소47
+(020809Z-89d0fd0c)·같은 새 JAR 참조 대조9(021137Z-d86797ad)도 PASS다. 새 CI/배포 및
+외부 producer 회수·운영 활성화는 후속이다. docs/evidence/m9-recovery-quarantine.md.
 ADR0057의 독립 M8 관리 부하 측정을 병행했다. 실제 API/전용 PG DB에서100→300→1,000대,
 각60초·11/33/110RPS·9,240요청의 오류/누락0, 정확한 관측/세션·재접속·자원 정리를 확인했다
 (234836Z-e9dbbb5f). 예정 시각 기준 p95는65.54/53.28/54.64ms다. 단위3개와 실제 API/DB의
