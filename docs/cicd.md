@@ -105,8 +105,29 @@ Traefik의 publishedService 설정도 이 빈 상태를 Ingress에 전달하므�
 
 Runner와 MinIO job은 각각 시험한 로컬 컨테이너를 main push에서만 GHCR에 발행한다.
 scaffold/storage/runner/images가 통과하면 gitops가 API·Dashboard 배포 pin과 함께
-Runner·MinIO digest를 `release.json`에 기록한다. 현재 참조 runtime 이미지 검증 플랫폼은
-linux/amd64다. Runner/MinIO digest 등록만으로 실제 실행 기능이 활성화되지는 않는다.
+Runner·MinIO digest를 `release.json`에 기록한다. MinIO와 API/Dashboard는 linux/amd64다.
+ADR0095 이후 Runner는 아래 두 native 플랫폼을 검증한다. 현재 배포의 플랫폼은
+`release.json`의 `runtimeImagePlatforms`와 실제 pin을 확인한다.
+
+## Runner native amd64·arm64
+
+`runner-native`는 `ubuntu-24.04`와 `ubuntu-24.04-arm`에서 각각 컨테이너111개와
+TLS MQTT97개를 실행한다. 소스 revision label, 호스트와 실제 컨테이너 architecture,
+원시 시험 수와 고정 image config digest를 artifact에 보존한다.
+main에서는 시험한 동일 이미지를 `sha-<source>-amd64`/`-arm64`로 발행한다.
+
+후속 `runner` job은 두 artifact의 소스와 실행 증거를 대조하고, 정확한 두 manifest digest를
+하나의 index로 발행한다. index를 다시 읽어 플랫폼별 digest를 확인하고 `images`의 실제
+kind 실행·복구 시험에 넘긴다. `gitops`는 index와 `runnerPlatformDigests`를 함께 기록한다.
+main의 전체 job은7개이며, branch에서는 native 시험까지만 수행하고 발행/index/images/gitops는
+생략한다. [branch 검증 근거](evidence/m10-native-runner-ci.md).
+
+native CI 성공은 실제 KubeEdge·GPU/NPU 모델 수용을 의미하지 않는다.
+실장비 구성 요소 시험은 [별도 명시 context](evidence/m10-hardware-components.md)로 실행한다.
+검증된 index가 배포된 후 `demo-multidevice.py --context <context> --architecture arm64`로
+공개 API의 ARM STREAM→BATCH·취소를 확인한다. `--node <name>`은 NODE case의 대상이고,
+`--edge-only`는 AUTO와 NODE, source driver를 모두 edge 노드에 제한한다.
+데모는 API/broker/storage를 재시작하지 않으며 고유 실행의 결과 이력은 보존한다.
 
 ## M9 DB 복원 게이트
 

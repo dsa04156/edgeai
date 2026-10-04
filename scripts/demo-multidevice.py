@@ -20,7 +20,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from image_identity import verify_image_id
+from image_identity import verify_image_id,manifest,platforms
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,6 +54,9 @@ def wait(predicate, seconds=120):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--context', required=True)
+    parser.add_argument('--architecture',choices=('amd64','arm64'),default='amd64')
+    parser.add_argument('--node',help='Ready node name for the explicit NODE case')
+    parser.add_argument('--edge-only',action='store_true',help='Constrain all Runner and driver Pods to KubeEdge nodes')
     parser.add_argument('--runner-image', help='Explicit CI-tested project Runner digest')
     parser.add_argument('--runner-source', help='Full source commit paired with the explicit Runner digest')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/multidevice-demo.json')
@@ -79,12 +82,15 @@ def main():
     assert all(settings[name] == 'true' for name in ('EDGEAI_STREAM_ENABLED', 'EDGEAI_STREAM_BINDINGS_ENABLED', 'EDGEAI_STREAM_RUNS_ENABLED', 'EDGEAI_API_TLS_ENABLED'))
     pin = json.loads((ROOT / 'deploy/kubernetes/overlays/dev/release.json').read_bytes())
     image = args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@' + pin['runnerDigest']
+    if args.architecture=='arm64':
+        assert 'linux/arm64' in platforms(manifest(image)), 'ARM demo requires a verified multi-platform Runner index'
     runner_digest = image.split('@', 1)[1]
     root = 'edgeai-multidevice-' + uuid.uuid4().hex[:12]
     labels = {'app.kubernetes.io/part-of': 'edgeai', 'app.kubernetes.io/managed-by': 'edgeai-stream-demo', 'edgeai.io/test-id': root}
     keys = {name: str(uuid.uuid4()) for name in ('auto', 'node', 'cancel')}
     records, forwards, seen, run_ids = [], [], {}, set()
     report = {'scope': 'existing-deployment-stream-dag', 'testId': root, 'runnerImage': image, 'runnerSourceRevision': args.runner_source or pin['sourceRevision'],
+              'architecture':args.architecture,'edgeOnly':args.edge_only,
               'apiImage': deployment['spec']['template']['spec']['containers'][0]['image'],
               'checkpointBarriers': [], 'observedPods': seen}
     def query(sql):
@@ -105,12 +111,15 @@ def main():
             statuses = pod.get('status', {}).get('containerStatuses', [])
             if not statuses or not statuses[0].get('imageID'):
                 continue
-            verify_image_id(image,statuses[0]['imageID'])
+            verify_image_id(image,statuses[0]['imageID'],'linux/'+args.architecture)
             assert spec['serviceAccountName'] == 'edgeai-runner' and spec['automountServiceAccountToken'] is False
             assert next(v for v in spec['volumes'] if v['name'] == 'edgeai-trust')['configMap']['name'] == settings['EDGEAI_RUNTIME_CA_CONFIG_MAP']
             if meta['uid'] not in seen:
                 node = read(['get', 'node', spec['nodeName'], '-o', 'json'])
-                seen[meta['uid']] = {'runId': run, 'attemptId': meta['labels']['edgeai.io/attempt-id'], 'nodeUid': node['metadata']['uid'], 'imageID': statuses[0]['imageID']}
+                assert node['status']['nodeInfo']['architecture']==args.architecture
+                if args.edge_only:assert 'node-role.kubernetes.io/edge' in node['metadata']['labels']
+                seen[meta['uid']] = {'runId': run, 'attemptId': meta['labels']['edgeai.io/attempt-id'], 'nodeUid': node['metadata']['uid'],
+                    'nodeName':node['metadata']['name'],'architecture':args.architecture,'imageID': statuses[0]['imageID']}
     def create(kind, **fields):
         obj = {'apiVersion': 'v1', 'kind': kind, 'metadata': {'name': root, 'namespace': 'edgeai', 'labels': labels}, **fields}
         value = read_create(obj)
@@ -161,16 +170,23 @@ def main():
                     return json.loads(response.read(1048576))
             public('csrf')
             nodes = read(['get', 'nodes', '-o', 'json'])['items']
-            node = next(n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
-                        and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', [])))
+            node = next(n for n in nodes if n['status']['nodeInfo']['architecture'] == args.architecture and not n['spec'].get('unschedulable')
+                        and (not args.node or n['metadata']['name']==args.node)
+                        and (not args.edge_only or 'node-role.kubernetes.io/edge' in n['metadata']['labels'])
+                        and not any(t['effect'] in ('NoSchedule', 'NoExecute') for t in n['spec'].get('taints', []))
+                        and all(any(c['type']==kind and c['status']==status for c in n['status']['conditions'])
+                            for kind,status in [('Ready','True'),('DiskPressure','False'),('MemoryPressure','False'),('PIDPressure','False')]))
+            selector={'kubernetes.io/arch':args.architecture}
+            if args.edge_only:selector['node-role.kubernetes.io/edge']=''
             config = {'origin': settings['EDGEAI_RUNTIME_CONTROL_PLANE_URL'], 'runnerImage': image, 'nodeId': node['metadata']['uid'],
+                      'architecture':args.architecture,'runnerNodeSelector':selector,
                       'cases': list(keys), 'runKeys': keys, 'resourcePrefix': root,
                       'streamSpec': json.loads((ROOT / 'contracts/profiles/service-stream.example.json').read_bytes()),
                       'batchSpec': json.loads((ROOT / 'contracts/profiles/service-execution.example.json').read_bytes()),
                       'reportCommand': 'import time; time.sleep(2)\n' + (ROOT / 'runner/examples/stream_report.py').read_text()}
             create('ConfigMap', immutable=True, data={'driver.py': (ROOT / 'scripts/stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': ca_path.read_text()})
             pod = create('Pod', spec={'restartPolicy': 'Never', 'automountServiceAccountToken': False, 'enableServiceLinks': False,
-                'nodeSelector': {'kubernetes.io/arch': 'amd64'}, 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
+                'nodeSelector': selector, 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001, 'seccompProfile': {'type': 'RuntimeDefault'}},
                 'containers': [{'name': 'source-driver', 'image': image, 'command': ['python3', '-B', '/scenario/driver.py'],
                     'env': [{'name': 'EDGEAI_API_USER', 'value': base['EDGEAI_API_USER']},
                             {'name': 'EDGEAI_API_PASSWORD', 'valueFrom': {'secretKeyRef': {'name': 'edgeai-runtime', 'key': 'EDGEAI_API_PASSWORD'}}},
@@ -184,6 +200,9 @@ def main():
                 assert value['metadata']['uid'] == pod['metadata']['uid'] and value['status'].get('phase') not in ('Failed', 'Succeeded')
                 return any(s.get('state', {}).get('running') for s in value['status'].get('containerStatuses', []))
             wait(started)
+            machine=call(['-n','edgeai','exec',root,'--','python3','-c','import platform;print(platform.machine())']).decode().strip()
+            assert machine=={'amd64':'x86_64','arm64':'aarch64'}[args.architecture]
+            report['driverMachine']=machine
             completed = set()
             deadline = time.monotonic() + 600
             while time.monotonic() < deadline:

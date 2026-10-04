@@ -2,10 +2,20 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
-M10의 실제 클러스터 [자원 관측](docs/evidence/m10-hardware-inventory.md): 등록10개,
-Ready4개(amd64/arm64), Ready GPU3개/NPU1개. edge label6개는 모두Ready가 아니다.
-사용 가능한 후보가 없다고 가정하지 않으며 실제 장치 접근/모델 실행·taint/압박/사용량을
-확인해야 한다. 공유 설정은 불변이고 하드웨어 전체 gate는 계속 미완료다.
+M10의 [실장비 구성 요소](docs/evidence/m10-hardware-components.md)최종7개
+`174327Z-583d0e77` PASS. 선행 전체 시험의 DiskPressure 퇴거 실패를 보존하고
+안정적인 건강 상태의 노드를 우선하도록 보완했다. 최초 경로별 검증은 다음과 같다:
+서버amd64/arm64 CPU·RTX5080/GB10 CUDA·ARIES 비루트 접근5개 `173534Z-ccbf4ed5`,
+KubeEdge Tinker CPU/Orin CUDA2개 `173721Z-fcb13cc9`. 실제 계산·고정 이미지·신원·소유 정리를
+확인했다. 과거 [자원 관측](docs/evidence/m10-hardware-inventory.md)의 Ready4는 시점별 기록이며
+현재 상태를 뜻하지 않는다. NPU 추론·플랫폼 API를 통한 실제 모델/장치 단절·외부 계약은 남는다.
+
+ADR0095 native amd64/arm64 각각 Runner111/MQTT97과 원시 artifact 감사
+`173754Z-71f9acbd` PASS. [근거](docs/evidence/m10-native-runner-ci.md).
+검증 branch 소스6853fd87이며 index 발행·실제 kind/새 배포는 main CI에서 확인한다.
+전체 branch CI4개 성공/3개 생략·원시35개/PG230/단위122 감사 `174542Z-e978bc85` PASS.
+후속 architecture 선택 공개 데모의 기존amd648Pod/S36개 `174227Z-17088dc7` PASS.
+ARM 공개 API 실행은 native index 발행 후 확인한다.
 
 ADR0094의 기록된 STREAM target 실패 일관성 검사를 포함해36개 `170123Z-963eee1a` PASS다.
 실제 복원DB16/부모자식4쌍·실패2건/새retry0·원래 실패/Operation/source/checkpoint 이력,
