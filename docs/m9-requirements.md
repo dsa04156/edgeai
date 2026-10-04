@@ -145,6 +145,12 @@ ADR0104의 [Kubernetes Result 복원](recovery-kubernetes-results.md)은 원래 
 확인했다. 자식은 대기만 하며 새 실행 권한을 만들지 않는다. STREAM/VD 결과 권한 소비,
 원본 API/writer 차단과 종합 재활성화·실제 외부 계약 수용·새 CI/배포는 남는다.
 
+ADR0105의 [VD 자식 시작 기록](evidence/m9-vd-task-start-journal.md)은 최초 claim 응답 전에
+배정 ID·세션/세대·슬롯·설정·허가 당시 lease와 원래 기한을 S3에 보존한다. 대상8개와
+실 Kubernetes7개에서27개 VD 기록·18개 고정 결과를 검증했다. 최종 개별 수트의
+단위122/PG232/runtime70/저장소11개 통과와 전체 명령의 간헐 실패를 구분한다.
+VD Result 기록·복원 DB 소비·STREAM 권한/종합 활성화는 남는다.
+
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,
 고정 S3 version/checksum·checkpoint가 보존되는지 확인한 다음 서비스를 활성화해야 한다.

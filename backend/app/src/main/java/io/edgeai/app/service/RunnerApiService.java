@@ -18,8 +18,9 @@ public final class RunnerApiService {
     private final Clock clock;
     private final RuntimeStartJournal starts;
     private final RuntimeResultPublisher results;
-    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results) {
-        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;
+    private final VDTaskStartJournal vdStarts;
+    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results,VDTaskStartJournal vdStarts) {
+        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;this.vdStarts=vdStarts;
     }
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
@@ -43,11 +44,10 @@ public final class RunnerApiService {
                 "stepTimeoutSeconds",stream.stepTimeoutSeconds(),"limits",Map.of("maxFrames",limits.maxFrames(),
                     "maxBufferBytes",limits.maxBufferBytes(),"maxStateBytes",limits.maxStateBytes())));
         }
-        if(!runtime.vd()){
-            starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
-            // External persistence must not let a concurrent cancellation or lease expiry issue a stale response.
-            lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
-        }
+        if(runtime.vd())vdStarts.retainVDStart(Objects.requireNonNull(assignment.vdStartAuthority()));
+        else starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
+        // External persistence must not let concurrent cancellation or lease expiry issue a stale response.
+        lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
         response.put("timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds())));
         return response;
     }

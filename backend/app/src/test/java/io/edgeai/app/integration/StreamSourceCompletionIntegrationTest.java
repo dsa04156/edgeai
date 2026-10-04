@@ -647,8 +647,11 @@ class StreamSourceCompletionIntegrationTest {
                     "checkpointSerial",cp==null?-1:cp.request().serial()));
             }
             var lines=Files.readAllLines(folder.resolve("probe.log")).stream().filter(s->s.matches("VD_STREAM_[A-Za-z0-9_ .,:-]+") && s.length()<2000).toList();
+            var runnerLog=folder.resolve("transferred-runner/runner.log");
+            var runnerLines=Files.exists(runnerLog)?Files.readAllLines(runnerLog).stream()
+                .filter(s->s.matches("RUNNER_(WORKLOAD_START|RESULT_COMMITTED|FAILED [A-Z_]{1,80})")).toList():List.of();
             System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,"offload",offload,
-                "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines)));
+                "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines,"transferredRunner",runnerLines)));
             throw error;
         }finally{
             if(transferredRunner!=null && transferredRunner.isAlive()){

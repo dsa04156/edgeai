@@ -39,7 +39,7 @@ class VDStreamObserver:
                 assert trust['name'] == self.trust
                 node = self.read(['get', 'node', spec['nodeName'], '-o', 'json'])
                 assert node['metadata']['uid'] == runtime['nodeUid']
-                self.pods[meta['uid']] = {'vdId': vd, 'runtimeId': runtime['id'], 'name': meta['name'], 'nodeUid': node['metadata']['uid'],
+                self.pods[meta['uid']] = {'vdId': vd, 'runtimeId': runtime['id'], 'name': meta['name'], 'nodeUid': node['metadata']['uid'], 'nodeName': spec['nodeName'],
                     'imageID': status[0]['imageID'], 'trustedTls': True, 'restartCount': 0}
 
     def processes(self, pod, attempts, kill=None):

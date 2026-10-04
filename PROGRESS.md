@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0105 VD 자식의 최초 허가를 성공 응답 전에 S3에 보존한다. 같은 Pod의 별도 배정,
+heartbeat/drain·동시 요청·응답 유실·취소/만료를 대상8개223308Z-da0e87ed에서 검증했다.
+실 Kubernetes7개224349Z-50a87186 PASS: VD 기록27개/Node2개·고정 출력18개·소유정리.
+[근거](docs/evidence/m9-vd-task-start-journal.md). 최종 각 수트 단위122/PG232/runtime70개
+225433Z-3ccee0f9·저장소11개230128Z-847a8732 PASS. 전체 명령은 SQLite export timeout으로
+FAIL이며 단일 전체 통과가 아니다. 초기 STREAM/DB 대기 실패·관련29개 재검증 통과와
+WALSync 지연 관측을 보존하고 원인 해결을 주장하지 않는다. 선행077d139 CI37239863156은5jobs 성공/images 진행 중.
+새 VD 변경은 미push이며 VD 결과/복원 권한·전역writer/종합 활성화와 전체 단계는 미완료다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0104의 Kubernetes BATCH Result 복원을 구현했다. 원래 시작/결과 기록·실제 종료·
 고정 S3 파일을 대조해 원래 ID/시각/producer 이력과 자식 대기를 한 transaction에 반영한다.
 새20개221111Z-8496de2b·Remote 결과15개221124Z-a42d00d4/실패15개221659Z-66ca50d8·

@@ -35,7 +35,9 @@ paths:
         Kubernetes 작업은 성공 응답 전에 최초 시작 허가의 신원·작업 digest·원래 실행/전환 기한을
         버전 관리 S3에 저장하고 다시 읽어 확인한다. 재요청은 최초 기록을 보존한다.
         저장 후 현재 실행 권한을 다시 검사하므로 저장 도중 취소·기한 만료는409다.
-        VD 자식은 기존 supervisor 배정 절차를 따른다. 시작 기록은 실제 계산 완료나 결과 성공을 뜻하지 않는다.
+        VD 자식도 최초 허가를 별도 S3 기록으로 보존하며 supervisor 세대·세션·배정 ID·슬롯·
+        설정 digest와 허가 당시 lease를 함께 확인한다. heartbeat·drain 이후 재요청에도 최초 기록을
+        유지하고 응답 전 현재 supervisor 권한을 다시 검사한다. 시작 기록은 실제 계산 완료나 결과 성공을 뜻하지 않는다.
       parameters:
       - name: attemptId
         in: path

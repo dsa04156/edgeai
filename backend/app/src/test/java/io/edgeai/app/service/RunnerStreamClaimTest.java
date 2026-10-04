@@ -31,7 +31,7 @@ class RunnerStreamClaimTest {
         when(runtimes.byAttempt(attempt)).thenReturn(Optional.of(runtime));
         var spec=ServiceExecutionInput.parseSpec(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
         when(lifecycle.claim(attempt,1,pod)).thenReturn(new RuntimeLifecycleService.Assignment(runtime,spec,"{}",List.of(),mock(RuntimeStartAuthority.class)));
-        var api=new RunnerApiService(lifecycle,runtimes,storage,mock(ArtifactCommitService.class),Clock.fixed(now,ZoneOffset.UTC),mock(RuntimeStartJournal.class),mock(RuntimeResultPublisher.class));
+        var api=new RunnerApiService(lifecycle,runtimes,storage,mock(ArtifactCommitService.class),Clock.fixed(now,ZoneOffset.UTC),mock(RuntimeStartJournal.class),mock(RuntimeResultPublisher.class),mock(io.edgeai.domain.storage.VDTaskStartJournal.class));
         var json=new JsonDocuments();var response=(Map<?,?>)api.claim(principal,json.canonical(Map.of("epoch",1,"podUid",pod.podUid().toString())));
         var original=(Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
         assertThat(json.canonical(response.get("stream"))).isEqualTo(json.canonical(original.get("stream")));

@@ -109,7 +109,7 @@ class ArtifactStorageIntegrationTest {
             if(sha!=null)args.add(sha);
             var process=new ProcessBuilder(args).redirectErrorStream(true).start();
             try {
-                if(!process.waitFor(15,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("Checkpoint probe timed out");
+                assertTrue(process.waitFor(15,java.util.concurrent.TimeUnit.SECONDS),"Checkpoint "+phase+" probe exceeded its 15-second limit");
                 String result=new String(process.getInputStream().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
                 assertEquals(0,process.exitValue(),"Checkpoint probe failed; private output suppressed");
                 assertEquals("STREAM_CHECKPOINT_"+phase.toUpperCase(java.util.Locale.ROOT)+"_PASS",result.strip());

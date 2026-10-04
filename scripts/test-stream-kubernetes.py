@@ -744,6 +744,29 @@ with response: print(response.status)
                     assert result.returncode == 0, 'Actual Kubernetes start records differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedStartJournals'] = len(starts)
+                    vd_starts = json.loads(query("""
+                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                            'runtimeId',r.id,'runId',r.run_id,'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,
+                            'namespace',r.namespace,'vdId',a.vd_id,'allocationId',a.id,'vdRuntimeId',a.vd_runtime_id,
+                            'generation',a.generation,'sessionId',a.session_id,'podName',v.pod_name,'podUid',a.pod_uid,
+                            'nodeUid',r.node_uid,'nodeName',r.node_name,'slot',a.slot,'assignedSequence',a.assigned_sequence,
+                            'assignedAt',a.assigned_at,'configurationDigest',v.configuration_digest,'readyAt',v.ready_at,
+                            'expiresAt',r.expires_at,'createdAt',r.created_at,'drainDeadline',v.drain_deadline,
+                            'offloadId',o.id,'startDeadline',o.start_deadline)), '[]'::jsonb)
+                        FROM edgeai.runtime_instance r JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id
+                        JOIN edgeai.vd_runtime v ON v.id=a.vd_runtime_id LEFT JOIN edgeai.task_offload o ON
+                            (o.target_attempt_id=r.attempt_id OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m
+                             WHERE m.operation_id=o.id AND m.target_attempt_id=r.attempt_id))
+                        WHERE r.producer_pod_uid IS NOT NULL
+                        """))
+                    for receipt in vd_starts:
+                        observed = vd_observer.pods[receipt['podUid']]
+                        assert receipt['vdRuntimeId'] == observed['runtimeId'] and receipt['vdId'] == observed['vdId']
+                        assert receipt['nodeUid'] == observed['nodeUid'] and receipt['nodeName'] == observed['nodeName']
+                    result = subprocess.run(['node', 'scripts/verify-vd-start-journals.mjs'], input=json.dumps(vd_starts).encode(), env=verify_env, capture_output=True, timeout=60)
+                    assert result.returncode == 0, 'Actual VD child start records differed; private output suppressed'
+                    print(result.stdout.decode().strip(), flush=True)
+                    snapshot['verifiedVDStartJournals'] = len(vd_starts)
                     wait(lambda: query("SELECT count(*) FROM edgeai.runtime_result_publication WHERE NOT completed") == '0',
                         60, 'Committed Result publication queue did not drain')
                     results = json.loads(query("""

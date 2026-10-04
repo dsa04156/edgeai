@@ -65,7 +65,7 @@ class VDTaskArtifactIntegrationTest {
     private VDRuntime supervisor;
     private UUID vdId;
     private Path work;
-    private final AtomicBoolean dropAssignment=new AtomicBoolean(),dropCommit=new AtomicBoolean();
+    private final AtomicBoolean dropAssignment=new AtomicBoolean(),dropClaim=new AtomicBoolean(),dropCommit=new AtomicBoolean();
     private String encode(Object v){return json.canonical(v);}
     @BeforeEach void storage()throws Exception {
         admin=MinioClient.builder().endpoint(required("EDGEAI_STORAGE_URL")).credentials(required("EDGEAI_MINIO_USER"),required("EDGEAI_MINIO_PASSWORD")).region("us-east-1").build();
@@ -96,6 +96,7 @@ class VDTaskArtifactIntegrationTest {
                 var response=client.send(request.POST(HttpRequest.BodyPublishers.ofByteArray(exchange.getRequestBody().readAllBytes())).build(),HttpResponse.BodyHandlers.ofByteArray());
                 int status=response.statusCode();byte[] data=response.body();String path=exchange.getRequestURI().getPath();
                 if(loseReplies && path.endsWith("/poll") && status==200 && !((List<?>)((Map<?,?>)json.decode(new String(data,java.nio.charset.StandardCharsets.UTF_8))).get("assignments")).isEmpty() && dropAssignment.compareAndSet(false,true)
+                    || loseReplies && path.endsWith("/claim") && status==200 && dropClaim.compareAndSet(false,true)
                     || loseReplies && path.endsWith("/commit") && status==201 && dropCommit.compareAndSet(false,true)) {
                     status=503;data="{}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
                 }
@@ -141,10 +142,11 @@ class VDTaskArtifactIntegrationTest {
         UUID sp=fixture(true);UUID run=run(sp,true,500);
         await(()->executions.run(run,false).orElseThrow().state().equals("SUCCEEDED"),30,"Actual VD DAG did not succeed");
         await(()->allocations.open(supervisor.id()).isEmpty(),10,"Completed child process slots not acknowledged");
-        assertThat(dropAssignment).isTrue();assertThat(dropCommit).isTrue();
+        assertThat(dropAssignment).isTrue();assertThat(dropClaim).isTrue();assertThat(dropCommit).isTrue();
         for(var task:executions.tasks(run)) {
             var result=runtimes.result(task.id()).orElseThrow();assertThat(result.vdRuntimeId()).isEqualTo(supervisor.id());assertThat(result.producerPodUid()).isEqualTo(supervisor.podUid());assertThat(executions.attempts(task.id())).hasSize(1);
             var r=runtimes.runtime(result.runtimeId()).orElseThrow();assertThat(r.jobName()).isNull();assertThat(r.observedState()).isEqualTo("TERMINATED");
+            verifyStart(r);
             var artifact=result.outputs().getFirst().artifact();var grant=storage.download(artifact);
             var response=client.send(HttpRequest.newBuilder(grant.url()).timeout(Duration.ofSeconds(5)).GET().build(),HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);var data=(Map<?,?>)json.decode(response.body());assertThat(data.get("sourceMode")).isEqualTo("SYNTHETIC");assertThat(((Number)data.get("score")).doubleValue()).isEqualTo(8);
@@ -157,6 +159,21 @@ class VDTaskArtifactIntegrationTest {
         executionApi.cancelTask(slow.id(),"{}");await(()->executions.task(slow.id()).orElseThrow().state().equals("CANCELLED"),15,"Cancelled child did not terminate");
         await(()->executions.task(fast.id()).orElseThrow().state().equals("SUCCEEDED"),15,"Other child did not succeed");await(()->allocations.open(supervisor.id()).isEmpty(),10,"Final slots not acknowledged");
         assertThat(runtimes.result(slow.id())).isEmpty();assertThat(runtimes.result(fast.id())).isPresent();assertThat(process.isAlive()).isTrue();assertThat(vdLifecycle.get(supervisor.id()).ready(Instant.now())).isTrue();
-        assertThat(allocations.byRuntime(runtimes.byAttempt(attempt).orElseThrow().id()).orElseThrow().exitCode()).isNotZero();drain();verifyNoInteractions(jobs);
+        assertThat(allocations.byRuntime(runtimes.byAttempt(attempt).orElseThrow().id()).orElseThrow().exitCode()).isNotZero();
+        verifyStart(runtimes.runtime(runtimes.result(fast.id()).orElseThrow().runtimeId()).orElseThrow());drain();verifyNoInteractions(jobs);
+    }
+    private void verifyStart(RuntimeInstance runtime)throws Exception {
+        String key="authority/vd-task-start/"+runtime.id()+".json";var versions=new ArrayList<String>();
+        for(var value:admin.listObjects(ListObjectsArgs.builder().bucket(BUCKET).prefix(key).includeVersions(true).build()))versions.add(value.get().versionId());
+        assertThat(versions).hasSize(1);var stat=admin.statObject(StatObjectArgs.builder().bucket(BUCKET).object(key).build());
+        assertThat(stat.versionId()).isEqualTo(versions.getFirst());assertThat(stat.contentType()).isEqualTo("application/vnd.edgeai.vd-task-start+json");
+        var allocation=allocations.byRuntime(runtime.id()).orElseThrow();
+        try(var input=admin.getObject(GetObjectArgs.builder().bucket(BUCKET).object(key).versionId(stat.versionId()).build())){
+            var document=(Map<?,?>)json.decode(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
+            assertThat(document.get("runtimeId")).isEqualTo(runtime.id().toString());assertThat(document.get("attemptId")).isEqualTo(runtime.attemptId().toString());
+            assertThat(document.get("allocationId")).isEqualTo(allocation.id().toString());assertThat(document.get("sessionId")).isEqualTo(allocation.sessionId().toString());
+            assertThat(document.get("vdRuntimeId")).isEqualTo(supervisor.id().toString());assertThat(document.get("podUid")).isEqualTo(supervisor.podUid().toString());
+            assertThat(Instant.parse((String)document.get("admittedAt"))).isBefore(runtime.expiresAt()).isBefore(Instant.parse((String)document.get("supervisorLeaseUntil")));
+        }
     }
 }

@@ -2,6 +2,17 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0105의 VD 자식 최초 실행 허가 기록을 구현했다. 배정/세션/세대/슬롯·원래 lease와
+기한을 S3 한 version으로 보존한다. 대상8개223308Z-da0e87ed·실 Kubernetes7개
+224349Z-50a87186 PASS: VD 시작 기록27개/Node2개·고정 출력18개·소유 자원 정리.
+[근거](docs/evidence/m9-vd-task-start-journal.md). 단위122/PG232/runtime70개225433Z-3ccee0f9와
+저장소11개230128Z-847a8732를 각 수트에서 통과했다. 전체 명령은 SQLite export timeout으로
+FAIL이며 초기 STREAM/DB 대기 실패·관련29개 재검증 PASS와 함께 보존한다. 단일 전체 PASS가 아니다.
+선행077d139 CI37239863156은5jobs 성공/images 진행 중이며 신규 코드는 아직 미push다.
+VD Result 기록·복원 권한 소비·전역 writer/API 차단·종합 활성화와 전체 M0–M10 목표를 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0104의 Kubernetes BATCH Result 복원을 구현했다. 원래 시작/결과 기록·실제 종료·
 고정 S3 파일을 대조해 원래 ID/시각/producer 이력과 자식 대기를 한 transaction에 반영한다.
 새20개221111Z-8496de2b·Remote 결과15개221124Z-a42d00d4/실패15개221659Z-66ca50d8·

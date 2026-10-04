@@ -32,7 +32,7 @@ class RuntimeConfiguration {
     @Bean ArtifactCommitService artifactCommitService(RuntimeLifecycleService lifecycle,ArtifactStore store){return new ArtifactCommitService(lifecycle,store);}
     @Bean RuntimeResultPublicationRepository runtimeResultPublications(org.springframework.jdbc.core.JdbcTemplate jdbc){return new io.edgeai.adapters.repository.JdbcRuntimeResultPublicationRepository(jdbc);}
     @Bean RuntimeResultPublisher runtimeResultPublisher(RuntimeRepository runtimes,io.edgeai.domain.storage.RuntimeResultJournal journal){return new RuntimeResultPublisher(runtimes,journal);}
-    @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock,io.edgeai.domain.storage.RuntimeStartJournal starts,RuntimeResultPublisher results){return new RunnerApiService(lifecycle,runtimes,store,commit,clock,starts,results);}
+    @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock,io.edgeai.domain.storage.RuntimeStartJournal starts,RuntimeResultPublisher results,io.edgeai.domain.storage.VDTaskStartJournal vdStarts){return new RunnerApiService(lifecycle,runtimes,store,commit,clock,starts,results,vdStarts);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     RuntimeResultPublicationWorker runtimeResultPublicationWorker(RuntimeResultPublicationRepository publications,RuntimeResultPublisher publisher,RuntimeSettings settings,Clock clock){return new RuntimeResultPublicationWorker(publications,publisher,settings,clock);}
