@@ -30,6 +30,13 @@ DB 접속은 `.env`를 사용하며 Compose는 `--transport compose`를 추가�
 이후 [기록된 workflow 취소·재시도 조정](recovery-kubernetes-workflows.md)을 실행할 수 있다.
 결과 미기록 작업·진행 중 offload/STREAM 조정은 별도다.
 
+Job UID는 기록됐지만 Runner claim 전 장애가 난 경우에는 `--unclaimed-jobs`를 추가할 수
+있다. 정확한 Job·보존된 자식 Pod 전체의 실제 종료와 Job 상태를 대조한다. 결과의
+`unclaimedJobs`는 이 별도 증거이며 원래 producer/node 필드는 채우지 않는다. Job UID가
+없거나 자식 Pod가 전혀 남지 않은 Job은 계속 미해결이다. 후속 workflow 명령에도 같은
+옵션이 필요하다. [ADR0084](adr/0084-recovery-unclaimed-jobs.md)와
+[실제56개 검증](evidence/m9-recovery-unclaimed-jobs.md)을 참고한다.
+
 종료0은 커밋 후 재검증 일치, 종료2는 관측/신원 충돌 등 BLOCKED, 종료1은 입력/DB 오류
 등 FAIL이다. `failure.json`의 `databaseModified:null`은 커밋 여부가 확정되지 않았다는 뜻이다.
 intent를 보존하고 같은 복구 입력·UUID로 재실행한다. 이미 반영한 행은 변경0으로 확인한다.

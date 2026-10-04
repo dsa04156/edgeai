@@ -44,10 +44,12 @@ def main():
     p.add_argument('--vd-tasks',action='store_true',help='Include explicit VD allocation and immutable outcome history fixtures')
     p.add_argument('--workflows',action='store_true',help='Reconcile recorded workflow state after VD/Kubernetes retirement')
     p.add_argument('--offloads',action='store_true',help='Include explicit restored BATCH transfer recovery fixtures')
+    p.add_argument('--unclaimed-jobs',action='store_true',help='Exercise recorded Jobs whose Pod never claimed its runtime')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
     if args.workflows and not args.vd_tasks: p.error('--workflows requires --vd-tasks')
     if args.offloads and not args.workflows: p.error('--offloads requires --workflows')
+    if args.unclaimed_jobs and not args.offloads: p.error('--unclaimed-jobs requires --offloads')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -88,7 +90,8 @@ def main():
     def cli(a,expected=0):
         command=[sys.executable,'scripts/recovery_kubernetes_retire.py']
         for k,v in vars(a).items():
-            if v is not None: command+=['--'+k.replace('_','-'),str(v)]
+            if v is True: command+=['--'+k.replace('_','-')]
+            elif v is not None and v is not False: command+=['--'+k.replace('_','-'),str(v)]
         result=subprocess.run(command,capture_output=True,timeout=150)
         with private_file(work/('command-'+uuid.uuid4().hex+'.log')) as log: log.write(result.stdout+result.stderr)
         assert result.returncode==expected,'Kubernetes retirement CLI outcome differs; private diagnostics retained'
@@ -235,7 +238,7 @@ def main():
             fixture_api.close()
         backup(pg,source,work/'backup')
         targets=[]
-        for _ in range(4 if args.vd_tasks else 3):
+        for _ in range(5 if args.unclaimed_jobs else 4 if args.vd_tasks else 3):
             database='edgeai_restore_kret_'+uuid.uuid4().hex
             restoring=Postgres(args.transport,diagnostics=work/('restore-'+uuid.uuid4().hex))
             restored=restore(restoring,work/'backup',database); owned[database]=restored['databaseOid']
@@ -245,6 +248,11 @@ def main():
         db,receipt=targets[0]; second,receipt2=targets[1]
         original=fingerprints(db); other=fingerprints(second); assert len(original)==43
         closures_before=pg.sql("SELECT to_jsonb(a)::text FROM edgeai.vd_task_allocation a WHERE closed_at IS NOT NULL ORDER BY id",db)
+        unclaimed_fixtures={}
+        if args.unclaimed_jobs:
+            from test_recovery_unclaimed_jobs import seed as seed_unclaimed
+            unclaimed_fixtures=seed_unclaimed(pg,targets[4][0],kube,create,namespace,operation,
+                pod_spec,vd_work['claimed'],attempt,run['id'])
         passed('real-running-parent-child-containers-backed-up-to-isolated-restores-and-source-database-removed')
 
         extra_vr=str(uuid.uuid4())
@@ -260,13 +268,13 @@ def main():
         durable_json(work/'termination-report.json',stopped)
         actual=kube.items(namespace,'Pod')[0]
         bound=[p for p in actual if p['spec'].get('nodeName')]
-        assert len(actual)==3 and len(bound)==2
+        assert len(actual)==(5 if args.unclaimed_jobs else 3) and len(bound)==(3 if args.unclaimed_jobs else 2)
         assert all(c['state']['terminated']['message']=='CHILD_REAPED' for p in bound for c in p['status']['containerStatuses'])
         assert all(termination_proof(p)['kind']=='ALL_CONTAINERS_TERMINATED' for p in bound)
-        assert sum(termination_proof(p)['kind']=='NEVER_BOUND_TO_NODE' for p in actual)==1
+        assert sum(termination_proof(p)['kind']=='NEVER_BOUND_TO_NODE' for p in actual)==(2 if args.unclaimed_jobs else 1)
         count=sum(len(p['spec']['containers']) for p in bound)
-        assert count==(3 if args.vd_tasks else 2)
-        report.update(terminatedContainers=count,reapedChildren=count,unboundPostBackupPods=1)
+        assert count==(4 if args.unclaimed_jobs else 3 if args.vd_tasks else 2)
+        report.update(terminatedContainers=count,reapedChildren=count,unboundPostBackupPods=2 if args.unclaimed_jobs else 1)
         passed('actual-quota-and-retained-pod-evidence-prove-all-parent-and-child-processes-terminated')
         if args.workflows:
             import recovery_kubernetes_workflows as workflows
@@ -413,7 +421,7 @@ def main():
             assert pg.sql('SELECT count(*) FROM edgeai.'+table+' WHERE NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL OR attempts<>3',db)=='0'
         for table in ('runtime_instance','vd_runtime'):
             assert pg.sql("SELECT count(*) FROM edgeai."+table+" WHERE desired_state<>'STOPPED' OR observed_state<>'TERMINATED'",db)==('1' if args.vd_tasks and table=='runtime_instance' else '0')
-        assert completed['objectsAbsentFromDatabase']==1
+        assert completed['objectsAbsentFromDatabase']==(5 if args.unclaimed_jobs else 1)
         report.update(runtimesRetired=1,vdRuntimesRetired=1,commandsCompleted=4,bindingsClosed=1,preservedTables=43-len(changed),restoredDatabases=len(targets))
         passed('atomic-runtime-vd-command-and-binding-retirement-preserves-other-tables-and-other-restored-database')
         if args.vd_tasks:
@@ -433,7 +441,7 @@ def main():
             assert pg.sql("SELECT close_reason FROM edgeai.vd_task_allocation WHERE id="+literal(vd_work['committed-open']['allocation'])+'::uuid',db)=='POD_GONE'
             passed('committed-success-with-open-allocation-is-retired-only-with-physical-evidence-and-result-preserved')
         replay=cli(options(db,receipt)); assert not replay['databaseModified'] and fingerprints(db)==after
-        assert len(kube.items(namespace,'Pod')[0])==3
+        assert len(kube.items(namespace,'Pod')[0])==(5 if args.unclaimed_jobs else 3)
         assert kube.read(object_path('ResourceQuota',namespace,FENCE))['metadata']['uid']==stopped['quotaUid']
         passed('same-recovery-replay-changes-no-timestamps-and-retains-fence-and-pod-evidence')
 
@@ -474,6 +482,10 @@ def main():
             offload_retirement=cli(options(offload_db,offload_receipt))
             assert offload_retirement['vdTaskRuntimesRetired']==4 and offload_retirement['allocationsClosed']==4
             check_offloads(pg,offload_db,offload_receipt,options,fingerprints,passed,work,vd_work,attempt,report)
+
+        if args.unclaimed_jobs:
+            from test_recovery_unclaimed_jobs import check as check_unclaimed
+            check_unclaimed(pg,*targets[4],options,cli,fingerprints,passed,work,unclaimed_fixtures,report)
 
         inspection=Api(db,work,inspection=True); apis.append(inspection)
         inspection.request('GET','workflow-runs/'+run['id'])

@@ -1,6 +1,11 @@
 # 진행 상태
 
 [STATUS]
+ADR0084 claim 전 Job 복구의 실제56개131023Z-96d5d08f PASS. 복원DB5/부모자식4쌍,
+Job의 보존자식2개·빈Job미해결, 원래claim/node NULL·sourceOFFLOADED/배치/기한 보존,
+실제STARTING 만료1·원복/응답유실/변경0·소유정리 확인. kind56개 게이트 연결.
+[근거](docs/evidence/m9-recovery-unclaimed-jobs.md). 새CI/배포·종합복구·전체목표는 미완료다.
+
 새5a313e1 CI37203679354의 storage는 정책 JSON 원문 순서 비교에서 실패했다.
 격리 TLS MinIO40회 조회에서 원문2종/내용동일을 재현하고 의미 비교로 수정했다.
 실제25개 전체130621Z-a3eb3fd3 PASS·소유 프로세스 정리 확인.

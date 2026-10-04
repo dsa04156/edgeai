@@ -32,8 +32,11 @@ STREAM/진행 중 offload 등 별도 복구가 필요한 작업이다. 두 목�
 `pendingOffloads`는 증명 범위 안에서 아직 대기 중인 전환 수다. `unresolvedOffloads`는
 target 증거 누락·Remote/STREAM 또는 새 epoch 등 별도 처리가 필요한 전환이다. 이 계수는
 `--offloads`를 적용한 범위이며 기본 명령의0을 전체 전환 부재로 해석하지 않는다.
-현재 실제 시험은 취소와 drain 만료 및 미기록 target 보존을 검증한다. claim 전 target의
-종료 증거 회수와 전체 STARTING 복구 수용은 남는다. [ADR0083](adr/0083-recovery-batch-offloads.md).
+claim 전 target은 실행 정리와 이 명령에 모두 `--unclaimed-jobs`를 추가해, 기록된 Job과
+보존 Pod 전체의 종료를 새로 대조할 수 있다. 실제 STARTING 기한 만료 시험은 target만
+실패 처리하고 source OFFLOADED·원래 배치/기한·빈 claim을 보존한다. 미관측 Job과
+Remote/STREAM/group은 여전히 별도다. [ADR0083](adr/0083-recovery-batch-offloads.md),
+[ADR0084 검증](evidence/m9-recovery-unclaimed-jobs.md).
 
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.

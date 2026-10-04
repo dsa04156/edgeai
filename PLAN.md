@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0084의 `--unclaimed-jobs`는 기록된 Job과 실제 보존 자식 전체에서 claim 전 target
+종료를 증명한다. 실제56개131023Z-96d5d08f PASS: 복원DB5/부모자식4쌍·Pod신원미생성,
+빈Job/미기록UID 보존, STARTING 기한만료1·sourceOFFLOADED/고정배치/기한 보존,
+실제원복/응답유실/변경0과 소유정리. [근거](docs/evidence/m9-recovery-unclaimed-jobs.md).
+kind56개로 확장했으며 새 CI/배포·Remote/STREAM/group/journal·종합 활성화는 남는다.
+
 선행 be41a8b CI37200100790은5jobs/원시32개 PASS(125138Z-05565ce2)다.
 GitOps2f88205 실제 imageID/Ready/PVC/ArgoSynced(125137Z-ff9020e5)와 그 뒤 기존10파일/
 원래PVC·TLS256KiB/익명403/소유probe정리(125229Z-73489f8b)를 확인했다.

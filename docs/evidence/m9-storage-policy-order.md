@@ -16,3 +16,7 @@ storage의 기존 정책 보존 검사에서 실패했다. 다운로드한 원�
 `20261004T130621Z-a3eb3fd3`가 PASS다. root/기존 서명 URL 거절, 진행PUT2→1→0,
 원래2버전과 늦은 완료1버전 보존, 재시작·재개·환경 override·소유 프로세스 정리를
 확인했다. 새 커밋의 CI/배포 및 전체 M9 복구 완료를 뜻하지 않는다.
+
+원래 CI는 최종 failure이며 scaffold/runner는 success, images/gitops는 skipped다.
+다운로드한3개 artifact의 원시 실행 보고서23개는22 PASS/1 FAIL이었다. 저장소 검사
+실패 뒤의 게이트와 새 이미지 배포가 성공한 것으로 해석하지 않는다.

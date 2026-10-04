@@ -119,6 +119,7 @@ def prepare(pg, args):
         'targetDatabase':args.database, 'databaseOid':catalog['oid'], 'marker':catalog['marker'],
         'restoreReportSha256':catalog['restoreReportSha256'], 'beforeGuard':catalog['guard'],
         'evidence':retired['evidence'], 'provenRuntimes':sorted(proven), 'entries':entries+offload_entries,
+        'unclaimedJobs':retired['unclaimedJobs'],
         'unresolvedProducers':retired['unresolved'], 'unresolvedWorkflows':unresolved,
         'reconcileOffloads':reconcile_offloads, 'unresolvedOffloads':unresolved_offloads,
         'historiesRetained':retained, 'preparedAt':datetime.now(timezone.utc).isoformat()}
@@ -141,7 +142,7 @@ def apply(pg, args, plan):
                                    args.database,source=source,timeout=45,reject_stderr=True))
     after = prepare(pg, args)
     if (after['beforeGuard'] != result['afterGuard'] or any(after[k] != plan[k] for k in
-            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','provenRuntimes','unresolvedProducers'))):
+            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','provenRuntimes','unresolvedProducers','unclaimedJobs'))):
         raise Blocked('Post-commit recovery evidence changed; retain quarantine')
     report = {k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid')}
     report.update(**result, status='RECORDED_KUBERNETES_WORKFLOWS_RECONCILED', activated=False,
@@ -149,6 +150,7 @@ def apply(pg, args, plan):
         namespaceUid=args.namespace_uid, recoveryId=args.recovery_id,
         pendingRetries=sum(e['action']=='CHECK_RETRY' for e in after['entries']),
         unresolvedProducers=after['unresolvedProducers'], unresolvedWorkflows=after['unresolvedWorkflows'],
+        unclaimedJobs=after['unclaimedJobs'],
         unresolvedOffloads=after['unresolvedOffloads'],
         pendingOffloads=sum(e['action'].startswith('CHECK_OFFLOAD_') for e in after['entries']),
         reconcileOffloads=after['reconcileOffloads'],
@@ -172,6 +174,7 @@ def main():
     parser.add_argument('--pg-bin',type=Path)
     parser.add_argument('--timeout',type=int,default=120)
     parser.add_argument('--offloads',action='store_true',help='Also reconcile proven BATCH transfer cancellations and original deadlines')
+    parser.add_argument('--unclaimed-jobs',action='store_true',help='Accept retained terminal children of recorded Jobs without inventing producer claims')
     args=parser.parse_args(); args.output.mkdir(mode=0o700,parents=True,exist_ok=False); submitted=False
     try:
         if not 1<=args.timeout<=1800: raise ValueError('Timeout must be between 1 and 1800 seconds')

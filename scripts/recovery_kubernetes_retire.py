@@ -29,7 +29,7 @@ SELECT jsonb_build_object(
  'migrations',(SELECT json_agg(json_build_object('version',version,'success',success))
    FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),
  'runtimes',(SELECT coalesce(json_agg(to_jsonb(r)),'[]'::json) FROM
-   (SELECT id,run_id,task_id,attempt_id,epoch,namespace,job_name,job_uid,producer_pod_uid,node_name,
+   (SELECT id,run_id,task_id,attempt_id,epoch,namespace,job_name,job_uid,producer_pod_uid,node_uid,node_name,
     desired_state,observed_state FROM edgeai.runtime_instance WHERE runtime_kind='KUBERNETES') r),
  'vds',(SELECT coalesce(json_agg(to_jsonb(v)),'[]'::json) FROM
    (SELECT id,vd_id,generation,session_id,namespace,pod_name,pod_uid,node_uid,node_name,desired_state,observed_state FROM edgeai.vd_runtime) v),
@@ -85,6 +85,44 @@ def live_evidence(args):
     return evidence, jobs, pods
 
 
+def unclaimed_job(row, job, pods, classified):
+    """Prove retained children of the recorded Job without turning observation into a producer claim."""
+    if row['node_uid'] is not None or row['node_name'] is not None or row['observed_state'] not in ('SUBMITTED','TERMINATED'):
+        raise Blocked('Unclaimed runtime has contradictory claim or submission history')
+    meta, spec, status = job['metadata'], job['spec'], job.get('status',{})
+    if (meta.get('deletionTimestamp') or classified[('Job',meta['uid'])]['classification']!='DATABASE_UID_MATCH' or
+            spec.get('parallelism',1)!=1 or spec.get('completions',1)!=1 or spec.get('backoffLimit')!=0 or
+            spec.get('completionMode','NonIndexed')!='NonIndexed' or
+            spec.get('manualSelector',False) or spec.get('managedBy','kubernetes.io/job-controller')!='kubernetes.io/job-controller' or
+            spec.get('template',{}).get('spec',{}).get('restartPolicy')!='Never'):
+        raise Blocked('Recorded unclaimed Job must retain the single-execution contract')
+    children=[]
+    for pod in pods:
+        owners=[r for r in pod['metadata'].get('ownerReferences',[]) if r.get('controller') is True]
+        owns=any(r.get('uid')==meta['uid'] for r in owners)
+        same_attempt=classified[('Pod',pod['metadata']['uid'])].get('identity',{}).get('attempt-id')==row['attempt_id']
+        if same_attempt and not owns:
+            raise Blocked('An observed runtime Pod belongs to another Job UID')
+        if not owns: continue
+        if (len(owners)!=1 or owners[0].get('apiVersion')!='batch/v1' or owners[0].get('kind')!='Job' or
+                owners[0].get('name')!=meta['name'] or
+                classified[('Pod',pod['metadata']['uid'])]['classification']!='DATABASE_UID_NOT_RECORDED'):
+            raise Blocked('Unclaimed Job child ownership differs from the restored attempt')
+        children.append(pod)
+    if not children:
+        return None  # A missing child is not evidence that no producer ever ran.
+    ids={p['metadata']['uid'] for p in children}
+    accounted=status.get('uncountedTerminatedPods',{})
+    if (status.get('active',0) or status.get('ready',0) or status.get('terminating',0)>len(children) or
+            any(status.get(key,0)>sum(p.get('status',{}).get('phase')==phase for p in children)
+                for key,phase in [('succeeded','Succeeded'),('failed','Failed')]) or
+            any(uid not in ids for key in ('succeeded','failed') for uid in accounted.get(key,[]))):
+        raise Blocked('Job controller still reports activity or unretained terminal children')
+    # live_evidence already proves every regular/init container or the never-bound state.
+    return {'runtimeId':row['id'],'jobUid':meta['uid'],'podUids':sorted(ids),
+            'proof':'OBSERVED_RETAINED_JOB_CHILDREN','producerClaimRecorded':False}
+
+
 def prepare(pg, args):
     catalog = database_inventory(pg, args.database, args.restore_report, CATALOG_SQL)
     evidence, jobs, pods = live_evidence(args)
@@ -98,7 +136,7 @@ def prepare(pg, args):
                 raise Blocked('Live producer and restored database ownership or identity conflict')
             classified[(kind,item['metadata']['uid'])] = row
     selected = {'runtimes': [], 'vds': [], 'vdTasks': [], 'vdAllocations': []}
-    unresolved = []
+    unresolved, unclaimed = [], []
     for group, rows in [('runtimes', catalog['runtimes']), ('vds', catalog['vds'])]:
         for row in rows:
             reason = None
@@ -107,7 +145,11 @@ def prepare(pg, args):
             elif group == 'runtimes':
                 job = next((j for j in jobs if j['metadata']['uid'] == row['job_uid']), None)
                 pod = next((p for p in pods if p['metadata']['uid'] == row['producer_pod_uid']), None)
-                if job is None or pod is None:
+                if job is not None and row['producer_pod_uid'] is None and getattr(args,'unclaimed_jobs',False):
+                    proof=unclaimed_job(row,job,pods,classified)
+                    if proof is None: reason='RETAINED_JOB_CHILDREN_NOT_PROVEN'
+                    else: unclaimed.append(proof)
+                elif job is None or pod is None:
                     reason = 'JOB_OR_CLAIMED_PRODUCER_NOT_PROVEN'
                 elif (classified[('Job',row['job_uid'])]['classification'] != 'DATABASE_UID_MATCH' or
                       classified[('Pod',row['producer_pod_uid'])]['classification'] != 'DATABASE_UID_MATCH' or
@@ -155,6 +197,7 @@ def prepare(pg, args):
         'targetDatabase':args.database, 'databaseOid':catalog['oid'], 'marker':catalog['marker'],
         'restoreReportSha256':catalog['restoreReportSha256'], 'beforeGuard':catalog['guard'],
         'evidence':evidence, 'selected':{k:sorted(v) for k,v in selected.items()},
+        'unclaimedJobs':sorted(unclaimed,key=lambda r:r['runtimeId']),
         'unresolved':sorted(unresolved,key=lambda r:(r['kind'],r['id'])),
         'objectsAbsentFromDatabase':sum(r['classification']=='ABSENT_FROM_RESTORED_DATABASE' for r in classified.values()),
         'preparedAt':datetime.now(timezone.utc).isoformat()}
@@ -219,10 +262,10 @@ def apply(pg, args, plan):
                                    source=source,timeout=45,reject_stderr=True))
     after = prepare(pg,args)
     if (after['beforeGuard'] != result['afterGuard'] or any(after[k] != plan[k] for k in
-            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','selected','unresolved','objectsAbsentFromDatabase'))):
+            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','selected','unresolved','unclaimedJobs','objectsAbsentFromDatabase'))):
         raise Blocked('Post-commit evidence changed; keep restored database quarantined')
     counters = ('runtimesRetired','vdRuntimesRetired','vdTaskRuntimesRetired','allocationsClosed','commandsCompleted','bindingsClosed')
-    report = {k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid','selected','unresolved','objectsAbsentFromDatabase')}
+    report = {k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid','selected','unresolved','unclaimedJobs','objectsAbsentFromDatabase')}
     report.update(status='OBSERVED_KUBERNETES_RUNTIMES_RETIRED', activated=False,globalQuiescenceProven=False,
         databaseModified=any(result[k] for k in counters), **result,
         intentSha256=hashlib.sha256((args.output/'intent.json').read_bytes()).hexdigest(),
@@ -243,6 +286,7 @@ def main():
     parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--pg-bin',type=Path)
     parser.add_argument('--timeout',type=int,default=120)
+    parser.add_argument('--unclaimed-jobs',action='store_true',help='Retire unclaimed runtimes only from their recorded Job and retained terminal children')
     args=parser.parse_args()
     args.output.mkdir(mode=0o700,parents=True,exist_ok=False)
     submitted=False
