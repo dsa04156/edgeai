@@ -109,10 +109,18 @@ class RemoteRecoveryTest(unittest.TestCase):
         else:
             command += ['--inspect']
         completed = subprocess.run(command + list(extra), capture_output=True, timeout=15)
-        self.assertEqual(expected, completed.returncode, 'CLI outcome differed; private output suppressed')
+        # Preserve bounded state diagnostics before temporary fixture cleanup.
+        # Never expose command arguments, endpoints, tokens or private HTTP output.
+        report_file = output / 'fence-report.json'
+        safe = {}
+        if completed.returncode != expected and report_file.exists():
+            failed = json.loads(report_file.read_text())
+            safe = {k: failed.get(k) for k in ('status','failureType','fenceRetained','workersStopped','controllerRejected')}
+            observed = failed.get('observed', {})
+            safe['observed'] = {k: observed.get(k) for k in ('fenced','quiescent','allocationCount','activeWorkers','states')}
+        self.assertEqual(expected, completed.returncode, 'CLI outcome differed: ' + json.dumps(safe,sort_keys=True))
         self.assertNotIn(self.token.encode(), completed.stdout + completed.stderr)
         self.assertNotIn(self.operator.encode(), completed.stdout + completed.stderr)
-        report_file = output / 'fence-report.json'
         self.assertEqual(0o600, report_file.stat().st_mode & 0o777)
         report = json.loads(report_file.read_text())
         self.assertFalse(report['activated'])

@@ -1,13 +1,16 @@
 # 진행 상태
 
 [STATUS]
-ADR0103: DB 확정 Result의 원래 ID/시각·producer·고정 출력 버전을 S3에 보존한다.
-V35 별도 발행 큐는 Result와 함께 commit/rollback되며 Pod 정리·API/worker 재시작 후에도
-재처리한다. 전체426개213243Z-a67f2e6e·최종신규9개214331Z-133f2f9f PASS.
-실제Kube3개213636Z-e95f14b8은10Pod/시작기록10/결과기록6·각1version·발행pending0,
-V35 백업13/참조9/기존복구91개도 PASS/소유정리. [근거](docs/evidence/m9-kubernetes-result-journal.md).
-Kubernetes Result의 복원 DB 소비·STREAM/VD/전역writer·종합 활성화와 전체 단계는 남는다.
-선행8b CI37234177387은5jobs성공/images진행, 완료원시35개PASS·신규push대기다.
+ADR0104의 Kubernetes BATCH Result 복원을 구현했다. 원래 시작/결과 기록·실제 종료·
+고정 S3 파일을 대조해 원래 ID/시각/producer 이력과 자식 대기를 한 transaction에 반영한다.
+새20개221111Z-8496de2b·Remote 결과15개221124Z-a42d00d4/실패15개221659Z-66ca50d8·
+기존 실제 API 시작 기록 복구91개221700Z-599e0412 PASS/소유 정리.
+[근거](docs/evidence/m9-recovery-kubernetes-results.md). 초기 Remote fence 일시 실패의 원인은
+미확정이며 재실행 통과/진단 보완과 구분한다. STREAM/VD 권한 소비·전역 writer/API 차단·
+종합 활성화·실모델/외부계약과 M0–M10 전체 목표는 유지한다.
+선행8b CI37234177387은55분 제한으로 images 취소/gitops 생략. 원시38개 중37PASS,
+STREAM 복구42/44 후 FAIL. [근거](docs/evidence/m9-ci-duration-limit.md). 전체 job 제한90분과
+새20개 CI gate를 연결했으며 신규 원격CI/배포는 후속 확인한다.
 
 아래는 선행 구현·검증 이력과 당시 상태다.
 

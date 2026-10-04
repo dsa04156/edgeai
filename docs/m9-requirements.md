@@ -138,8 +138,12 @@ ADR0103의 [Kubernetes Result 기록](evidence/m9-kubernetes-result-journal.md)�
 영속 발행 큐를 한 transaction에 저장하고 확정 후 S3에 원래 결과 신원·출력 버전을 보존한다.
 새9개에서 응답 유실·실제 연결 실패·Pod 정리/lease 만료·동시 발행·DB rollback·업그레이드
 backfill을 검증했고, 실제 Kubernetes3개에서6개 결과 기록과 pending0을 확인했다.
-V35 백업13/참조9/기존 시작 기록 복구91개도 통과했다. 이 기록을 복원 DB에 소비하는 경로,
-원본 API/writer 차단과 종합 재활성화·실제 외부 계약 수용은 남는다.
+V35 백업13/참조9/기존 시작 기록 복구91개도 통과했다.
+ADR0104의 [Kubernetes Result 복원](recovery-kubernetes-results.md)은 원래 시작 기록·실제
+종료·고정 파일을 대조하고 원래 Result ID/시각과 누락된 producer 이력을 격리 DB에 반영한다.
+실제 결합20개/복원DB5개에서 중복·변조·잠금·원복·응답 유실·후검증 실패·타38테이블 보존을
+확인했다. 자식은 대기만 하며 새 실행 권한을 만들지 않는다. STREAM/VD 결과 권한 소비,
+원본 API/writer 차단과 종합 재활성화·실제 외부 계약 수용·새 CI/배포는 남는다.
 
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,

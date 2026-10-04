@@ -138,7 +138,26 @@ def prepare(pg, storage, args):
             'beforeGuard': catalog['guard'], 'entries': entries, 'preparedAt': datetime.now(timezone.utc).isoformat()}
 
 
-def transaction_sql(plan):
+def transaction_sql(plan, *, tables=TABLES, guard_query=GUARD_QUERY, kubernetes=False):
+    # Both recovery paths use the same atomic BATCH readiness/Run aggregation.
+    # Kubernetes alone preserves an already committed Result ID/time and Pod binding.
+    binding = """
+ IF (entry->>'restoreBinding')::boolean THEN
+  UPDATE edgeai.runtime_instance SET producer_pod_uid=(entry->>'podUid')::uuid,
+   node_uid=(entry->>'nodeUid')::uuid,node_name=entry->>'nodeName' WHERE id=(entry->>'runtimeId')::uuid;
+  bindings:=bindings+1;
+ END IF;
+""" if kubernetes else ''
+    publication = """
+ IF NOT (entry->>'existing')::boolean OR (entry->>'publicationPending')::boolean THEN
+  UPDATE edgeai.runtime_result_publication SET completed=true,lease_owner=NULL,lease_until=NULL,
+   updated_at=transaction_timestamp() WHERE result_id=(entry->>'resultId')::uuid
+   AND runtime_id=(entry->>'runtimeId')::uuid AND NOT completed AND lease_owner IS NULL AND lease_until IS NULL;
+  GET DIAGNOSTICS changed=ROW_COUNT;
+  IF changed<>1 THEN RAISE EXCEPTION 'Result publication history differs'; END IF;
+  publications:=publications+changed;
+ END IF;
+""" if kubernetes else ''
     identity = """
 IF current_database()<>{database} OR NOT EXISTS (SELECT FROM pg_database WHERE datname=current_database()
  AND oid::text={oid} AND shobj_description(oid,'pg_database')={marker}) THEN
@@ -147,18 +166,19 @@ END IF;
 """.format(database=literal(plan['targetDatabase']), oid=literal(plan['databaseOid']), marker=literal(plan['marker']))
     body = """
 DECLARE entry jsonb; artifact jsonb; child edgeai.task; recovered_run_id uuid; new_state text; changed integer;
- results integer:=0; children integer:=0; runs integer:=0;
+ results integer:=0; children integer:=0; runs integer:=0; bindings integer:=0; publications integer:=0;
 BEGIN
 {identity}
 IF ({guard}) IS DISTINCT FROM {before}::jsonb THEN
  RAISE EXCEPTION 'Restored database changed after fixed-version verification';
 END IF;
 FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
+{binding}
  IF NOT (entry->>'existing')::boolean THEN
-  INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,remote_allocation_id,manifest_digest,created_at)
+  INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,{producer_column},manifest_digest,created_at)
   VALUES ((entry->>'resultId')::uuid,(entry->>'taskId')::uuid,(entry->>'attemptId')::uuid,
-    (entry->>'runtimeId')::uuid,(entry->>'epoch')::bigint,(entry->>'allocationId')::uuid,
-    entry->>'manifestDigest',transaction_timestamp());
+    (entry->>'runtimeId')::uuid,(entry->>'epoch')::bigint,(entry->>'{producer_field}')::uuid,
+    entry->>'manifestDigest',{created_at});
   FOR artifact IN SELECT * FROM jsonb_array_elements(entry->'outputs') LOOP
    INSERT INTO edgeai.result_artifact(id,result_id,port,bucket,object_key,object_version,sha256,bytes,media_type)
    VALUES (gen_random_uuid(),(entry->>'resultId')::uuid,artifact->>'port',artifact->>'bucket',artifact->>'key',
@@ -169,6 +189,7 @@ FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
   UPDATE edgeai.task SET state='SUCCEEDED',updated_at=transaction_timestamp() WHERE id=(entry->>'taskId')::uuid;
   results:=results+1;
  END IF;
+{publication}
 END LOOP;
 FOR recovered_run_id IN SELECT DISTINCT (value->>'runId')::uuid FROM jsonb_array_elements({entries}::jsonb) LOOP
  IF EXISTS(SELECT FROM edgeai.workflow_run WHERE id=recovered_run_id AND state='RUNNING') THEN
@@ -198,12 +219,16 @@ FOR recovered_run_id IN SELECT DISTINCT (value->>'runId')::uuid FROM jsonb_array
 END LOOP;
 {identity}
 INSERT INTO recovery_result VALUES (jsonb_build_object('resultsCreated',results,'childrenReadied',children,
- 'runsReconciled',runs,'afterGuard',({guard})));
+ 'runsReconciled',runs,'afterGuard',({guard}){counters}));
 END
-""".format(identity=identity, guard=GUARD_QUERY, before=literal(canonical(plan['beforeGuard']).decode()),
-           entries=literal(canonical(plan['entries']).decode()))
+""".format(identity=identity, guard=guard_query, before=literal(canonical(plan['beforeGuard']).decode()),
+           entries=literal(canonical(plan['entries']).decode()), binding=binding, publication=publication,
+           producer_column='producer_pod_uid' if kubernetes else 'remote_allocation_id',
+           producer_field='podUid' if kubernetes else 'allocationId',
+           created_at="(entry->>'committedAt')::timestamptz" if kubernetes else 'transaction_timestamp()',
+           counters=",'bindingsRestored',bindings,'publicationsCompleted',publications" if kubernetes else '')
     return ("BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';\nLOCK TABLE " +
-            ','.join('edgeai.' + table for table in TABLES) + ' IN SHARE ROW EXCLUSIVE MODE;\n'
+            ','.join('edgeai.' + table for table in tables) + ' IN SHARE ROW EXCLUSIVE MODE;\n'
             'CREATE TEMP TABLE recovery_result(value jsonb) ON COMMIT DROP; DO ' + literal(body) +
             '; SELECT value FROM recovery_result; COMMIT;\n')
 

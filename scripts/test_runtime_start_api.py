@@ -19,7 +19,7 @@ from recovery_remote_storage import Storage, header
 Api=runpy.run_path(str(ROOT/'scripts/test-postgres-backup.py'))['Api']
 
 
-def admit(fixture,pg,database,context,pod,kube,create,namespace):
+def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None):
     runtime=context['runtime'];work=fixture.work
     def capture(arguments,document=None):
         result=subprocess.run(kube.command+arguments,input=None if document is None else json.dumps(document).encode(),
@@ -79,14 +79,14 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace):
     message='edgeai-runner-v1\n'+namespace+'\n'+runtime['attempt_id']+'\n'+str(runtime['epoch'])+'\n'+nonce
     token='v1.'+base64.urlsafe_b64encode(hmac.new(bytes.fromhex(signing_key),message.encode(),hashlib.sha256).digest()).decode().rstrip('=')
     origin='https://localhost:'+str(tls_port)
-    def claim(proof,expected):
-        request=urllib.request.Request(origin+'/internal/v1/attempts/'+runtime['attempt_id']+'/claim',method='POST',
-            data=json.dumps({'epoch':runtime['epoch'],'podUid':pod['metadata']['uid']}).encode(),
+    def request(path,extra,expected,proof=pod_token):
+        request=urllib.request.Request(origin+'/internal/v1/attempts/'+runtime['attempt_id']+'/'+path,method='POST',
+            data=json.dumps({'epoch':runtime['epoch'],'podUid':pod['metadata']['uid'],**extra}).encode(),
             headers={'Authorization':'Bearer '+token,'X-EdgeAI-Pod-Token':proof,'Content-Type':'application/json'})
         try:response=urllib.request.urlopen(request,context=fixture.tls,timeout=15)
         except urllib.error.HTTPError as error:response=error
         with response:
-            assert response.status==expected,'Actual TLS Runner claim returned HTTP '+str(response.status)
+            assert response.status==expected,'Actual TLS Runner '+path+' returned HTTP '+str(response.status)
             raw=response.read()
             return json.loads(raw) if raw else None
     # The source storage is intentionally inspected with its own explicit identity.
@@ -98,20 +98,22 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace):
             store=Storage(SimpleNamespace(certificate_sha256=fixture.pin,timeout=60))
             path='/'+fixture.bucket+'/authority/runtime-start/'+runtime['id']+'.json'
             assert store.request('HEAD',path)[0]==404
-            claim('invalid-pod-proof',401)
+            request('claim',{},401,'invalid-pod-proof')
             assert store.request('HEAD',path)[0]==404
-            response=claim(pod_token,200)
+            response=request('claim',{},200)
             assert response['attemptId']==runtime['attempt_id'] and response['epoch']==runtime['epoch'] and response['command']
             code,headers,raw=store.request('GET',path,max_bytes=8192);assert code==200
             version=header(headers,'x-amz-version-id');authority=json.loads(raw)
-            assert authority['podUid']==pod['metadata']['uid'] and authority['offloadId']==context['offloads'][0]['id']
-            assert claim(pod_token,200)['command']==response['command']
+            assert authority['podUid']==pod['metadata']['uid'] and authority['offloadId']==(context['offloads'][0]['id'] if context['offloads'] else None)
+            assert request('claim',{},200)['command']==response['command']
             code,headers,repeated=store.request('GET',path,max_bytes=8192)
             assert code==200 and header(headers,'x-amz-version-id')==version and repeated==raw
             actual=json.loads(pg.sql('SELECT to_jsonb(r)-\'claim_nonce\' FROM edgeai.runtime_instance r WHERE id='+literal(runtime['id'])+'::uuid',database))
             assert actual['producer_pod_uid']==authority['podUid'] and actual['node_uid']==authority['nodeUid']
-            assert pg.sql('SELECT state FROM edgeai.task_offload WHERE id='+literal(authority['offloadId'])+'::uuid',database)=='SUCCEEDED'
+            if authority['offloadId'] is not None:
+                assert pg.sql('SELECT state FROM edgeai.task_offload WHERE id='+literal(authority['offloadId'])+'::uuid',database)=='SUCCEEDED'
             fixture.api_claim_verified=True
+            if on_admitted is not None:on_admitted(request,authority,store)
             return authority
     finally:
         api.close();fixture.api_claim_source_stopped=api.process.poll() is not None

@@ -273,7 +273,9 @@ jobs:
     needs: [scaffold, storage, runner]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    # Run 37234177387 reached the former 55m job cap at STREAM recovery case 42/44.
+    # Keep each acceptance command bounded; allow the full suite and cleanup to finish.
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -392,6 +394,7 @@ jobs:
             .tools/kind-multidevice-demo.json
             .tools/kind-recovery-stop.json
             .tools/kind-recovery-kubernetes-retire.json
+            .tools/kind-recovery-kubernetes-results.json
             .tools/kind-recovery-stream-workflows.json
           include-hidden-files: true
           retention-days: 14
