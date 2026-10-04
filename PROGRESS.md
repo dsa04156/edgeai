@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+ADR0082 복원 Kubernetes/VD 작업 상태 조정37개(122910Z-58941ebc)와 공통 Remote 회귀15개
+(122911Z-4233255d) PASS. 기록된 취소2·원래 기한 만료1·후손2·Run5,39테이블 보존,
+결과 미기록/미배정·기존 결과/새 시도·원래 예약 보존, 실제 잠금/경쟁/원복/COMMIT응답 유실·
+변경0 재실행 및 소유 자원 정리 확인. docs/evidence/m9-recovery-kubernetes-workflows.md.
+kind 게이트를37개로 확장했다. 새 CI/배포·결과 회수·활성 offload·STREAM/journal·전역 writer·
+종합 활성화·M5 잔여/M7–M10은 남는다. 선행 be41a8b CI37200100790의 완료3jobs/원시29개·
+PG230·Remote14/15 부분 감사122426Z-83ac6073 PASS; 이번 확장은 선행 CI에 포함되지 않는다.
+
 ADR0081 VD 내부 Task runtime/할당 정리23개(120355Z-1f71afa5), 기존16개 회귀
 (115733Z-64d93a90) PASS. 복원DB4·부모/자식3쌍·할당이력6종, 실행3/할당3 정리·과거closure2/
 확정Result2/37테이블·미배정 보존, allocation경쟁/잠금/원복·COMMIT응답유실·소유자원정리.

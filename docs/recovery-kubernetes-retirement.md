@@ -27,7 +27,8 @@ DB 접속은 `.env`를 사용하며 Compose는 `--transport compose`를 추가�
 `POD_GONE`이며 실제 자식의 exit code를 추정하지 않는다. 기존 PROCESS_EXIT/NOT_STARTED
 기록과 성공 Result는 보존한다. `vdTaskRuntimesRetired`/`allocationsClosed`에 변경 개수가 나온다.
 배정 이력이 없는 Task는 `VD_ALLOCATION_NOT_RECORDED`로 미해결에 남는다.
-workflow/offload 결과·재시도 조정은 후속이다.
+이후 [기록된 workflow 취소·재시도 조정](recovery-kubernetes-workflows.md)을 실행할 수 있다.
+결과 미기록 작업·진행 중 offload/STREAM 조정은 별도다.
 
 종료0은 커밋 후 재검증 일치, 종료2는 관측/신원 충돌 등 BLOCKED, 종료1은 입력/DB 오류
 등 FAIL이다. `failure.json`의 `databaseModified:null`은 커밋 여부가 확정되지 않았다는 뜻이다.

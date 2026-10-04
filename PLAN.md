@@ -2,6 +2,15 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0082로 실제 Kubernetes/VD 종료 뒤 기록된 취소·원래 재시도 기한·후손/Run 조정을 연결했다.
+실제37개(122910Z-58941ebc)·공통 Remote 회귀15개(122911Z-4233255d) PASS.
+취소2/만료1/후손2/Run5·39테이블 보존, 결과 미기록1·원래 예약1·미배정은 유지한다.
+새 시도 보존·stale Run만 완료·실잠금/마지막 쓰기 원복/실COMMIT응답 유실·변경0을 확인했다.
+[검증](docs/evidence/m9-recovery-kubernetes-workflows.md). kind37개 게이트의 새 CI/배포와
+결과 회수·활성 offload·STREAM/journal·전역 writer·종합 활성화는 남는다.
+선행 be41a8b CI37200100790의 완료3jobs/원시29개·PG230·Remote14/15 부분 감사는
+122426Z-83ac6073 PASS이며 이 확장을 포함하지 않는다. 전체 M5 잔여/M7–M10 목표를 유지한다.
+
 ADR0081은 종료된 VD의 내부 Task runtime/할당을 같은 복구 transaction으로 정리한다.
 실제 PG16/Kubernetes23개(120355Z-1f71afa5), 기존16개 회귀(115733Z-64d93a90) PASS다.
 복원DB4·부모/자식3쌍·VD Task6종: 실행3/할당3 종료, 과거closure2/확정Result2·37테이블과

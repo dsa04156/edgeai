@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import runpy
+import secrets
 import subprocess
 import sys
 import time
@@ -41,8 +42,10 @@ def main():
     p.add_argument('--transport',choices=['native','compose'],default='native')
     p.add_argument('--runner-image'); p.add_argument('--runner-source')
     p.add_argument('--vd-tasks',action='store_true',help='Include explicit VD allocation and immutable outcome history fixtures')
+    p.add_argument('--workflows',action='store_true',help='Reconcile recorded workflow state after VD/Kubernetes retirement')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
+    if args.workflows and not args.vd_tasks: p.error('--workflows requires --vd-tasks')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -219,6 +222,15 @@ def main():
                             '::uuid,'+literal('sha256:'+'a'*64)+',now()); INSERT INTO edgeai.result_artifact(id,result_id,port,bucket,object_key,object_version,sha256,bytes,media_type) VALUES ('+
                             literal(str(uuid.uuid4()))+'::uuid,'+literal(result_id)+"::uuid,'output','fixture-only',"+literal('fixture/'+mode)+",'fixture-version',"+literal('b'*64)+
                             ",1,'application/json'); UPDATE edgeai.task_result SET committed=true WHERE id="+literal(result_id)+'::uuid; COMMIT',source)
+        workflow_fixtures={}
+        if args.workflows:
+            from test_recovery_kubernetes_workflows import seed
+            with private_file(work/'workflow-runtime-key','w') as key: key.write(secrets.token_hex(32))
+            fixture_api=Api(source,work,extra_env={'EDGEAI_RUNTIME_ENABLED':'true','EDGEAI_VD_ENABLED':'true',
+                'EDGEAI_RUNTIME_WORKER_ENABLED':'false','EDGEAI_RUNTIME_NAMESPACE':namespace,
+                'EDGEAI_RUNNER_KEY_FILE':str(work/'workflow-runtime-key')}); apis.append(fixture_api)
+            workflow_fixtures=seed(pg,source,fixture_api,namespace,vd['id'],vr,service['id'],vd_work,attempt,run['id'])
+            fixture_api.close()
         backup(pg,source,work/'backup')
         targets=[]
         for _ in range(4 if args.vd_tasks else 3):
@@ -254,6 +266,13 @@ def main():
         assert count==(3 if args.vd_tasks else 2)
         report.update(terminatedContainers=count,reapedChildren=count,unboundPostBackupPods=1)
         passed('actual-quota-and-retained-pod-evidence-prove-all-parent-and-child-processes-terminated')
+        if args.workflows:
+            import recovery_kubernetes_workflows as workflows
+            try: workflows.prepare(pg,options(db,receipt))
+            except Blocked: pass
+            else: raise AssertionError('Workflow recovery accepted incomplete runtime retirement')
+            assert fingerprints(db)==original
+            passed('workflow-reconciliation-requires-completed-database-retirement-in-addition-to-physical-stop')
 
         refused(options(db,receipt,namespace_uid=str(uuid.uuid4())),1)
         invalid=copy.deepcopy(stopped)
@@ -404,7 +423,8 @@ def main():
             assert pg.sql("SELECT count(*) FROM edgeai.task_result WHERE committed AND producer_kind='VD'",db)=='2'
             assert pg.sql("SELECT count(*) FROM edgeai.runtime_command c JOIN edgeai.runtime_instance r ON r.id=c.runtime_id WHERE r.runtime_kind='VD'",db)=='0'
             assert pg.sql("SELECT count(*) FROM edgeai.runtime_instance WHERE runtime_kind='VD' AND job_name IS NOT NULL",db)=='0'
-            report.update(vdTaskFixtures=6,vdTaskRuntimesRetired=3,allocationsClosed=3,existingClosuresPreserved=2,immutableResultFixtures=2,unassignedTasksPreserved=1)
+            report.update(vdTaskFixtures=9 if args.workflows else 6,vdTaskRuntimesRetired=3,allocationsClosed=3,
+                existingClosuresPreserved=5 if args.workflows else 2,immutableResultFixtures=2,unassignedTasksPreserved=1)
             passed('claimed-and-unclaimed-VD-assignments-close-without-inventing-exit-code-result-or-job')
             passed('existing-process-exit-not-started-sealed-result-and-unassigned-work-history-remain-unchanged')
             assert pg.sql("SELECT state FROM edgeai.task WHERE id="+literal(vd_work['committed-open']['task'])+'::uuid',db)=='SUCCEEDED'
@@ -442,6 +462,10 @@ def main():
         if not args.vd_tasks: assert later['runtime_instance']==pending['runtime_instance']
         assert pg.sql("SELECT count(*) FROM edgeai.runtime_command WHERE NOT completed AND lease_owner IS NOT NULL",third)=='2'
         passed('unrecorded-claimed-producer-remains-unresolved-with-pending-commands-preserved')
+
+        if args.workflows:
+            from test_recovery_kubernetes_workflows import check
+            check(pg,targets,options,fingerprints,passed,work,workflow_fixtures,vd_work,attempt,report)
 
         inspection=Api(db,work,inspection=True); apis.append(inspection)
         inspection.request('GET','workflow-runs/'+run['id'])

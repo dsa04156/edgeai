@@ -1,5 +1,9 @@
 # 검증 증거
 
+ADR0082 [복원 Kubernetes/VD 작업 상태 조정](m9-recovery-kubernetes-workflows.md):
+실제 PG/Kubernetes37개·공통 Remote 회귀15개 PASS. 기록된 취소·재시도 기한·후손/Run을
+정리하며 미확정 결과·새 시도·기존 결과를 보존한다. 새 CI/배포와 종합 복구는 별도다.
+
 2026-10-01 M0 초기 환경 검증. 로컬 Linux x86_64 / JDK 21 / Node 22 / PostgreSQL 16.15.
 원시 로그·JSON은 `docs/evidence/runs/<testRunId>/`에 있으며 자격 증명을 제거하고 Git에서는 제외한다.
 공개 저장소에는 아래 결과 요약만 보존한다. CI 원시 증거는 해당 Actions run artifact에서 확인한다.

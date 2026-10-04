@@ -265,7 +265,7 @@ def main():
                 raise RuntimeError('kind recovery producer termination acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-kubernetes-retire',
                 'bash', 'scripts/test-recovery-kubernetes-retire.sh', '--context', context, '--transport', 'compose',
-                '--vd-tasks',
+                '--vd-tasks', '--workflows',
                 '--runner-image', images['runner'], '--runner-source', source_revision,
                 '--report', '.tools/kind-recovery-kubernetes-retire.json'], env=env, timeout=600)
             if result.returncode:
