@@ -7,6 +7,17 @@
 최종 private 경로 검사를 포함한 준비17개도 `20261004T102946Z-909eeee6` PASS/0이며,
 새 별도 경로로 검증된 bundle을 내보냈다. 기존 입력 bundle은 그대로 보존했다.
 
+후속 cd1424a의 CI37196161670은5jobs/원시29개 모두 PASS/0다
+(`20261004T114232Z-47e37693`). Compose17의 Remote17개/실제 회수 파일1개·79bytes가
+S3 publication12개로 전달됐고 같은 MinIO binary·기존3버전 보존·동시 등록1version을 확인했다.
+GitOps `760908baf39e78b47ad9ac12b4dcf827e59097d0`의 실제 API/dashboard/MinIO imageID,
+Ready/PVC Bound·Argo Synced는 `20261004T114725Z-53fcdb3b` PASS다.
+그 뒤 원래10파일/두 PVC UID·TLS256KiB/익명403·probe 정리도
+`20261004T114806Z-497eac42` PASS다. 공유 Ingress aggregate health는 Progressing이다.
+먼저 실행한 `114233Z-e8e53575`는 로컬의 이전 image pin을 읽는 보조 검사 때문에 FAIL이었다.
+원격 GitOps pin으로 검사 대상을 고쳐 위 성공을 확인했으며 배포 실패로 판정하지 않는다.
+ADR0078–0080의 후속 변경은 이 CI에 포함되지 않는다.
+
 원본 MinIO와 별도 대상 MinIO 사이에3개 버전(같은 key의 두 버전·빈 파일)을 실제 복제한다.
 원본을 종료한 뒤 Remote bundle의 파일을 같은 artifact 버킷/Java와 같은 object key 규칙으로
 등록한다. DB/Remote 자격 없이 동작하며 새 파일 bytes와 반환한 version을 실제 GET으로 대조한다.

@@ -12,6 +12,14 @@ Docker 권한이 없으면 exit2이며 자동으로 권한을 변경하지 않�
 호스트에는 Docker·kubectl·Node·OpenSSL 외에 Java `keytool`과 `mosquitto_ctrl`이 필요하다.
 Ubuntu24.04에서 `mosquitto_ctrl`은 `mosquitto` 패키지에 포함된다. GitHub images 작업은 이를 준비한다.
 
+복원 DB 결합 게이트에는 Java21, 프로젝트 `.env`, 별도 Compose `edgeai-dev` PostgreSQL,
+시험할 정확한 API 이미지의 `/app/app.jar`를 복사한
+`backend/app/build/libs/edgeai-control-plane.jar`도 필요하다. 기존 데이터를 초기화하지 않고
+시험마다 별도 DB를 만든다. CI의 `Prepare restored-database recovery fixtures` 단계가
+JAR 복사와 `compose up -d --wait postgres`를 담당한다. 필수 파일/DB가 없으면 클러스터 생성
+전에 BLOCKED로 끝난다. 이후 실제 종료 Pod·quota와 복원 runtime/VD/명령/binding을
+대조하는16개 시험과 소유 자원 정리를 수행한다. [복구 검증](../../docs/evidence/m9-recovery-kubernetes-retirement.md).
+
 GitHub Actions는 이미지 job에서 API/화면 발행 전에 이 시험을 수행한다. kind v0.33.0 바이너리의
 SHA-256과 해당 릴리스의 Kubernetes1.35.8 node image digest를 고정한다. 노드는 control-plane1개와
 worker2개이며 API/화면의 실제 빌드 이미지를 kind에 적재한다. 별도 Secret·DB·MinIO PVC·버전 bucket을

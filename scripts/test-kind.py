@@ -106,6 +106,15 @@ def main():
     if subprocess.run(['docker', 'info'], capture_output=True).returncode:
         print('BLOCKED: Docker daemon unavailable; no permissions changed')
         return 2
+    if not (ROOT / '.env').is_file() or not (ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').is_file():
+        print('BLOCKED: prepare .env and the API JAR from the exact built image for restored-database recovery')
+        return 2
+    recovery_database = subprocess.run(['docker', 'compose', '--project-name', 'edgeai-dev', '--env-file', str(ROOT / '.env'),
+        '-f', str(ROOT / 'deploy/compose/compose.yaml'), 'exec', '-T', 'postgres', 'pg_isready', '-q'],
+        capture_output=True, timeout=30)
+    if recovery_database.returncode:
+        print('BLOCKED: the separate Compose PostgreSQL recovery fixture must be ready before kind acceptance')
+        return 2
     images = {}
     for name in ['API', 'DASHBOARD']:
         image = os.environ.get('EDGEAI_' + name + '_IMAGE', '')
@@ -254,6 +263,12 @@ def main():
                 '--report', '.tools/kind-recovery-stop.json'], env=env, timeout=480)
             if result.returncode:
                 raise RuntimeError('kind recovery producer termination acceptance failed')
+            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-kubernetes-retire',
+                'bash', 'scripts/test-recovery-kubernetes-retire.sh', '--context', context, '--transport', 'compose',
+                '--runner-image', images['runner'], '--runner-source', source_revision,
+                '--report', '.tools/kind-recovery-kubernetes-retire.json'], env=env, timeout=600)
+            if result.returncode:
+                raise RuntimeError('kind restored Kubernetes runtime retirement acceptance failed')
             # Exercise the real component on the original persistent API/DB/storage deployment.
             with tempfile.TemporaryDirectory(prefix='.stream-', dir=ROOT / 'deploy/kind') as overlay:
                 (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))

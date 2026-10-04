@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0080 실제 Kubernetes 종료→복원 DB 정리16개(114126Z-5ef20866) PASS.
+복원DB3·컨테이너/자식2쌍·never-bound1, runtime/VD각1·명령4·binding1,
+guard/실잠금/rollback·응답 유실·미기록UID/404·38테이블 보존·소유자원 정리 확인.
+docs/evidence/m9-recovery-kubernetes-retirement.md. 새kind게이트·VD Task/offload/STREAM/journal·
+종합 활성화와 M5 잔여/M7–M10 전체 수용은 남는다.
+선행 cd1424a CI37196161670은5jobs/원시29개 PASS(114232Z-47e37693)다.
+ADR0078–0080의 새 CI/배포는 이 선행 결과와 구분한다.
+GitOps760908b 실제 imageID/Ready/PVC/ArgoSynced(114725Z-53fcdb3b), 그 뒤 기존10파일/
+두PVC·TLS 보존(114806Z-497eac42) PASS. 공유Ingress aggregatehealthProgressing 유지.
+
 ADR0079 복원 Remote 실패·취소·재시도 대기의 실제15개(111817Z-b771e368) PASS다.
 실패5·원래 기한 예약2·취소2·후손2·완료Run5, SQLrollback/잠금/응답 유실·새 시도/기존 사유/
 38테이블 보존과 기한 만료를 확인했다. 기존 Result14개(110815Z-f311735c) 회귀도 PASS다.

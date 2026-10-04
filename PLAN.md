@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0080은 실제 Kubernetes 종료 기록을 복원 DB 실행/명령·VD binding에 반영한다.
+실제 PG16/복원DB3·Kubernetes16개(114126Z-5ef20866) PASS: 부모/자식2쌍·never-bound1,
+runtime/VD각1·명령4·binding1, guard/잠금/rollback·응답 유실·미기록 UID/404 거절·38테이블
+보존과 정리를 확인했다. [근거](docs/evidence/m9-recovery-kubernetes-retirement.md).
+새 kind/Compose17 gate를 추가했다. VD Task/offload/STREAM/journal·종합 활성화는 남는다.
+선행 cd1424a CI37196161670은5jobs/원시29개 PASS(114232Z-47e37693)이며
+ADR0078–0080의 새 CI/배포와 구분한다.
+GitOps760908b의 실제 imageID/Ready/PVC/ArgoSynced(114725Z-53fcdb3b), 그 뒤 기존10파일/
+두PVC·TLS 보존(114806Z-497eac42)도 PASS다. 공유 Ingress health는 Progressing이다.
+
 ADR0079는 복원 Remote 실패·취소·원래 기한의 재시도 대기를 정리한다. 실제 결합15개
 (111817Z-b771e368) PASS: 실패5·예약2·취소2·후손2·완료Run5, guard/잠금/rollback·응답 유실·
 새 epoch/기존 취소 사유 보존·기한 만료·38테이블 보존을 확인했다. 공통 검사 추출 뒤

@@ -110,6 +110,13 @@ linux/amd64다. Runner/MinIO digest 등록만으로 실제 실행 기능이 활�
 
 ## M9 DB 복원 게이트
 
+ADR0080의 `test-recovery-kubernetes-retire.sh --transport compose`는 images job의
+kind에서 실제 종료 Pod·quota와 복원 DB 실행/명령·VD binding을 대조한다. 같은 job이 빌드한
+API 이미지에서 JAR을 복사하고 별도 Compose PostgreSQL17을 준비한다. 기존 kind 회귀 뒤
+16개 시험을 수행하고 원시 evidence 및 `kind-recovery-kubernetes-retire.json`을 수집한다.
+DB/API/namespace 정리를 확인하며 job 종료 시 Compose 서비스를 내리고 볼륨은 보존한다.
+추가 실제 결합 시험을 위해 images 제한은55분이다. 새 gate의 CI 성공은 별도 확인한다.
+
 scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비스 내부의
 동일 major pg_dump/pg_restore를 사용한다. 별도 DB와 API를 만들고 백업·격리 복원·거절·정리를
 검증한다. 실패하면 이미지 발행이 차단된다. `postgres-backup-report.json`과 evidence의
