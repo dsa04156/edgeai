@@ -2,6 +2,15 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0072는 root 차단 이전에 이미 인증된 S3 요청의 소진을 별도로 확인한다.
+실제 PUT2개를 유지한 뒤 차단하고, 진행2→1에서는BLOCKED, 하나의 늦은 완료·다른 연결 종료 뒤
+새 완료 counter와 진행0을 확인했다. 기존18개를 포함한25개 PASS(083947Z-c4e158e0).
+[요청 소진 근거](docs/evidence/m9-recovery-storage-drain.md). 단일 서버의 읽기 검증이며
+내부 writer·Remote·장치 journal·종합 복구 활성화는 남는다.
+선행9caa7dd CI37188905983의 scaffold/storage/runner 성공·원시24개/PG230·S3차단18·
+MQTT차단15/35계정·Runner111/MQTT95를 확인했다. images의 실제 Kubernetes 검증은 진행 중이며
+이번 새 요청 소진 코드의 CI/배포는 후속이다.
+
 ADR0071 원본 S3 root 접근 차단의 실제 TLS18개가 PASS(082045Z-c2caa5f1)다. 기존 PUT/GET
 URL 거절·고정2버전 보존·부분 중단/같은 ID 재개·SIGKILL 재시작·환경변수 우선순위를 확인했다.
 [저장소 차단 근거](docs/evidence/m9-recovery-storage-fence.md). 새 CI storage 게이트를 추가했다.

@@ -43,6 +43,8 @@ CA 검증을 끄거나 HTTP로 실행하는 옵션은 없다.
 분산 MinIO의 모든 노드 및 운영 재가동을 보장하지 않는다. 세 완료 필드
 `inFlightRequestsDrained`, `globalQuiescenceProven`, `activated`는 항상false다.
 다음 복구 단계에서 producer 종료와 진행 중 저장 요청의 소진을 증명하고 고정 참조를 대조해야 한다.
+단일 MinIO의 S3 요청은 [별도 소진 검증](recovery-storage-drain.md)으로 확인한다. 원본 root
+차단 보고서의 false 필드는 그대로 유지하고 두 결과를 함께 사용한다.
 
 격리 검증은 `bash scripts/test-recovery-storage-fence.sh --minio-binary <시험 binary>`다.
 별도 TLS MinIO와 합성 파일만 사용한다. [검증 결과](evidence/m9-recovery-storage-fence.md).

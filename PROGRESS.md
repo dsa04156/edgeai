@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+ADR0072 원본 S3 요청 소진 검증을 추가했다. 실제 PUT2개가 root 차단 후에도 진행하며,
+하나는200/64KiB 저장 완료·다른 하나는 연결 종료로 끝나는 것을 확인했다. 새 counter의0 관측
+두 번만 성공으로 인정하고 오래된0/누락/혼합server/여러server/timeout을 거절한다.
+기존 root차단18개 포함25개 PASS(083947Z-c4e158e0), 원래2버전과 늦은 완료1버전 보존·정리 확인.
+docs/evidence/m9-recovery-storage-drain.md. 단일 S3 요청의 소진이며 전역 writer 중지·활성화는 미완료다.
+선행9caa7dd CI37188905983은 scaffold/storage/runner 성공·원시24개와PG230/S3차단18/
+MQTT차단15·35계정/Runner111/MQTT95를 확인했다. images 실제Kubernetes 게이트 진행 중이며
+이번 새 변경의 원격 검증/배포는 후속이다. 아래는 선행 구성 요소 이력이다.
+
 ADR0071 원본 S3 root 접근 차단18개 실제 TLS 검증 PASS(082045Z-c2caa5f1).
 기존 PUT/GET URL 거절·고정2버전/bytes 보존·사용자 생성/차단 직후 중단과 같은 ID 재개·
 SIGKILL 재시작·환경변수 override·무관한 IAM/정책 보존을 확인했다. 새 CI storage 게이트 추가.

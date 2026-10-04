@@ -33,7 +33,7 @@ def main():
     env={k:v for k,v in os.environ.items() if not k.startswith(('MC_','MINIO_'))}
     env.update(MC_CONFIG_DIR=str(work/'mc'),MC_NO_COLOR='1',MC_DISABLE_PAGER='1')
     user='fence-probe-root';password=secrets.token_hex(24)
-    processes=[]
+    processes=[];pending=[]
     report={'scope':'storage-root-credential-fence-tests','sourceMode':'SYNTHETIC','status':'RUNNING',
             'cases':[],'ownedProcessesStopped':False}
     def run(command,body=None):
@@ -141,6 +141,19 @@ def main():
         cli('foreign-marker',1);assert mc(['admin','policy','info','origin',MARKER]).stdout==before
         mc(['admin','policy','rm','origin',MARKER])
         passed('another-recovery-policy-refused-without-overwrite')
+        for key in ('late-complete.bin','late-abort.bin'):
+            channel=tls.wrap_socket(socket.create_connection(('localhost',port),timeout=10),server_hostname='localhost')
+            pending.append(channel)
+            signed=presigned_path('PUT','/edgeai-fence-probe/'+key,user,password,'localhost:'+str(port))
+            channel.sendall(('PUT '+signed+' HTTP/1.1\r\nHost: localhost:'+str(port)+
+                '\r\nContent-Length: 65536\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n').encode())
+            response=b''
+            while b'\r\n\r\n' not in response:
+                chunk=channel.recv(4096)
+                assert chunk and len(response)<16384,'Admitted PUT response was lost or oversized'
+                response+=chunk
+            assert response.startswith(b'HTTP/1.1 100 Continue')
+        passed('two-real-puts-reach-server-body-read-before-root-fencing')
         original_call=Client.call
         def fault_after_add(self,arguments,**kwargs):
             result=original_call(self,arguments,**kwargs)
@@ -183,6 +196,83 @@ def main():
         except Blocked:pass
         else:raise AssertionError('JSON error was treated as successful CLI exit')
         passed('actual-mc-zero-exit-with-error-response-is-not-success')
+        def drain(label,expected):
+            output=work/label
+            value=run([sys.executable,str(ROOT/'scripts/recovery_storage_drain.py'),
+                '--state-directory',str(cfg.state_directory),'--ca-file',str(cfg.ca_file),
+                '--root-password-file',str(cfg.root_password_file),'--output',str(output),'--timeout','10'])
+            assert value.returncode==expected,label+': unexpected drain exit'
+            result=json.loads((output/'drain-report.json').read_text())
+            assert not result['globalQuiescenceProven'] and not result['activated']
+            assert not (output/'drain-report.json').stat().st_mode&0o077
+            return result
+        blocked=drain('drain-two-pending',2)
+        assert not blocked['inFlightRequestsDrained'] and blocked['remainingInFlight']==2
+        assert snapshot('recovery')==original and http(old_put,'PUT',b'forbidden')[0]==403
+        passed('drain-times-out-with-two-real-admitted-puts-and-keeps-root-fence')
+        pending[0].sendall(b'z'*65536)
+        response=b''
+        while True:
+            chunk=pending[0].recv(4096)
+            if not chunk:break
+            response+=chunk
+        pending[0].close();assert response.startswith(b'HTTP/1.1 200 OK')
+        assert mc(['cat','recovery/edgeai-fence-probe/late-complete.bin']).stdout==b'z'*65536
+        after_late=snapshot('recovery')
+        assert len(after_late)==3 and all(item in after_late for item in original)
+        original=after_late
+        blocked=drain('drain-one-pending',2)
+        assert not blocked['inFlightRequestsDrained'] and blocked['remainingInFlight']==1
+        passed('admitted-put-can-commit-after-root-disable-while-second-put-still-blocks-drain')
+        pending[1].shutdown(socket.SHUT_RDWR);pending[1].close()
+        drained=drain('drain-complete',0)
+        assert drained['inFlightRequestsDrained'] and drained['freshZeroObservations']>=2
+        assert drained['remainingInFlight']==drained['remainingQueued']==0 and snapshot('recovery')==original
+        passed('client-disconnect-ends-last-put-and-fresh-counters-prove-drain-with-version-history')
+        from recovery_storage_drain import execute as verify_drain, metrics_snapshot, TOTAL, INFLIGHT
+        captured=client.one(['admin','prometheus','metrics','recovery','api','--api-version','v3'])
+        observed=metrics_snapshot(captured)
+        assert observed['inFlight']==0
+        scientific=json.loads(json.dumps(captured))
+        for family in scientific:
+            if family['name']==TOTAL:
+                for sample in family['metrics']:
+                    if sample['labels']['name']=='ListBuckets':sample['value']='1e6'
+        assert metrics_snapshot(scientific)['completedProbes']==1000000
+        variants=[]
+        variants.append([f for f in captured if f['name']!=TOTAL])
+        variants.append(captured+[{'name':INFLIGHT,'type':'GAUGE','metrics':[{'labels':{'name':'PutObject','server':observed['server'],'type':'s3'},'value':'-1'}]}])
+        variants.append(captured+[{'name':INFLIGHT,'type':'GAUGE','metrics':[{'labels':{'name':'PutObject','server':'other-server','type':'s3'},'value':'1'}]}])
+        for document in variants:
+            try:metrics_snapshot(document)
+            except Blocked:pass
+            else:raise AssertionError('Incomplete/invalid metric evidence was accepted')
+        passed('missing-completion-counter-negative-gauge-and-mixed-server-metrics-are-refused')
+        original_one=Client.one
+        def multiple_servers(self,arguments,**kwargs):
+            value=original_one(self,arguments,**kwargs)
+            if arguments==['admin','info','recovery']:
+                value['info']['servers'].append({**value['info']['servers'][0],'endpoint':'other-server'})
+            return value
+        multi=SimpleNamespace(state_directory=cfg.state_directory,ca_file=cfg.ca_file,
+            root_password_file=cfg.root_password_file,timeout=10,output=work/'multiple-servers')
+        multi.output.mkdir(mode=0o700)
+        with patch.object(Client,'one',multiple_servers):
+            try:verify_drain(multi,{})
+            except Blocked:pass
+            else:raise AssertionError('Single endpoint observation accepted a distributed installation')
+        passed('multi-server-administration-response-is-refused-before-drain-certification')
+        def stale_metrics(self,arguments,**kwargs):
+            if arguments[:3]==['admin','prometheus','metrics']:return captured
+            return original_one(self,arguments,**kwargs)
+        stale=SimpleNamespace(state_directory=cfg.state_directory,ca_file=cfg.ca_file,
+            root_password_file=cfg.root_password_file,timeout=10,output=work/'stale-metrics')
+        stale.output.mkdir(mode=0o700)
+        with patch.object(Client,'one',stale_metrics):
+            try:verify_drain(stale,{})
+            except Blocked:pass
+            else:raise AssertionError('Repeated stale zero metrics were accepted')
+        passed('unchanged-zero-metrics-cannot-pass-without-fresh-completed-root-probes')
         variant=copy(cfg);variant.recovery_id=str(uuid.uuid4())
         cli('different-recovery-state',1,variant)
         variant.state_directory=work/'other-state'
@@ -191,12 +281,14 @@ def main():
         passed('different-recovery-cannot-adopt-existing-private-state-or-disabled-installation')
         p.kill();p.wait(10);p=start()
         cli('after-restart',0);assert snapshot('recovery')==original
+        assert drain('drain-after-restart',0)['inFlightRequestsDrained']
         assert http(old_put,'PUT',b'forbidden')[0]==403
         passed('sigkill-restart-retains-deployment-identity-root-disable-recovery-policy-and-versions')
         # Reopening is an owned-fixture fault, never an automatic action of the recovery command.
         mc(['admin','config','set','recovery','api','root_access=on'])
         assert http(old_get)==(200,b'after')
         cli('externally-reopened',1);assert http(old_get)==(200,b'after')
+        assert not drain('drain-reopened',2)['inFlightRequestsDrained']
         passed('external-reopening-after-confirmation-is-refused-without-pretending-the-fence-held')
         mc(['admin','config','set','recovery','api','root_access=off'])
         p.kill();p.wait(10);p=start('on')
@@ -210,14 +302,17 @@ def main():
         for path in [cfg.state_directory/'recovery.json',cfg.state_directory/'confirmed.json']:
             assert path.stat().st_mode&0o077==0
         passed('same-state-confirms-after-override-removal-with-private-files-and-original-history')
-        report.update(status='PASS',versionCount=2,minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest(),
-            oldPresignedPutRejected=True,oldPresignedGetRejected=True,restartPreserved=True,versionsPreserved=True)
+        report.update(status='PASS',versionCount=3,originalVersionCount=2,
+            minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest(),
+            oldPresignedPutRejected=True,oldPresignedGetRejected=True,restartPreserved=True,versionsPreserved=True,
+            admittedPuts=2,lateCompletedPuts=1,disconnectedPuts=1,freshDrainVerified=True,staleMetricsRejected=True)
         code=0
     except Exception as error:
         report.update(status='FAIL',failureType=type(error).__name__,
             failureLocations=[Path(f.filename).name+':'+str(f.lineno) for f in traceback.extract_tb(error.__traceback__)])
         print('FAIL: storage fence test; private diagnostics at '+str(work),flush=True)
     finally:
+        for channel in pending:channel.close()
         for p in processes:
             if p.poll() is None:
                 p.terminate()
