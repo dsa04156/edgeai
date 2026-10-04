@@ -44,3 +44,6 @@ snapshot으로 복구할 수 없는 구간이다. 소비자가 장치 snapshot�
 실제 시험: `bash scripts/test-recovery-device-journal.sh --report /private/new-report.json`.
 공개 STREAM API/실제 PostgreSQL·SQLite·age를 사용한다. 런타임 claim·broker 활성화·
 checkpoint 접수는 SQL fixture이므로 실제 클러스터 종단 복구 완료 근거로 사용하지 않는다.
+
+다음 [복구 데이터·원본 브로커 검증](recovery-device-readiness.md)은 실제 checkpoint
+바이트와 원본 MQTT 권한 회수를 함께 확인한다. 이 검사도 격리 상태를 유지한다.

@@ -35,10 +35,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-device-journal-test.json')
+    parser.add_argument('--verify-authority',action='store_true')
+    parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     args = parser.parse_args(); identity = uuid.uuid4().hex
     work = ROOT/'.tools'/('recovery-device-journal-test-'+identity); work.mkdir(mode=0o700)
     pg = Postgres(args.transport,diagnostics=work/'postgres'); age = material.Age()
-    owned, apis = {}, []; source = 'edgeai_backup_journal_'+identity
+    owned, apis = {}, []; fixtures=None; source = 'edgeai_backup_journal_'+identity
     report = {'status':'RUNNING','scope':'restored-device-journal-database-comparison-tests',
         'sourceMode':'SYNTHETIC','runtimeBoundary':'SQL_FIXTURE_WITH_ACTIVE_CONSTRAINTS',
         'publicStreamRun':False,'cases':[],'activated':False,'ownedDatabasesRemoved':False,'ownedApisStopped':False}
@@ -102,6 +104,10 @@ def main():
     code=1
     try:
         pg.check_versions('postgres')
+        if args.verify_authority:
+            from recovery_device_test_support import Fixtures
+            fixtures=Fixtures(directory('authority'),args.minio_binary,'sha256:'+'b'*64);fixtures.start()
+            report['scope']='device-recovery-data-authority-prerequisites-tests'
         key=work/'identity'
         with private_file(key) as output:
             result=subprocess.run([str(age.paths['age-keygen'])],stdout=output,stderr=subprocess.PIPE,timeout=30)
@@ -160,21 +166,26 @@ def main():
                 for b in bindings: journal.receive(Frame(b,sequence,'END' if sequence==4 else 'DATA',b'' if sequence==4 else str(sequence).encode(),None if sequence==4 else 'application/json'))
                 state=str(sequence).encode(); journal.commit(sequence-1,journal.pending(),state)
                 snapshot=capture(journal,'a'*64); doc=snapshot.document(); cid=str(uuid.uuid4())
+                object_key='tasks/'+task['task']+'/attempts/'+task['attempt']+'/stream-checkpoint/'+snapshot.sha256
+                object_version=fixtures.upload(object_key,snapshot.wire) if fixtures else str(uuid.uuid4())
                 insert('stream_checkpoint',{'id':cid,'run_id':run_id,'task_id':task['task'],'attempt_id':task['attempt'],
                     'runtime_id':task['runtime'],'epoch':1,'producer_pod_uid':task['pod'],'service_profile_version_id':profile['id'],
                     'previous_id':previous,'serial':doc['serial'],'state_revision':doc['revision'],'sha256':snapshot.sha256,
                     'execution_sha256':'a'*64,'bytes':len(snapshot.wire),'generation_ids':'{'+','.join(generations.values())+'}',
                     'summary_json':json.dumps({'manifest':doc['manifest'],'revision':doc['revision'],
                         'routes':[{k:v for k,v in r.items() if k!='frames'} for r in doc['routes']],
-                        'stateSha256':hashlib.sha256(state).hexdigest(),'stateBytes':len(state)}),
-                    'bucket':'fixture-checkpoints','object_key':'tasks/'+task['task']+'/attempts/'+task['attempt']+'/stream-checkpoint/'+snapshot.sha256,
-                    'object_version':str(uuid.uuid4()),'created_at':pg.sql('SELECT now()::text',source)})
+                        'stateSha256':'0'*64 if fixtures and sequence==3 else hashlib.sha256(state).hexdigest(),'stateBytes':len(state)}),
+                    'bucket':'fixture-checkpoints','object_key':object_key,
+                    'object_version':object_version,'created_at':pg.sql('SELECT now()::text',source)})
                 previous=cid; confirm(journal,snapshot.serial,snapshot.sha256)
                 if sequence==2: middle=work/'db-middle'; backup(pg,source,middle)
+                if fixtures and sequence==3: mismatched=work/'db-mismatched'; backup(pg,source,mismatched)
         for gid in generations.values(): insert('stream_device_completion',{'generation_id':gid,'sequence':4,'created_at':pg.sql('SELECT now()::text',source)})
         terminal=work/'db-terminal'; backup(pg,source,terminal)
+        if fixtures:fixtures.seal_storage()
         target,receipt=restore_database(middle,'mid'); empty,empty_receipt=restore_database(early,'early'); ended,ended_receipt=restore_database(terminal,'end')
-        drop(source); report.update(sourceDatabaseRemoved=True,restoredDatabaseCount=3)
+        mismatched_restore=restore_database(mismatched,'mis') if fixtures else None
+        drop(source); report.update(sourceDatabaseRemoved=True,restoredDatabaseCount=4 if fixtures else 3)
         report['tableCount']=len(fingerprint(target)); assert report['tableCount']>=43
         base=source_snapshot('base'); result=compare(base,target,receipt,cli=True)
         assert len(result['routes'])==2 and {r['sourceAcknowledged'] for r in result['routes']}=={1,2}
@@ -246,6 +257,12 @@ def main():
         blocked(lambda:recovery.compare(pg,options),ValueError)
         pg.sql('COMMENT ON DATABASE '+identifier(target)+' IS '+literal(db_marker),'postgres')
         passed('actual-database-marker-replacement-cannot-reuse-an-old-restore-receipt')
+        if fixtures:
+            fixtures.fence_device(actor,task['attempt'],bindings[0])
+            fixtures.exercise(pg,options,fingerprint,passed,args.transport,mismatched_restore)
+            report.update(sourceStorageStopped=fixtures.origin.poll() is not None,brokerConnectionsRetired=2,
+                fixedStorageVersions=4,verifiedCheckpointObjects=1,brokerAndStorageTls=True,
+                minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest())
         pg.sql('UPDATE edgeai.device_session SET closed_at=now()',target)
         compare(base,target,receipt,{'DEVICE_SESSION_NO_LONGER_CURRENT'})
         passed('closed-session-remains-ineligible-even-when-data-cursors-match')
@@ -255,13 +272,17 @@ def main():
             else: raise AssertionError('Comparison activated a quarantined source')
         passed('successful-comparison-does-not-remove-quarantine-or-open-device-producer')
         report.update(status='PASS',jarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest(),
-            databaseTablesPreserved=True,journalFilesPreserved=True,sourceVolumesRemoved=True,checkpointObjectsVerified=False,
+            databaseTablesPreserved=True,journalFilesPreserved=True,sourceVolumesRemoved=True,checkpointObjectsVerified=fixtures is not None,
             serverMajor=int(pg.sql('SHOW server_version_num',target))//10000)
         code=0
     except Exception as error:
         report.update(status='FAIL',failureType=type(error).__name__,failureFrames=[{'file':Path(f.filename).name,'line':f.lineno} for f in traceback.extract_tb(error.__traceback__)])
         print('FAIL: Device recovery comparison; '+type(error).__name__+'; private diagnostics retained',file=sys.stderr)
     finally:
+        if fixtures:
+            try:report['ownedAuthorityProcessesStopped']=fixtures.close()
+            except Exception as error:report.update(status='FAIL',authorityCleanupFailureType=type(error).__name__);code=1
+            report['ownedAuthorityClientsStopped']=all(peer.client._thread is None for peer in fixtures.peers)
         for api in apis: api.close()
         report['ownedApisStopped']=all(api.process.poll() is not None for api in apis)
         try:

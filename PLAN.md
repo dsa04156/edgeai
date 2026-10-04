@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0089 장치 journal/DB와 실제 고정 checkpoint bytes·원본 MQTT 권한을 결합 검증한다.
+공개 API/복원 DB 4개·TLS MinIO 2개/원본 종료·실제 MQTT 연결 2개 회수·상태 summary
+불일치/권한 재활성화/객체 삭제/관측 경쟁 등 27개 `144757Z-420384e3` PASS.
+[근거](docs/evidence/m9-device-recovery-authority.md). source 격리를 유지하며 원본 Device
+프로세스 종료·다른 producer/API 권한 회수·새 권한 배정·종합 활성화와 전체 목표는 남는다.
+CI의 기존 16개 gate를 storage job의 27개로 확장했다. 새 CI/배포 확인은 별도다.
+
 ADR0088 복원한 Device journal과 정확한 PostgreSQL 복원본의 읽기 전용 대조를 추가했다.
 공개 STREAM API·실제 DB 복원 3개·원본 삭제·43개 테이블/파일 보존을 포함한 16개
 `142409Z-b11d1b61`, 장치 백업 회귀 13개 `142719Z-0da4249f` PASS.

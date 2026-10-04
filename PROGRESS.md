@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0089 복원 장치 데이터·원본 MQTT 권한 결합 검증 27개 `144757Z-420384e3` PASS.
+실제 공개 API/복원 DB 4개·TLS MinIO 복제/원본 종료·실제 MQTT 연결 회수·고정 checkpoint
+파싱과 DB summary 대조·계정/관리자 복구·관측 경쟁·파일 삭제 거절·43개 테이블/파일 보존과
+소유 프로세스/DB/client 정리를 확인했다. [근거](docs/evidence/m9-device-recovery-authority.md).
+자동 재개는 하지 않으며 원본 Device 프로세스 종료·다른 producer/API 권한·새 Secret/grant·
+종합 활성화와 M5 잔여/M7–M10 전체 수용은 남는다. 새 27개 CI gate/배포는 미확인이다.
+
 ADR0088 장치 journal/DB 대조 실제 16개 `142409Z-b11d1b61`, 백업 회귀 13개
 `142719Z-0da4249f` PASS. 공개 STREAM API·복원 DB 3개·원본 DB/source 삭제·43개 테이블과
 파일 보존·순번 유실/세션/경로/END/전환 충돌·실제 관측 경쟁·격리 유지·소유 정리를 확인했다.

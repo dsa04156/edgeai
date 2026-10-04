@@ -63,6 +63,7 @@ def query(run_id, actor):
         "'version',version,'success',success)) FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),"
         "'guard',("+GUARD+"),'run',(SELECT jsonb_build_object('id',id,'state',state) FROM edgeai.workflow_run WHERE id="+run+"),"
         "'configured',EXISTS(SELECT FROM edgeai.stream_run_configuration WHERE run_id="+run+"),"
+        "'brokerDigest',(SELECT broker_digest FROM edgeai.stream_run_configuration WHERE run_id="+run+"),"
         "'frozen',EXISTS(SELECT FROM edgeai.stream_run_binding WHERE run_id="+run+"),"
         "'device',(SELECT jsonb_build_object('state',state,'sessionEpoch',session_epoch,'profileId',profile_version_id,'sourceMode',source_mode)"
         " FROM edgeai.device WHERE id="+device+"),"
@@ -105,6 +106,7 @@ def classify(catalog, value, bindings, run_id):
         generations = context['generations']; generation = next((g for g in generations if g['generation'] == binding.generation),None)
         if generation is None:
             conflict('JOURNAL_GENERATION_MISSING_FROM_DATABASE',route_id); continue
+        if generation['broker_digest'] != catalog['brokerDigest']: conflict('GENERATION_BROKER_CONFIGURATION_MISMATCH',route_id)
         if generation['generation'] != max(g['generation'] for g in generations): conflict('JOURNAL_GENERATION_REQUIRES_HANDOVER',route_id)
         if (generation['producer_session_id'] != actor.id or generation['producer_epoch'] != actor.epoch or
                 generation['source_device_id'] != actor.device_id): conflict('GENERATION_PRODUCER_MISMATCH',route_id)
@@ -153,7 +155,7 @@ def compare(pg, args):
     return {'formatVersion':1,'scope':'restored-device-journal-database-comparison',
         'status':'DEVICE_JOURNAL_CONFLICTS' if conflicts else 'DEVICE_JOURNAL_METADATA_MATCHED',
         'targetDatabase':args.database,'databaseOid':catalog['oid'],'restoreReportSha256':catalog['restoreReportSha256'],
-        'runId':args.run_id,**evidence,'databaseGuardSha256':hashlib.sha256(canonical(catalog['guard'])).hexdigest(),
+        'runId':args.run_id,'brokerDigest':catalog['brokerDigest'],**evidence,'databaseGuardSha256':hashlib.sha256(canonical(catalog['guard'])).hexdigest(),
         'routes':routes,'conflicts':conflicts,'databaseModified':False,'journalModified':False,
         'activated':False,'checkpointObjectsVerified':False,'producerQuiescenceProven':False,
         'verifiedAt':datetime.now(timezone.utc).isoformat(),
