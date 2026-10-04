@@ -1,6 +1,10 @@
 # 진행 상태
 
 [STATUS]
+ADR0065 정적 키 파일 암호화·새 경로 복원10개가 PASS(033214Z-e49bced8)다.
+실제 age/OpenSSL·합성4파일/3,009bytes·원본 삭제 뒤TLS키쌍복원·손상/잘못된키/경로/링크/
+덮어쓰기/변경입력 거절·native X25519/PQ를 확인했다. docs/evidence/m9-private-material.md.
+새 CI 게이트 추가, 운영 Secret/CA 적용·키 회전·journal·서명·종합 복구 활성화는 남는다.
 ADR0064 Kubernetes producer 중지의 판정5·실제클러스터7개 PASS(025504Z-74efb678).
 전용namespace에실행한컨테이너2/자식2의종료와quota·timeout/재개·finalizer보존·소유자원정리
 확인. docs/evidence/m9-recovery-producer-stop.md. 전역writer회수/해제/활성화는미완료다.

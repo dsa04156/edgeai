@@ -31,6 +31,10 @@ jobs:
         run: python3 scripts/test-recovery-kubernetes.py
       - name: Verify conservative producer termination evidence and recovery ownership
         run: python3 scripts/test-recovery-stop.py
+      - name: Verify encrypted private material backup and isolated restore
+        run: |
+          bash scripts/install-age.sh
+          bash scripts/collect-evidence.sh private-material bash scripts/test-private-material.sh --report docs/evidence/runs/private-material-report.json
       - run: bash scripts/dev-up.sh
       - name: Verify real TLS broker authority and revocation
         run: |

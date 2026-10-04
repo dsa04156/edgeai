@@ -2,6 +2,11 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0065는 선택한 정적 키 파일의 암호화 백업과 새 경로 복원을 연결한다. 실제 age/OpenSSL의
+10개 시험이 PASS(033214Z-e49bced8): 원본 삭제 뒤4개 파일/TLS 키쌍 복원, 잘못된 키·손상·
+경로/링크·덮어쓰기·변경 입력 거절, X25519/PQ를 확인했다. [키 복원 근거](docs/evidence/m9-private-material.md).
+새 CI 게이트를 추가했으며 운영 Secret/journal·서명·키 회전/적용·종합 활성화는 남는다.
+
 ADR0064는 전용 namespace의 새 Pod/Job 생성을 차단하고 관측한 실행의 종료를 확인한다.
 판정5·실제클러스터7개 PASS(025504Z-74efb678):컨테이너2/자식2 종료·timeout/재개·차단/
 기록/다른finalizer 보존·소유namespace정리. 새kind게이트는후속이다.

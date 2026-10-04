@@ -134,12 +134,15 @@ python3 scripts/test-recovery-kubernetes.py # 복원 DB/실행 목록 분류·�
 bash scripts/test-recovery-kubernetes-live.sh --context <시험-context> # 실제 복원 DB와 별도 Kubernetes namespace
 python3 scripts/test-recovery-stop.py # 종료 상태·신원·불확실한 종료 거절 판정
 bash scripts/test-recovery-stop-live.sh --context <시험-context> # 실제 부모/자식 종료·생성 차단·timeout/재개
+bash scripts/install-age.sh # 고정 공식 age 배포 파일·실행 파일 checksum 확인
+bash scripts/test-private-material.sh # 합성 키의 실제 암호화·복원·손상/경로/덮어쓰기 거절
 ```
 
 `verify-all.sh local|full`은 미구현 fault/hardware 시험과 부하 성능 기준 미정을 숨기지 않고 nonzero를 반환합니다.
 관리 부하의 측정 범위·실행 방법·합격 판정은 [부하 시험 문서](docs/load-testing.md)를 따릅니다.
 DB 백업과 새 DB로의 복원은 [백업 실행 문서](docs/postgres-backup.md)를 따릅니다.
 고정 S3 버전 복제와 독립 검증은 [MinIO 백업 문서](docs/storage-backup.md)를 따릅니다.
+정적 Secret·CA 파일의 암호화 백업과 새 경로 복원은 [키 파일 백업 문서](docs/private-material-backup.md)를 따릅니다.
 복원 DB의 모든 결과/checkpoint 참조 대조는 [DB/S3 복원 검증](docs/recovery-references.md)을 따릅니다.
 복원 DB의 일반 API 기동은 차단하며, 조회는 [복구 점검 모드](docs/recovery-inspection.md)를 사용합니다.
 DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/recovery-kubernetes.md)을 제공합니다.
