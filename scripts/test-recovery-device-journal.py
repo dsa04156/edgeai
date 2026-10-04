@@ -81,7 +81,7 @@ def main():
         assert fingerprint(target)==before
         assert files=={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in restored.rglob('*') if p.is_file()}
         return result
-    def source_snapshot(name,generated=3,ack=(1,2),selected=None,end=False,intent=False):
+    def source_snapshot(name,generated=3,ack=(1,2),selected=None,end=False,intent=False,retain_source=False):
         selected=bindings if selected is None else selected; live=directory(name+'-live')
         with Journal(live/'journal',[],selected,create=True) as journal:
             for sequence in range(1,generated+1):
@@ -94,9 +94,9 @@ def main():
                 assignments={b.route_id:SimpleNamespace(generation_id=generations[b.route_id],binding=b) for b in selected}
                 completion.write(live,run_id,actor,assignments,journal)
         bundle=directory(name+'-backup'); journals.backup(age,live,recipient,bundle)
-        shutil.rmtree(live)
+        if not retain_source: shutil.rmtree(live)
         restored=directory(name+'-restored'); journals.restore(age,bundle,key,restored)
-        return restored
+        return (restored,live) if retain_source else restored
     def blocked(operation, exception=Blocked):
         try: operation()
         except exception: return
@@ -259,9 +259,12 @@ def main():
         passed('actual-database-marker-replacement-cannot-reuse-an-old-restore-receipt')
         if fixtures:
             fixtures.fence_device(actor,task['attempt'],bindings[0])
-            fixtures.exercise(pg,options,fingerprint,passed,args.transport,mismatched_restore)
+            retained_restore,retained_source=source_snapshot('retired-owner',retain_source=True)
+            fixtures.exercise(pg,options,fingerprint,passed,args.transport,mismatched_restore,(retained_restore,retained_source))
+            shutil.rmtree(retained_source)
             report.update(sourceStorageStopped=fixtures.origin.poll() is not None,brokerConnectionsRetired=2,
                 fixedStorageVersions=4,verifiedCheckpointObjects=1,brokerAndStorageTls=True,
+                sourceOwnerRetirementVerified=True,retiredSourceRemoved=not retained_source.exists(),
                 minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest())
         pg.sql('UPDATE edgeai.device_session SET closed_at=now()',target)
         compare(base,target,receipt,{'DEVICE_SESSION_NO_LONGER_CURRENT'})

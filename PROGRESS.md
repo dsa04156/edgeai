@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+ADR0090 원본 Device source 종료11개 `150639Z-87144f5a`, 실제 복원 DB4/DB·TLS S3/MQTT·
+원본 journal 결합33개 `151649Z-82a21d30` PASS. Runner111 `151238Z-82901393`, MQTT97
+`151238Z-d7b91f12`, 백업13 `151238Z-fca4c959`도 PASS다. 원본 마지막 프레임 보존·잠금
+해제/재점유·다른 UUID·inode 교체·transaction 중단·검사 중 실제 쓰기/원본 유실·격리와
+소유 자원 정리를 확인했다. [근거](docs/evidence/m9-device-source-retirement.md).
+증명은 LOCAL journal owner 해제이며 물리/전역 producer 종료와 활성화는 false다.
+새 CI/배포·다른 producer/API 자격·새 권한/종합 복구·M5 잔여/M7–M10 전체 수용은 남는다.
+
 ADR0089 복원 장치 데이터·원본 MQTT 권한 결합 검증 27개 `144757Z-420384e3` PASS.
 실제 공개 API/복원 DB 4개·TLS MinIO 복제/원본 종료·실제 MQTT 연결 회수·고정 checkpoint
 파싱과 DB summary 대조·계정/관리자 복구·관측 경쟁·파일 삭제 거절·43개 테이블/파일 보존과

@@ -1,5 +1,7 @@
 """Owned real TLS MinIO replicas and Mosquitto for Device recovery integration tests."""
 import hashlib
+from contextlib import closing
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,7 @@ import selectors
 import shutil
 import socket
 import ssl
+import sqlite3
 import subprocess
 import sys
 import time
@@ -20,6 +23,7 @@ from unittest.mock import patch
 from postgres_backup import ROOT, Blocked, private_file
 import private_material_backup as material
 import recovery_device_readiness as readiness
+import recovery_device_retire as retirement
 import recovery_mqtt_fence as mqtt
 from storage_backup import Client, backup
 from edgeai_runner.stream_protocol import Frame
@@ -129,7 +133,7 @@ class Fixtures:
             peer=Peer(self.cfg,name,password);self.peers.append(peer);assert peer.reason in (134,135)
         self.replacement=json.loads((self.cfg.state_directory/'recovery.json').read_text())['password']
 
-    def exercise(self,pg,options,fingerprint,passed,transport,mismatched_restore):
+    def exercise(self,pg,options,fingerprint,passed,transport,mismatched_restore,source_fixture):
         args=SimpleNamespace(**vars(options),storage_input=self.bundle,mqtt_state_directory=self.cfg.state_directory,
             mqtt_ca_file=self.cfg.ca_file,mqtt_original_password_file=self.cfg.admin_password_file,
             recovery_id=self.cfg.recovery_id,timeout=30)
@@ -216,6 +220,7 @@ class Fixtures:
             except Blocked:pass
         verify()
         passed('restoring-the-old-administrator-invalidates-a-previously-successful-fence')
+        self.exercise_source(pg,args,fingerprint,passed,transport,source_fixture)
         # Delete an actually referenced historical checkpoint, never merely an unreferenced newest version.
         catalog=readiness.journal.database_inventory(pg,args.database,args.restore_report,
             readiness.journal.query(args.run_id,readiness.journal.restored_journal(args.journal_restore)[1][0].producer))
@@ -224,6 +229,61 @@ class Fixtures:
         refused(lambda:verify(),RuntimeError)
         assert fingerprint(args.database)==pristine and files()==journal_files
         passed('deleted-fixed-checkpoint-version-is-not-hidden-by-an-old-verification-report-or-a-later-version')
+
+    def exercise_source(self,pg,options,fingerprint,passed,transport,source_fixture):
+        restored,source=source_fixture
+        _,bindings,evidence=readiness.journal.restored_journal(restored)
+        receipt=self.directory/'source-retirement.json'
+        material.write_json(receipt,retirement.retire(source,options.recovery_id,bindings,evidence['journalSnapshotSha256'],5))
+        args=SimpleNamespace(**vars(options));args.journal_restore=restored
+        args.original_source=source;args.source_retirement_report=receipt
+        pristine=fingerprint(args.database)
+        def files():return {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in restored.rglob('*') if p.is_file()}
+        original_files=files()
+        def refused(operation,kind=Blocked):
+            try:operation()
+            except kind:return
+            raise AssertionError('Unverified original source was accepted')
+        output=self.directory/'combined-source-cli'
+        command=[sys.executable,'scripts/recovery_device_readiness.py','--transport',transport,'--output',str(output)]
+        for key,value in vars(args).items():command+=['--'+key.replace('_','-'),str(value)]
+        self.run(command);result=json.loads((output/'readiness.json').read_text())
+        assert result['status']=='DEVICE_DATA_BROKER_AND_SOURCE_OWNER_VERIFIED'
+        assert result['sourceJournalOwnerQuiescenceProven'] and result['source']['snapshotSha256']==evidence['journalSnapshotSha256']
+        assert result['source']['recoveryId']==self.cfg.recovery_id
+        assert result['checkpointObjectsVerified'] and result['oldBrokerAuthorityRetired']
+        assert all(result[k] is False for k in ('activated','producerProcessQuiescenceProven','globalQuiescenceProven'))
+        passed('actual-retired-original-owner-is-joined-to-restored-journal-database-fixed-checkpoints-and-broker-with-quarantine-retained')
+        with (source/'journal/owner.lock').open('r+') as held:
+            fcntl.flock(held,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            refused(lambda:readiness.verify(pg,self.client,args))
+        passed('actual-held-original-owner-lock-blocks-combined-recovery-even-with-an-existing-retirement-receipt')
+        changed=json.loads(receipt.read_text());changed['recoveryId']=str(uuid.uuid4())
+        other=self.directory/'other-retirement.json';material.write_json(other,changed)
+        variant=SimpleNamespace(**vars(args));variant.source_retirement_report=other
+        refused(lambda:readiness.verify(pg,self.client,variant))
+        passed('another-retirement-operation-cannot-be-joined-to-the-original-broker-recovery')
+        original=readiness.verify_checkpoint_bytes
+        def changed_source(*a,**kw):
+            value=original(*a,**kw)
+            with closing(sqlite3.connect(source/'journal/journal.sqlite')) as db:
+                db.execute('UPDATE checkpoint SET state=?',(b'changed-after-source-observation',));db.commit()
+            return value
+        with patch.object(readiness,'verify_checkpoint_bytes',side_effect=changed_source):
+            refused(lambda:readiness.verify(pg,self.client,args))
+        with closing(sqlite3.connect(source/'journal/journal.sqlite')) as db:
+            db.execute('UPDATE checkpoint SET state=?',(b'3',));db.commit()
+        passed('actual-original-journal-write-during-checkpoint-read-invalidates-the-combined-source-proof')
+        for name in ('original_source','source_retirement_report'):
+            variant=SimpleNamespace(**vars(args));setattr(variant,name,None)
+            refused(lambda:readiness.verify(pg,self.client,variant),ValueError)
+        passed('partial-source-proof-arguments-cannot-silently-fall-back-to-data-only-verification')
+        missing=source.with_name(source.name+'-temporarily-moved');source.rename(missing)
+        try:refused(lambda:readiness.verify(pg,self.client,args),FileNotFoundError)
+        finally:missing.rename(source)
+        readiness.verify(pg,self.client,args)
+        assert fingerprint(args.database)==pristine and files()==original_files
+        passed('unavailable-original-source-cannot-reuse-an-old-retirement-report-and-readiness-preserves-database-and-quarantine')
 
     def close(self):
         for peer in self.peers:peer.close()

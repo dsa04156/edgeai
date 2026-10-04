@@ -38,6 +38,12 @@ state 원문을 명령 인자·Git·CI artifact로 옮기지 않는다.
    상태, 원래 관리자 자격의 거절을 확인한다. 장치 계정은 없거나 disabled여야 한다.
 4. 저장소·브로커·DB/journal을 재관측해 입력이나 권한이 달라지면 결론을 폐기한다.
 
+원본 로컬 장치의 journal 소유권 해제도 함께 확인하려면 [원본 장치 종료](recovery-device-source-retirement.md)를
+먼저 실행하고 `--original-source`와 `--source-retirement-report`를 함께 추가한다. 동일 복구
+UUID·최종 snapshot과 실제 잠금/파일 신원을 전후 대조한다. 이 경우 성공 상태는
+`DEVICE_DATA_BROKER_AND_SOURCE_OWNER_VERIFIED`, `sourceJournalOwnerQuiescenceProven=true`다.
+인자를 생략한 기본 검사의 source 소유권 검증은 false이며 한쪽 인자만 주면 실패한다.
+
 성공 결과는 `readiness.json`의 `DEVICE_DATA_AND_ORIGINAL_BROKER_VERIFIED`/exit0이다.
 충돌·관측 변경·차단 상태 미확정은 BLOCKED/exit2, 잘못된 입력이나 신원·파일 누락 등은
 FAIL/nonzero다. output은 새 경로이며 비공개 진단에는 자격이 포함될 수 있다.
@@ -52,3 +58,4 @@ marker도 유지한다. `producerProcessQuiescenceProven`, `globalQuiescenceProv
 고정 age/mc/Paho와 Mosquitto Dynamic Security plugin·OpenSSL이 필요하다. 비표준
 Mosquitto 설치 변수는 기존 MQTT 차단 시험과 같다.
 [실제 27개 검증과 경계](evidence/m9-device-recovery-authority.md)를 참고한다.
+원본 소유권 검증을 포함한 후속 [33개 결합 검증](evidence/m9-device-source-retirement.md)도 제공한다.

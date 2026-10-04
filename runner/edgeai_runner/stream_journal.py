@@ -108,12 +108,18 @@ class Journal:
                 and stat.S_IMODE(info.st_mode) == 0o700, 'Private stream journal directory required')
         require(not os.path.lexists(directory / 'recovery.json'),
                 'Stream journal recovery requires explicit activation')
+        self._check_retirement()
         try:
             self.lock = os.open(directory / 'owner.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
             try:
                 fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise JournalError('Stream journal already owned') from None
+            # Retirement/restore may have been published after the first check
+            # while this process was acquiring ownership.
+            require(not os.path.lexists(directory / 'recovery.json'),
+                    'Stream journal recovery requires explicit activation')
+            self._check_retirement()
             path = directory / 'journal.sqlite'
             if create:
                 fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -218,6 +224,7 @@ class Journal:
     @contextmanager
     def _transaction(self, *, advance=True):
         require(self.db is not None, 'Stream journal is closed')
+        self._check_retirement()
         if self.authority_guard is not None:
             self.authority_guard()
         self.db.execute('BEGIN IMMEDIATE')
@@ -230,11 +237,16 @@ class Journal:
                 self.db.execute('UPDATE durability SET serial=? WHERE id=1', (serial + 1,))
             if self.authority_guard is not None:
                 self.authority_guard()
+            self._check_retirement()
             self.db.commit()
         except BaseException:
             if self.db.in_transaction:
                 self.db.rollback()
             raise
+
+    def _check_retirement(self):
+        require(not os.path.lexists(self.directory / 'retirement.json'),
+                'Stream source journal is permanently retired')
 
     def close(self):
         if self.db is not None:

@@ -103,6 +103,7 @@ class DeviceSource:
 
     def _check_owner(self):
         require(not self.closed and not self.cancel.is_set(), 'STREAM_SOURCE_CANCELLED')
+        require(not os.path.lexists(self.directory/'journal/retirement.json'), 'STREAM_SOURCE_RETIRED')
         require(time.monotonic() < self.deadline, 'STREAM_SOURCE_TIMEOUT')
 
     def _check(self):

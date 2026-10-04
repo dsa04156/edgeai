@@ -44,3 +44,5 @@ exit0은 암호화 또는 격리 복원 성공이며 서비스 재개가 아니�
 
 격리 복원 다음에는 [장치 journal과 DB 대조](recovery-device-journal.md)를 실행해 세션·
 경로·처리 순번을 확인한다. 대조 성공 후에도 원본 종료와 권한/활성화 검증은 남는다.
+원본이 접근 가능하면 [원본 source 종료](recovery-device-source-retirement.md) 후 최종 snapshot을
+다시 백업·복원하고 원본 잠금 해제 증거까지 결합해 확인할 수 있다.

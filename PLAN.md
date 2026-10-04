@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0090 원본 Device source의 영속 종료 marker·실제 owner 잠금 해제·최종 snapshot 보존을
+추가하고 DB/S3/브로커 결합 검사에 연결했다. 별도 writer11개150639Z-87144f5a·결합33개
+151649Z-82a21d30, Runner111/TLS MQTT97/백업13개151238Z 회귀 PASS.
+[근거](docs/evidence/m9-device-source-retirement.md). 기존 원본의 새 SDK 실행을 거절하며
+오래된 백업·잠금 점유/교체·관측 중 쓰기는 통과하지 않는다. 증명 범위는 journal owner이며
+전역 producer/API 권한·새 Secret/grant·종합 활성화와 전체 목표는 남는다. 새 CI/배포는 후속이다.
+
 ADR0089 장치 journal/DB와 실제 고정 checkpoint bytes·원본 MQTT 권한을 결합 검증한다.
 공개 API/복원 DB 4개·TLS MinIO 2개/원본 종료·실제 MQTT 연결 2개 회수·상태 summary
 불일치/권한 재활성화/객체 삭제/관측 경쟁 등 27개 `144757Z-420384e3` PASS.

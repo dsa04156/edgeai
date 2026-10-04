@@ -1,10 +1,12 @@
 """Actual HTTPS/TLS MQTT DeviceSource; authority replies are explicit fixtures."""
 from dataclasses import replace
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import ssl
 import subprocess
 import sys
@@ -324,6 +326,63 @@ with DeviceSource(client,POD,[GENERATION],Path(directory),create=True,timeout=20
         self.assertIsNone(source.link);self.assertEqual(b'offset2',source.checkpoint().state)
         self.assertEqual(2,source.checkpoint().output_sequences[A.route_id])
         self.assertTrue(all(path.endswith('/complete') for path in self.api.paths[count:]))
+
+    def test_retirement_during_emit_rolls_back_and_closes_transport(self):
+        source=self.open(create=True);self.emit()
+        path=self.directory/'journal/journal.sqlite'
+        def snapshot():
+            with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as db:
+                return [db.execute('SELECT * FROM '+table).fetchall() for table in ('checkpoint','route','frame','durability')]
+        before=snapshot();capacity=source.journal._capacity
+        def retire():
+            capacity();(self.directory/'journal/retirement.json').write_text('{}')
+        with patch.object(source.journal,'_capacity',side_effect=retire):
+            with self.assertRaisesRegex(SourceError,'STREAM_SOURCE_RETIRED'):self.emit(b'9',b'offset2')
+        self.assertTrue(source.closed);self.assertTrue(source.link.closed);self.assertEqual(before,snapshot())
+        calls=len(self.api.paths)
+        with self.assertRaisesRegex(SourceError,'STREAM_SOURCE_RETIRED'):self.open()
+        self.assertEqual(calls,len(self.api.paths))
+
+    def test_separate_device_process_releases_owner_and_cannot_restart_after_retirement(self):
+        code='''import sys,time
+from pathlib import Path
+from test_stream_journal import A
+from test_stream_assignment import POD,GENERATION
+from edgeai_runner.stream_assignment import BindingClient
+from edgeai_runner.stream_source import DeviceSource,SourceError
+from edgeai_runner.stream_journal import Emission
+url,token,ca,directory=sys.argv[1:]
+client=BindingClient(url,A.producer,token,ca_file=ca)
+try:
+ with DeviceSource(client,POD,[GENERATION],Path(directory),create=True,timeout=30) as source:
+  source.emit([Emission(A.route_id,b'4','application/json')],b'offset1')
+  while True:source.step();time.sleep(.005)
+except SourceError as error:
+ if str(error)!='STREAM_SOURCE_RETIRED':raise
+'''
+        self.api.duration=15;self.api.deadline=time.monotonic()+15
+        sdk=Path(__file__).resolve().parents[1]
+        env={**os.environ,'PYTHONPATH':os.pathsep.join(str(p) for p in (sdk,sdk/'tests',sdk/'integration'))}
+        child=subprocess.Popen([sys.executable,'-c',code,self.api.url,str(self.root/'device.token'),str(self.broker.ca),str(self.directory)],
+            env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        try:
+            eventually(lambda:self.link.step(.001),lambda:bool(self.sink.pending()),10)
+            self.assertIsNone(child.poll())
+            scripts=sdk.parent/'scripts';sys.path.insert(0,str(scripts))
+            try:
+                import recovery_device_retire as retirement
+                value,bindings,digest=retirement.read_source(self.directory,5)
+                report=retirement.retire(self.directory,POD,bindings,digest,5)
+                self.assertTrue(report['sourceJournalOwnerQuiescenceProven'])
+                self.assertFalse(report['producerProcessQuiescenceProven'])
+            finally:sys.path.remove(str(scripts))
+            self.assertEqual(0,child.wait(5));self.assertEqual(b'',child.stderr.read())
+            calls=len(self.api.paths)
+            with self.assertRaisesRegex(SourceError,'STREAM_SOURCE_RETIRED'):self.open()
+            self.assertEqual(calls,len(self.api.paths))
+        finally:
+            if child.poll() is None:child.kill();child.wait(5)
+            child.stderr.close()
 
 
 if __name__=='__main__':unittest.main()

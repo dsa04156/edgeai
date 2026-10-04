@@ -39,6 +39,8 @@ jobs:
           bash scripts/collect-evidence.sh private-material bash scripts/test-private-material.sh --report docs/evidence/runs/private-material-report.json
       - name: Verify consistent encrypted Device journals and quarantined source restoration
         run: bash scripts/collect-evidence.sh device-journal bash scripts/test-device-journal.sh --report docs/evidence/runs/device-journal-report.json
+      - name: Verify durable original Device retirement and final snapshot preservation
+        run: bash scripts/collect-evidence.sh device-source-retirement bash scripts/test-device-source-retirement.sh --report docs/evidence/runs/device-source-retirement-report.json
       - run: bash scripts/dev-up.sh
       - name: Verify real TLS broker authority and revocation
         run: |

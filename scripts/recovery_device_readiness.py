@@ -18,6 +18,7 @@ import uuid
 from postgres_backup import Blocked, Postgres
 import private_material_backup as material
 import recovery_device_journal as journal
+import recovery_device_retire as retirement
 import recovery_references as references
 import recovery_mqtt_fence as mqtt
 from storage_backup import Client
@@ -98,9 +99,14 @@ def stable(value,excluded): return {k:v for k,v in value.items() if k not in exc
 
 
 def verify(pg,client,args):
+    source=getattr(args,'original_source',None); receipt=getattr(args,'source_retirement_report',None)
+    if (source is None)!=(receipt is None): raise ValueError('Original source and retirement report are required together')
     before=journal.compare(pg,args)
     if before['conflicts']: raise Blocked('Device journal and restored database have unresolved conflicts')
-    _,bindings,_=journal.restored_journal(args.journal_restore); actor=bindings[0].producer
+    _,bindings,evidence=journal.restored_journal(args.journal_restore); actor=bindings[0].producer
+    def observe_source():
+        return retirement.verify(source,receipt,args.recovery_id,bindings,evidence['journalSnapshotSha256']) if source else None
+    source_before=observe_source()
     sql=journal.query(args.run_id,actor)
     catalog=journal.database_inventory(pg,args.database,args.restore_report,sql)
     if hashlib.sha256(journal.canonical(catalog['guard'])).hexdigest()!=before['databaseGuardSha256']:
@@ -111,11 +117,13 @@ def verify(pg,client,args):
     current_storage=references.verify(pg,client,args.database,args.restore_report,args.storage_input)
     current_broker=observe_broker(args,before['brokerDigest'],actor)
     after=journal.compare(pg,args)
+    source_after=observe_source()
     if (stable(storage,{'verifiedAt','databaseSnapshot'})!=stable(current_storage,{'verifiedAt','databaseSnapshot'}) or
-            broker!=current_broker or stable(before,{'verifiedAt'})!=stable(after,{'verifiedAt'})):
-        raise Blocked('Recovery inputs or original broker authority changed across verification')
+            broker!=current_broker or source_before!=source_after or stable(before,{'verifiedAt'})!=stable(after,{'verifiedAt'})):
+        raise Blocked('Recovery inputs or original source authority changed across verification')
     return {'formatVersion':1,'scope':'device-recovery-data-authority-prerequisites',
-        'status':'DEVICE_DATA_AND_ORIGINAL_BROKER_VERIFIED','recoveryId':args.recovery_id,
+        'status':'DEVICE_DATA_BROKER_AND_SOURCE_OWNER_VERIFIED' if source else 'DEVICE_DATA_AND_ORIGINAL_BROKER_VERIFIED',
+        'recoveryId':args.recovery_id,'source':source_after,'sourceJournalOwnerQuiescenceProven':source_after is not None,
         'database':before,'storage':current_storage,'broker':current_broker,'checkpoints':checkpoints,
         'checkpointObjectsVerified':True,'oldBrokerAuthorityRetired':True,'databaseModified':False,'journalModified':False,
         'brokerModified':False,'activated':False,'producerProcessQuiescenceProven':False,'globalQuiescenceProven':False,
@@ -128,6 +136,7 @@ def main():
     for name in ('database','run-id','recovery-id'):parser.add_argument('--'+name,required=True)
     for name in ('restore-report','journal-restore','storage-input','mqtt-state-directory','mqtt-ca-file','mqtt-original-password-file','output'):
         parser.add_argument('--'+name,type=Path,required=True)
+    for name in ('original-source','source-retirement-report'):parser.add_argument('--'+name,type=Path)
     parser.add_argument('--timeout',type=int,default=60)
     parser.add_argument('--transport',choices=['native','compose'],default='native');parser.add_argument('--pg-bin',type=Path)
     args=parser.parse_args();created=False
