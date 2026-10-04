@@ -33,6 +33,8 @@ for name, options, code, status, acceptance in cases:
     assert stage['summary']['unexpected'] == stage['summary']['dropped'] == 0
     assert stage['integrity']['observations'] == 31 and stage['integrity']['exactObservationCounts']
     print('PASS: ' + name + ' expected exit=' + str(code) + ' status=' + status + '; actual API/DB correctness and cleanup', flush=True)
-print('PASS: all four real API/DB acceptance classifications; reduced-scale harness regression only')
+subprocess.run([sys.executable, 'scripts/test-device-load-failure.py', '--report',
+                str(directory / 'queue-full.json')], timeout=180, check=True)
+print('PASS: four real API/DB acceptance classifications and failed-window evidence; reduced-scale harness regression only')
 print('Acceptance reports: ' + str(directory))
 PY

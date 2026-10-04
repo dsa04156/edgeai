@@ -89,7 +89,7 @@
 | M9-PRIVATE-MATERIAL | scripts/install-age.sh + scripts/test-private-material.sh | 실제 age 암호화·원본 삭제 뒤 TLS 키쌍/파일 복원·손상/잘못된 키/경로/링크/덮어쓰기/변경 입력 거절 | 합성 정적 파일·native X25519/PQ 10개; docs/evidence/m9-private-material.md. 운영 Secret 적용·키 회전·journal·활성화는 별도 |
 | M9-MANAGEMENT-AUDIT | scripts/test-management-audit.sh + scripts/test-profiles-stack.sh local | 실제 Basic/CSRF·접수503 실행 차단·결과 실패201/미확정·재시작·불변 이력·비밀값 배제·조회/Swagger/PC·모바일 | 격리 PG/패키징 API8개와 실제 브라우저; docs/evidence/m9-management-audit.md. 내부 worker/직접 설정·사용자별 RBAC·외부 보존은 별도 |
 | M8-LOAD | scripts/test-load.sh | 실제 API/PG의100→300→1,000 장치·고정 발송·지연/누락·DB정합성·재접속·자원/정리 | --measure-only는 측정 범위; 합의 성능 예산은 별도, docs/load-testing.md |
-| M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과를 구분하고 종료 코드/정리 확인 | 10대/2초 회귀; 전체 규모·장비 성능 수용과 구분 |
+| M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과 및 큐 포화 실패의 DB 관측값 보존·종료 코드/정리 확인 | 10대/2초 회귀; 실패 시험만 클라이언트 지연 주입, 전체 규모·장비 성능 수용과 구분 |
 | M8-AUTH-CACHE | scripts/test-unit.sh + scripts/test-load.sh --measure-only | 성공 비교64개/30초·고정 만료·hash/비밀번호/권한/잠금 변경·실HTTP401/403·동일 규모 지연/CPU 측정 | 단위111개·실제9,240요청/오류0·DB정합성 PASS; docs/evidence/m8-authentication-load.md |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |
 

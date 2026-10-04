@@ -172,7 +172,35 @@ def main():
             stage['setupAndWarmupSeconds'] = setup_seconds
             report['stages'].append(stage); save()
             summary = stage['summary']
+            # Keep one read-only snapshot before a failed window aborts further probes.
+            # Counts are observations at this instant, not a full integrity/acceptance verdict:
+            # an HTTP response can precede its independently committed audit outcome.
+            try:
+                stage['postWindowDatabase'] = json.loads(sql("""
+                    SELECT json_build_object(
+                        'observedAt', clock_timestamp(),
+                        'devices', (SELECT count(*) FROM edgeai.device),
+                        'sessions', (SELECT count(*) FROM edgeai.device_session),
+                        'observations', (SELECT count(*) FROM edgeai.device_observation),
+                        'audit', (SELECT json_build_object(
+                            'requests', count(*), 'outcomes', count(o.request_id),
+                            'invalidActors', count(*) FILTER (WHERE o.actor_type='LOCAL_BASIC'
+                                AND (o.actor_subject<>'load-test' OR o.subject_format<>'NAME')),
+                            'handlerFailures', count(*) FILTER (WHERE o.disposition='HANDLER_FAILED'))
+                            FROM edgeai.management_audit_request r
+                            LEFT JOIN edgeai.management_audit_outcome o ON o.request_id=r.id),
+                        'auditTransactions', (SELECT count(DISTINCT transaction_id) FROM (
+                            SELECT xmin::text AS transaction_id FROM edgeai.management_audit_request
+                            UNION ALL SELECT xmin::text FROM edgeai.management_audit_outcome) committed),
+                        'bytes', pg_database_size(current_database()), 'connections', numbackends,
+                        'deadlocks', deadlocks, 'commits', xact_commit, 'rollbacks', xact_rollback)
+                    FROM pg_stat_database WHERE datname=current_database()
+                """))
+            except Exception as error:
+                stage['postWindowDatabaseError'] = type(error).__name__
+            save()
             assert summary['unexpected'] == 0 and summary['dropped'] == 0, 'Load request failures/drops; partial metrics retained'
+            assert 'postWindowDatabaseError' not in stage, 'Post-window database evidence unavailable'
             listed, offset = [], 0
             while offset is not None:
                 page = client.expect('GET', 'devices?limit=100&offset='+str(offset))

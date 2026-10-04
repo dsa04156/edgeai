@@ -40,6 +40,11 @@ bash scripts/test-load.sh
   대기열·발송 지연을 포함한다. `maxDispatchDelayMs`와 모든 개별 표본을 함께 보존한다.
 - `unexpected`, `dropped`: 기대하지 않은 상태·응답·연결 오류 및 꽉 찬 대기열의 미발송 수.
   하나라도 있으면 실패다. 오류를 숨기는 자동 재시도나 부하 하향은 없다.
+- `postWindowDatabase`: 측정 구간 직후, 정합성 probe나 실패 판정 전에 읽은 DB 관측값이다.
+  실패한 구간에서도 장치·세션·관측·감사 접수/결과 수와 transaction 통계를 보존한다.
+  한 SQL snapshot의 시점 값이며 전체 정합성 검증을 대신하지 않는다. HTTP 응답 뒤 감사 결과가
+  저장될 수 있어 접수/결과 수 차이만으로 유실을 단정하지 않는다. 조회 실패는 비밀값 없이
+  `postWindowDatabaseError`에 예외 종류를 기록하고 원래 요청 오류·미발송 수를 유지한다.
 - `integrity`: 페이지 조회의 정확한 장치 집합, DB의 최신 세션/sequence·총 관측 수·본문 속성,
   동일 요청 재전송·새 세션 epoch·이전 세션 거절 결과다. 등록과 정합성 probe는 timed window 밖이다.
   `audit`는 프로필/장치/세션/관측 변경·재전송 및 인증/CSRF 거절의 접수와 결과를 실제 DB에서
@@ -66,8 +71,12 @@ p95가 예산 이내일 때 exit0이며, 임의 CLI 수치를 실제 장비의 �
 
 `bash scripts/test-load-acceptance.sh`는 실제 API/전용 DB에서 각각10대·2초로 측정 전용,
 예산 미정, 초과 예산, 소규모 예산 통과의 네 가지 종료 코드·보고서·DB 정합성·정리를 검사한다.
+다섯 번째 회귀는 클라이언트 요청에300ms 지연과 worker1개를 적용하여 실제 대기열 포화를 만든다.
+전송된 요청은 실제 API/DB로 처리하며, 미발송으로 FAIL을 유지하면서 성공 응답에 해당하는 관측과
+감사 접수 수를 보고서에 보존하는지 확인한다. 이 지연은 회귀 시험 전용이며 기본 부하 설정에 없다.
 GitHub Actions scaffold에도 같은 게이트를 연결한다. 이 회귀 자체의 성공은 전체 규모나
 합의 성능 수용을 뜻하지 않는다. 원시 보고서는 `docs/evidence/runs/*-load-acceptance-*/`에
 보존하며 CI의 platform-verification artifact에도 포함한다.
 
 최초 전체 규모 측정과 남은 범위는 [M8 측정 근거](evidence/m8-management-load.md)를 따른다.
+감사 저장 부하의 추가 진단과 실패 시 보고서 검증은 [후속 근거](evidence/m8-audit-storage-diagnostics.md)를 따른다.
