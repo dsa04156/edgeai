@@ -2,6 +2,11 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+M10의 실제 클러스터 [자원 관측](docs/evidence/m10-hardware-inventory.md): 등록10개,
+Ready4개(amd64/arm64), Ready GPU3개/NPU1개. edge label6개는 모두Ready가 아니다.
+사용 가능한 후보가 없다고 가정하지 않으며 실제 장치 접근/모델 실행·taint/압박/사용량을
+확인해야 한다. 공유 설정은 불변이고 하드웨어 전체 gate는 계속 미완료다.
+
 ADR0094의 기록된 STREAM target 실패 일관성 검사를 포함해36개 `170123Z-963eee1a` PASS다.
 실제 복원DB16/부모자식4쌍·실패2건/새retry0·원래 실패/Operation/source/checkpoint 이력,
 기본 취소 우회 차단·원복/COMMIT응답 유실·소유 정리를 확인했다.
