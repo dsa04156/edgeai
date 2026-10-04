@@ -47,3 +47,4 @@ timeout은10..300초다. 종료0/SOURCE_REMOTE_FENCED는 전체 비종료 할당
 
 검증: `bash scripts/test-remote.sh`는 실제 TLS 복구 시험과 기존 Java gateway 회귀를 함께 실행한다.
 [OpenAPI](../contracts/openapi/remote-reference-api.yaml)에 각 복구 API의 역할·자격·상태를 설명한다.
+종료 확인 뒤 [복원 DB/Remote 이력 점검](recovery-remote-inventory.md)으로 전체 할당의 누락·충돌을 대조한다.

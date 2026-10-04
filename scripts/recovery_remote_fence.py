@@ -49,7 +49,7 @@ class Client:
         self.tls.minimum_version = ssl.TLSVersion.TLSv1_2
         self.deadline = time.monotonic() + args.timeout
 
-    def request(self, credential, method='GET', path=PATH, value=None):
+    def request(self, credential, method='GET', path=PATH, value=None, max_bytes=8192):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise Blocked('Provider workers have not stopped before the deadline')
@@ -77,10 +77,10 @@ class Client:
             connection.request(method, path, body=json.dumps(value).encode() if value is not None else None,
                                headers={'Authorization': 'Bearer ' + credential, 'Content-Type': 'application/json'})
             response = connection.getresponse()
-            raw = response.read(8193)
+            raw = response.read(max_bytes + 1)
             if time.monotonic() >= self.deadline:
                 raise Blocked('Provider recovery deadline expired')
-            if len(raw) > 8192 or response.getheader('Content-Type') != 'application/json':
+            if len(raw) > max_bytes or response.getheader('Content-Type') != 'application/json':
                 raise Blocked('Unsupported provider response')
             return response.status, json.loads(raw, object_pairs_hook=unique)
         finally:

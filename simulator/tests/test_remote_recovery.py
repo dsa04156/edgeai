@@ -14,10 +14,16 @@ import threading
 import time
 import unittest
 import uuid
+from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import test_tls_fixture as fixture
 sys.path.insert(0, str(fixture.ROOT / 'simulator'))
 import remote_server
+sys.path.insert(0, str(fixture.ROOT / 'scripts'))
+import recovery_remote_inventory as inventory
+from recovery_remote_fence import Client
+from postgres_backup import Blocked
 
 
 class RemoteRecoveryTest(unittest.TestCase):
@@ -235,6 +241,61 @@ class RemoteRecoveryTest(unittest.TestCase):
         self.stop(); self.start()
         self.assertEqual(identity['providerId'], self.binding()['providerId'])
         self.assertTrue(self.cli(identity)['workersStopped'])
+
+    def test_frozen_inventory_pages_cover_history_and_exclude_work_payloads(self):
+        binding = self.binding()
+        query = {**binding, 'after': '', 'limit': 2}
+        path = '/reference/v1/recovery/allocations?'
+        self.assertEqual(409, self.rpc(path + urlencode(query))[0])
+        self.assertEqual(401, self.rpc(path + urlencode(query), credential=self.token)[0])
+        canary = 'private-work-' + uuid.uuid4().hex
+        for _ in range(7):
+            route, headers, raw, _ = self.work()
+            work = json.loads(raw); work['parameters']['privateCanary'] = canary
+            raw = json.dumps(work).encode()
+            headers['X-EdgeAI-Request-Digest'] = 'sha256:' + hashlib.sha256(b'edgeai-reference-allocation-v1\n' + raw).hexdigest()
+            self.assertEqual(201, self.rpc(route, 'PUT', raw, headers, self.token)[0])
+        self.cli(binding)
+        before = self.rows()
+        ids = []
+        while True:
+            code, page = self.rpc(path + urlencode(query))
+            self.assertEqual(200, code)
+            self.assertEqual(7, page['allocationCount'])
+            self.assertNotIn(canary, json.dumps(page))
+            ids.extend(row['identity']['allocationId'] for row in page['items'])
+            if page['nextAfter'] is None:
+                break
+            query['after'] = page['nextAfter']
+        self.assertEqual([row[0] for row in before], ids)
+        self.assertEqual(before, self.rows())
+        for invalid in ({**query, 'limit': 101}, {**query, 'after': 'bad'}, {**query, 'extra': 'bad'}):
+            self.assertEqual(400, self.rpc(path + urlencode(invalid))[0])
+        self.assertEqual(409, self.rpc(path + urlencode({**query, 'recoveryId': str(uuid.uuid4())}))[0])
+
+    def test_inventory_verifier_rejects_incomplete_duplicate_and_changed_pages(self):
+        for _ in range(3):
+            self.allocate()
+        binding = self.binding(); self.cli(binding)
+        args = SimpleNamespace(endpoint='https://127.0.0.1:' + str(self.port), ca_file=self.root / 'cert.pem',
+                               certificate_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert((self.root / 'cert.pem').read_text())).hexdigest(),
+                               timeout=30, provider_id=binding['providerId'], recovery_id=binding['recoveryId'], page_size=2)
+        actual = Client(args)
+        before, rows = inventory.provider_inventory(actual, self.operator, args)
+        self.assertEqual(3, len(rows))
+        self.assertEqual(3, before['allocationCount'])
+        for mode in ('incomplete', 'duplicate', 'changed-recovery', 'unknown-field'):
+            class Altered:
+                status = actual.status
+                def request(inner, *pos, **kw):
+                    code, page = actual.request(*pos, **kw)
+                    if mode == 'incomplete': page['nextAfter'] = None
+                    if mode == 'duplicate': page['items'][1] = page['items'][0]
+                    if mode == 'changed-recovery': page['recoveryId'] = str(uuid.uuid4())
+                    if mode == 'unknown-field': page['items'][0]['private'] = 'must-be-rejected'
+                    return code, page
+            with self.subTest(mode=mode), self.assertRaises(Blocked):
+                inventory.provider_inventory(Altered(), self.operator, args)
 
     def test_blocked_worker_is_not_reported_stopped_until_actual_thread_exit(self):
         self.stop()

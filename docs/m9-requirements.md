@@ -35,6 +35,9 @@ ADR0072의 [S3 요청 소진 확인](recovery-storage-drain.md)은 실제로 진
 ADR0073의 [참조 Remote 차단](recovery-remote-fence.md)은 별도 운영 자격·설치/복구 ID로
 제공자 전체를 차단하고 실제 계산 스레드 종료를 확인한다. 늦은 인증 요청·응답 유실·재시작·
 기존 DB 업그레이드·timeout을 실제 TLS7개로 검증했다. 외부 제공자 계약·복원 DB 조정·활성화는 남는다.
+ADR0074의 [복원 Remote 이력 점검](recovery-remote-inventory.md)은 차단된 제공자 전체를
+페이지 조회하고 복원 DB의 신원·binding·요청·관측을 대조한다. 실제 PG/TLS10개에서
+백업 이후 할당과 양쪽 누락/충돌·43테이블/제공자 이력 보존을 확인했다. DB 조정 쓰기와 활성화는 남는다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

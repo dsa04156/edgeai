@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+ADR0074 복원 DB/참조 Remote 전체 이력 점검을 추가했다. 실제 PG/TLS10개
+(092539Z-1d04c194)·Python14/Java gateway13개(092408Z-ed5d7eed) PASS다.
+백업 후 할당·양쪽 누락·binding/신원/요청/관측 충돌·페이지 누락/중복·43테이블/제공자 보존을
+검증했으며 Compose17 CI 게이트를 추가했다. docs/evidence/m9-recovery-remote-inventory.md.
+DB 상태 조정·장치 journal·외부 업체 종료 계약·종합 활성화는 남는다.
+선행9caa7dd CI37188905983의5jobs/원시26개 PASS(092606Z-b89a28f6), GitOpsd351a3b의
+정확한imageID/Ready/PVC/ArgoSynced(092608Z-eeb39b40)·기존10파일/두PVC/TLS보존
+(092659Z-cff29cb6) PASS다. 공유Ingress aggregatehealthProgressing이며 새 복구 변경의 CI/배포와 구분한다.
+
 ADR0073 참조 Remote 제공자 전체 차단·계산 종료 검증을 추가했다. 실제 TLS7개
 PASS(090831Z-b7537085), Python 전체12개·Java gateway13개·별도 PG/MinIO27개도 통과했다.
 별도 운영 자격/설치 UUID·늦은 인증 예약/입력 차단·실제 worker 종료·완료 파일/이력 보존·

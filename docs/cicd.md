@@ -131,6 +131,10 @@ scaffold의 기존 `test-remote.sh`에는 ADR0073 참조 Remote 복구 TLS7개�
 별도 운영 자격·늦은 예약/입력·실제 스레드 종료·timeout·SIGKILL/restart·기존 DB 업그레이드를
 시험한다. 일반 제공자 동작의 Java gateway 회귀도 유지한다. 자격과 SQLite/파일은 소유 임시
 디렉터리에서 정리하고 시험 이름/결과만 evidence에 기록한다. 실제 외부 제공자 수용은 별도다.
+ADR0074는 같은 시험에 페이지 경계/누락 거절2개를 추가한다. 별도 scaffold의
+`test-recovery-remote-inventory.sh --transport compose`는 실제 Java API가 만든 binding/할당과
+pg_dump/restore·별도 TLS 제공자2를 결합한10개를 수행한다. `recovery-remote-inventory-report.json`에는
+집계/정리 여부만 기록하고 원본 SQLite·SQL/API 로그·작업 신원/출력 metadata inventory는 업로드하지 않는다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험

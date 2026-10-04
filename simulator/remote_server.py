@@ -16,6 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from urllib.parse import parse_qs, urlsplit
 
 LIMIT = 262144
 FILE_LIMIT = 1048576  # Explicit reference-provider capability, not the platform's 256 MiB ceiling.
@@ -155,6 +156,33 @@ class Provider:
             self.db.execute("UPDATE allocations SET state='CANCELLED',failure=NULL,outputs='[]',revision=revision+1 WHERE state='ALLOCATED'")
             self.db.execute("UPDATE allocations SET state='CANCELLING',failure=NULL,outputs='[]',revision=revision+1 WHERE state='RUNNING'")
         return self.recovery_status()
+
+    def recovery_inventory(self, query):
+        if set(query) != {'providerId', 'recoveryId', 'after', 'limit'} or any(len(v) != 1 for v in query.values()):
+            raise Rejected(400, 'INVALID_REQUEST')
+        provider_id, recovery_id, after, limit = (query[k][0] for k in ('providerId', 'recoveryId', 'after', 'limit'))
+        try:
+            for value in (provider_id, recovery_id, *([after] if after else [])):
+                if str(uuid.UUID(value)) != value:
+                    raise ValueError()
+            if not re.fullmatch('[1-9][0-9]{0,2}', limit) or not 1 <= int(limit) <= 100:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise Rejected(400, 'INVALID_REQUEST') from None
+        with self.transaction():
+            status = self.recovery_status()
+            if status['providerId'] != provider_id or status['recoveryId'] != recovery_id:
+                raise Rejected(409, 'RECOVERY_IDENTITY_CONFLICT')
+            if not status['quiescent']:
+                raise Rejected(409, 'RECOVERY_NOT_QUIESCENT')
+            # Admission is fenced and every worker has exited: application code cannot change
+            # any allocation now. Page the complete frozen history, never only known DB IDs.
+            rows = self.db.execute('SELECT identity,digest,work,state,revision,failure,outputs,executions '
+                                   'FROM allocations WHERE id>? ORDER BY id LIMIT ?', (after, int(limit) + 1)).fetchall()
+            items = [{**self.status(json.loads(row[0]), row[:7]), 'executions': row[7]} for row in rows[:int(limit)]]
+            return {'apiVersion': 'edgeai.remote.recovery/v1', 'providerId': provider_id, 'recoveryId': recovery_id,
+                    'allocationCount': status['allocationCount'], 'after': after,
+                    'nextAfter': items[-1]['identity']['allocationId'] if len(rows) > int(limit) else None, 'items': items}
 
     def row(self, expected):
         value = self.db.execute('SELECT identity,digest,work,state,revision,failure,outputs FROM allocations WHERE id=?', (expected['allocationId'],)).fetchone()
@@ -418,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_expect_100(self):
         try:
-            recovery = self.path == '/reference/v1/recovery'
+            recovery = urlsplit(self.path).path in ('/reference/v1/recovery', '/reference/v1/recovery/allocations')
             self.authenticate(recovery)
             if not recovery:
                 with self.server.provider.transaction():
@@ -442,6 +470,14 @@ class Handler(BaseHTTPRequestHandler):
             raise Rejected(400, 'INVALID_REQUEST') from None
         if not 0 <= size <= 1024:
             raise Rejected(413, 'TOO_LARGE')
+        parsed = urlsplit(self.path)
+        if parsed.path == '/reference/v1/recovery/allocations':
+            if self.command != 'GET' or size:
+                raise Rejected(405, 'METHOD_NOT_ALLOWED')
+            self.reply(200, self.server.provider.recovery_inventory(parse_qs(parsed.query, keep_blank_values=True)))
+            return
+        if parsed.query:
+            raise Rejected(400, 'INVALID_REQUEST')
         if self.command == 'GET' and size == 0:
             self.reply(200, self.server.provider.recovery_status())
         elif self.command == 'PUT' and self.headers.get('Content-Type') == 'application/json':
@@ -456,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self):
         p = self.server.provider
         try:
-            if self.path == '/reference/v1/recovery':
+            if urlsplit(self.path).path in ('/reference/v1/recovery', '/reference/v1/recovery/allocations'):
                 self.recovery()
                 return
             self.authenticate()

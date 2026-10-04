@@ -2,6 +2,15 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0074는 복원 DB와 차단된 참조 Remote 전체 이력을 읽기 전용으로 대조한다.
+실제 PG16/별도 TLS 제공자2·복원DB2의10개(092539Z-1d04c194), Python14/Java gateway13개
+(092408Z-ed5d7eed) PASS다. 백업 후 실제 할당·양쪽 누락·binding/신원/요청/관측 충돌과
+43테이블/제공자 이력 보존·페이지 누락 거절을 확인했다. [Remote 이력 근거](docs/evidence/m9-recovery-remote-inventory.md).
+Compose17 CI gate를 추가했다. DB 조정 쓰기·장치 journal·외부 업체 계약·종합 활성화는 남는다.
+선행9caa7dd CI37188905983은5jobs/원시26개 PASS(092606Z-b89a28f6), GitOpsd351a3b의
+정확한imageID/Ready/PVC/ArgoSynced(092608Z-eeb39b40), 기존10파일/두PVC·TLS보존
+(092659Z-cff29cb6)도 PASS다. 공유Ingress healthProgressing이며 새 ADR0072–0074 CI/배포는 후속이다.
+
 ADR0073은 참조 Remote 전체의 새 요청을 영속 차단하고 실제 계산 스레드 종료를 확인한다.
 TLS7개(090831Z-b7537085)·기존 Java gateway13·실제 별도 PG/MinIO27개 PASS다.
 늦은 인증 예약/입력·완료/실패 이력·응답 유실/재개·기존 SQLite 업그레이드·SIGKILL 후 차단 유지·

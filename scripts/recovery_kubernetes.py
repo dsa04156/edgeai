@@ -91,7 +91,7 @@ class Kubernetes:
         raise Blocked('Kubernetes inventory page limit exceeded')
 
 
-def database_inventory(pg,database,restore_path):
+def database_inventory(pg,database,restore_path,sql=DATABASE_SQL):
     identifier(database)
     restored,digest = read_json(restore_path)
     if (not database.startswith('edgeai_restore_') or database == 'edgeai_restore_'
@@ -100,7 +100,7 @@ def database_inventory(pg,database,restore_path):
             or restored.get('created') is not True or restored.get('targetDatabase') != database
             or not re.fullmatch('[a-f0-9]{32}',restored.get('restoreIdentity',''))):
         raise ValueError('A successful inactive restore report is required')
-    value = json.loads(pg.call('psql',['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-c',DATABASE_SQL],
+    value = json.loads(pg.call('psql',['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-c',sql],
         database,timeout=60,reject_stderr=True))
     if (value['database'] != database or value['oid'] != str(restored.get('databaseOid'))
             or value['marker'] != 'edgeai-restore:'+restored['restoreIdentity'] or value['readOnly'] != 'on'):

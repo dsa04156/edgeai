@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EdgeAI reference Remote provider contract
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     플랫폼 내부 RemoteGateway를 시험하는 참조 프로토콜입니다. 실제 2세부 API의 정의가 아닙니다.
     할당 요청은 allocation/run/task/attempt/epoch 전체를 대조합니다. 복구 API는 별도 운영 자격과
@@ -14,6 +14,35 @@ servers:
 security:
   - providerBearer: []
 paths:
+  /reference/v1/recovery/allocations:
+    get:
+      operationId: referenceRemoteRecoveryInventory
+      summary: 차단과 계산 종료가 확인된 제공자의 전체 할당 이력 조회
+      description: >-
+        별도 운영 자격을 사용합니다. providerId/recoveryId가 일치하고 quiescent=true일 때만
+        조회하며 그렇지 않으면409입니다. allocationId의 오름차순으로 전체 이력을 페이지 처리합니다.
+        after는 첫 페이지에서 빈 문자열, 이후 직전 nextAfter입니다. nextAfter=null이 끝입니다.
+        일반 접근 차단과 모든 계산 스레드 종료로 제공자 내부 이력이 고정된 상태만 조회합니다.
+        전체 allocationCount·설치/복구 ID·페이지 순서/중복/누락을 클라이언트가 대조해야 합니다.
+        parameters·serviceSpec·입출력 본문·자격은 반환하지 않습니다. outputs는 metadata이며
+        실제 파일 검증·DB 복원 조정·서비스 재개를 대신하지 않습니다.
+      security: [{recoveryBearer: []}]
+      parameters:
+        - {name: providerId, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: recoveryId, in: query, required: true, schema: {type: string, format: uuid}}
+        - name: after
+          in: query
+          required: true
+          allowEmptyValue: true
+          schema: {type: string, description: '빈 문자열 또는 직전 페이지의 마지막 정규 UUID'}
+        - {name: limit, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        '200':
+          description: 고정된 전체 할당 이력의 한 페이지
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryInventory'}
+        default: {$ref: '#/components/responses/Error'}
   /reference/v1/recovery:
     get:
       operationId: referenceRemoteRecoveryInspect
@@ -236,6 +265,38 @@ components:
             properties:
               code: {type: string, maxLength: 64}
   schemas:
+    RecoveryInventory:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, providerId, recoveryId, allocationCount, after, nextAfter, items]
+      properties:
+        apiVersion: {const: edgeai.remote.recovery/v1}
+        providerId: {type: string, format: uuid}
+        recoveryId: {type: string, format: uuid}
+        allocationCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        after: {type: string}
+        nextAfter: {type: [string, 'null'], format: uuid}
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/RecoveryAllocation'}
+    RecoveryAllocation:
+      type: object
+      additionalProperties: false
+      required: [identity, requestDigest, state, revision, failureReason, expiresAt, sourceMode, outputs, executions]
+      properties:
+        identity: {$ref: '#/components/schemas/Identity'}
+        requestDigest: {type: [string, 'null'], pattern: '^sha256:[a-f0-9]{64}$'}
+        state: {enum: [SUCCEEDED, FAILED, CANCELLED]}
+        revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        failureReason: {enum: [null, LEASE_EXPIRED, WORKLOAD_FAILED, PROVIDER_RESTART, INPUT_INVALID, OUTPUT_INVALID]}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        sourceMode: {const: SYNTHETIC}
+        outputs:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/File'}
+        executions: {type: integer, minimum: 0, maximum: 1}
     RecoveryStatus:
       type: object
       additionalProperties: false
