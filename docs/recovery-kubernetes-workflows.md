@@ -38,6 +38,30 @@ claim 전 target은 실행 정리와 이 명령에 모두 `--unclaimed-jobs`를 
 Remote/STREAM/group은 여전히 별도다. [ADR0083](adr/0083-recovery-batch-offloads.md),
 [ADR0084 검증](evidence/m9-recovery-unclaimed-jobs.md).
 
+참조 Remote를 포함한 전환은 먼저 [Remote 실행 정리](recovery-remote-retirement.md)를
+완료한 뒤 `--offloads --remote-connection /private/remote-connection.json`을 추가한다.
+파일은 현재 사용자 소유0600이며 아래6개 필드만 허용한다. 토큰 자체 대신 기존 개인 파일의
+절대 경로를 사용한다. TLS 제공자는 같은 recovery UUID로 이미 fence/quiescent 상태여야 한다.
+
+```json
+{
+  "endpoint": "https://remote.example.test:8443",
+  "caFile": "/private/remote-ca.pem",
+  "certificateSha256": "<실제 leaf 인증서 SHA256>",
+  "providerId": "<확인한 제공자 UUID>",
+  "providerKey": "reference",
+  "recoveryTokenFile": "/private/remote-recovery-token"
+}
+```
+
+이 명령은 제공자를 실제로 다시 조회하며 접속 불가/다른 binding/미완료 retirement이면
+진행하지 않는다. `remoteEvidence`에 확인한 binding·provider 상태·runtime ID가 남으며
+bearer와 작업 본문은 포함하지 않는다. 현재 한 DB의 단일 SYNTHETIC 참조 제공자 계약을
+지원한다. 아직 활성 Task의 Remote target이 SUCCEEDED/FAILED이면 시작 기한으로
+덮어쓰지 않고 `REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION`에 남긴다.
+[ADR0085](adr/0085-recovery-mixed-remote-offloads.md),
+[실제64개 검증](evidence/m9-recovery-mixed-remote-offloads.md)을 참고한다.
+
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.
 

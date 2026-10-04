@@ -9,13 +9,15 @@ from pathlib import Path
 from postgres_backup import Blocked, Postgres, literal, private_file
 from recovery_kubernetes import database_inventory
 import recovery_kubernetes_retire as retirement
-from recovery_remote_inventory import canonical
+from recovery_remote_inventory import canonical, DATABASE_QUERY as REMOTE_QUERY
 from recovery_remote_retire import durable_json
+from recovery_remote_results import CONTEXT_QUERY as REMOTE_CONTEXT_QUERY
+from recovery_remote_workflow_evidence import observe as observe_remote
 from recovery_workflow_failures import transaction_sql as workflow_transaction
 import recovery_batch_offloads as offloads
 
 TABLES = (*retirement.TABLES, 'task_retry', 'task_definition', 'task_dependency',
-          'workflow_version', 'profile_version', 'task_offload', 'task_offload_member')
+          'workflow_version', 'profile_version', 'task_offload', 'task_offload_member', 'remote_allocation')
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
     "encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY " +
@@ -43,7 +45,8 @@ CATALOG_SQL = ("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SEL
     "'marker',(SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()),"
     "'readOnly',current_setting('transaction_read_only'),'migrations',(SELECT json_agg(json_build_object("
     "'version',version,'success',success)) FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),"
-    "'guard',(" + GUARD_QUERY + "),'contexts',(" + CONTEXT_QUERY + "),'offloads',(" + offloads.QUERY + ')); COMMIT;')
+    "'guard',(" + GUARD_QUERY + "),'contexts',(" + CONTEXT_QUERY + "),'offloads',(" + offloads.QUERY +
+    "),'remoteSnapshot',("+REMOTE_QUERY.strip().removesuffix(';')+"),'remoteContexts',("+REMOTE_CONTEXT_QUERY+')); COMMIT;')
 
 
 def entry_for(context, action):
@@ -60,9 +63,13 @@ def prepare(pg, args):
             any(retired['beforeGuard'][t] != catalog['guard'][t] for t in retirement.TABLES)):
         raise Blocked('Restored retirement inventory changed during workflow snapshot')
     proven = set(retired['selected']['runtimes'] + retired['selected']['vdTasks'])
+    remote_evidence,remote_outcomes=observe_remote(catalog,args)
+    proven.update(remote_outcomes)
     entries, unresolved, retained = [], [], 0
     reconcile_offloads=getattr(args,'offloads',False)
-    offload_entries, unresolved_offloads = (offloads.classify(catalog['offloads'],proven,args.namespace)
+    offload_entries, unresolved_offloads = (offloads.classify(catalog['offloads'],proven,args.namespace,
+        remote_outcomes if remote_evidence is not None else None,
+        remote_evidence['binding'] if remote_evidence is not None else None)
         if reconcile_offloads else ([],[]))
     for context in catalog['contexts']:
         runtime, attempt, task = (context[k] for k in ('runtime','attempt','task'))
@@ -120,6 +127,7 @@ def prepare(pg, args):
         'restoreReportSha256':catalog['restoreReportSha256'], 'beforeGuard':catalog['guard'],
         'evidence':retired['evidence'], 'provenRuntimes':sorted(proven), 'entries':entries+offload_entries,
         'unclaimedJobs':retired['unclaimedJobs'],
+        'remoteEvidence':remote_evidence,
         'unresolvedProducers':retired['unresolved'], 'unresolvedWorkflows':unresolved,
         'reconcileOffloads':reconcile_offloads, 'unresolvedOffloads':unresolved_offloads,
         'historiesRetained':retained, 'preparedAt':datetime.now(timezone.utc).isoformat()}
@@ -142,7 +150,7 @@ def apply(pg, args, plan):
                                    args.database,source=source,timeout=45,reject_stderr=True))
     after = prepare(pg, args)
     if (after['beforeGuard'] != result['afterGuard'] or any(after[k] != plan[k] for k in
-            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','provenRuntimes','unresolvedProducers','unclaimedJobs'))):
+            ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','provenRuntimes','unresolvedProducers','unclaimedJobs','remoteEvidence'))):
         raise Blocked('Post-commit recovery evidence changed; retain quarantine')
     report = {k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid')}
     report.update(**result, status='RECORDED_KUBERNETES_WORKFLOWS_RECONCILED', activated=False,
@@ -151,6 +159,7 @@ def apply(pg, args, plan):
         pendingRetries=sum(e['action']=='CHECK_RETRY' for e in after['entries']),
         unresolvedProducers=after['unresolvedProducers'], unresolvedWorkflows=after['unresolvedWorkflows'],
         unclaimedJobs=after['unclaimedJobs'],
+        remoteEvidence=after['remoteEvidence'],
         unresolvedOffloads=after['unresolvedOffloads'],
         pendingOffloads=sum(e['action'].startswith('CHECK_OFFLOAD_') for e in after['entries']),
         reconcileOffloads=after['reconcileOffloads'],
@@ -175,6 +184,7 @@ def main():
     parser.add_argument('--timeout',type=int,default=120)
     parser.add_argument('--offloads',action='store_true',help='Also reconcile proven BATCH transfer cancellations and original deadlines')
     parser.add_argument('--unclaimed-jobs',action='store_true',help='Accept retained terminal children of recorded Jobs without inventing producer claims')
+    parser.add_argument('--remote-connection',type=Path,help='Private reference Remote connection for fresh mixed BATCH offload evidence')
     args=parser.parse_args(); args.output.mkdir(mode=0o700,parents=True,exist_ok=False); submitted=False
     try:
         if not 1<=args.timeout<=1800: raise ValueError('Timeout must be between 1 and 1800 seconds')

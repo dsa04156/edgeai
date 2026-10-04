@@ -16,7 +16,7 @@ WHERE o.state IN ('DRAINING','STARTING','CANCELLING')
 """
 
 
-def classify(rows, proven, namespace):
+def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None):
     entries, unresolved, blocked_runs = [], [], set()
     for row in rows:
         op, task, source, target = (row[k] for k in ('operation','task','source','target'))
@@ -27,23 +27,34 @@ def classify(rows, proven, namespace):
             reason='OUTSIDE_SELECTED_NAMESPACE'
         elif row['hasStream'] or row['hasMembers']:
             reason='STREAM_OFFLOAD_REQUIRES_SEPARATE_RECOVERY'
-        elif op['remote_provider_key'] is not None or any(r['runtime_kind']=='REMOTE' for r in row['runtimes']):
+        elif remote_outcomes is None and (op['remote_provider_key'] is not None or any(r['runtime_kind']=='REMOTE' for r in row['runtimes'])):
             reason='REMOTE_OFFLOAD_REQUIRES_PROVIDER_EVIDENCE'
         elif any(a['id'] not in runtimes for a in required) or any(r['id'] not in proven for r in runtimes.values()):
             reason='OFFLOAD_PRODUCER_NOT_PROVEN'
         if reason:
             unresolved.append({'operationId':op['id'],'reason':reason}); blocked_runs.add(task['run_id']); continue
+        if op['remote_provider_key'] is not None and (remote_binding is None or any(
+                op['remote_'+key]!=remote_binding[key] for key in ('provider_key','configuration_digest','source_mode'))):
+            raise Blocked('Offload destination differs from the freshly observed Remote binding')
         if (op['task_id'] != task['id'] or op['run_id'] != task['run_id'] or source['task_id'] != task['id'] or
                 source['state'] != 'OFFLOADED' or op['failure_reason'] is not None or row['hasResult'] or row['retryPending'] or
-                runtimes[source['id']]['producer_pod_uid'] is None or
+                (runtimes[source['id']]['runtime_kind']!='REMOTE' and runtimes[source['id']]['producer_pod_uid'] is None) or
+                any(r['runtime_kind']=='REMOTE' and r['id'] not in (remote_outcomes or {}) for r in runtimes.values()) or
                 any(r['namespace'] != namespace or r['desired_state'] != 'STOPPED' or r['observed_state'] != 'TERMINATED'
                     for r in runtimes.values())):
             raise Blocked('Recorded offload contradicts its retired source, outcome or queue')
         if target:
+            remote_target=op['remote_provider_key'] is not None
             if (target['task_id'] != task['id'] or target['cause'] != 'OFFLOAD' or target['epoch'] <= source['epoch'] or
-                    target['mode'] != ('NODE' if op['target_node_id'] else 'AUTO') or
-                    target['node_id'] != op['target_node_id'] or target['excluded_node_names'] != op['excluded_node_names']):
+                    target['mode'] != ('REMOTE' if remote_target else 'NODE' if op['target_node_id'] else 'AUTO') or
+                    target['node_id'] != op['target_node_id'] or target['excluded_node_names'] != op['excluded_node_names'] or
+                    any(target['remote_'+key]!=op['remote_'+key] for key in ('provider_key','configuration_digest','source_mode'))):
                 raise Blocked('Offload target differs from its frozen placement')
+            if remote_target and op['state']=='STARTING' and task['state'] in ('READY','RUNNING'):
+                outcome=(remote_outcomes or {}).get(runtimes[target['id']]['id'])
+                if outcome in ('SUCCEEDED','FAILED'):
+                    unresolved.append({'operationId':op['id'],'reason':'REMOTE_TARGET_OUTCOME_REQUIRES_RECONCILIATION'})
+                    blocked_runs.add(task['run_id']);continue
         if row['latestEpoch'] != (target or source)['epoch']:
             unresolved.append({'operationId':op['id'],'reason':'NEWER_ATTEMPT_RECORDED'}); blocked_runs.add(task['run_id']); continue
         if (op['state']=='DRAINING' and (target is not None or op['start_deadline'] is not None) or

@@ -25,7 +25,7 @@ GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     ",''),'UTF8')),'hex') FROM edgeai." + name + ' t)' for name in TABLES) + ')'
 CONTEXT_QUERY = """
 SELECT coalesce(jsonb_agg(jsonb_build_object(
- 'allocationId',a.id,'runtimeId',r.id,'desiredState',r.desired_state,'runtimeState',r.observed_state,
+ 'allocationId',a.id,'runtimeId',r.id,'namespace',r.namespace,'desiredState',r.desired_state,'runtimeState',r.observed_state,
  'failureReason',r.failure_reason,'attempt',to_jsonb(p),'task',to_jsonb(t),'runState',w.state,
  'outputs',v.spec->'outputs','latestEpoch',(SELECT max(epoch) FROM edgeai.task_attempt WHERE task_id=t.id),
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),

@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0085 Kubernetes/참조Remote 혼합64개132134Z-7df3eacf PASS. 복원DB6·부모자식5쌍,
+실제Remote할당4/실행2종료·양방향시작기한만료2/취소1·성공1보존·22테이블경쟁/원복/
+응답유실/변경0·소유정리. Remote 결과14개132150Z-a211a1f9/실패15개132149Z-1ac3b571
+PASS. [근거](docs/evidence/m9-recovery-mixed-remote-offloads.md). kind64개 게이트 연결,
+새CI/배포·종합결과/STREAM/group/journal/활성화·전체목표는 미완료다.
+
 ADR0084 claim 전 Job 복구의 실제56개131023Z-96d5d08f PASS. 복원DB5/부모자식4쌍,
 Job의 보존자식2개·빈Job미해결, 원래claim/node NULL·sourceOFFLOADED/배치/기한 보존,
 실제STARTING 만료1·원복/응답유실/변경0·소유정리 확인. kind56개 게이트 연결.

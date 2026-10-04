@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0085 혼합 Remote 전환 복구64개132134Z-7df3eacf PASS. 복원DB6/부모자식5쌍·Remote
+실제할당4/실행2종료, 양방향기한만료2·취소1·성공1보존, 신원/접속거절·22테이블경쟁/
+원복/응답유실/변경0·소유정리를 검증했다. Remote 결과14개132150Z-a211a1f9/실패15개
+132149Z-1ac3b571도 PASS. [근거](docs/evidence/m9-recovery-mixed-remote-offloads.md).
+kind64개로 확장하며 새CI/배포·전환결과종합조정·STREAM/group/journal·전체활성화는 남는다.
+
 ADR0084의 `--unclaimed-jobs`는 기록된 Job과 실제 보존 자식 전체에서 claim 전 target
 종료를 증명한다. 실제56개131023Z-96d5d08f PASS: 복원DB5/부모자식4쌍·Pod신원미생성,
 빈Job/미기록UID 보존, STARTING 기한만료1·sourceOFFLOADED/고정배치/기한 보존,
