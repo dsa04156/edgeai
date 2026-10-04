@@ -24,3 +24,22 @@ CI의 재현 환경/부하가 같지 않으므로 간헐 실패의 원인이 해
 
 새 CI에서 보완한 실패 경계와 전체 수용 게이트를 다시 확인한다. 기존 M9 백업·참조 대조·
 복원 DB 격리의 로컬 근거, ADR0063 조회 점검 근거는 각각의 검증 문서를 따른다.
+
+## 후속 CI와 배포
+
+소스 `aa21e46eb92c000260c11501428d22161d350afe`의 CI `37171839136`은5개 job 모두
+성공했다. 완료 artifact의 원시 결과21개가 PASS/exit0이며 상세 감사 근거는
+`20261004T033736Z-c4b9c68f`다. 전체 단위113·PostgreSQL226·Runner111·TLS MQTT90,
+Compose PostgreSQL17 백업/복원13개·TLS S3 백업11개·복원 DB/S3 참조9개를 대조했다.
+kind의 STREAM24개/Node43Pod·VD33Pod/고정 결과54개, 혼합 Remote3개, 영속 broker 교체,
+MinIO TLS 및 이전 실패 구간인 배포 데모3개/8Pod/결과6개와 소유 자원 정리도 확인했다.
+
+GitOps `fd86520092c1424374ae2d134447ca2cd85be671`을 실제 클러스터에서 확인한
+`20261004T033749Z-e4f8ce6c`은 API/dashboard/MinIO의 정확한 source imageID,
+Ready·PVC Bound·Argo Synced를 검증했다. 공유 Ingress의 aggregate health는
+여전히 Progressing이다. 이 성공은 aa21e46의 검증이며, 앞선 간헐 실패의 근본 원인을
+입증하거나 후속 ADR0064/0065의 새 CI 게이트를 검증한 것으로 확대하지 않는다.
+
+배포 뒤 `20261004T033850Z-a2a4c713`에서 기존 고정 버전 파일10개의 bytes/SHA와
+PostgreSQL/MinIO PVC2개의 원래 UID를 확인했다. 실제 TLS S3 PUT/stat/GET256KiB,
+익명403과 시험 소유 객체/버킷만의 정리도 통과했다.

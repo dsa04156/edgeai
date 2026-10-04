@@ -12,8 +12,10 @@ ADR0064는 전용 namespace의 새 Pod/Job 생성을 차단하고 관측한 실�
 기록/다른finalizer 보존·소유namespace정리. 새kind게이트는후속이다.
 명시적CI image/source입력의7개재검증도PASS(030222Z-f8fe9a12)다.
 [종료 근거](docs/evidence/m9-recovery-producer-stop.md). 전역쓰기차단·해제/활성화는미완료다.
-aa21e46 CI37171839136의 완료된3jobs 원시19개PASS를 확인했다. 단위113/PG226·
-PG복원13/S3백업11/복원참조9가포함된다. images/GitOps는 아직진행중으로 전체성공아니다.
+aa21e46 CI37171839136은5jobs/원시21개PASS(033736Z-c4b9c68f)다. 단위113/PG226·
+PG복원13/S3백업11/복원참조9·STREAM24개/Node43·VD33Pods/결과54개를 포함한다.
+GitOpsfd86520 실제 이미지·Ready/PVC·ArgoSynced(033749Z-e4f8ce6c), 기존10파일/두PVC
+보존(033850Z-a2a4c713)도PASS다. ADR0064/0065 새 CI 게이트는 후속이다.
 
 최신: ADR0063 복원 DB/Kubernetes 조회 대조의 분류7·실제 PG/별도 namespace6개가
 PASS(023306Z-de6fe9bb)다. DB에 없는 실행과 소유 충돌을 찾고41테이블·객체5개를 보존했다.

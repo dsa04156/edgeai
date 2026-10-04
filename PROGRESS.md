@@ -9,8 +9,10 @@ ADR0064 Kubernetes producer 중지의 판정5·실제클러스터7개 PASS(02550
 전용namespace에실행한컨테이너2/자식2의종료와quota·timeout/재개·finalizer보존·소유자원정리
 확인. docs/evidence/m9-recovery-producer-stop.md. 전역writer회수/해제/활성화는미완료다.
 명시적CI image/source입력의7개재검증030222Z-f8fe9a12도PASS·소유namespace정리완료다.
-선행aa21e46 CI37171839136은scaffold/runner/storage성공·원시19PASS,
-단위113/PG226·DB복원13/S3백업11/참조9. images/GitOps완료전이다.
+선행aa21e46 CI37171839136의5jobs/원시21개 PASS(033736Z-c4b9c68f)를 확인했다.
+단위113/PG226·DB복원13/S3백업11/참조9·STREAM24/Node43·VD33Pods/결과54개 포함.
+GitOpsfd86520의 정확한imageID·Ready/PVC·ArgoSynced(033749Z-e4f8ce6c), 기존10파일/
+두PVC보존(033850Z-a2a4c713) PASS. 공유Ingress healthProgressing, 새ADR0064/0065 CI는후속이다.
 ADR0063 복원 DB/Kubernetes 관측은 분류7·실제PG/소유namespace6개 PASS
 (023306Z-de6fe9bb):DB에 없는 실행3개/소유 충돌1개를 찾고41테이블·실제객체5개를
 보존했다. 소유 DB/API/namespace 정리 확인. docs/evidence/m9-recovery-kubernetes.md.
