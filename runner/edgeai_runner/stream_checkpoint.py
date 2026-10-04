@@ -52,7 +52,16 @@ def validate(wire):
     require(type(value) is dict and set(value) == {'apiVersion','serial','revision','stateBase64','executionSha256','manifest','routes'},
             'Invalid checkpoint fields')
     require(value['apiVersion'] == VERSION, 'Invalid checkpoint version')
-    counter(value['serial']); counter(value['revision']); digest(value['executionSha256'])
+    digest(value['executionSha256'])
+    validate_state(value)
+    # Canonical bytes prevent ambiguous digest identities across parse/restore/export.
+    require(encode(value) == wire, 'Noncanonical checkpoint encoding')
+    return value
+
+
+def validate_state(value):
+    """Validate bounded logical journal state; this does not grant restore or publication authority."""
+    counter(value['serial']); counter(value['revision'])
     require(value['revision'] <= value['serial'], 'Invalid checkpoint revision')
     config = value['manifest']
     require(type(config) is dict and set(config) == {'version','inputs','outputs','limits'} and type(config['version']) is int and config['version'] == 1,
@@ -93,9 +102,6 @@ def validate(wire):
             require((frame.kind == 'END') == (row['ended'] and sequence == received), 'Invalid checkpoint end marker')
             size += len(frame.encode())
         require(size <= limits.max_buffer_bytes // len(bindings), 'Checkpoint exceeds route capacity')
-    # Canonical bytes prevent ambiguous digest identities across parse/restore/export.
-    require(encode(value) == wire, 'Noncanonical checkpoint encoding')
-    return value
 
 
 @dataclass(frozen=True)

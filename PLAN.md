@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0087 동일 Device Session LOCAL journal의 일관 논리 snapshot·age 암호화·격리 복원을
+추가했다. 실제13개140112Z-41923f08, Runner111개135456Z-4855a9b2·TLS MQTT95개
+140012Z-b4fa7f1d PASS. 별도 writer의8snapshot·원본 삭제·fanout/END·완료 파일 경쟁·큰
+payload2조각·게시 전후 SIGKILL·자동 재개 거절을 확인했다.
+[근거](docs/evidence/m9-device-journal-backup.md). 새 CI gate 연결, 원본 차단/현재 DB와
+journal 대조·권한 재적용/재개·M5 잔여/M7–M10 전체 목표는 남는다.
+
 ADR0086 실제 Remote target 실패를 원래 재시도 정책과 같은 transaction으로 조정했다.
 STARTING 성공의 별도 Result 우회를 실제 S3로 재현 후 수정했다. 혼합69개
 134212Z-7fca0d0d·전환 경쟁 포함 Result15개134221Z-9f81f337·실패15개134221Z-e1e9e102 PASS.

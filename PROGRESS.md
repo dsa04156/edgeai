@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0087 장치 journal의 일관 snapshot·암호화·격리 복원 실제13개140112Z-41923f08 PASS.
+Runner111개135456Z-4855a9b2·TLS MQTT95개140012Z-b4fa7f1d PASS. 원본 볼륨 삭제 뒤
+fanout/cursor/state/END·완료 intent 보존, 별도 writer8snapshot·큰 payload·실SIGKILL·자동
+송신 차단·소유 프로세스 정리 확인. [근거](docs/evidence/m9-device-journal-backup.md).
+새 CI gate 연결. 새 이미지/배포·현재 DB와 journal/권한 대조·종합 활성화는 미완료다.
+
 ADR0086 혼합69개134212Z-7fca0d0d·Result15개134221Z-9f81f337·실패15개134221Z-e1e9e102
 PASS. 실제 Remote target 실패2/재시도1·원래 예산·원복/응답 유실/변경0을 확인했다.
 실제 S3 성공이 STARTING 전환을 우회하는 문제를 재현 후 차단하고 전환 삽입 경쟁도 검증했다.

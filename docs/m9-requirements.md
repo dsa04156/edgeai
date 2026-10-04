@@ -77,6 +77,11 @@ STARTING 성공 파일만으로 누락된 시작 권한을 대신하지 않으�
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.
+ADR0087의 [장치 journal 백업](device-journal-backup.md)은 동일 Device Session의 LOCAL
+상태·fanout·ACK·DATA/END를 한 읽기 transaction에서 추출해 암호화하고 새 볼륨에 격리 복원한다.
+[실제13개](evidence/m9-device-journal-backup.md)에서 별도 writer·원본 유실·완료 파일 경쟁·
+SIGKILL·자동 재개 차단을 확인했다. 현재 DB/route/watermark 대조·원본 송신 차단·새 권한 적용과
+활성화는 별도이며 snapshot 이후 센서 데이터까지 보존한다고 주장하지 않는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

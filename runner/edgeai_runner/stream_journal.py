@@ -106,6 +106,8 @@ class Journal:
         info = directory.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
                 and stat.S_IMODE(info.st_mode) == 0o700, 'Private stream journal directory required')
+        require(not os.path.lexists(directory / 'recovery.json'),
+                'Stream journal recovery requires explicit activation')
         try:
             self.lock = os.open(directory / 'owner.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
             try:
