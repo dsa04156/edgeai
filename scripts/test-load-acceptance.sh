@@ -27,6 +27,7 @@ for name, options, code, status, acceptance in cases:
     assert report['status'] == status and report['performanceAcceptance'] == acceptance, name
     assert not report['fullScaleSequence']
     assert report['ownedApiStopped'] and report['ownedDatabaseRemoved'], name + ': cleanup'
+    assert len(report['authenticationGuards']) == 5 and all(report['authenticationGuards'].values()), name + ': authentication'
     stage, = report['stages']
     assert stage['summary']['offered'] == stage['summary']['succeeded'] == 22
     assert stage['summary']['unexpected'] == stage['summary']['dropped'] == 0

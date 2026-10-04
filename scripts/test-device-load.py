@@ -4,6 +4,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
+import http.client
 from http.cookies import SimpleCookie
 import json
 import os
@@ -127,6 +128,24 @@ def main():
         monitor = threading.Thread(target=sample_resources); monitor.start()
         profile = client.expect('POST', 'profiles/DEVICE', {'key': 'load-'+identity, 'version': '1.0.0',
             'spec': {'protocol': 'synthetic', 'purpose': 'management-load'}}, 201)
+        # Exercise the packaged Basic/CSRF chain after successful authentication has warmed any cache.
+        def guard_status(method, authorization=None):
+            connection = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+            try:
+                headers = {'Cookie': client.cookie}
+                if authorization is not None: headers['Authorization'] = authorization
+                connection.request(method, '/api/v1/platform', headers=headers)
+                response = connection.getresponse(); response.read()
+                return response.status
+            finally:
+                connection.close()
+        assert guard_status('GET', client.authorization) == 200
+        assert guard_status('GET') == 401
+        assert guard_status('GET', 'Basic '+base64.b64encode((user+':wrong').encode()).decode()) == 401
+        assert guard_status('GET', 'Basic '+base64.b64encode(('unknown:'+password).encode()).decode()) == 401
+        assert guard_status('POST', client.authorization) == 403
+        report['authenticationGuards'] = {'correctBasic': True, 'cookieAloneDenied': True,
+            'wrongPasswordDenied': True, 'unknownUserDenied': True, 'csrfRequired': True}
         devices = []
         def register(index):
             d = client.expect('POST', 'devices', {'key': 'load-'+identity+'-'+str(index).zfill(4), 'displayName': 'Synthetic management load',

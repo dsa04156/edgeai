@@ -81,6 +81,7 @@
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
 | M8-LOAD | scripts/test-load.sh | 실제 API/PG의100→300→1,000 장치·고정 발송·지연/누락·DB정합성·재접속·자원/정리 | --measure-only는 측정 범위; 합의 성능 예산은 별도, docs/load-testing.md |
 | M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과를 구분하고 종료 코드/정리 확인 | 10대/2초 회귀; 전체 규모·장비 성능 수용과 구분 |
+| M8-AUTH-CACHE | scripts/test-unit.sh + scripts/test-load.sh --measure-only | 성공 비교64개/30초·고정 만료·hash/비밀번호/권한/잠금 변경·실HTTP401/403·동일 규모 지연/CPU 측정 | 단위111개·실제9,240요청/오류0·DB정합성 PASS; docs/evidence/m8-authentication-load.md |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |
 
 `SCAFFOLD_VERIFIED`는 M0 일부 시험에 한정한다. `LOCAL_VERIFIED`는 kind/UI/fault 등 필수

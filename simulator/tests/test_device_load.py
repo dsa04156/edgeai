@@ -27,7 +27,7 @@ class DeviceLoadTest(unittest.TestCase):
         report = run_window(Slow(), devices(20), .1, .1, workers=1)
         self.assertEqual(22, report['summary']['offered'])
         self.assertGreater(report['summary']['dropped'], 0)
-        self.assertLessEqual(report['summary']['sent'], 4)
+        self.assertEqual(22, report['summary']['sent'] + report['summary']['dropped'])
         self.assertEqual(22, len(report['samples']))
 
     def test_http_success_with_wrong_session_is_failure(self):

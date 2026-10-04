@@ -44,7 +44,8 @@ bash scripts/test-load.sh
   동일 요청 재전송·새 세션 epoch·이전 세션 거절 결과다. 등록과 정합성 probe는 timed window 밖이다.
 - `apiResources`: `/proc`로 측정한 해당 API의 최고 RSS와 CPU 사용량이다. CPU core equivalent1은
   표본 구간에서 CPU1개분 사용을 뜻하며, 백분율이나 CPU quota가 아니다. JVM 최대 heap은512MiB,
-  Hikari pool은5개다. CPU 제한은 없고 호스트와 PostgreSQL instance는 공유하므로 비교 시 환경을 맞춘다.
+  Hikari pool은5개다. 도구는 별도 CPU 제한을 설정하지 않는다. 상위 실행 환경의 CPU 제한은
+  수집하지 않으며 `cpuQuota=null`은 무제한 확인을 뜻하지 않는다. 호스트와 PostgreSQL instance는 공유한다.
 - `database`: 해당 DB의 크기·접속 수·누적 transaction/deadlock 통계다. 공유 PostgreSQL 전체의
   CPU를 이 시험 전용 CPU로 표시하지 않는다. DB 연결/transaction 통계는 sampling 시점 값이다.
 - `ownedApiStopped`, `ownedDatabaseRemoved`: 시험이 만든 프로세스와 DB의 정리 확인이다.

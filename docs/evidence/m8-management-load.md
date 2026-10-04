@@ -24,7 +24,8 @@ rollback은 요청 오류 수로 해석하지 않는다. 시험 종료 후 소�
 환경은 Linux x86_64·논리 CPU24개·호스트 메모리134,757,564,416bytes,
 PostgreSQL16.15·API JVM 최대 heap512MiB·Hikari pool5·worker32/대기 상한64다.
 API JAR SHA-256은 `3f9bfc03329367fdc594d7fa765b79dcee7a66274849fe8bd3617635581fc8ac`다.
-CPU quota 없이 호스트와 PostgreSQL instance를 공유한다. CPU 값은 API 프로세스의 표본 구간
+도구가 별도 CPU quota를 설정하지 않으며 상위 실행 환경의 제한은 수집하지 않았다.
+호스트와 PostgreSQL instance를 공유한다. CPU 값은 API 프로세스의 표본 구간
 사용량이며 DB 또는 부하 생성기 CPU를 포함하지 않는다. 단일 실행 결과로 최대 수용 용량이나
 원격 네트워크/클러스터 확장 성능을 주장하지 않는다. 원시 `report.json`을 실행 증거에 보존했다.
 
@@ -52,6 +53,7 @@ CPU quota 없이 호스트와 PostgreSQL instance를 공유한다. CPU 값은 AP
 JFR를 켠 진단의 p95는56.16ms이며 위 성능 기준선에 혼합하지 않는다.
 
 성능 예산은 UNSET이며 기본 명령의 전체 규모 측정만으로 M8을 완료 처리하지 않는다.
-인증 의미를 보존하는 병목 개선과 같은 조건의 재측정, 합의한 지연/오류/지속 시간 기준이 남는다.
+인증 의미를 보존하는 병목 개선과 같은 조건의 재측정은 [후속 근거](m8-authentication-load.md)를
+따른다. 합의한 지연/오류/지속 시간 기준은 남는다.
 MQTT payload·모델 계산·Dashboard·실제 센서/장비·장시간·클러스터 확장 성능은 이 시험 범위 밖이다.
 M5/M7의 남은 외부 계약 수용과 M9/M10도 유지한다.
