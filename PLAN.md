@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+선행60c8be3 CI37223827513은5jobs성공/images실패/gitops생략으로 종료했다.
+원시39개 중37개 PASS, STREAM복구 업무case0에서 S3 고정버전 복제대기120초 실패다.
+실패 범위/소유정리 감사193318Z-cfe2641f PASS. ADR0098 적용 전 소스이며 아래 로컬
+백업11/결합44개는 수정 후 통과했다. 수정과 ADR0097/0099의 새 CI·배포를 확인한다.
+[실패 근거](docs/evidence/m9-stream-recovery-ci-timeout.md).
+
 ADR0099의 Remote 시작 허가·실제 접수 시각 영속화를 구현했다. 원래 전환 기한을
 API와 제공자에서 확인하고 계산 전에 SQLite에 저장한다. Python24개/Java연동13개
 `192155Z-4c060e15`, 공개 API/PG/S3 결합48개 `192333Z-a87e3730` PASS/소유정리.

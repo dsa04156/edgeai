@@ -13,10 +13,12 @@ ADR0099 Remote 시작 권한 기록: API worker·참조 제공자의 원래 기�
 ADR0098 S3 소유target 명시적resync: 느린scanner의 수정 전 timeout 재현 후
 백업11개 `185831Z-0be128f4`와 위44개 결합 회귀 PASS.
 새코드원격CI·종합활성화는 미완료다.
-선행60c8be3 CI37223827513의 완료5jobs·원시35개/PG230/단위122/Device47 감사
-`184444Z-bfa04fa3` PASS. images실kind가 진행 중이며 전체CI/새배포는 후속이다.
+선행60c8be3 CI37223827513은5jobs성공/images실패/gitops생략으로 종료했다.
+원시39개 중37개 PASS. STREAM복구case0에서 S3고정버전 복제대기120초 실패이며
+소유자원/kind정리 확인. 감사193318Z-cfe2641f PASS, 전체CI성공은 아니다.
+ADR0098 적용 전 소스다. [실패 근거](docs/evidence/m9-stream-recovery-ci-timeout.md).
 
-최신main소스60c8be3 CI37223827513: native ARM/x86와index발행3jobs 성공.
+선행main소스60c8be3 CI37223827513: native ARM/x86와index발행3jobs 성공.
 `182346Z-6cf4c91c` 원시4개/각Runner111·MQTT97/두manifest 감사 PASS.
 새index8a2f8067의 공개 ARM서버GPU 실행·S3결과·소유정리 PASS. 같은
 `182404Z-6448ff9a`의 엣지GPU는 가용노드부재로 BLOCKED, 전체명령 exit2.
