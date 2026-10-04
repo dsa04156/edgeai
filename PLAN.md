@@ -2,6 +2,15 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+최신: ADR0063 복원 DB/Kubernetes 조회 대조의 분류7·실제 PG/별도 namespace6개가
+PASS(023306Z-de6fe9bb)다. DB에 없는 실행과 소유 충돌을 찾고41테이블·객체5개를 보존했다.
+[관측 근거](docs/evidence/m9-recovery-kubernetes.md). 실제 producer 회수·활성화는 남는다.
+6617d939 CI37168798128은19/20원시 결과PASS지만 마지막 배포 데모 driver에서 실패하여
+gitops는 미실행이다. STREAM24개/S354는 통과했다. driver 상세가 artifact에서 빠져 원인은
+미확정이며, 후속은 안전한 실패 위치를 정해진 보고서에 보존한다. 성공 배포로 판정하지 않는다.
+기존 클러스터의 같은 데모3개/Pod8개/S36개 재실행은 PASS(023612Z-ad91d440)다.
+CI 실패의 원인 해결로 간주하지 않는다. [실패·재확인 근거](docs/evidence/m9-backup-ci-failure.md).
+
 2026-10-02 사용자가 전체 단계의 구현·검증을 지시했다. M1 이후를 진행하며 전체 완료를
 현재 구현 범위로 축소하지 않는다. 매 단계 OpenAPI/DDL/코드/UI/시험/증거를 함께 갱신한다.
 

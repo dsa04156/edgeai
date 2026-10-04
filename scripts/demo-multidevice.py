@@ -11,6 +11,7 @@ import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import ssl
 import subprocess
@@ -21,6 +22,22 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def driver_failure(value):
+    """Retain failure location, never exception messages, HTTP bodies or credentials."""
+    if not isinstance(value,dict): return {'type':'InvalidFailureReport'}
+    projected={}
+    for field,pattern in [('type',r'[A-Za-z_][A-Za-z0-9_]{0,79}'),('phase',r'[a-z0-9_-]{1,128}')]:
+        item=value.get(field)
+        if isinstance(item,str) and re.fullmatch(pattern,item): projected[field]=item
+    locations=value.get('locations')
+    if isinstance(locations,str) and len(locations)<=4096:
+        projected['locations']=','.join(location for location in locations.split(',')
+            if re.fullmatch(r'[A-Za-z0-9_.-]{1,120}:[0-9]{1,7}',location))
+    try: projected['runId']=str(uuid.UUID(value['runId']))
+    except (KeyError,TypeError,ValueError,AttributeError): pass
+    return projected
 
 
 def wait(predicate, seconds=120):
@@ -40,7 +57,6 @@ def main():
     parser.add_argument('--runner-source', help='Full source commit paired with the explicit Runner digest')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/multidevice-demo.json')
     args = parser.parse_args()
-    import re
     assert bool(args.runner_image) == bool(args.runner_source)
     if args.runner_image:
         assert re.fullmatch(r'ghcr\.io/dsa04156/edgeai-runner@sha256:[0-9a-f]{64}', args.runner_image)
@@ -172,7 +188,10 @@ def main():
             while time.monotonic() < deadline:
                 expression = "import json;from pathlib import Path;print(json.dumps({n:json.loads(Path('/work',n+'.json').read_text()) for n in ('phase','failure','done') if Path('/work',n+'.json').exists()}))"
                 state = read(['-n', 'edgeai', 'exec', root, '--', 'python3', '-c', expression])
-                assert 'failure' not in state, 'Deployment stream driver failed: ' + json.dumps(state.get('failure', {}))
+                if 'failure' in state:
+                    report['driverFailure']=driver_failure(state['failure'])
+                    print('Deployment driver failure: '+json.dumps(report['driverFailure']),flush=True)
+                    raise AssertionError('Deployment stream driver failed; projected evidence retained')
                 current = state.get('phase')
                 if current:
                     report['phase'] = current['phase']
@@ -219,6 +238,11 @@ def main():
                 raise AssertionError('Deployment stream demo deadline exceeded')
         except BaseException as error:
             report['failureType'] = type(error).__name__
+            report['status'] = 'FAIL'
+            # CI uploads this exact path, including on failure. The prior random failure
+            # filename was not included in the artifact and lost the driver boundary.
+            args.report.parent.mkdir(parents=True,exist_ok=True)
+            args.report.write_text(json.dumps(report, indent=2) + '\n')
             (ROOT / '.tools' / (root + '-failure.json')).write_text(json.dumps(report, indent=2) + '\n')
             print('Deployment demo failure evidence saved: ' + root + '-failure.json', flush=True)
             raise

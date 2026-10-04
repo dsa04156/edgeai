@@ -1,6 +1,14 @@
 # 진행 상태
 
 [STATUS]
+ADR0063 복원 DB/Kubernetes 관측은 분류7·실제PG/소유namespace6개 PASS
+(023306Z-de6fe9bb):DB에 없는 실행3개/소유 충돌1개를 찾고41테이블·실제객체5개를
+보존했다. 소유 DB/API/namespace 정리 확인. docs/evidence/m9-recovery-kubernetes.md.
+회수/재가동은 수행하지 않는다. 6617d939 CI37168798128은19/20원시결과PASS지만
+마지막 배포 demo driver에서 실패·gitops skipped다. 실제STREAM24/S354는 통과했다.
+driver 실패 상세 artifact가 누락되어 근본 원인은 미확정이며 후속에 수집 경로를 보완한다.
+기존 클러스터의 같은 데모3개/Pod8개/S36개는 PASS(023612Z-ad91d440)다.
+CI 장애 해결/새 배포 판정은 아니다. docs/evidence/m9-backup-ci-failure.md.
 현재 M7 다중 장치 DAG/스트리밍을 진행한다. M0–M4·M6 완료, M5 잔여/M8–M10 미완료다.
 독립 M9 DB 백업·새 DB 복원을 ADR0059로 구현했다. PostgreSQL16/실제 패키징 API의10개
 사례가 PASS(010138Z-7ebea0c3):41테이블·Flyway 이력34행·API 조회·불변 제약·백업 후 쓰기
