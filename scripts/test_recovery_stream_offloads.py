@@ -96,7 +96,8 @@ def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,po
     starting=work/'offload-start-backup';backup(pg,seed_db,starting)
     targets={}
     for name,bundle in [('drain-pending',drain),('drain-expired',drain),('drain-cancel',drain),
-            ('start-pending',starting),('start-expired',starting),('start-cancel',starting),('start-missing',starting)]:
+            ('start-pending',starting),('start-expired',starting),('start-cancel',starting),('start-missing',starting),
+            ('selected-failed',starting),('peer-failed',starting),('failure-unproven',starting)]:
         db='edgeai_restore_stream_transfer_'+uuid.uuid4().hex
         tool=Postgres(transport,diagnostics=work/('offload-restore-'+name));restore(tool,bundle,db);remember(db)
         targets[name]=(db,tool.directory/'restore-report.json')
@@ -208,7 +209,7 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
         assert retained(target[0])==retained_before[name]
         assert pg.sql('SELECT count(*) FROM edgeai.task_offload_member',target[0])=='2'
         assert pg.sql('SELECT count(*) FROM edgeai.stream_checkpoint',target[0])=='2'
-    report.update(streamOffloadCases=True,streamOffloadRestoredDatabases=7,streamOffloadIntermediateRestores=1,
+    report.update(streamOffloadCases=True,streamOffloadRestoredDatabases=len(targets),streamOffloadIntermediateRestores=1,
         streamOffloadsFailed=2,streamOffloadsCancelled=2,streamOffloadSourcesPreserved=2,streamOffloadCheckpointsPreserved=2,
         streamOffloadMemberPlansPreserved=2,streamOffloadPendingOperations=2,streamOffloadUnprovenOperations=1,
         streamSuccessorContainers=2,streamOffloadFullSourceHistoryPreserved=True,

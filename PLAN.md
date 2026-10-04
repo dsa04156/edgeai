@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0094의 기록된 STREAM target 실패 일관성 검사를 포함해36개 `170123Z-963eee1a` PASS다.
+실제 복원DB16/부모자식4쌍·실패2건/새retry0·원래 실패/Operation/source/checkpoint 이력,
+기본 취소 우회 차단·원복/COMMIT응답 유실·소유 정리를 확인했다.
+[근거](docs/evidence/m9-recorded-stream-target-failures.md). 불일치 복원본을 Run 완료로 바꾸는
+오류를 실제 재현 후 수정했다. 선행 ADR0092–0093은2d86e9e로push했고 CI37218040065가
+진행 중이다. 새36개 변경의 원격 수용·미기록 실패/시작 권한/finalization·종합 활성화는 남는다.
+
 선행 c133315 CI37213721652 전체5jobs/원시35개 `164536Z-08054170` PASS다.
 GitOps11958d6의 정확한3이미지·Ready/PVC/ArgoSynced `164522Z-268fbe82`, 기존10파일/
 원래PVC·HTTPS 보존 `164612Z-dbe48fdd`도 PASS다. ADR0092–0093을 pin 위로 rebase했고

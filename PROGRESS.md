@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0094 기록된 target 실패 포함36개 `170123Z-963eee1a` PASS. 실제 복원DB16/부모자식4쌍·
+선택/peer 실패2·원래 실패/전환/체크포인트 이력 보존·retry0·원복/응답 유실·소유 정리 확인.
+불일치 실패 이력을 기본 취소로 우회하는 오류를 재현·수정했다.
+[근거](docs/evidence/m9-recorded-stream-target-failures.md). 선행29개는2d86e9e로push됐고
+CI37218040065가 진행 중이다. 새36개 원격 검증·미기록 실패/시작 권한/최종 처리·종합 활성화는 남는다.
+
 선행 c133315 CI37213721652 전체5jobs/원시35개 `164536Z-08054170` PASS.
 GitOps11958d6 정확한 이미지·Ready/ArgoSynced `164522Z-268fbe82`, 기존10파일/원래PVC·
 HTTPS 보존 `164612Z-dbe48fdd` PASS다. 새 ADR0092–0093을 pin 위로 rebase했으며

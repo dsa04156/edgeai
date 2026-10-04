@@ -348,12 +348,14 @@ def main():
         if args.offloads:
             from test_recovery_stream_offloads import check
             check(pg,offload_fixture,options,apply,cli,fingerprints,refused,passed,report)
+            from test_recovery_stream_failures import check as check_failures
+            check_failures(pg,offload_fixture,options,apply,cli,fingerprints,refused,passed,report)
         manifest=json.loads((fixtures.bundle/'manifest.json').read_text())
         assert len(manifest['versions'])==2
         for item in manifest['versions']:assert fixtures.client.digest('replica',item)==item['sha256']
         for db,_ in targets:assert pg.sql('SELECT count(*) FROM edgeai.stream_checkpoint',db)=='2'
         passed('nonempty-immutable-checkpoints-and-two-fixed-s3-versions-survive-all-group-outcomes')
-        report.update(publicStreamRun=True,restoredDatabases=13 if args.offloads else 5,groupMembers=2,
+        report.update(publicStreamRun=True,restoredDatabases=6+len(offload_fixture['targets']) if args.offloads else 5,groupMembers=2,
             terminatedContainers=4 if args.offloads else 2,reapedChildren=4 if args.offloads else 2,
             retriesExpired=2,tasksCancelled=2,tasksSkipped=1,runsReconciled=2,pendingRetriesPreserved=2,
             preservedTables=40,checkpointsPreserved=2,storageVersionsPreserved=2,noNewAttempts=True,image=image,imageSourceRevision=revision,

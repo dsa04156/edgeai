@@ -106,6 +106,10 @@ ADR0093은 같은 명령의 `--offloads`로 기록된 전환 취소와 원래 dr
 조정한다. 실제29개에서 source2→target2 종료·복원DB13개·checkpoint/배치/기한 보존과
 원복/응답 유실을 확인했다. VD/자동 전환의 복원 종단·기록된 target 실패·전환 성공의 시작
 권한·finalization·새 자격/종합 활성화는 여전히 남는다.
+ADR0094는 [기록된 STREAM target 실패](evidence/m9-recorded-stream-target-failures.md)의
+Operation/Attempt/runtime 일관성을 검사한다. 원래 실패 이력은 보존하고 남은 peer 취소와
+Run만 조정하며, 모순된 실패 사유/재시도/최신 시도는 미해결로 남긴다. 명시적 실패 fixture를
+포함한36개를 검증하며 미기록 실패·시작 권한·종합 재가동은 별도다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
