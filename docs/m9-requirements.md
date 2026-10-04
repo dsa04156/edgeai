@@ -82,6 +82,10 @@ ADR0087의 [장치 journal 백업](device-journal-backup.md)은 동일 Device Se
 [실제13개](evidence/m9-device-journal-backup.md)에서 별도 writer·원본 유실·완료 파일 경쟁·
 SIGKILL·자동 재개 차단을 확인했다. 현재 DB/route/watermark 대조·원본 송신 차단·새 권한 적용과
 활성화는 별도이며 snapshot 이후 센서 데이터까지 보존한다고 주장하지 않는다.
+ADR0088의 [DB/journal 대조](recovery-device-journal.md)는 복원 신원·고정 Session/경로·
+소비자 checkpoint 메타데이터·처리 순번/END를 읽기 전용으로 비교한다. 실제 16개에서
+원본 유실·ACK 격차·세션/경로/전환 충돌·DB/marker 변경과 격리 유지를 확인했다.
+checkpoint 바이트·원본 종료·브로커 권한·복원 환경 활성화는 여전히 별도다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

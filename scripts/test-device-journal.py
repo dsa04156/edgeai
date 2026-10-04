@@ -155,14 +155,25 @@ def main():
         live=output('live');ready=mp.Event();done=mp.Event()
         writer=mp.Process(target=live_source,args=(live,bindings,ready,done));writer.start();processes.append(writer)
         assert ready.wait(5)
-        revisions=[]
+        revisions=[]; contention_retries=0
+        def concurrent_capture():
+            nonlocal contention_retries
+            # DELETE-mode writers can occupy the read-lock window for the entire 5s
+            # attempt. A failed snapshot is valid and never published; retry only
+            # SQLITE_BUSY within the public default 30s budget. Other errors fail.
+            deadline=time.monotonic()+30
+            while True:
+                try:return recovery.capture(live,min(5,max(.001,deadline-time.monotonic())))
+                except sqlite3.OperationalError as error:
+                    if error.sqlite_errorcode != sqlite3.SQLITE_BUSY or time.monotonic()>=deadline:raise
+                    contention_retries+=1
         for _ in range(8):
-            snapshot=recovery.validate(recovery.capture(live,5))[0]
+            snapshot=recovery.validate(concurrent_capture())[0]
             n=int(base64.b64decode(snapshot['stateBase64']));assert snapshot['revision']==n
             assert all(r['received']==n and r['received']-r['committed']<=3 for r in snapshot['routes'])
             revisions.append(n);time.sleep(.01)
         assert revisions[-1]>revisions[0]
-        live_backup=output('live-backup');recovery.backup(age,live,recipient,live_backup,5)
+        live_backup=output('live-backup');recovery.backup(age,live,recipient,live_backup)
         assert writer.is_alive();stop(writer,done)
         live_restore=output('live-restore');recovery.restore(age,live_backup,identity,live_restore);deny_open(live_restore/'source')
         passed('actual-separate-process-writer-yields-eight-consistent-snapshots-and-encrypted-backup-without-stealing-owner-lock')
@@ -251,11 +262,13 @@ def main():
             if after:inspect(target/'source',value);deny_open(target/'source')
         passed('actual-sigkill-before-and-after-directory-publication-never-exposes-an-automatically-runnable-restored-source')
 
-        code=0;report.update(status='PASS',concurrentSnapshots=8,writerAdvanced=True,largeSnapshotBytes=len(wire),sourceLossVerified=True,
+        code=0;report.update(status='PASS',concurrentSnapshots=8,contentionRetries=contention_retries,writerAdvanced=True,largeSnapshotBytes=len(wire),sourceLossVerified=True,
             quarantineEnforced=True,crashBoundaries=2)
     except Exception as error:
         with private_file(work/'failure.log','w') as log:traceback.print_exc(file=log)
-        report.update(status='FAIL',failureType=type(error).__name__)
+        report.update(status='FAIL',failureType=type(error).__name__,
+            failureFrames=[{'file':Path(f.filename).name,'line':f.lineno} for f in traceback.extract_tb(error.__traceback__)])
+        if isinstance(error,sqlite3.Error):report['sqliteErrorName']=getattr(error,'sqlite_errorname',None)
         print('FAIL: Device journal backup; private diagnostics retained')
     finally:
         for process in processes:

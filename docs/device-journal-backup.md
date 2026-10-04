@@ -41,3 +41,6 @@ exit0은 암호화 또는 격리 복원 성공이며 서비스 재개가 아니�
 검사: `bash scripts/test-device-journal.sh --report /private/new-test-report.json`.
 합성 장치의 실제 SQLite/age·별도 writer 프로세스·SIGKILL을 사용하며 기존 broker/API를
 변경하지 않는다. [ADR0087](adr/0087-device-journal-backup.md)을 따른다.
+
+격리 복원 다음에는 [장치 journal과 DB 대조](recovery-device-journal.md)를 실행해 세션·
+경로·처리 순번을 확인한다. 대조 성공 후에도 원본 종료와 권한/활성화 검증은 남는다.

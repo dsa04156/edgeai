@@ -1,5 +1,24 @@
 # M9 Remote/Kubernetes 복구의 CI와 실제 배포 검증
 
+## 최신: ADR0081–0084 포함
+
+2026-10-04. 소스 `fd8830db36bfc329d4047af41e594a12054d8b9e`,
+[CI37204890109](https://github.com/dsa04156/edgeai/actions/runs/37204890109)의 5개 job과
+다운로드한 원시 보고서 32개가 PASS/exit0이다. 감사 `20261004T142230Z-e8e25801`.
+PostgreSQL230/단위122/Runner111/MQTT95와 실제 STREAM24개·결과54개를 포함한다.
+복구 retirement 56개에서 VD Task/workflow/BATCH offload·claim되지 않은 Job도 검증했다.
+
+GitOps `4a13ec13d50154aa33e60e70cd04888d9ffb347e`의 정확한 API/dashboard/MinIO 이미지,
+Ready/PVC Bound/Argo Synced는 `20261004T142255Z-670ebdc4`에서 확인했다. 기존 공유
+Ingress의 aggregate health는 Progressing이다. 뒤이어 `20261004T142314Z-d47d0242`에서
+기준 파일 10개의 version/bytes/SHA, 기존 PVC UID, HTTPS 256KiB PUT/stat/GET·익명403과
+시험 소유 object/bucket 정리를 확인했다. 원래 baseline 두 개는 다시 캡처하지 않았다.
+
+이 CI에는 ADR0085–0088의 혼합 Remote/실패 처리/장치 journal 백업·DB 대조가 포함되지
+않는다. 해당 변경의 로컬 근거와 새 CI를 별도로 확인한다. 전체 플랫폼 완료 판정은 아니다.
+
+## 선행: 기본 Kubernetes retirement
+
 2026-10-04. 검증 소스는 `be41a8bc872f7b7ed4b065d524a3645d6e0a2ca2`,
 [CI37200100790](https://github.com/dsa04156/edgeai/actions/runs/37200100790)이다.
 scaffold/storage/runner/images/gitops 5개 job이 모두 success이며 다운로드한 원시 보고서32개는

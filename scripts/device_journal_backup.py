@@ -69,10 +69,10 @@ def validate(wire):
     return value, bindings, limits
 
 
-def capture(directory, timeout):
+def capture(directory, timeout, *, _quarantined=False):
     """One read transaction preserves state, processing acknowledgements and all fanout frames together."""
     directory = directory.absolute(); private_directory(directory); private_directory(directory / 'journal')
-    require(not os.path.lexists(directory / 'journal/recovery.json'), 'Cannot back up an unactivated recovery')
+    require(_quarantined or not os.path.lexists(directory / 'journal/recovery.json'), 'Cannot back up an unactivated recovery')
     before = completion_bytes(directory)
     path = directory / 'journal/journal.sqlite'
     deadline = time.monotonic() + timeout

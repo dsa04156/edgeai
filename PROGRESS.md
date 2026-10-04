@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0088 장치 journal/DB 대조 실제 16개 `142409Z-b11d1b61`, 백업 회귀 13개
+`142719Z-0da4249f` PASS. 공개 STREAM API·복원 DB 3개·원본 DB/source 삭제·43개 테이블과
+파일 보존·순번 유실/세션/경로/END/전환 충돌·실제 관측 경쟁·격리 유지·소유 정리를 확인했다.
+[근거](docs/evidence/m9-recovery-device-journal.md). 제품 활성화는 하지 않으며 checkpoint
+바이트/원본 종료/브로커 권한의 종합 확인과 M5 잔여/M7–M10은 미완료다.
+
+선행 fd8830d CI37204890109는 5 jobs/원시 32개 PASS (`142230Z-e8e25801`). GitOps4a13ec1의
+정확한 이미지/Ready/PVC/Argo Synced (`142255Z-670ebdc4`)와 기존 파일 10개·PVC UID·HTTPS
+256KiB/익명403/소유 object 정리 (`142314Z-d47d0242`)도 PASS. 공유 Ingress의 aggregate
+Progressing은 유지한다. ADR0085–0088 변경의 새 CI/배포 검증과 구분한다.
+
 ADR0087 장치 journal의 일관 snapshot·암호화·격리 복원 실제13개140112Z-41923f08 PASS.
 Runner111개135456Z-4855a9b2·TLS MQTT95개140012Z-b4fa7f1d PASS. 원본 볼륨 삭제 뒤
 fanout/cursor/state/END·완료 intent 보존, 별도 writer8snapshot·큰 payload·실SIGKILL·자동

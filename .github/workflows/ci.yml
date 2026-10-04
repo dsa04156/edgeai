@@ -52,6 +52,8 @@ jobs:
       - run: pnpm --filter @edgeai/dashboard exec playwright install --with-deps chromium
       - run: bash scripts/verify-all.sh scaffold
       - run: bash scripts/collect-evidence.sh postgres bash scripts/test-integration.sh
+      - name: Verify quarantined Device journals against exact restored PostgreSQL history
+        run: bash scripts/collect-evidence.sh recovery-device-journal bash scripts/test-recovery-device-journal.sh --transport compose --report docs/evidence/runs/recovery-device-journal-report.json
       - name: Verify PostgreSQL → Spring → Next.js
         run: bash scripts/collect-evidence.sh health bash scripts/test-profiles-stack.sh compose
       - name: Verify load measurement and acceptance classification

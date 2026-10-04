@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0088 복원한 Device journal과 정확한 PostgreSQL 복원본의 읽기 전용 대조를 추가했다.
+공개 STREAM API·실제 DB 복원 3개·원본 삭제·43개 테이블/파일 보존을 포함한 16개
+`142409Z-b11d1b61`, 장치 백업 회귀 13개 `142719Z-0da4249f` PASS.
+[근거](docs/evidence/m9-recovery-device-journal.md). 대조 성공 후에도 격리를 유지한다.
+DB checkpoint 객체·원본 종료·브로커 권한·종합 재개와 M5 잔여/M7–M10 전체 수용은 남는다.
+
+선행 fd8830d CI37204890109의 5 jobs/원시 32개를 `142230Z-e8e25801`에서 감사했다.
+GitOps4a13ec1의 정확한 이미지·Ready/Argo Synced는 `142255Z-670ebdc4`, 기존 파일 10개와
+PVC/HTTPS 보존은 `142314Z-d47d0242` PASS다. ADR0085–0088의 새 CI와 구분한다.
+
 ADR0087 동일 Device Session LOCAL journal의 일관 논리 snapshot·age 암호화·격리 복원을
 추가했다. 실제13개140112Z-41923f08, Runner111개135456Z-4855a9b2·TLS MQTT95개
 140012Z-b4fa7f1d PASS. 별도 writer의8snapshot·원본 삭제·fanout/END·완료 파일 경쟁·큰
