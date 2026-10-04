@@ -134,9 +134,10 @@ public final class MosquittoStreamBroker implements StreamBrokerGateway {
     private static List<?> list(Object value){if(!(value instanceof List<?> l))throw new StreamBrokerException(INVALID_RESPONSE);return l;}
     private static void error(Map<?,?> response,String allowed){if(response.containsKey("error") && !Objects.equals(response.get("error"),allowed))throw new StreamBrokerException(REJECTED);}
 
+    private record PendingResponse(String correlation,ArrayBlockingQueue<Map<?,?>> replies) {}
     private final class Connection implements AutoCloseable {
-        private MqttClient client;private final ArrayBlockingQueue<Map<?,?>> replies=new ArrayBlockingQueue<>(1);
-        private final AtomicReference<String> expected=new AtomicReference<>();private final AtomicReference<StreamBrokerException> failure=new AtomicReference<>();
+        private MqttClient client;
+        private final AtomicReference<PendingResponse> expected=new AtomicReference<>();private final AtomicReference<StreamBrokerException> failure=new AtomicReference<>();
         Connection(){
             try {
                 client=new MqttClient(endpoint.toString(),"edgeai-control-"+UUID.randomUUID(),new MemoryPersistence());client.setTimeToWait(3000);
@@ -151,24 +152,28 @@ public final class MosquittoStreamBroker implements StreamBrokerGateway {
                     if(message.getPayload().length>65536 || message.isRetained()){failure.set(new StreamBrokerException(INVALID_RESPONSE));return;}
                     try {
                         var root=object(json.readValue(message.getPayload(),Object.class));
-                        for(var entry:list(root.get("responses"))){var response=object(entry);if(expected.get()!=null && expected.get().equals(response.get("correlationData")))replies.offer(response);}
+                        // The caller can finish or start its next command while this callback runs.
+                        // Capture once and keep delayed replies bound to that request's own queue.
+                        var pending=expected.get();
+                        for(var entry:list(root.get("responses"))){var response=object(entry);if(pending!=null && pending.correlation().equals(response.get("correlationData")))pending.replies().offer(response);}
                     }catch(RuntimeException invalid){failure.set(new StreamBrokerException(INVALID_RESPONSE));}
                 }});
                 for(int code:token.getReasonCodes())if(code>=128)throw new StreamBrokerException(REJECTED);
             }catch(Exception error){close();throw error instanceof StreamBrokerException s?s:new StreamBrokerException(UNAVAILABLE);}
         }
         Map<?,?> call(String command,Map<String,?> values){
-            var correlation=UUID.randomUUID().toString();expected.set(correlation);replies.clear();
+            var correlation=UUID.randomUUID().toString();var pending=new PendingResponse(correlation,new ArrayBlockingQueue<>(1));
+            if(!expected.compareAndSet(null,pending))throw new StreamBrokerException(CONFLICT);
             var body=new HashMap<String,Object>(values);body.put("command",command);body.put("correlationData",correlation);
             try {
                 byte[] bytes=json.writeValueAsBytes(Map.of("commands",List.of(body)));if(bytes.length>32768)throw new StreamBrokerException(CONFIGURATION);
                 client.publish(COMMAND,bytes,1,false);
-                var reply=replies.poll(3,TimeUnit.SECONDS);
+                var reply=pending.replies().poll(3,TimeUnit.SECONDS);
                 if(failure.get()!=null)throw failure.get();if(reply==null)throw new StreamBrokerException(UNAVAILABLE);
-                if(!command.equals(reply.get("command")))throw new StreamBrokerException(INVALID_RESPONSE);return reply;
+                if(!command.equals(reply.get("command")) || !correlation.equals(reply.get("correlationData")))throw new StreamBrokerException(INVALID_RESPONSE);return reply;
             }catch(InterruptedException e){Thread.currentThread().interrupt();throw new StreamBrokerException(UNAVAILABLE);}
             catch(StreamBrokerException e){throw e;}catch(Exception e){throw new StreamBrokerException(UNAVAILABLE);}
-            finally{expected.set(null);}
+            finally{expected.compareAndSet(pending,null);}
         }
         Map<?,?> checked(String name,Map<String,?> values){var r=call(name,values);error(r,null);return r;}
         public void close(){if(client!=null){try{client.disconnectForcibly(0,100,false);}catch(Exception ignored){}try{client.close(true);}catch(Exception ignored){}}}

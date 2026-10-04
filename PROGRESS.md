@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0096의 요청별 broker 응답 수명 수정: 기존80회 콜백NPE1개 확인 후 같은80회
+`180704Z-af18f0f5` 예외0/PASS, 최종broker14개 `181144Z-36506086` PASS/정리.
+최종 단위122개 `181439Z-4e038d42` PASS.
+신규 main native index/CI/배포 확인은 남는다.
+선행2d86e9e CI37218040065 전체5jobs/원시36개·STREAM복구29개 감사 `180330Z-08a26c13`
+PASS. e93b3ad 실제이미지/Ready/ArgoSynced `180330Z-f67f9bf1`, 기존10파일/PVC/HTTPS
+보존 `180845Z-e5fda2fe` PASS. 새 native 이미지·broker수정의 원격 수용과는 구분한다.
+M10 [공개 API 하드웨어 실행](docs/evidence/m10-hardware-runtime.md)2개 `175547Z-fb453bb8`
+PASS: 실제CUDA계산/ARIES접근·Run2/Pod2/고정S3결과2·소유runtime정리.
+후속branch CI37221887410의 broker 권한 경합 REVOKED/INVALID_RESPONSE 실패는 위 수정의 출발점이다.
+새 native index 발행·ARM 공개 실행·실제모델/NPU추론은 아직 완료되지 않았다.
 M10 최종 전체7개 `174327Z-583d0e77` PASS. 선행 전체 재실행의 GPU 노드 DiskPressure
 퇴거 실패는 보존하며, 건강 상태 변경 시각을 기준으로 안정적인 후보를 먼저 선택한다.
 branch CI4개 성공/3개 생략·원시35개/PG230/단위122 감사 `174542Z-e978bc85` PASS.

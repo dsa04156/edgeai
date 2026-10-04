@@ -2,6 +2,23 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0096 MQTT 관리 응답 경합 수정: 실제80회 중 콜백 NPE1개를 `180109Z-585a08ed`에서
+관측했고 요청별 correlation/큐와 단일 snapshot으로 수정했다. 같은80회
+`180704Z-af18f0f5` 예외0/PASS, 최종코드 전체broker14개 `181144Z-36506086` PASS.
+단위122개 `181439Z-4e038d42`도 PASS다.
+[근거](docs/evidence/m9-broker-response-correlation.md). 이전branchCI 실패를 보존하고
+이 수정과 native ARM 변경의 새 main CI/index/배포를 확인한다.
+
+선행2d86e9e CI37218040065 5jobs/원시36개·STREAM복구29개 `180330Z-08a26c13` PASS.
+GitOpse93b3ad의 정확한이미지/Ready/ArgoSynced `180330Z-f67f9bf1`, 원래10파일/PVC/HTTPS
+보존 `180845Z-e5fda2fe` PASS. native index와 새36개/아래broker 경합 수정은 후속 검증한다.
+
+M10 공개 Profile→Run→실제GPU/NPU배정→S3결과2개 `175547Z-fb453bb8` PASS.
+CUDA계산/ARIES비루트접근·각1Pod/1Attempt·고정version/bytes/SHA·소유runtime정리 확인.
+[근거](docs/evidence/m10-hardware-runtime.md). 기존amd64배포 검사이며 ARM/실제모델·NPU추론은 남는다.
+후속branch CI37221887410은 기존 broker 권한 경합 시험에서 REVOKED 대신 INVALID_RESPONSE로
+실패했다. 위 ADR0096으로 원인을 재현·수정했으며 새 원격 수용은 후속이다.
+
 M10의 [실장비 구성 요소](docs/evidence/m10-hardware-components.md)최종7개
 `174327Z-583d0e77` PASS. 선행 전체 시험의 DiskPressure 퇴거 실패를 보존하고
 안정적인 건강 상태의 노드를 우선하도록 보완했다. 최초 경로별 검증은 다음과 같다:

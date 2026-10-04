@@ -121,14 +121,16 @@ class StreamBrokerIntegrationTest {
         var next=permission();restarted.grant(next);var consumer=peer(next.consumer());var queue=subscribe(consumer,next.topic("frames"));publish(peer(next.producer()),next.topic("frames"),"11");received(queue,"11");
     }
     @Test void competingLateGrantsCannotRestoreRevokedGeneration()throws Exception {
+        for(int round=0;round<12;round++){
         var p=permission();gateway.grant(p);
         try(var pool=Executors.newFixedThreadPool(4)){
             var gate=new CountDownLatch(1);var jobs=new ArrayList<Future<?>>();
-            for(int i=0;i<3;i++)jobs.add(pool.submit(()->{gate.await();try{gateway.grant(p);}catch(StreamBrokerException e){assertThat(e.reason()).isEqualTo(StreamBrokerException.Reason.REVOKED);}return null;}));
+            for(int i=0;i<3;i++)jobs.add(pool.submit(()->{gate.await();try{gateway.grant(p);}catch(StreamBrokerException e){assertThat(e.reason()).withFailMessage("Broker reason %s at %s",e.reason(),e.getStackTrace()[0]).isEqualTo(StreamBrokerException.Reason.REVOKED);}return null;}));
             jobs.add(pool.submit(()->{gate.await();gateway.revoke(p);return null;}));gate.countDown();
             for(var job:jobs)job.get(20,TimeUnit.SECONDS);
         }
         reason(StreamBrokerException.Reason.REVOKED,()->gateway.grant(p));gateway.revoke(p);
+        }
     }
     @Test void wrongBrokerPolicyExpiredLeaseAndCredentialConfigurationFailClosed()throws Exception {
         var p=permission();gateway.grant(p);var g=p.generation();

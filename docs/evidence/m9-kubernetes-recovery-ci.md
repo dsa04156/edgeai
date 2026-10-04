@@ -1,5 +1,14 @@
 # M9 Remote/Kubernetes 복구의 CI와 실제 배포 검증
 
+2026-10-05 KST, 소스2d86e9e의 CI37218040065 전체5jobs/원시36개 감사
+`180330Z-08a26c13` PASS다. PG230·단위122·Runner111/MQTT97·STREAM24/S354,
+Kubernetes/혼합 복구69·장치 결합47·STREAM 전환 포함 복구29개를 확인했다.
+GitOpse93b3ad의 정확한3이미지·Ready/PVC/ArgoSynced `180330Z-f67f9bf1`,
+기존10파일 고정version/bytes/SHA와 원래 두PVC·HTTPS 보존 `180845Z-e5fda2fe`도 PASS다.
+Argo aggregate health는 공유 Ingress로 Progressing이다. 새 native ARM index·ADR0094의
+기록된 target 실패36개와 이후 broker 경합 수정은 이 소스에 없으며 별도 검증한다.
+
+
 ## 최신: ADR0089–0091 포함
 
 2026-10-05. 소스 `c1333159154ff9512f41a0f751601c7434adac54`,
