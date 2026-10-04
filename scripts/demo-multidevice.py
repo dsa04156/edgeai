@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from image_identity import verify_image_id
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,7 +105,7 @@ def main():
             statuses = pod.get('status', {}).get('containerStatuses', [])
             if not statuses or not statuses[0].get('imageID'):
                 continue
-            assert statuses[0]['imageID'].endswith('@' + runner_digest)
+            verify_image_id(image,statuses[0]['imageID'])
             assert spec['serviceAccountName'] == 'edgeai-runner' and spec['automountServiceAccountToken'] is False
             assert next(v for v in spec['volumes'] if v['name'] == 'edgeai-trust')['configMap']['name'] == settings['EDGEAI_RUNTIME_CA_CONFIG_MAP']
             if meta['uid'] not in seen:

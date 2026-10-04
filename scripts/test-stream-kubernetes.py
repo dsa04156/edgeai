@@ -22,6 +22,7 @@ import uuid
 from vd_acceptance import ROOT, wait
 from vd_stream_acceptance import CASES as VD_CASES
 from vd_stream_kubernetes import VDStreamObserver
+from image_identity import verify_image_id
 
 CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover')
 
@@ -302,7 +303,7 @@ with response: print(response.status)
                 statuses = pod['status'].get('containerStatuses', [])
                 if not statuses or not statuses[0].get('imageID'):
                     continue
-                assert statuses[0]['imageID'].endswith('@' + runner_digest), 'Actual Runner image differs from tested digest'
+                verify_image_id(runner_image,statuses[0]['imageID'])
                 assert spec['serviceAccountName'] == 'edgeai-runner' and spec['automountServiceAccountToken'] is False
                 container = spec['containers'][0]
                 assert {'name': 'SSL_CERT_FILE', 'value': '/var/run/edgeai-trust/ca.crt'} in container['env']

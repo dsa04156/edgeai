@@ -7,6 +7,7 @@ import json
 import subprocess
 import uuid
 from vd_acceptance import ROOT, wait
+from image_identity import verify_image_id
 
 
 def run_mixed_remote(scenario, provider_pod, restart):
@@ -97,7 +98,7 @@ print(json.dumps(proof))
                         if target['mode'] == 'NODE': assert actual['metadata']['uid'] == target['nodeId']
                         containers = pod.get('status', {}).get('containerStatuses', [])
                         if not containers or not containers[0].get('imageID'): continue
-                        assert containers[0]['imageID'].endswith(s.image.split('@')[1])
+                        verify_image_id(s.image,containers[0]['imageID'])
                         seen[task_key] = {'podUid': pod['metadata']['uid'], 'attemptId': labels['edgeai.io/attempt-id'], 'nodeUid': actual['metadata']['uid']}
                         current = s.request('tasks/' + task_id)
                         if task_key != 'root' and task_key not in observed_inputs and current['attempts'][0]['state'] == 'RUNNING':
