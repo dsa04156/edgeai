@@ -32,8 +32,18 @@ def driver_failure_evidence(value):
                 'locations': r'[a-zA-Z0-9_.-]+:[0-9]+(?:,[a-zA-Z0-9_.-]+:[0-9]+)*',
                 'runId': r'[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}'}
     value = value if isinstance(value, dict) else {}
-    return {key: field if isinstance(field := value.get(key), str) and len(field) <= 2000 and re.fullmatch(pattern, field)
-            else None for key, pattern in patterns.items()}
+    result = {key: field if isinstance(field := value.get(key), str) and len(field) <= 2000 and re.fullmatch(pattern, field)
+              else None for key, pattern in patterns.items()}
+    transition = value.get('attemptTransition')
+    if isinstance(transition, dict) and transition.get('task') in ('root', 'sink') and transition.get('expectedOldState') in ('FAILED', 'OFFLOADED'):
+        attempts = transition.get('attempts')
+        if isinstance(attempts, list) and len(attempts) <= 4 and all(isinstance(a, dict) for a in attempts):
+            result['attemptTransition'] = {'task': transition['task'], 'expectedOldState': transition['expectedOldState'],
+                'attempts': [{'id': a.get('id') if isinstance(a.get('id'), str) and re.fullmatch(patterns['runId'], a['id']) else None,
+                    'state': a.get('state') if a.get('state') in ('QUEUED', 'DISPATCHING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'OFFLOADED') else None,
+                    **{k: a[k] if type(a.get(k)) is int and 0 < a[k] <= 9223372036854775807 else None for k in ('number', 'epoch')}}
+                    for a in attempts]}
+    return result
 
 
 def main():

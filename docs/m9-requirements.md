@@ -7,7 +7,7 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 
 | 요구 영역 | 현재 근거 | 남은 수용 |
 |---|---|---|
-| 영속 명령·재조정·재시작 | 실행 lease·producer fencing·broker 권한 조정·API/Runner/VD 교체·재시도, ADR0062 복원 DB 기동 격리/조회 점검 | 서로 다른 장애가 겹친 상태와 DB 복원 이후 외부 실행의 회수·일치·활성화 |
+| 영속 명령·재조정·재시작 | 실행 lease·producer fencing·broker 권한 조정·API/Runner/VD 교체·재시도, ADR0062 복원 DB 기동 격리/조회 점검·ADR0069 원본 DB 연결 차단 | 서로 다른 장애가 겹친 상태와 DB 복원 이후 외부 실행의 회수·일치·활성화 |
 | 사용자 신원·RBAC | 관리 Basic/CSRF, 내부 Device·Runner 인증 및 토큰 경계 | 실제 신원 제공자/사용자별 역할·권한 행렬·회수·운영 키 수명 |
 | 감사 | Run/Task/Attempt·전환 이력, ADR0066 관리 HTTP의 영속 접수/관측 결과·현재 Basic 주체·401/403·조회·비밀값 배제 | 사용자별 신원/RBAC, 내부 worker·직접 설정 변경, 도메인 변경과 원자적 연결·외부 보존/보관 정책 |
 | 전송 보호 | dev API·MinIO·MQTT TLS 및 CA 전달·인증서 오류 시험 | 실제 접근 경로 전체와 인증서 갱신·만료·키 유실 시 절차 |
@@ -20,6 +20,9 @@ UID·소유 충돌을 구분한다. 실제 DB/클러스터 메타데이터 검�
 ADR0064의 [producer 중지](recovery-producer-stop.md)는 전용 namespace에서 새 Pod/Job
 생성을 막고 관측한 컨테이너의 종료를 확인한다. 실제7개·판정5개를 검증했으며 quota/종료
 기록을 보존한다. 전역 쓰기 차단, Remote/broker/장치 회수와 해제/활성화는 후속이다.
+ADR0069의 [원본 DB 연결 차단](recovery-database-fence.md)은 명시한 DB 이름/OID/복구 UUID로
+새 연결을 막고 기존 API/쓰기 backend 종료를 확인한다. 실제 PG/API10개에서 다른 DB 보존과
+대상 교체 경쟁 rollback을 검증했다. DB 밖의 권한·기존 외부 요청 회수와 활성화는 후속이다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

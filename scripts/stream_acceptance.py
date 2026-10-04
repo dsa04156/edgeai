@@ -442,7 +442,8 @@ if __name__ == '__main__':
                 pass
         import traceback
         locations = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(error.__traceback__))
-        save('failure.json', {'phase': phase, 'runId': active, 'type': type(error).__name__, 'locations': locations})
+        save('failure.json', {'phase': phase, 'runId': active, 'type': type(error).__name__, 'locations': locations,
+                             'attemptTransition': globals().get('failed_attempt_transition')})
         print('STREAM_KUBERNETES_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + locations, flush=True)
     while True:
         time.sleep(1)

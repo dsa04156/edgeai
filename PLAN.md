@@ -2,14 +2,23 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0069 원본 DB 연결 차단의 실제 PG/API10개가 PASS(065711Z-4d27de4e)다. API pool과
+미완료 쓰기 연결3개 종료·새 연결 거절·다른 DB 보존·동일 복구 재개·DB 교체 경쟁 rollback을
+확인했다. [연결 차단 근거](docs/evidence/m9-recovery-database-fence.md). 새 Compose CI gate를
+연결했으며 종합 writer 회수·복구 활성화와 전체 M9 수용은 남는다.
+
 부하 실패 시 DB 관측값이 사라지는 문제를 수정했다. 실제 API/PG의 기존 판정4개와 새 큐 포화
 회귀가 PASS(062331Z-f6a52a6a)이며 실패 판정·부하량·정리 조건은 유지한다.
 별도20ms 동시 커밋은 기본 전체9,240건과 비계측1,000대180초19,800건을 모두 처리했으나,
 진단 실행은 기록 종료 경계에서8건 미발송이었다. 기존 제품의 같은 비계측180초는290건 미발송
 (063006Z-36e08240)이며 관측18,736행·감사20,741쌍을 보존했다. 공유 호스트 변동과 계측
 영향을 확정하지 않았고 제품은 개별 transaction을 유지한다. [후속 진단](docs/evidence/m8-audit-storage-diagnostics.md).
-5f80455 CI37181374516의 완료된 runner/storage/scaffold 산출물21개와 PG230/MQTT95/Runner111을
-확인했다. 실제 Kubernetes 이미지 게이트가 진행 중이므로 전체 CI·신규 배포 완료를 의미하지 않는다.
+5f80455 CI37181374516은 runner/storage/scaffold 성공·images 실패·gitops skipped로 끝났다.
+완료된3jobs의 산출물21개와 PG230/MQTT95/Runner111 성공을 확인했으나 VD 전환 뒤 Attempt
+상태 검사가 실패했고 당시 값이 없어 원인은 미확정이다. 취소 전 제한된 상태를 보존하는 진단3개
+PASS. 같은 Runner/MinIO·기존 JAR의 실제 클러스터 단일 전환은 PASS(070243Z-4715e4c0,
+Node1/VD3Pods·S3결과3개·정리)지만 CI 실패 해결이나 새 배포 성공으로 판정하지 않는다.
+[실패·후속 진단](docs/evidence/m7-offload-ci-diagnostics.md).
 
 ADR0067 감사 동시 커밋 실험은 단위129·PG231·실제API8·백업13개를 통과했으나 미채택이다.
 기본 전체 부하의 첫 실행은200건 미발송 FAIL, 같은 조건 진단은9,240건/감사12,105쌍 보존이다.

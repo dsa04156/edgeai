@@ -31,6 +31,8 @@ jobs:
         run: python3 scripts/test-recovery-kubernetes.py
       - name: Verify conservative producer termination evidence and recovery ownership
         run: python3 scripts/test-recovery-stop.py
+      - name: Verify bounded stream failure evidence without response bodies
+        run: python3 scripts/test-stream-failure-evidence.py
       - name: Verify encrypted private material backup and isolated restore
         run: |
           bash scripts/install-age.sh
@@ -56,6 +58,8 @@ jobs:
         run: bash scripts/collect-evidence.sh postgres-backup bash scripts/test-postgres-backup.sh --transport compose --report docs/evidence/runs/postgres-backup-report.json
       - name: Verify real management audit admission failure, result failure and restart
         run: bash scripts/collect-evidence.sh management-audit bash scripts/test-management-audit.sh --transport compose --report docs/evidence/runs/management-audit-report.json
+      - name: Verify source database connection fencing and unrelated database preservation
+        run: bash scripts/collect-evidence.sh recovery-database-fence bash scripts/test-recovery-database-fence.sh --transport compose --report docs/evidence/runs/recovery-database-fence-report.json
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh

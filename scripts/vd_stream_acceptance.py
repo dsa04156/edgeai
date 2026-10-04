@@ -198,8 +198,14 @@ def run_case(c, name):
                 assert all(value.checkpoint() == checkpoints[key] for key, value in owners.items())
                 attempts = {}
                 for key in ('root', 'sink'):
-                    old, new = sorted(request('tasks/' + task_ids[key])['attempts'], key=lambda a: a['number'])
-                    assert old['state'] == ('OFFLOADED' if offload else 'FAILED') and new['state'] == 'RUNNING' and new['epoch'] == old['epoch'] + 1
+                    history = sorted(request('tasks/' + task_ids[key])['attempts'], key=lambda a: a['number'])
+                    expected_old = 'OFFLOADED' if offload else 'FAILED'
+                    if not (len(history) == 2 and history[0]['state'] == expected_old and history[1]['state'] == 'RUNNING'
+                            and history[1]['epoch'] == history[0]['epoch'] + 1):
+                        c.failed_attempt_transition = {'task': key, 'expectedOldState': expected_old,
+                            'attempts': [{field: a.get(field) for field in ('id', 'number', 'state', 'epoch')} for a in history[:4]]}
+                        raise AssertionError('Recovered attempt transition differs')
+                    old, new = history
                     assert old['vdId'] == initial_targets[key]['vdId']
                     assert new['mode'] == targets[key]['mode'] and new.get('vdId') == targets[key].get('vdId') and new.get('nodeId') == targets[key].get('nodeId')
                     assert new['cause'] == ('OFFLOAD' if offload else 'RETRY')

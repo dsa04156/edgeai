@@ -116,6 +116,12 @@ scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비
 시험 결과만 업로드하며 원본 dump·manifest·API/SQL 로그는 `.tools`에 남겨 업로드에서 제외한다.
 [범위와 실행법](postgres-backup.md). 이 게이트는 전체 플랫폼 재해 복구를 대신하지 않는다.
 
+같은 scaffold의 `test-recovery-database-fence.sh --transport compose`는 별도 DB/API의
+새 연결 차단·기존 연결 종료·다른 DB 보존·재개·DB 교체 경쟁 거절10개를 검증한다.
+`recovery-database-fence-report.json`과 evidence 결과만 업로드하며 상세 SQL/API 로그는
+`.tools`에 보존한다. 원본의 DB 연결 차단 게이트이며 전체 writer 중지·서비스 활성화는 별도다.
+`test-stream-failure-evidence.py`는 Kubernetes 실패 보고서의 허용 필드와 비밀값 배제를 확인한다.
+
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험
 결과로 바뀔 수 있다. 전체 시험의 수와 마지막 필터 시험의 수를 서로 대체하지 않는다.
