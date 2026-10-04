@@ -135,7 +135,7 @@ python3 scripts/test-recovery-kubernetes.py # 복원 DB/실행 목록 분류·�
 bash scripts/test-recovery-kubernetes-live.sh --context <시험-context> # 실제 복원 DB와 별도 Kubernetes namespace
 python3 scripts/test-recovery-stop.py # 종료 상태·신원·불확실한 종료 거절 판정
 bash scripts/test-recovery-stop-live.sh --context <시험-context> # 실제 부모/자식 종료·생성 차단·timeout/재개
-bash scripts/test-recovery-kubernetes-retire.sh --context <시험-context> # 실제 종료→복원 DB 실행·명령·VD binding 정리
+bash scripts/test-recovery-kubernetes-retire.sh --context <시험-context> --vd-tasks # 실제 종료→복원 DB 실행·명령·VD binding/작업 할당 정리
 bash scripts/test-recovery-database-fence.sh # 격리 DB/API의 연결 차단·다른 DB 보존·미완료 쓰기 rollback
 bash scripts/test-recovery-mqtt-fence.sh # 격리 TLS broker의 관리자 교체·기존 연결 차단·중단/재개·재시작
 bash scripts/test-recovery-storage-fence.sh # 격리 TLS MinIO의 root/URL 차단·실제 진행 요청 소진·버전 보존25개
@@ -167,6 +167,7 @@ DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/r
 [복원 Remote 결과 확정](docs/recovery-remote-results.md)은 실제 고정 파일을 다시 검사하고 Result·Task·Run을 원자적으로 반영합니다. 후속 작업은 대기 상태로만 준비하며 기동 격리를 유지합니다.
 [복원 Remote 실패·취소 정리](docs/recovery-remote-failures.md)는 사용자 취소·기존 결과를 보존하고 원래 기한과 횟수 안에서만 재시도를 예약합니다. 새 실행은 시작하지 않습니다.
 [복원 Kubernetes 실행 정리](docs/recovery-kubernetes-retirement.md)는 보존한 실제 종료 증거와 DB 신원을 대조해 실행·명령·VD 연결 이력을 정리합니다. 미관측 실행과 작업 결과 조정·전체 재가동은 별도입니다.
+[VD 내부 작업 복구 검증](docs/evidence/m9-recovery-vd-tasks.md)은 실제 supervisor 종료 후 열린 할당을 닫고 기존 종료 사유·성공 결과·미배정 작업을 보존합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

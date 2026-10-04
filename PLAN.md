@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0081은 종료된 VD의 내부 Task runtime/할당을 같은 복구 transaction으로 정리한다.
+실제 PG16/Kubernetes23개(120355Z-1f71afa5), 기존16개 회귀(115733Z-64d93a90) PASS다.
+복원DB4·부모/자식3쌍·VD Task6종: 실행3/할당3 종료, 과거closure2/확정Result2·37테이블과
+미배정 상태 보존, 실제 allocation 경쟁/잠금·마지막 closure 오류 원복을 확인했다.
+[근거](docs/evidence/m9-recovery-vd-tasks.md). kind게이트를 확장했다. 작업 결과/offload/
+STREAM/journal·전역 writer·종합 활성화는 남는다. 선행 be41a8b CI37200100790은 별도다.
+
 ADR0080은 실제 Kubernetes 종료 기록을 복원 DB 실행/명령·VD binding에 반영한다.
 실제 PG16/복원DB3·Kubernetes16개(114126Z-5ef20866) PASS: 부모/자식2쌍·never-bound1,
 runtime/VD각1·명령4·binding1, guard/잠금/rollback·응답 유실·미기록 UID/404 거절·38테이블

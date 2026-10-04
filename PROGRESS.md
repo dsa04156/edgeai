@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0081 VD 내부 Task runtime/할당 정리23개(120355Z-1f71afa5), 기존16개 회귀
+(115733Z-64d93a90) PASS. 복원DB4·부모/자식3쌍·할당이력6종, 실행3/할당3 정리·과거closure2/
+확정Result2/37테이블·미배정 보존, allocation경쟁/잠금/원복·COMMIT응답유실·소유자원정리.
+docs/evidence/m9-recovery-vd-tasks.md. 선행 be41a8b CI37200100790에는 이번 확장이 없다.
+새CI/배포·작업결과/offload/STREAM/journal·전역writer·종합활성화·M5잔여/M7–M10은 남는다.
+
 ADR0080 실제 Kubernetes 종료→복원 DB 정리16개(114126Z-5ef20866) PASS.
 복원DB3·컨테이너/자식2쌍·never-bound1, runtime/VD각1·명령4·binding1,
 guard/실잠금/rollback·응답 유실·미기록UID/404·38테이블 보존·소유자원 정리 확인.

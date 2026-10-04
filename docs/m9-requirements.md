@@ -61,6 +61,9 @@ ADR0080의 [복원 Kubernetes 실행 정리](recovery-kubernetes-retirement.md)�
 종료 Pod와 복원 DB 신원을 재확인해 runtime·기존 명령·VD binding을 원자적으로 정리한다.
 실제16개에서 잠금/rollback·응답 유실·UID 미기록/404·이력 보존을 검증했다. 미관측 producer,
 VD Task allocation 결과·offload/STREAM/journal·종합 활성화는 별도다.
+ADR0081은 이 종료 확인을 [VD 내부 Task/할당 정리](evidence/m9-recovery-vd-tasks.md)로 확장한다.
+실제23개에서 runtime/할당3개 종료, 기존 closure/성공 결과·미배정 이력 보존과 경쟁/원복을
+검증했다. Task/Run 업무 결과와 재시도/offload·종합 활성화는 후속이다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

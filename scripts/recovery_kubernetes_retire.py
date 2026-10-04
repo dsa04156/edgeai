@@ -14,7 +14,7 @@ from recovery_stop_kubernetes import Stop, FENCE, FINALIZER, OPERATION, HARD, ob
 
 TABLES = {name: 'id' for name in ('runtime_instance', 'runtime_command', 'task_attempt', 'task',
     'workflow_run', 'task_result', 'result_artifact', 'virtual_device', 'vd_runtime',
-    'vd_runtime_command', 'vd_runtime_binding', 'vd_operation')}
+    'vd_runtime_command', 'vd_runtime_binding', 'vd_operation', 'vd_task_allocation')}
 TABLES['flyway_schema_history'] = 'installed_rank'
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
@@ -32,7 +32,10 @@ SELECT jsonb_build_object(
    (SELECT id,run_id,task_id,attempt_id,epoch,namespace,job_name,job_uid,producer_pod_uid,node_name,
     desired_state,observed_state FROM edgeai.runtime_instance WHERE runtime_kind='KUBERNETES') r),
  'vds',(SELECT coalesce(json_agg(to_jsonb(v)),'[]'::json) FROM
-   (SELECT id,vd_id,generation,namespace,pod_name,pod_uid,node_name,desired_state,observed_state FROM edgeai.vd_runtime) v),
+   (SELECT id,vd_id,generation,session_id,namespace,pod_name,pod_uid,node_uid,node_name,desired_state,observed_state FROM edgeai.vd_runtime) v),
+ 'vdTasks',(SELECT coalesce(json_agg(to_jsonb(r) || jsonb_build_object('allocation',to_jsonb(a))),'[]'::json) FROM
+   (SELECT id,vd_id,namespace,producer_pod_uid,node_uid,node_name,desired_state,observed_state
+    FROM edgeai.runtime_instance WHERE runtime_kind='VD') r LEFT JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id),
  'guard',(""" + GUARD_QUERY + '));\nCOMMIT;'
 
 
@@ -94,7 +97,7 @@ def prepare(pg, args):
                                                            'ABSENT_FROM_RESTORED_DATABASE'):
                 raise Blocked('Live producer and restored database ownership or identity conflict')
             classified[(kind,item['metadata']['uid'])] = row
-    selected = {'runtimes': [], 'vds': []}
+    selected = {'runtimes': [], 'vds': [], 'vdTasks': [], 'vdAllocations': []}
     unresolved = []
     for group, rows in [('runtimes', catalog['runtimes']), ('vds', catalog['vds'])]:
         for row in rows:
@@ -122,6 +125,32 @@ def prepare(pg, args):
                     'alreadyTerminal':row['desired_state']=='STOPPED' and row['observed_state']=='TERMINATED'})
             else:
                 selected[group].append(row['id'])
+    for row in catalog['vdTasks']:
+        allocation=row['allocation']
+        reason=None
+        if row['namespace'] != args.namespace:
+            reason='OUTSIDE_SELECTED_NAMESPACE'
+        elif allocation is None:
+            reason='VD_ALLOCATION_NOT_RECORDED'
+        else:
+            supervisor=next((v for v in catalog['vds'] if v['id']==allocation['vd_runtime_id']),None)
+            if supervisor is None or (allocation['runtime_id'],allocation['vd_id'],allocation['generation'],
+                    allocation['session_id'],allocation['pod_uid'],row['namespace']) != (
+                    row['id'],row['vd_id'],supervisor['generation'],supervisor['session_id'],supervisor['pod_uid'],supervisor['namespace']):
+                raise Blocked('VD task allocation and supervisor identity differ')
+            if supervisor['vd_id'] != row['vd_id'] or row['producer_pod_uid'] is not None and (
+                    row['producer_pod_uid'],row['node_uid'],row['node_name']) != (
+                    allocation['pod_uid'],supervisor['node_uid'],supervisor['node_name']):
+                raise Blocked('Claimed VD task producer differs from its supervisor')
+            if allocation['closed_at'] is not None and (row['desired_state']!='STOPPED' or row['observed_state']!='TERMINATED'):
+                raise Blocked('A closed VD allocation has inconsistent runtime history')
+            if supervisor['id'] not in selected['vds']:
+                reason='VD_SUPERVISOR_NOT_PROVEN'
+        if reason:
+            unresolved.append({'kind':'vdTasks','id':row['id'],'reason':reason,
+                'alreadyTerminal':row['desired_state']=='STOPPED' and row['observed_state']=='TERMINATED'})
+        else:
+            selected['vdTasks'].append(row['id']); selected['vdAllocations'].append(allocation['id'])
     return {'formatVersion':1, 'scope':'restored-database-kubernetes-retirement',
         'targetDatabase':args.database, 'databaseOid':catalog['oid'], 'marker':catalog['marker'],
         'restoreReportSha256':catalog['restoreReportSha256'], 'beforeGuard':catalog['guard'],
@@ -140,7 +169,8 @@ IF current_database()<>{database} OR NOT EXISTS (SELECT FROM pg_database WHERE d
     # Complete existing CREATE commands before the VD trigger accepts terminal evidence. Close its
     # binding in the same transaction: the existing deferred lifecycle constraint remains enabled.
     statements = []
-    for group, runtime, command in [('runtimes','runtime_instance','runtime_command'), ('vds','vd_runtime','vd_runtime_command')]:
+    for group, runtime, command in [('runtimes','runtime_instance','runtime_command'),
+            ('vdTasks','runtime_instance','runtime_command'), ('vds','vd_runtime','vd_runtime_command')]:
         ids = literal(json.dumps(plan['selected'][group])) + '::jsonb'
         where = '(SELECT value::uuid FROM jsonb_array_elements_text(' + ids + '))'
         statements.append("UPDATE edgeai." + command + " SET completed=true,lease_owner=NULL,lease_until=NULL,updated_at=transaction_timestamp()"
@@ -157,10 +187,17 @@ IF current_database()<>{database} OR NOT EXISTS (SELECT FROM pg_database WHERE d
             " AND (desired_state<>'STOPPED' OR observed_state<>'TERMINATED')) OR EXISTS (SELECT FROM edgeai." +
             command + " WHERE runtime_id IN " + where + " AND (NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL))"
             " THEN RAISE EXCEPTION 'Kubernetes retirement postcondition differs'; END IF;")
-    body = "DECLARE changed integer; runtimes integer:=0; vds integer:=0; commands integer:=0; bindings integer:=0; BEGIN\n" + identity + (
+    allocations='(SELECT value::uuid FROM jsonb_array_elements_text('+literal(json.dumps(plan['selected']['vdAllocations']))+'::jsonb))'
+    statements.append("UPDATE edgeai.vd_task_allocation SET closed_at=transaction_timestamp(),close_reason='POD_GONE'"
+        ",completion_sequence=NULL,exit_code=NULL WHERE id IN " + allocations + " AND closed_at IS NULL;"
+        " GET DIAGNOSTICS allocationsClosed=ROW_COUNT;"
+        " IF EXISTS (SELECT FROM edgeai.vd_task_allocation WHERE id IN " + allocations + " AND closed_at IS NULL) THEN"
+        " RAISE EXCEPTION 'VD allocation retirement postcondition differs'; END IF;")
+    body = "DECLARE changed integer; runtimes integer:=0; vds integer:=0; vdTasks integer:=0; commands integer:=0; bindings integer:=0; allocationsClosed integer:=0; BEGIN\n" + identity + (
         'IF (' + GUARD_QUERY + ') IS DISTINCT FROM ' + literal(canonical(plan['beforeGuard']).decode()) + "::jsonb THEN"
         " RAISE EXCEPTION 'Restored database changed after termination inventory'; END IF;\n") + '\n'.join(statements) + identity + (
         "INSERT INTO retirement_result VALUES (jsonb_build_object('runtimesRetired',runtimes,'vdRuntimesRetired',vds,"
+        "'vdTaskRuntimesRetired',vdTasks,'allocationsClosed',allocationsClosed,"
         "'commandsCompleted',commands,'bindingsClosed',bindings,'afterGuard',(" + GUARD_QUERY + '))); END')
     return ("BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';\nLOCK TABLE " +
         ','.join('edgeai.'+name for name in TABLES) + ' IN SHARE ROW EXCLUSIVE MODE;\n'
@@ -184,13 +221,13 @@ def apply(pg, args, plan):
     if (after['beforeGuard'] != result['afterGuard'] or any(after[k] != plan[k] for k in
             ('targetDatabase','databaseOid','marker','restoreReportSha256','evidence','selected','unresolved','objectsAbsentFromDatabase'))):
         raise Blocked('Post-commit evidence changed; keep restored database quarantined')
-    counters = ('runtimesRetired','vdRuntimesRetired','commandsCompleted','bindingsClosed')
+    counters = ('runtimesRetired','vdRuntimesRetired','vdTaskRuntimesRetired','allocationsClosed','commandsCompleted','bindingsClosed')
     report = {k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid','selected','unresolved','objectsAbsentFromDatabase')}
     report.update(status='OBSERVED_KUBERNETES_RUNTIMES_RETIRED', activated=False,globalQuiescenceProven=False,
         databaseModified=any(result[k] for k in counters), **result,
         intentSha256=hashlib.sha256((args.output/'intent.json').read_bytes()).hexdigest(),
         namespaceUid=args.namespace_uid,recoveryId=args.recovery_id,verifiedAt=datetime.now(timezone.utc).isoformat(),
-        preserved=['task-attempt-run-outcomes','committed-results','runtime-identities','VD-operation-outcomes',
+        preserved=['task-attempt-run-outcomes','committed-results','runtime-identities','VD-operation-outcomes','existing-VD-allocation-closures',
                    'database-quarantine','admission-fence','retained-pod-evidence'],
         excluded=['unobserved-producers','workflow-and-offload-reconciliation','journals','global-writer-fence','service-activation'])
     durable_json(args.output/'retirement.json',report)

@@ -40,6 +40,7 @@ def main():
     p.add_argument('--context',required=True)
     p.add_argument('--transport',choices=['native','compose'],default='native')
     p.add_argument('--runner-image'); p.add_argument('--runner-source')
+    p.add_argument('--vd-tasks',action='store_true',help='Include explicit VD allocation and immutable outcome history fixtures')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
@@ -68,7 +69,10 @@ def main():
 
     def fingerprints(database):
         tables=json.loads(pg.sql("SELECT json_agg(tablename ORDER BY tablename) FROM pg_tables WHERE schemaname='edgeai'",database))
-        return {t:hashlib.sha256(pg.sql('SELECT to_jsonb(t)::text FROM edgeai.'+identifier(t)+' t ORDER BY to_jsonb(t)::text',database).encode()).hexdigest() for t in tables}
+        # Preserve complete-row comparisons in one snapshot and one Compose round trip.
+        query='SELECT jsonb_build_object('+','.join(literal(t)+",(SELECT encode(sha256(convert_to(coalesce(string_agg("
+            "to_jsonb(t)::text,E'\\n' ORDER BY to_jsonb(t)::text),''),'UTF8')),'hex') FROM edgeai."+identifier(t)+' t)' for t in tables)+')'
+        return json.loads(pg.sql(query,database))
 
     def options(database,receipt,**overrides):
         result=SimpleNamespace(context=args.context,namespace=namespace,namespace_uid=namespace_uid,recovery_id=operation,
@@ -123,6 +127,7 @@ def main():
         device=api.request('POST','devices',{'key':'retire-source','displayName':'Source','profileVersionId':device_profile['id'],'sourceMode':'SYNTHETIC'},201)
         spec=json.loads((ROOT/'contracts/profiles/vd-profile.example.json').read_text())
         spec['serviceProfileVersionId']=service['id']; spec['sources']['input']['deviceProfileVersionId']=device_profile['id']
+        if args.vd_tasks: spec['runtime']['maxConcurrentTasks']=4
         vd_profile=api.request('POST','profiles/VD',{'key':'retire-vd-profile','version':'1.0.0','spec':spec},201)
         vd=api.request('POST','virtual-devices',{'key':'retire-vd','displayName':'VD','profileVersionId':vd_profile['id'],
             'sources':[{'sourceKey':'input','deviceId':device['id']}],'placement':{'mode':'AUTO'}},201)
@@ -130,7 +135,7 @@ def main():
         vr=str(uuid.uuid4()); vd_pod='edgeai-vd-'+vr
         configuration={'sources':json.loads(pg.sql("SELECT jsonb_object_agg(source_key,id::text) FROM edgeai.vd_source_binding WHERE vd_id="+literal(vd['id'])+'::uuid',source)),
             'serviceProfileVersionId':service['id'],'namespace':namespace,'placementMode':'AUTO','targetNodeId':None,'targetNodeName':None,
-            'maxConcurrentTasks':1,'startupSeconds':120,'drainSeconds':120}
+            'maxConcurrentTasks':spec['runtime']['maxConcurrentTasks'],'startupSeconds':120,'drainSeconds':120}
         # These rows represent the backup's controller history, not an actual Runner/VD claim protocol.
         pg.sql('BEGIN; INSERT INTO edgeai.vd_runtime(id,vd_id,generation,requested_revision,configuration,configuration_digest,namespace,pod_name,claim_nonce,desired_state,observed_state,startup_deadline,created_at,updated_at) VALUES ('+
             literal(vr)+'::uuid,'+literal(vd['id'])+'::uuid,1,0,'+literal(json.dumps(configuration))+'::jsonb,'+literal('sha256:'+hashlib.sha256(json.dumps(configuration).encode()).hexdigest())+','+
@@ -149,14 +154,19 @@ def main():
                 'securityContext':{'allowPrivilegeEscalation':False,'capabilities':{'drop':['ALL']}}}]}
         job=create({'apiVersion':'batch/v1','kind':'Job','metadata':{'namespace':namespace,'name':claimed_job,'labels':labels},
             'spec':{'backoffLimit':0,'template':{'metadata':{'labels':labels},'spec':pod_spec}}})
+        vd_spec=copy.deepcopy(pod_spec)
+        if args.vd_tasks:
+            second_container=copy.deepcopy(vd_spec['containers'][0]); second_container['name']='committed-worker'
+            vd_spec['containers'].append(second_container)
         create({'apiVersion':'v1','kind':'Pod','metadata':{'namespace':namespace,'name':vd_pod,
-            'labels':{PART:'edgeai',MANAGER:VD,'edgeai.io/vd-runtime-id':vr,'edgeai.io/vd-id':vd['id'],'edgeai.io/generation':'1'}},'spec':pod_spec})
+            'labels':{PART:'edgeai',MANAGER:VD,'edgeai.io/vd-runtime-id':vr,'edgeai.io/vd-id':vd['id'],'edgeai.io/generation':'1'}},'spec':vd_spec})
         deadline=time.monotonic()+150
         while time.monotonic()<deadline:
             pods=kube.items(namespace,'Pod')[0]
             if len(pods)==2 and all(p.get('status',{}).get('phase')=='Running' for p in pods):
-                if all(subprocess.run(kube.command+['-n',namespace,'exec',p['metadata']['name'],'--','python3','-c',
-                    "from pathlib import Path;import os;os.kill(int(Path('/tmp/child-ready').read_text()),0)"],capture_output=True,timeout=15).returncode==0 for p in pods): break
+                if all(subprocess.run(kube.command+['-n',namespace,'exec',p['metadata']['name'],'-c',c['name'],'--','python3','-c',
+                    "from pathlib import Path;import os;os.kill(int(Path('/tmp/child-ready').read_text()),0)"],capture_output=True,timeout=15).returncode==0
+                    for p in pods for c in p['spec']['containers']): break
             time.sleep(.3)
         else: raise AssertionError('Actual parent and child processes did not become ready')
         runner=next(p for p in pods if p['metadata']['labels'][MANAGER]==RUNTIME)
@@ -165,9 +175,53 @@ def main():
         pg.sql("UPDATE edgeai.runtime_instance SET observed_state='RUNNING',job_uid="+literal(job['metadata']['uid'])+'::uuid,producer_pod_uid='+literal(runner['metadata']['uid'])+
             '::uuid,node_uid='+literal(node['metadata']['uid'])+'::uuid,node_name='+literal(runner['spec']['nodeName'])+' WHERE id='+literal(runtime)+'::uuid',source)
         pg.sql("UPDATE edgeai.vd_runtime SET observed_state='SUBMITTED',pod_uid="+literal(vd_live['metadata']['uid'])+'::uuid,updated_at=now() WHERE id='+literal(vr)+'::uuid',source)
+        vd_work={}
+        if args.vd_tasks:
+            vd_node=kube.read('/api/v1/nodes/'+vd_live['spec']['nodeName'])
+            session=str(uuid.uuid4())
+            pg.sql("UPDATE edgeai.vd_runtime SET observed_state='READY',session_id="+literal(session)+'::uuid,node_uid='+
+                literal(vd_node['metadata']['uid'])+'::uuid,node_name='+literal(vd_live['spec']['nodeName'])+
+                ",lease_until=now()+interval '1 hour',ready_at=now(),updated_at=now() WHERE id="+literal(vr)+'::uuid',source)
+            def clone(table,origin,changes):
+                pg.sql('INSERT INTO edgeai.'+table+' SELECT (jsonb_populate_record(NULL::edgeai.'+table+',to_jsonb(t)||'+
+                    literal(json.dumps(changes))+'::jsonb)).* FROM edgeai.'+table+' t WHERE id='+literal(origin)+'::uuid',source)
+            for mode in ('completed','not-started','claimed','assigned','committed-open','unassigned'):
+                run_id,task_id,attempt_id,rid=[str(uuid.uuid4()) for _ in range(4)]
+                clone('workflow_run',run['id'],{'id':run_id,'mode':'VD','vd_id':vd['id'],'state':'RUNNING','idempotency_key':str(uuid.uuid4())})
+                clone('task',attempt['task_id'],{'id':task_id,'run_id':run_id,'initial_mode':'VD','initial_vd_id':vd['id'],'state':'RUNNING'})
+                clone('task_attempt',attempt['id'],{'id':attempt_id,'task_id':task_id,'mode':'VD','vd_id':vd['id'],'state':'DISPATCHING'})
+                pg.sql('INSERT INTO edgeai.runtime_instance(id,attempt_id,task_id,run_id,epoch,namespace,claim_nonce,desired_state,observed_state,expires_at,vd_id,created_at,updated_at) VALUES ('+
+                    ','.join(literal(v)+'::uuid' for v in (rid,attempt_id,task_id,run_id))+',1,'+literal(namespace)+','+literal(str(uuid.uuid4()))+
+                    "::uuid,'RUNNING','PENDING',now()+interval '1 hour',"+literal(vd['id'])+'::uuid,now(),now())',source)
+                vd_work[mode]={'runtime':rid,'task':task_id,'attempt':attempt_id,'run':run_id}
+                if mode=='unassigned': continue
+                aid=str(uuid.uuid4()); vd_work[mode]['allocation']=aid
+                pg.sql('INSERT INTO edgeai.vd_task_allocation(id,runtime_id,vd_id,vd_runtime_id,generation,session_id,pod_uid,slot,assigned_sequence,assigned_at) VALUES ('+
+                    ','.join(literal(v)+'::uuid' for v in (aid,rid,vd['id'],vr))+',1,'+literal(session)+'::uuid,'+literal(vd_live['metadata']['uid'])+
+                    '::uuid,'+str({'assigned':2,'committed-open':3}.get(mode,1))+',0,now())',source)
+                pg.sql("UPDATE edgeai.runtime_instance SET observed_state='SUBMITTED' WHERE id="+literal(rid)+'::uuid',source)
+                if mode in ('claimed','completed','committed-open'):
+                    pg.sql("UPDATE edgeai.runtime_instance SET observed_state='RUNNING',producer_pod_uid="+literal(vd_live['metadata']['uid'])+
+                        '::uuid,node_uid='+literal(vd_node['metadata']['uid'])+'::uuid,node_name='+literal(vd_live['spec']['nodeName'])+' WHERE id='+literal(rid)+'::uuid',source)
+                    pg.sql("UPDATE edgeai.task_attempt SET state='RUNNING' WHERE id="+literal(attempt_id)+'::uuid',source)
+                if mode in ('completed','not-started'):
+                    pg.sql("UPDATE edgeai.runtime_instance SET desired_state='STOPPED',observed_state='TERMINATED' WHERE id="+literal(rid)+'::uuid; '+
+                        'UPDATE edgeai.vd_task_allocation SET closed_at=now(),close_reason='+literal('PROCESS_EXIT' if mode=='completed' else 'NOT_STARTED')+
+                        ',completion_sequence=1,exit_code='+('0' if mode=='completed' else 'NULL')+' WHERE id='+literal(aid)+'::uuid',source)
+                if mode in ('completed','not-started','committed-open'):
+                    for table,row_id in [('task',task_id),('task_attempt',attempt_id),('workflow_run',run_id)]:
+                        pg.sql('UPDATE edgeai.'+table+' SET state='+literal('FAILED' if mode=='not-started' else 'SUCCEEDED')+' WHERE id='+literal(row_id)+'::uuid',source)
+                    if mode!='not-started':
+                        result_id=str(uuid.uuid4())
+                        # Immutable result fixture only: this test never claims a real S3 publication.
+                        pg.sql('BEGIN; INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,producer_pod_uid,vd_runtime_id,manifest_digest,created_at) VALUES ('+
+                            ','.join(literal(v)+'::uuid' for v in (result_id,task_id,attempt_id,rid))+',1,'+literal(vd_live['metadata']['uid'])+'::uuid,'+literal(vr)+
+                            '::uuid,'+literal('sha256:'+'a'*64)+',now()); INSERT INTO edgeai.result_artifact(id,result_id,port,bucket,object_key,object_version,sha256,bytes,media_type) VALUES ('+
+                            literal(str(uuid.uuid4()))+'::uuid,'+literal(result_id)+"::uuid,'output','fixture-only',"+literal('fixture/'+mode)+",'fixture-version',"+literal('b'*64)+
+                            ",1,'application/json'); UPDATE edgeai.task_result SET committed=true WHERE id="+literal(result_id)+'::uuid; COMMIT',source)
         backup(pg,source,work/'backup')
         targets=[]
-        for _ in range(3):
+        for _ in range(4 if args.vd_tasks else 3):
             database='edgeai_restore_kret_'+uuid.uuid4().hex
             restoring=Postgres(args.transport,diagnostics=work/('restore-'+uuid.uuid4().hex))
             restored=restore(restoring,work/'backup',database); owned[database]=restored['databaseOid']
@@ -176,7 +230,8 @@ def main():
         drop(source); report['sourceDatabaseRemovedBeforeRecovery']=True
         db,receipt=targets[0]; second,receipt2=targets[1]
         original=fingerprints(db); other=fingerprints(second); assert len(original)==43
-        passed('real-running-parent-child-containers-backed-up-restored-three-times-and-source-database-removed')
+        closures_before=pg.sql("SELECT to_jsonb(a)::text FROM edgeai.vd_task_allocation a WHERE closed_at IS NOT NULL ORDER BY id",db)
+        passed('real-running-parent-child-containers-backed-up-to-isolated-restores-and-source-database-removed')
 
         extra_vr=str(uuid.uuid4())
         unbound=copy.deepcopy(pod_spec)
@@ -192,11 +247,13 @@ def main():
         actual=kube.items(namespace,'Pod')[0]
         bound=[p for p in actual if p['spec'].get('nodeName')]
         assert len(actual)==3 and len(bound)==2
-        assert all(p['status']['containerStatuses'][0]['state']['terminated']['message']=='CHILD_REAPED' for p in bound)
+        assert all(c['state']['terminated']['message']=='CHILD_REAPED' for p in bound for c in p['status']['containerStatuses'])
         assert all(termination_proof(p)['kind']=='ALL_CONTAINERS_TERMINATED' for p in bound)
         assert sum(termination_proof(p)['kind']=='NEVER_BOUND_TO_NODE' for p in actual)==1
-        report.update(terminatedContainers=2,reapedChildren=2,unboundPostBackupPods=1)
-        passed('actual-quota-and-retained-pod-evidence-prove-two-parents-and-children-terminated')
+        count=sum(len(p['spec']['containers']) for p in bound)
+        assert count==(3 if args.vd_tasks else 2)
+        report.update(terminatedContainers=count,reapedChildren=count,unboundPostBackupPods=1)
+        passed('actual-quota-and-retained-pod-evidence-prove-all-parent-and-child-processes-terminated')
 
         refused(options(db,receipt,namespace_uid=str(uuid.uuid4())),1)
         invalid=copy.deepcopy(stopped)
@@ -220,6 +277,19 @@ def main():
         pg.sql('UPDATE edgeai.runtime_instance SET producer_pod_uid='+literal(runner['metadata']['uid'])+'::uuid WHERE id='+literal(runtime)+'::uuid',db)
         assert fingerprints(db)==original
         passed('restored-claimed-producer-uid-conflict-refused-without-adopting-replacement')
+        if args.vd_tasks:
+            rid=vd_work['claimed']['runtime']
+            pg.sql('UPDATE edgeai.runtime_instance SET node_uid='+literal(str(uuid.uuid4()))+'::uuid WHERE id='+literal(rid)+'::uuid',db)
+            refused(options(db,receipt))
+            pg.sql('UPDATE edgeai.runtime_instance SET node_uid='+literal(vd_node['metadata']['uid'])+'::uuid WHERE id='+literal(rid)+'::uuid',db)
+            assert fingerprints(db)==original
+            passed('claimed-vd-task-node-identity-conflict-rejects-all-retirement')
+            rid=vd_work['completed']['runtime']
+            pg.sql("UPDATE edgeai.runtime_instance SET desired_state='RUNNING',observed_state='RUNNING' WHERE id="+literal(rid)+'::uuid',db)
+            refused(options(db,receipt))
+            pg.sql("UPDATE edgeai.runtime_instance SET desired_state='STOPPED',observed_state='TERMINATED' WHERE id="+literal(rid)+'::uuid',db)
+            assert fingerprints(db)==original
+            passed('closed-allocation-with-reactivated-runtime-is-refused-without-rewriting-immutable-result')
 
         a=options(db,receipt); a.output.mkdir(mode=0o700); plan=prepare(pg,a)
         pg.sql('UPDATE edgeai.runtime_command SET attempts=attempts+1 WHERE runtime_id='+literal(runtime)+'::uuid',db)
@@ -244,6 +314,25 @@ def main():
         pg.sql('UPDATE edgeai.runtime_command SET attempts=attempts-1 WHERE runtime_id='+literal(runtime)+'::uuid',db)
         assert fingerprints(db)==original
         passed('locked-transaction-guard-detects-writer-after-live-inventory')
+        if args.vd_tasks:
+            race_db,race_receipt=targets[3]
+            a=options(race_db,race_receipt); a.output.mkdir(mode=0o700); plan=prepare(pg,a)
+            raced_before=fingerprints(race_db)
+            allocation_id=str(uuid.uuid4()); pending_runtime=vd_work['unassigned']['runtime']
+            class AllocationWriter:
+                def call(self,*positional,**keywords):
+                    if keywords.get('source') is not None:
+                        pg.sql('INSERT INTO edgeai.vd_task_allocation(id,runtime_id,vd_id,vd_runtime_id,generation,session_id,pod_uid,slot,assigned_sequence,assigned_at) VALUES ('+
+                            ','.join(literal(v)+'::uuid' for v in (allocation_id,pending_runtime,vd['id'],vr))+',1,'+literal(session)+'::uuid,'+
+                            literal(vd_live['metadata']['uid'])+'::uuid,4,0,now())',race_db)
+                    return pg.call(*positional,**keywords)
+            try: apply(AllocationWriter(),a,plan)
+            except RuntimeError: pass
+            else: raise AssertionError('Concurrent VD allocation insert was accepted')
+            raced_after=fingerprints(race_db)
+            assert {k for k in raced_before if raced_after[k]!=raced_before[k]}=={'vd_task_allocation'}
+            assert pg.sql('SELECT count(*) FROM edgeai.vd_task_allocation WHERE id='+literal(allocation_id)+'::uuid AND closed_at IS NULL',race_db)=='1'
+            passed('actual-allocation-only-insert-after-live-inventory-refuses-stale-retirement-and-preserves-new-assignment')
 
         a=options(db,receipt); a.output.mkdir(mode=0o700); plan=prepare(pg,a)
         class MarkerWriter:
@@ -259,15 +348,16 @@ def main():
         passed('database-identity-is-rechecked-inside-locked-transaction')
 
         locker=None; locker_name='kret-lock-'+uuid.uuid4().hex
+        lock_table='vd_task_allocation' if args.vd_tasks else 'vd_runtime_binding'
         try:
             with private_file(work/'lock-holder.log') as output:
                 locker=subprocess.Popen(pg.prefix+[pg.binaries['psql']]+pg.connection+['--dbname',db,
                     '-X','-q','-v','ON_ERROR_STOP=1','-c',
-                    'BEGIN; LOCK TABLE edgeai.vd_runtime_binding IN ROW EXCLUSIVE MODE; SELECT pg_sleep(60); COMMIT;'],
+                    'BEGIN; LOCK TABLE edgeai.'+lock_table+' IN ROW EXCLUSIVE MODE; SELECT pg_sleep(60); COMMIT;'],
                     env={**pg.env,'PGAPPNAME':locker_name},stdout=output,stderr=output)
             deadline=time.monotonic()+5
             while pg.sql("SELECT EXISTS(SELECT FROM pg_locks l JOIN pg_stat_activity a USING(pid) WHERE a.application_name="+
-                literal(locker_name)+" AND l.relation='edgeai.vd_runtime_binding'::regclass AND l.mode='RowExclusiveLock' AND l.granted)",db)!='t':
+                literal(locker_name)+" AND l.relation='edgeai."+lock_table+"'::regclass AND l.mode='RowExclusiveLock' AND l.granted)",db)!='t':
                 assert time.monotonic()<deadline and locker.poll() is None
                 time.sleep(.05)
             refused(options(db,receipt),1)
@@ -275,7 +365,7 @@ def main():
             if locker is not None:
                 pg.sql('SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name='+literal(locker_name),db)
                 locker.wait(timeout=10)
-        passed('real-competing-vd-binding-lock-times-out-without-partial-write')
+        passed('real-competing-vd-table-lock-times-out-without-partial-write')
 
         pg.sql("CREATE FUNCTION edgeai.reject_recovery_binding() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected binding failure'; END $$; "
             "CREATE TRIGGER reject_recovery_binding BEFORE UPDATE ON edgeai.vd_runtime_binding FOR EACH ROW EXECUTE FUNCTION edgeai.reject_recovery_binding()",db)
@@ -283,20 +373,43 @@ def main():
         assert fingerprints(db)==original
         pg.sql('DROP TRIGGER reject_recovery_binding ON edgeai.vd_runtime_binding; DROP FUNCTION edgeai.reject_recovery_binding()',db)
         passed('late-vd-binding-error-rolls-back-runtime-and-command-updates-together')
+        if args.vd_tasks:
+            pg.sql("CREATE FUNCTION edgeai.reject_allocation_closure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected allocation failure'; END $$; "
+                "CREATE TRIGGER reject_allocation_closure BEFORE UPDATE ON edgeai.vd_task_allocation FOR EACH ROW EXECUTE FUNCTION edgeai.reject_allocation_closure()",db)
+            refused(options(db,receipt),1)
+            assert fingerprints(db)==original
+            pg.sql('DROP TRIGGER reject_allocation_closure ON edgeai.vd_task_allocation; DROP FUNCTION edgeai.reject_allocation_closure()',db)
+            passed('late-allocation-closure-failure-rolls-back-supervisor-binding-child-runtime-and-command-writes')
 
         completed=cli(options(db,receipt)); after=fingerprints(db)
         assert {k:completed[k] for k in ('runtimesRetired','vdRuntimesRetired','commandsCompleted','bindingsClosed')}=={
             'runtimesRetired':1,'vdRuntimesRetired':1,'commandsCompleted':4,'bindingsClosed':1}
-        assert not completed['unresolved'] and not completed['activated'] and not completed['globalQuiescenceProven']
+        assert len(completed['unresolved'])==(1 if args.vd_tasks else 0) and not completed['activated'] and not completed['globalQuiescenceProven']
         changed={'runtime_instance','runtime_command','vd_runtime','vd_runtime_command','vd_runtime_binding'}
+        if args.vd_tasks: changed.add('vd_task_allocation')
         assert all(original[t]==after[t] for t in original if t not in changed) and fingerprints(second)==other
         for table in ('runtime_command','vd_runtime_command'):
             assert pg.sql('SELECT count(*) FROM edgeai.'+table+' WHERE NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL OR attempts<>3',db)=='0'
         for table in ('runtime_instance','vd_runtime'):
-            assert pg.sql("SELECT count(*) FROM edgeai."+table+" WHERE desired_state<>'STOPPED' OR observed_state<>'TERMINATED'",db)=='0'
+            assert pg.sql("SELECT count(*) FROM edgeai."+table+" WHERE desired_state<>'STOPPED' OR observed_state<>'TERMINATED'",db)==('1' if args.vd_tasks and table=='runtime_instance' else '0')
         assert completed['objectsAbsentFromDatabase']==1
-        report.update(runtimesRetired=1,vdRuntimesRetired=1,commandsCompleted=4,bindingsClosed=1,preservedTables=38,restoredDatabases=3)
-        passed('atomic-runtime-vd-command-and-binding-retirement-preserves-38-tables-and-other-restored-database')
+        report.update(runtimesRetired=1,vdRuntimesRetired=1,commandsCompleted=4,bindingsClosed=1,preservedTables=43-len(changed),restoredDatabases=len(targets))
+        passed('atomic-runtime-vd-command-and-binding-retirement-preserves-other-tables-and-other-restored-database')
+        if args.vd_tasks:
+            assert completed['vdTaskRuntimesRetired']==3 and completed['allocationsClosed']==3
+            assert completed['unresolved'][0]['reason']=='VD_ALLOCATION_NOT_RECORDED'
+            assert completed['unresolved'][0]['id']==vd_work['unassigned']['runtime']
+            assert pg.sql("SELECT to_jsonb(a)::text FROM edgeai.vd_task_allocation a WHERE close_reason<>'POD_GONE' ORDER BY id",db)==closures_before
+            assert pg.sql("SELECT count(*) FROM edgeai.vd_task_allocation WHERE close_reason='POD_GONE' AND completion_sequence IS NULL AND exit_code IS NULL",db)=='3'
+            assert pg.sql("SELECT count(*) FROM edgeai.task_result WHERE committed AND producer_kind='VD'",db)=='2'
+            assert pg.sql("SELECT count(*) FROM edgeai.runtime_command c JOIN edgeai.runtime_instance r ON r.id=c.runtime_id WHERE r.runtime_kind='VD'",db)=='0'
+            assert pg.sql("SELECT count(*) FROM edgeai.runtime_instance WHERE runtime_kind='VD' AND job_name IS NOT NULL",db)=='0'
+            report.update(vdTaskFixtures=6,vdTaskRuntimesRetired=3,allocationsClosed=3,existingClosuresPreserved=2,immutableResultFixtures=2,unassignedTasksPreserved=1)
+            passed('claimed-and-unclaimed-VD-assignments-close-without-inventing-exit-code-result-or-job')
+            passed('existing-process-exit-not-started-sealed-result-and-unassigned-work-history-remain-unchanged')
+            assert pg.sql("SELECT state FROM edgeai.task WHERE id="+literal(vd_work['committed-open']['task'])+'::uuid',db)=='SUCCEEDED'
+            assert pg.sql("SELECT close_reason FROM edgeai.vd_task_allocation WHERE id="+literal(vd_work['committed-open']['allocation'])+'::uuid',db)=='POD_GONE'
+            passed('committed-success-with-open-allocation-is-retired-only-with-physical-evidence-and-result-preserved')
         replay=cli(options(db,receipt)); assert not replay['databaseModified'] and fingerprints(db)==after
         assert len(kube.items(namespace,'Pod')[0])==3
         assert kube.read(object_path('ResourceQuota',namespace,FENCE))['metadata']['uid']==stopped['quotaUid']
@@ -320,11 +433,13 @@ def main():
         pg.sql("UPDATE edgeai.runtime_instance SET producer_pod_uid=NULL,node_uid=NULL,node_name=NULL,observed_state='SUBMITTED' WHERE id="+literal(runtime)+'::uuid',third)
         pending=fingerprints(third)
         unresolved=cli(options(third,receipt3))
-        assert unresolved['runtimesRetired']==0 and unresolved['vdRuntimesRetired']==1 and len(unresolved['unresolved'])==1
-        assert unresolved['unresolved'][0]['reason']=='JOB_OR_CLAIMED_PRODUCER_NOT_PROVEN'
-        assert unresolved['unresolved'][0]['alreadyTerminal'] is False
+        assert unresolved['runtimesRetired']==0 and unresolved['vdRuntimesRetired']==1 and len(unresolved['unresolved'])==(2 if args.vd_tasks else 1)
+        missing=next(r for r in unresolved['unresolved'] if r['kind']=='runtimes')
+        assert missing['reason']=='JOB_OR_CLAIMED_PRODUCER_NOT_PROVEN' and missing['alreadyTerminal'] is False
         later=fingerprints(third)
-        assert later['runtime_instance']==pending['runtime_instance'] and later['runtime_command']==pending['runtime_command']
+        assert later['runtime_command']==pending['runtime_command']
+        assert pg.sql("SELECT observed_state FROM edgeai.runtime_instance WHERE id="+literal(runtime)+'::uuid',third)=='SUBMITTED'
+        if not args.vd_tasks: assert later['runtime_instance']==pending['runtime_instance']
         assert pg.sql("SELECT count(*) FROM edgeai.runtime_command WHERE NOT completed AND lease_owner IS NOT NULL",third)=='2'
         passed('unrecorded-claimed-producer-remains-unresolved-with-pending-commands-preserved')
 
