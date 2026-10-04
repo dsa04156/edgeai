@@ -44,6 +44,8 @@ jobs:
         run: bash scripts/collect-evidence.sh health bash scripts/test-profiles-stack.sh compose
       - name: Verify load measurement and acceptance classification
         run: bash scripts/collect-evidence.sh load-acceptance bash scripts/test-load-acceptance.sh
+      - name: Verify PostgreSQL backup and isolated restore with matching container clients
+        run: bash scripts/collect-evidence.sh postgres-backup bash scripts/test-postgres-backup.sh --transport compose --report docs/evidence/runs/postgres-backup-report.json
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh

@@ -2,6 +2,12 @@
 
 [STATUS]
 현재 M7 다중 장치 DAG/스트리밍을 진행한다. M0–M4·M6 완료, M5 잔여/M8–M10 미완료다.
+독립 M9 DB 백업·새 DB 복원을 ADR0059로 구현했다. PostgreSQL16/실제 패키징 API의10개
+사례가 PASS(010138Z-7ebea0c3):41테이블·Flyway 이력34행·API 조회·불변 제약·백업 후 쓰기
+분리·기존 DB/손상/파일 권한 거절·실제 pg_restore 오류 정리·경고 dump 미발행을 확인했다.
+소유 DB/API를 정리했고 원본 archive/SQL 로그는 비공개다. Compose17 CI 게이트를 추가했으나
+원격 통과는 후속 확인한다. docs/evidence/m9-postgres-backup.md, docs/m9-requirements.md.
+DB만의 복원이며 S3/키/journal·외부 실행의 일치·RBAC/감사·전체 M9 수용은 남는다.
 ADR0057의 독립 M8 관리 부하 측정을 병행했다. 실제 API/전용 PG DB에서100→300→1,000대,
 각60초·11/33/110RPS·9,240요청의 오류/누락0, 정확한 관측/세션·재접속·자원 정리를 확인했다
 (234836Z-e9dbbb5f). 예정 시각 기준 p95는65.54/53.28/54.64ms다. 단위3개와 실제 API/DB의

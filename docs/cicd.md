@@ -107,3 +107,11 @@ Runner와 MinIO job은 각각 시험한 로컬 컨테이너를 main push에서�
 scaffold/storage/runner/images가 통과하면 gitops가 API·Dashboard 배포 pin과 함께
 Runner·MinIO digest를 `release.json`에 기록한다. 현재 참조 runtime 이미지 검증 플랫폼은
 linux/amd64다. Runner/MinIO digest 등록만으로 실제 실행 기능이 활성화되지는 않는다.
+
+## M9 DB 복원 게이트
+
+scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비스 내부의
+동일 major pg_dump/pg_restore를 사용한다. 별도 DB와 API를 만들고 백업·격리 복원·거절·정리를
+검증한다. 실패하면 이미지 발행이 차단된다. `postgres-backup-report.json`과 evidence의
+시험 결과만 업로드하며 원본 dump·manifest·API/SQL 로그는 `.tools`에 남겨 업로드에서 제외한다.
+[범위와 실행법](postgres-backup.md). 이 게이트는 전체 플랫폼 재해 복구를 대신하지 않는다.
