@@ -59,7 +59,7 @@ def main():
         with private_file(work/(name+'-'+uuid.uuid4().hex+'.log')) as log:
             proc=subprocess.Popen([str(a.minio_binary.resolve()),'server',str(work/(name+'-data')),'--address','127.0.0.1:'+str(port),
                 '--console-address','127.0.0.1:'+str(console_port),'--certs-dir',str(work/(name+'-certs')),'--quiet'],stdout=log,stderr=log,
-                env={**os.environ,'MINIO_ROOT_USER':user,'MINIO_ROOT_PASSWORD':password})
+                env={**os.environ,'MINIO_ROOT_USER':user,'MINIO_ROOT_PASSWORD':password,'MINIO_SCANNER_SPEED':'slowest'})
         processes.append(proc)
         tls=ssl.create_default_context(cafile=str(work/'ca.crt'));deadline=time.monotonic()+30
         while time.monotonic()<deadline:
@@ -87,9 +87,9 @@ def main():
         assert len(manifest['versions'])==4 and manifest['sourceDeploymentId']!=manifest['targetDeploymentId']
         assert all((bundle/name).stat().st_mode & 0o077==0 for name in ['manifest.json','backup-report.json'])
         backup=json.loads((bundle/'backup-report.json').read_text())
-        assert backup['ownedRulesRemoved'] and backup['status']=='BACKED_UP_OBJECT_VERSIONS'
+        assert backup['ownedRulesRemoved'] and backup['status']=='BACKED_UP_OBJECT_VERSIONS' and backup['resyncsStarted']==1
         cli('verify',bundle)
-        report.update(versionCount=4,bytes=backup['bytes'],tls=True,
+        report.update(versionCount=4,bytes=backup['bytes'],tls=True,scannerSpeed='slowest',explicitResyncsStarted=1,
             minioBinarySha256=hashlib.sha256(a.minio_binary.read_bytes()).hexdigest())
         passed('actual TLS replication preserves historical and current version IDs, empty/Unicode objects and SHA-256 bytes')
         before_files=sorted(p.name for p in bundle.iterdir())
@@ -110,6 +110,10 @@ def main():
             '--priority','1','--replicate','existing-objects','--disable-proxy','--sync'])
         before=mc(['replicate','export','origin/edgeai-backup-test']).stdout
         cli('backup',work/'preexisting-replication',1)
+        assert mc(['replicate','export','origin/edgeai-backup-test']).stdout==before
+        refused_resync=work/'unowned-resync';refused_resync.mkdir(mode=0o700)
+        check_resync="import sys;from pathlib import Path;sys.path.insert(0,'scripts');from storage_backup import Client;Client(Path(sys.argv[1]),source=True).start_owned_resync('edgeai-backup-test','not-the-created-rule')"
+        run([sys.executable,'-c',check_resync,str(refused_resync)],expected=1)
         assert mc(['replicate','export','origin/edgeai-backup-test']).stdout==before
         mc(['replicate','remove','origin/edgeai-backup-test','--all','--force'])
         passed('preexisting replication configuration is refused and preserved')

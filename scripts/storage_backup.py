@@ -149,6 +149,19 @@ class Client:
         self.call(['replicate','remove','origin/'+bucket,'--all','--force'])
         if self.configuration(bucket) is not None or self.remote_target_arns(bucket): raise RuntimeError('Owned replication configuration remains')
 
+    def start_owned_resync(self, bucket, rule_id):
+        current = self.configuration(bucket)
+        if current is None or len(current['Rules']) != 1 or current['Rules'][0]['ID'] != rule_id:
+            raise RuntimeError('Replication configuration changed before owned resync')
+        rule = current['Rules'][0]
+        target = rule['Destination']['Bucket']
+        if (rule.get('Status') != 'Enabled' or rule.get('ExistingObjectReplication',{}).get('Status') != 'Enabled' or
+                self.remote_target_arns(bucket) != {target}):
+            raise RuntimeError('Owned existing-object replication target is not uniquely enabled')
+        # Existing versions must not wait for a background scanner cycle. The
+        # explicitly selected target was created by this backup and is checked again.
+        self.call(['replicate','resync','start','origin/'+bucket,'--remote-bucket',target])
+
 
 def validate_manifest(manifest):
     if manifest.get('formatVersion') != 1 or manifest.get('scope') != 'minio-object-versions':
@@ -181,7 +194,7 @@ def backup(client, buckets, timeout):
         for item in client.versions('origin',bucket):
             item['sha256'] = client.digest('origin',item)
             inventory.append(item)
-    report = {'status':'RUNNING','scope':'minio-object-versions','createdBuckets':[],'ownedRulesRemoved':False}
+    report = {'status':'RUNNING','scope':'minio-object-versions','createdBuckets':[],'ownedRulesRemoved':False,'resyncsStarted':0}
     rules = []
     manifest = {'formatVersion':1,'scope':'minio-object-versions','sourceDeploymentId':source_id,
         'targetDeploymentId':target_id,'buckets':buckets,'versions':inventory,
@@ -196,6 +209,8 @@ def backup(client, buckets, timeout):
             rules.append((bucket,rule_id))
             client.call(['replicate','add','origin/'+bucket,'--remote-bucket','replica/'+bucket,'--id',rule_id,
                          '--priority','1','--replicate','existing-objects','--disable-proxy','--sync'])
+            client.start_owned_resync(bucket,rule_id)
+            report['resyncsStarted'] += 1
         deadline = time.monotonic()+timeout
         for item in inventory:
             while True:

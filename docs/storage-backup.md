@@ -4,6 +4,12 @@
 SHA-256을 대조한다. `verify-storage-backup.sh`는 source가 없어도 backup의 같은 버전을 읽어
 검증한다. [DB 백업](postgres-backup.md)과 연결한 전체 서비스 복구 판정은 아직 별도다.
 
+생성한 sole replication rule과 remote target의 소유를 다시 대조한 뒤 해당 ARN으로
+명시적 resync를 시작한다. 백그라운드 scanner가 기존 객체를 다시 발견하기를 기다리지
+않으며, 모든 고정 버전의 실제 bytes/SHA 검증과 소유 규칙 정리 후에 성공을 기록한다.
+`backup-report.json`의 `resyncsStarted`는 접수 수다.
+[ADR0098](adr/0098-explicit-owned-storage-resync.md)을 따른다.
+
 ## 준비
 
 ```bash
@@ -19,6 +25,7 @@ rule 없이 남은 remote target도 기존 설정으로 취급해 거절한다. 
 
 권한에는 양쪽 서버 식별 조회, source 버전 읽기·replication 설정, target bucket 생성·versioning·
 replica 쓰기·고정 버전 읽기가 필요하다. 백업 설정 변경은 다른 관리자와 직렬화한다.
+source에서 MinIO의 기존 버전 resync를 시작할 권한도 필요하다.
 동일 호스트의 이 CLI는 source URL별 lock을 사용하지만 다른 호스트와의 분산 lock은 아니다.
 
 아래 환경 변수는 권한0600의 별도 파일에 보관한 후 shell 환경으로 읽는다. 저장소의 일반
