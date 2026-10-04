@@ -15,6 +15,9 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 | 파일·상태·키 복원 | ADR0060 버전 보존과 ADR0061 복원 DB 전체 result/checkpoint 참조의 실제 TLS S3 대조·원본 유실 시험 | 배포 환경 결합 복원, Secret/CA와 broker·장치 journal, 외부 producer 재조정·활성화 |
 | 종합 장애 수용 | 구성 요소별 실제 PostgreSQL/S3/TLS/Kubernetes 회귀 | `test-fault.sh`의 종합 장애 게이트·허용 데이터 유실과 복구 시간 측정 |
 
+ADR0063의 [Kubernetes 복구 점검](recovery-kubernetes.md)은 DB에 없는 실행까지 조회하고
+UID·소유 충돌을 구분한다. 실제 DB/클러스터 메타데이터 검증은 완료했으며 실행 회수는 후속이다.
+
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,
 고정 S3 version/checksum·checkpoint가 보존되는지 확인한 다음 서비스를 활성화해야 한다.

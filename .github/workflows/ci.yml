@@ -27,6 +27,8 @@ jobs:
           cache: pnpm
       - run: bash scripts/bootstrap.sh
       - run: bash scripts/preflight.sh local
+      - name: Verify recovery Kubernetes inventory classification and list boundaries
+        run: python3 scripts/test-recovery-kubernetes.py
       - run: bash scripts/dev-up.sh
       - name: Verify real TLS broker authority and revocation
         run: |
