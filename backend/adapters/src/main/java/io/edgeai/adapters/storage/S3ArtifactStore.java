@@ -15,12 +15,13 @@ import java.util.*;
 import okhttp3.OkHttpClient;
 
 /** Fixed-bucket, version-bound artifact verification; never trusts ETag or user SHA metadata. */
-public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, AutoCloseable {
+public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, AutoCloseable {
     private static final int EXPIRY_SECONDS = 600;
     private final MinioClient client, signer;
     private final String bucket;
     private final Clock clock;
     private final S3RuntimeStartJournal starts;
+    private final S3RuntimeResultJournal results;
     public S3ArtifactStore(String endpoint, String runnerEndpoint, String accessKey, String secretKey, String bucket, Clock clock) {
         validateEndpoint(endpoint); validateEndpoint(runnerEndpoint);
         if (bucket == null || !bucket.matches("[a-z0-9][a-z0-9-]{1,61}[a-z0-9]")) throw new IllegalArgumentException("Invalid artifact bucket");
@@ -31,6 +32,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
         client = MinioClient.builder().endpoint(endpoint).credentials(accessKey, secretKey).region("us-east-1").httpClient(http, true).build();
         signer = MinioClient.builder().endpoint(runnerEndpoint).credentials(accessKey, secretKey).region("us-east-1").build();
         starts=new S3RuntimeStartJournal(client,bucket);
+        results=new S3RuntimeResultJournal(client,bucket);
     }
     private static void validateEndpoint(String value) {
         URI uri = URI.create(value);
@@ -39,6 +41,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
             throw new IllegalArgumentException("Storage endpoint must be an HTTP(S) origin without credentials");
     }
     @Override public void retainStart(io.edgeai.domain.runtime.RuntimeStartAuthority authority){starts.retainStart(authority);}
+    @Override public void retainResult(io.edgeai.domain.runtime.RuntimeResultAuthority authority){results.retainResult(authority);}
     @Override public ArtifactGrant upload(ArtifactContent expected) {
         try {
             if (client.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(bucket).build()).status() != VersioningConfiguration.Status.ENABLED)

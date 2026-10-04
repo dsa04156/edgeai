@@ -272,8 +272,8 @@ def check(pg,db,receipt,options,retire_cli,fingerprints,passed,work,fixture,repo
         else:assert actual==before_op
     assert row('runtime_instance',pending['target']['runtime'])==old_pending
     assert all(row('runtime_instance',fixtures['to-node']['target']['runtime'])[k] is None for k in ('producer_pod_uid','node_uid','node_name'))
-    passed('actual-mixed-commit-reply-loss-replays-with-zero-changes-and-preserves-37-tables-source-history-and-successful-remote-work')
+    passed('actual-mixed-commit-reply-loss-replays-with-zero-changes-and-preserves-38-tables-source-history-and-successful-remote-work')
     report.update(mixedRemoteOffloadsVerified=True,mixedRemoteAllocations=6,mixedRemoteStartTimeouts=2,
-        mixedRemoteCancellations=1,mixedRemoteSuccessesPending=1,mixedRemotePreservedTables=37)
+        mixedRemoteCancellations=1,mixedRemoteSuccessesPending=1,mixedRemotePreservedTables=38)
     from test_recovery_mixed_outcomes import check as check_outcomes
     check_outcomes(pg,db,receipt,opts,cli,fingerprints,passed,work,fixture,row,report)

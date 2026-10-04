@@ -362,7 +362,7 @@ def main():
         report.update(publicStreamRun=True,restoredDatabases=(6+len(offload_fixture['targets']) if args.offloads else 5)+2*int(args.finalizers),groupMembers=2,
             terminatedContainers=4 if args.offloads else 2,reapedChildren=4 if args.offloads else 2,
             retriesExpired=2,tasksCancelled=2,tasksSkipped=1,runsReconciled=2,pendingRetriesPreserved=2,
-            preservedTables=40,checkpointsPreserved=2,storageVersionsPreserved=2,noNewAttempts=True,image=image,imageSourceRevision=revision,
+            preservedTables=41,checkpointsPreserved=2,storageVersionsPreserved=2,noNewAttempts=True,image=image,imageSourceRevision=revision,
             minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest(),
             apiJarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code=0

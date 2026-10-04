@@ -138,7 +138,7 @@ def check(pg, db, receipt, options, fingerprints, passed, work, vd_work, kube_at
     assert pg.sql('SELECT state FROM edgeai.task_attempt WHERE id='+q(fixtures['expired']['attempt']),db)=='OFFLOADED'
     assert pg.sql('SELECT coalesce(failure_reason,\'NONE\') FROM edgeai.runtime_instance WHERE id='+q(fixtures['expired']['runtime']),db)=='NONE'
     assert pg.sql('SELECT state||\':\'||failure_reason FROM edgeai.task_offload WHERE id='+q(fixtures['expired']['operation']),db)=='FAILED:SOURCE_DRAIN_TIMEOUT'
-    passed('two-recorded-cancellations-and-one-original-drain-expiry-preserve-source-attempts-targets-39-tables-and-the-future-operation')
+    passed('two-recorded-cancellations-and-one-original-drain-expiry-preserve-source-attempts-targets-40-tables-and-the-future-operation')
     passed('actual-offload-commit-reply-loss-retains-intent-and-replays-without-new-attempt-or-deadline')
 
     pg.sql("UPDATE edgeai.task_offload SET created_at=created_at-interval '1 hour',drain_deadline=drain_deadline-interval '1 hour' WHERE id="+q(future['operation']),db)
@@ -147,4 +147,4 @@ def check(pg, db, receipt, options, fingerprints, passed, work, vd_work, kube_at
     assert not cli(options(db,receipt))['databaseModified'] and fingerprints(db)==aged
     passed('future-drain-eventually-expires-under-the-recorded-budget-and-ordinary-workflow-recovery-accepts-the-offloaded-failed-history')
     report.update(offloadCases=True,offloadOperationsCancelled=2,offloadOperationsExpired=2,
-        offloadUnknownTargetsPreserved=1,offloadPreservedTables=39)
+        offloadUnknownTargetsPreserved=1,offloadPreservedTables=40)

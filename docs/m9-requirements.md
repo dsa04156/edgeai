@@ -134,6 +134,13 @@ ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접�
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
 검증한다. 운영 사용자별 역할·외부 감사·보관 정책 및 전체 M9 수용은 포함하지 않는다.
 
+ADR0103의 [Kubernetes Result 기록](evidence/m9-kubernetes-result-journal.md)은 DB seal과
+영속 발행 큐를 한 transaction에 저장하고 확정 후 S3에 원래 결과 신원·출력 버전을 보존한다.
+새9개에서 응답 유실·실제 연결 실패·Pod 정리/lease 만료·동시 발행·DB rollback·업그레이드
+backfill을 검증했고, 실제 Kubernetes3개에서6개 결과 기록과 pending0을 확인했다.
+V35 백업13/참조9/기존 시작 기록 복구91개도 통과했다. 이 기록을 복원 DB에 소비하는 경로,
+원본 API/writer 차단과 종합 재활성화·실제 외부 계약 수용은 남는다.
+
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,
 고정 S3 version/checksum·checkpoint가 보존되는지 확인한 다음 서비스를 활성화해야 한다.

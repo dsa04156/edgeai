@@ -136,7 +136,7 @@ def check(pg,db,options,cli,fingerprints,passed,fixture,row,report,result_args):
     else:raise AssertionError('Actual success write error was not observed')
     pg.sql('DROP TRIGGER reject_start_recovery ON edgeai.task_offload; DROP FUNCTION edgeai.reject_start_recovery()',db)
     assert fingerprints(db)==pristine and not (a.output/'workflows.json').exists()
-    passed('actual-late-transfer-write-error-preserves-all-43-tables-and-original-admission-receipt')
+    passed('actual-late-transfer-write-error-preserves-all-44-tables-and-original-admission-receipt')
 
     a=opts();a.output.mkdir(mode=0o700);plan=workflows.prepare(pg,a);committed={}
     def lost_reply(tool,arguments,*args,**kwargs):
@@ -155,7 +155,7 @@ def check(pg,db,options,cli,fingerprints,passed,fixture,row,report,result_args):
     assert row('runtime_instance',pending['source']['runtime'])==original_source and row('task_attempt',target['attempt'])==original_attempt
     replay=cli(opts());assert not replay['databaseModified'] and replay['offloadsCompleted']==0 and not replay['activated']
     assert replay['remoteEvidence']['startReceipts']==receipts and fingerprints(db)==after and provider.rows()==provider_before
-    passed('actual-success-commit-reply-loss-replays-with-zero-changes-and-preserves-42-tables-original-deadline-and-stopped-producers')
+    passed('actual-success-commit-reply-loss-replays-with-zero-changes-and-preserves-43-tables-original-deadline-and-stopped-producers')
 
     # Only after authority reconciliation may the existing fixed-version S3 protocol commit a Result.
     a=result_args;store=storage.Storage(a);plan=results.prepare(pg,store,a)
@@ -171,4 +171,4 @@ def check(pg,db,options,cli,fingerprints,passed,fixture,row,report,result_args):
     passed('actual-fixed-version-s3-result-commits-once-after-start-authority-reconciliation-without-new-executions-or-activation')
     report.update(remoteStartReceiptsVerified=True,remoteStartReceiptsObserved=1,remoteStartMissingReceipts=5,
         remoteStartObservationRejections=len(variants),remoteStartTransfersCompleted=1,remoteStartResultsCreated=1,
-        remoteStartPreservedTables=42,remoteStartActivation=False,mixedRemoteSuccessesPending=0)
+        remoteStartPreservedTables=43,remoteStartActivation=False,mixedRemoteSuccessesPending=0)

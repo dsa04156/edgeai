@@ -127,7 +127,7 @@ def check(pg,db,receipt,options,cli,fingerprints,passed,work,fixture,row,report)
         'FROM edgeai.task_retry q JOIN edgeai.task t ON t.id=q.task_id JOIN edgeai.workflow_run w ON w.id=t.run_id '
         'JOIN edgeai.task_attempt a ON a.id=q.failed_attempt_id JOIN edgeai.task_attempt first ON first.task_id=t.id AND first.number=1 '
         'WHERE t.id='+q(retry['task']),db)=='t'
-    passed('target-failure-reply-loss-retains-one-original-budget-retry-one-final-failure-and-37-other-tables-with-zero-change-replay')
+    passed('target-failure-reply-loss-retains-one-original-budget-retry-one-final-failure-and-38-other-tables-with-zero-change-replay')
     pg.sql("UPDATE edgeai.task_retry SET deadline=deadline+interval '1 second' WHERE task_id="+q(retry['task']),db)
     invalid=fingerprints(db);cli(options(),1);assert fingerprints(db)==invalid
     pg.sql("UPDATE edgeai.task_retry SET deadline=deadline-interval '1 second' WHERE task_id="+q(retry['task']),db)
@@ -158,4 +158,4 @@ def check(pg,db,receipt,options,cli,fingerprints,passed,work,fixture,row,report)
             from test_recovery_remote_start_receipts import check as check_starts
             check_starts(pg,db,options,cli,fingerprints,passed,fixture,row,report,a)
     report.update(mixedRemoteFailureOutcomesVerified=True,mixedRemoteTargetFailures=2,mixedRemoteTargetRetries=1,
-        mixedRemoteActiveSuccessBlocked=True,mixedRemoteFailurePreservedTables=37)
+        mixedRemoteActiveSuccessBlocked=True,mixedRemoteFailurePreservedTables=38)

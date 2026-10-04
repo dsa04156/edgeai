@@ -255,7 +255,7 @@ def main():
             targets.append((database,receipt))
         drop(source); report['sourceDatabaseRemovedBeforeRecovery']=True
         db,receipt=targets[0]; second,receipt2=targets[1]
-        original=fingerprints(db); other=fingerprints(second); assert len(original)==43
+        original=fingerprints(db); other=fingerprints(second); assert len(original)==44
         closures_before=pg.sql("SELECT to_jsonb(a)::text FROM edgeai.vd_task_allocation a WHERE closed_at IS NOT NULL ORDER BY id",db)
         unclaimed_fixtures={}
         if args.unclaimed_jobs:
@@ -451,7 +451,7 @@ def main():
         for table in ('runtime_instance','vd_runtime'):
             assert pg.sql("SELECT count(*) FROM edgeai."+table+" WHERE desired_state<>'STOPPED' OR observed_state<>'TERMINATED'",db)==('1' if args.vd_tasks and table=='runtime_instance' else '0')
         assert completed['objectsAbsentFromDatabase']==(7 if args.remote_offloads else 5 if args.unclaimed_jobs else 1)
-        report.update(runtimesRetired=1,vdRuntimesRetired=1,commandsCompleted=4,bindingsClosed=1,preservedTables=43-len(changed),restoredDatabases=len(targets))
+        report.update(runtimesRetired=1,vdRuntimesRetired=1,commandsCompleted=4,bindingsClosed=1,preservedTables=44-len(changed),restoredDatabases=len(targets))
         passed('atomic-runtime-vd-command-and-binding-retirement-preserves-other-tables-and-other-restored-database')
         if args.vd_tasks:
             assert completed['vdTaskRuntimesRetired']==3 and completed['allocationsClosed']==3

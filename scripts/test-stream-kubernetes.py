@@ -744,6 +744,25 @@ with response: print(response.status)
                     assert result.returncode == 0, 'Actual Kubernetes start records differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedStartJournals'] = len(starts)
+                    wait(lambda: query("SELECT count(*) FROM edgeai.runtime_result_publication WHERE NOT completed") == '0',
+                        60, 'Committed Result publication queue did not drain')
+                    results = json.loads(query("""
+                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                            'apiVersion','edgeai.runtime.result/v1','resultId',s.id,'runtimeId',r.id,'runId',r.run_id,
+                            'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,'namespace',r.namespace,
+                            'jobName',r.job_name,'jobUid',r.job_uid,'podUid',r.producer_pod_uid,'nodeUid',r.node_uid,'nodeName',r.node_name,
+                            'startKey','authority/runtime-start/'||r.id||'.json','manifestDigest',s.manifest_digest,'committedAt',s.created_at,
+                            'outputs',(SELECT jsonb_agg(jsonb_build_object('port',a.port,'bucket',a.bucket,'objectKey',a.object_key,
+                                'versionId',a.object_version,'bytes',a.bytes,'sha256',a.sha256,'mediaType',a.media_type) ORDER BY a.port)
+                                FROM edgeai.result_artifact a WHERE a.result_id=s.id))), '[]'::jsonb)
+                        FROM edgeai.task_result s JOIN edgeai.runtime_instance r ON r.id=s.runtime_id
+                        WHERE s.committed AND s.remote_allocation_id IS NULL AND s.vd_runtime_id IS NULL
+                        """))
+                    result = subprocess.run(['node', 'scripts/verify-runtime-result-journals.mjs'], input=json.dumps(results).encode(), env=verify_env, capture_output=True, timeout=60)
+                    assert result.returncode == 0, 'Actual Kubernetes committed Result records differed; private output suppressed'
+                    print(result.stdout.decode().strip(), flush=True)
+                    snapshot['verifiedResultJournals'] = len(results)
+                    snapshot['pendingResultPublications'] = 0
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
                     succeeded = True
                     break

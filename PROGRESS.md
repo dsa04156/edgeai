@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0103: DB 확정 Result의 원래 ID/시각·producer·고정 출력 버전을 S3에 보존한다.
+V35 별도 발행 큐는 Result와 함께 commit/rollback되며 Pod 정리·API/worker 재시작 후에도
+재처리한다. 전체426개213243Z-a67f2e6e·최종신규9개214331Z-133f2f9f PASS.
+실제Kube3개213636Z-e95f14b8은10Pod/시작기록10/결과기록6·각1version·발행pending0,
+V35 백업13/참조9/기존복구91개도 PASS/소유정리. [근거](docs/evidence/m9-kubernetes-result-journal.md).
+Kubernetes Result의 복원 DB 소비·STREAM/VD/전역writer·종합 활성화와 전체 단계는 남는다.
+선행8b CI37234177387은5jobs성공/images진행, 완료원시35개PASS·신규push대기다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0102 실제 API 확장: TLS claim·실제 Pod-bound TokenReview가 생성한 S3 기록을
 별도 백업/원본 제거→복원DB/보존 Pod→복구 CLI에 연결했다. 기본68개210516Z-76adc3e9,
 최종 혼합91개210855Z-97f6fc1e PASS/소유 정리. claim 재요청은 최초 version 보존,

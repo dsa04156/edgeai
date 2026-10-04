@@ -203,9 +203,9 @@ def check(pg, db, receipt, options, retire_cli, fingerprints, passed, work, fixt
     actual=state(target['runtime'])
     assert actual['failure_reason']=='TARGET_START_TIMEOUT' and all(actual[k] is None for k in ('producer_pod_uid','node_uid','node_name'))
     assert {t for t in retired if retired[t]!=after[t]}=={'runtime_instance','task_attempt','task','workflow_run','task_retry','task_offload'}
-    passed('real-unclaimed-target-start-expiry-preserves-source-offloaded-state-placement-deadlines-and-37-other-tables')
+    passed('real-unclaimed-target-start-expiry-preserves-source-offloaded-state-placement-deadlines-and-38-other-tables')
     assert not workflow_cli(opts(offloads=True))['databaseModified'] and fingerprints(db)==after
     assert not workflow_cli(opts())['databaseModified'] and fingerprints(db)==after
     passed('expired-starting-recovery-and-ordinary-workflow-replay-change-no-history-or-timestamps')
     report.update(unclaimedJobsVerified=True,unclaimedTargetJobsRetired=1,unclaimedTargetPodsProven=2,
-        emptyJobsPreserved=1,unclaimedClaimsCreated=0,targetStartTimeoutsReconciled=1,unclaimedPreservedTables=37)
+        emptyJobsPreserved=1,unclaimedClaimsCreated=0,targetStartTimeoutsReconciled=1,unclaimedPreservedTables=38)

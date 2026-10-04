@@ -140,6 +140,6 @@ def exercise(fixtures,pg,restored,fingerprint,passed,transport):
     assert not result['databaseModified'] and fingerprint(database)==other_before
     passed('another-broker-open-generation-remains-unresolved-and-unchanged')
     final=fingerprint(database)
-    assert len(final)==43 and {k:v for k,v in final.items() if k!='route_generation'}==expected_other
+    assert len(final)==44 and {k:v for k,v in final.items() if k!='route_generation'}==expected_other
     return {'streamRetirementCases':14,'streamGenerationsClosed':4,'streamOtherBrokerGenerationsPreserved':1,
-        'streamOtherTablesPreserved':42,'streamLockProcessStopped':locker.poll() is not None}
+        'streamOtherTablesPreserved':43,'streamLockProcessStopped':locker.poll() is not None}

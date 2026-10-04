@@ -12,11 +12,12 @@ from storage_backup import Client, validate_manifest
 
 
 # A migration that adds another durable S3 reference must extend this inventory before acceptance.
-SUPPORTED_VERSIONS = {str(version) for version in range(1, 35)}
-# V34 adds only HTTP audit rows; V33 and V34 have the same complete S3/runtime reference inventory.
+SUPPORTED_VERSIONS = {str(version) for version in range(1, 36)}
+# V35 adds an outbox referring to existing immutable Results, without new fixed S3 references.
+# Start/Result authority journals are separate post-snapshot recovery evidence.
 def supported_schema(migrations):
     versions={row['version'] for row in migrations}
-    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34))
+    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35))
             and all(row['success'] is True for row in migrations))
 INVENTORY_SQL = """
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
@@ -73,7 +74,7 @@ def verify(pg, client, database, restore_report_path, storage_bundle):
         raise ValueError('Restored database identity or read-only snapshot differs')
     migrations = inventory['migrations'] or []
     if not supported_schema(migrations):
-        raise Blocked('This verifier inventories the complete V33/V34 reference schema; review other migration versions first')
+        raise Blocked('This verifier inventories the complete V33/V34/V35 artifact reference schema; review other migration versions first')
     references = inventory['references']
     versions = {(item['bucket'],item['key'],item['versionId']):item for item in manifest['versions']}
     required = {}
@@ -96,7 +97,7 @@ def verify(pg, client, database, restore_report_path, storage_bundle):
         'formatVersion':1, 'scope':'restored-database-storage-references',
         'status':'VERIFIED_DB_STORAGE_REFERENCES', 'activated':False,
         'targetDatabase':database, 'databaseOid':inventory['databaseOid'],
-        'databaseSnapshot':inventory['snapshot'], 'schemaVersions':sorted(SUPPORTED_VERSIONS,key=int),
+        'databaseSnapshot':inventory['snapshot'], 'schemaVersions':sorted((row['version'] for row in migrations),key=int),
         'databaseArchiveSha256':restored['archiveSha256'], 'restoreReportSha256':restore_digest,
         'storageManifestSha256':manifest_digest, 'targetDeploymentId':manifest['targetDeploymentId'],
         'referenceCounts':counts, 'referenceSha256':hashlib.sha256(encoded).hexdigest(),

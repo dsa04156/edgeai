@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0103 확정 Kubernetes Result의 S3 기록과 독립 영속 발행 큐를 구현했다.
+DB seal과 큐가 원자적이며 API 성공 전 저장 확인·Pod 정리/재시작 뒤 재발행을 검증했다.
+전체426개213243Z-a67f2e6e·최종새9개214331Z-133f2f9f·실Kube3개213636Z-e95f14b8,
+V35 백업13/참조9/기존복구91개 PASS/소유정리. [근거](docs/evidence/m9-kubernetes-result-journal.md).
+다음은 백업된 Kubernetes Result를 격리된 복원 DB에 반영하는 경로다. STREAM/VD 권한,
+전역writer/종합 활성화·실모델/외부계약과 전체 단계 목표를 유지한다.
+선행8b CI37234177387은5jobs 성공/images 실제Kube검증 중으로 후속 push를 대기한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0102의 실제 TLS API·Pod-bound TokenReview 시작 기록을 백업·복원 CLI까지 검증했다.
 기본68개210516Z-76adc3e9·최종 혼합91개210855Z-97f6fc1e PASS/소유 정리.
 [근거](docs/evidence/m9-recovery-kubernetes-start-journals.md). 실제 Runner 업무의 Result 복구,

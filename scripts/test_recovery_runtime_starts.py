@@ -273,7 +273,7 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     assert fingerprints(fixture.targets[1][0])==other
     a=opts();a.output.mkdir(mode=0o700)
     assert not workflows.apply(pg,a,workflows.prepare(pg,a))['databaseModified'] and fingerprints(db)==after
-    passed('only-original-transfer-admission-completes-with-42-tables-claims-attempts-results-and-replay-unchanged')
+    passed('only-original-transfer-admission-completes-with-43-tables-claims-attempts-results-and-replay-unchanged')
 
     def lost_reply(tool,arguments,*args,**kwargs):
         result=original_call(tool,arguments,*args,**kwargs)
@@ -291,7 +291,7 @@ def _check(pg,fixture,options,retire_cli,fingerprints,passed,report):
     report.update(runtimeStartJournalFixtures=1,
         runtimeStartAuthoritySource='ACTUAL_API_WITH_KUBERNETES_TOKENREVIEW' if fixture.api_claim else 'EXPLICIT_ADMISSION_FIXTURE',
         runtimeStartBackupSourcesRemoved=True,runtimeStartRestoredDatabases=2,runtimeStartOffloadsCompleted=1,
-        runtimeStartResultsCreated=0,runtimeStartClaimsCreated=0,runtimeStartPreservedTables=42,
+        runtimeStartResultsCreated=0,runtimeStartClaimsCreated=0,runtimeStartPreservedTables=43,
         runtimeStartAlteredObservations=len(variants))
     if fixture.api_claim:
         assert fixture.api_claim_verified and fixture.api_claim_source_stopped

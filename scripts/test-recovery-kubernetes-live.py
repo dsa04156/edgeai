@@ -71,7 +71,7 @@ def main():
         restored=restore(pg,work/'backup',target); owned[target]=restored['databaseOid']
         catalog=database_inventory(pg,target,pg.directory/'restore-report.json')
         assert not catalog['runtimes'] and not catalog['vds']
-        before=fingerprints(); assert len(before)==43
+        before=fingerprints(); assert len(before)==44
         report['serverVersion']=int(pg.sql('SHOW server_version_num',target))
         passed('actual-archive-restore-and-read-only-database-inventory')
 

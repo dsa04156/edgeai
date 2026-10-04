@@ -189,7 +189,7 @@ def main():
         mismatched_restore=restore_database(mismatched,'mis') if fixtures else None
         route_restore=restore_database(middle,'routes') if args.retire_routes else None
         drop(source); report.update(sourceDatabaseRemoved=True,restoredDatabaseCount=(5 if args.retire_routes else 4) if fixtures else 3)
-        report['tableCount']=len(fingerprint(target)); assert report['tableCount']>=43
+        report['tableCount']=len(fingerprint(target)); assert report['tableCount']>=44
         base=source_snapshot('base'); result=compare(base,target,receipt,cli=True)
         assert len(result['routes'])==2 and {r['sourceAcknowledged'] for r in result['routes']}=={1,2}
         assert all(r['replayFromSequence']==3 for r in result['routes'])

@@ -17,8 +17,9 @@ public final class RunnerApiService {
     private final ArtifactCommitService commits;
     private final Clock clock;
     private final RuntimeStartJournal starts;
-    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts) {
-        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;
+    private final RuntimeResultPublisher results;
+    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results) {
+        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;
     }
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
@@ -72,7 +73,9 @@ public final class RunnerApiService {
     }
     public Creation<TaskResult> commit(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");
-        return commits.commit(principal.attemptId(),principal.epoch(),principal.podUid(),RunnerInput.manifest(root.get("outputs")));
+        var committed=commits.commit(principal.attemptId(),principal.epoch(),principal.podUid(),RunnerInput.manifest(root.get("outputs")));
+        if(committed.value().vdRuntimeId()!=null)return committed;
+        return new Creation<>(results.publish(committed.value().runtimeId()),committed.created());
     }
     public Object fail(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"reason");lifecycle.fail(principal.attemptId(),principal.epoch(),principal.podUid(),text(root.get("reason"),64));

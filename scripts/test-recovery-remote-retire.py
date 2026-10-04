@@ -178,7 +178,7 @@ def main():
             targets.append((target, restoring.directory / 'restore-report.json'))
         drop(source)
         target, receipt = targets[0]; before = fingerprints(target)
-        assert len(before) == 43
+        assert len(before) == 44
         assert cli(options(target, receipt), expected=2)['databaseModified'] is False
         assert fingerprints(target) == before
         passed('live unfenced provider blocks all restored database writes')
@@ -363,7 +363,7 @@ def main():
             if not destination.is_relative_to(ROOT / '.tools'): raise ValueError('Test bundle must remain under private .tools')
             shutil.copytree(recovered.output, destination)
             assert output_recovery.verify(destination)['uniqueFiles'] == 1
-        report.update(status='PASS', restoredTables=43, restoredDatabases=2, providerInstallations=1, allocations=4,
+        report.update(status='PASS', restoredTables=44, restoredDatabases=2, providerInstallations=1, allocations=4,
                       observationsUpdated=3, runtimesRetired=3, commandsCompleted=4,
                       retainedResults=1, retainedArtifactReferences=1,
                       recoveredFiles=1, recoveredOutputBytes=len(original_bytes), offlineBundleVerified=True,

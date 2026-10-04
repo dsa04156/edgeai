@@ -290,7 +290,7 @@ def main():
         inspector.close()
         passed('packaged inspection API exposes final and pending Run states while management writes remain forbidden')
         report.update(status='PASS',allocations=9,restoredDatabases=2,attemptsFailed=5,retriesScheduled=2,retriesExpired=2,
-                      tasksCancelled=2,tasksSkipped=2,preservedTables=38,retainedResultFixtures=1,successesPending=1,
+                      tasksCancelled=2,tasksSkipped=2,preservedTables=39,retainedResultFixtures=1,successesPending=1,
                       sourceProviderOffline=True,jarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code=0
     except Exception as error:

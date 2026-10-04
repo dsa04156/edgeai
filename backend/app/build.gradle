@@ -29,6 +29,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/ArtifactStorageIntegrationTest.class'
     exclude '**/RuntimeStartStorageIntegrationTest.class'
     exclude '**/RuntimeStartJournalIntegrationTest.class'
+    exclude '**/RuntimeResultJournalIntegrationTest.class'
     exclude '**/RuntimeArtifactIntegrationTest.class'
     exclude '**/VDTaskArtifactIntegrationTest.class'
     exclude '**/KubernetesRuntimeIntegrationTest.class'
@@ -61,6 +62,7 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     include '**/StreamCheckpointIntegrationTest.class'
     include '**/StreamSourceCompletionIntegrationTest.class'
     include '**/RuntimeStartJournalIntegrationTest.class'
+    include '**/RuntimeResultJournalIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 

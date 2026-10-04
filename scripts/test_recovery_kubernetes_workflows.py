@@ -174,9 +174,9 @@ def check(pg, targets, options, fingerprints, passed, work, fixtures, vd_work, k
     assert pg.sql('SELECT state FROM edgeai.task WHERE id='+literal(vd_work['claimed']['task'])+'::uuid',db)=='RUNNING'
     assert pg.sql('SELECT state FROM edgeai.task_attempt WHERE id='+quoted('expired','attempt'),db)=='FAILED'
     assert not cli(options(db,receipt))['databaseModified'] and fingerprints(db)==after
-    report.update(workflowCases=True,workflowPreservedTables=39,workflowTasksCancelled=2,workflowTasksSkipped=2,
+    report.update(workflowCases=True,workflowPreservedTables=40,workflowTasksCancelled=2,workflowTasksSkipped=2,
         workflowRetriesExpired=1,workflowPendingRetries=1,workflowRunsReconciled=5,workflowUnknownOutcomes=1)
-    passed('recorded-cancellations-and-original-deadline-expiry-reconcile-five-runs-without-creating-attempts-or-changing-39-tables')
+    passed('recorded-cancellations-and-original-deadline-expiry-reconcile-five-runs-without-creating-attempts-or-changing-40-tables')
     passed('unknown-running-outcome-sealed-results-unassigned-work-and-future-retry-remain-pending-or-immutable-on-replay')
 
     # The old failed producer cannot overwrite a newer, already recorded retry attempt.
