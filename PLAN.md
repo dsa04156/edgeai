@@ -2,13 +2,22 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0071 원본 S3 root 접근 차단의 실제 TLS18개가 PASS(082045Z-c2caa5f1)다. 기존 PUT/GET
+URL 거절·고정2버전 보존·부분 중단/같은 ID 재개·SIGKILL 재시작·환경변수 우선순위를 확인했다.
+[저장소 차단 근거](docs/evidence/m9-recovery-storage-fence.md). 새 CI storage 게이트를 추가했다.
+진행 중 업로드의 종료, 외부 writer/journal·종합 복원 활성화는 남는다.
+선행5ed7b03 CI37185328851의5jobs/원시24개 PASS(081857Z-83bd1448), GitOps8cf5a23의
+정확한API/dashboard/MinIO imageID·Ready/PVC·ArgoSynced(082000Z-1b9a0d9a), 기존10파일/
+두PVC·TLS/S3보존(082000Z-565ea715)을 확인했다. 공유Ingress aggregatehealthProgressing이다.
+새 MQTT15·S318개 게이트의 원격 CI/배포 및 전체 M9 수용은 별도다.
+
 ADR0070 원본 MQTT 차단의 실제 TLS15개가 PASS(075002Z-74d8ac1a)다. 기존 관리자 자격을
 교체한 뒤35계정·실제 Device/Task 연결2개의 재접속을 차단하고 부분 중단/동일 ID 재개·역할 이력·broker
 재시작 보존을 확인했다. [브로커 차단 근거](docs/evidence/m9-recovery-mqtt-fence.md).
 새 CI gate를 추가했으며 journal·Remote/S3 writer·복원 실행 조정/활성화는 남는다.
 선행5ed7b03 CI37185328851은3jobs/원시22개·PG230·Runner111·MQTT95·Compose DB fence10개
-PASS를 확인했다. images의 실제 Kubernetes gate는 진행 중이다. 새 MQTT 복구15개는 해당
-CI에 포함되지 않으며 전체 CI·신규 배포 또는 전체 M9 수용 완료로 판정하지 않는다.
+PASS를 확인했으며 이후 images·GitOps까지 위에서 검증했다. 새 MQTT 복구15개는 해당
+CI에 포함되지 않는다. 전체 M9 수용은 미완료다.
 
 ADR0069 원본 DB 연결 차단의 실제 PG/API10개가 PASS(065711Z-4d27de4e)다. API pool과
 미완료 쓰기 연결3개 종료·새 연결 거절·다른 DB 보존·동일 복구 재개·DB 교체 경쟁 rollback을

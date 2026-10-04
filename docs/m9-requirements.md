@@ -26,6 +26,9 @@ ADR0069의 [원본 DB 연결 차단](recovery-database-fence.md)은 명시한 DB
 ADR0070의 [원본 MQTT 차단](recovery-mqtt-fence.md)은 API의 브로커 관리 자격을 먼저
 교체하고 기존 Device/Task 연결과 재접속을 막는다. 실제 TLS15개에서 중단/재개·역할 보존·
 브로커 재시작을 검증했다. 키/journal과 복원 DB 실행 조정·새 자격의 운영 적용은 후속이다.
+ADR0071의 [원본 S3 root 차단](recovery-storage-fence.md)은 현재 API의 저장소 자격과 기존
+PUT/GET URL의 새 요청을 차단한다. 실제 TLS18개에서 고정 버전 보존·중단/재개·재시작·
+환경변수 override를 검증했다. 이미 진행 중인 업로드·외부/내부 writer 전체 종료와 재활성화는 남는다.
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.

@@ -137,6 +137,7 @@ python3 scripts/test-recovery-stop.py # 종료 상태·신원·불확실한 종�
 bash scripts/test-recovery-stop-live.sh --context <시험-context> # 실제 부모/자식 종료·생성 차단·timeout/재개
 bash scripts/test-recovery-database-fence.sh # 격리 DB/API의 연결 차단·다른 DB 보존·미완료 쓰기 rollback
 bash scripts/test-recovery-mqtt-fence.sh # 격리 TLS broker의 관리자 교체·기존 연결 차단·중단/재개·재시작
+bash scripts/test-recovery-storage-fence.sh # 격리 TLS MinIO의 root/기존 URL 차단·버전 보존·중단/재개
 bash scripts/install-age.sh # 고정 공식 age 배포 파일·실행 파일 checksum 확인
 bash scripts/test-private-material.sh # 합성 키의 실제 암호화·복원·손상/경로/덮어쓰기 거절
 bash scripts/test-management-audit.sh # 격리 API/DB의 감사 접수·결과 저장 실패·재시작·비밀값 배제
@@ -155,6 +156,7 @@ DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/r
 관측한 실행의 [생성 차단과 종료 확인](docs/recovery-producer-stop.md)은 전용 namespace에서 수행합니다.
 [원본 DB 연결 차단](docs/recovery-database-fence.md)은 명시한 원본 DB의 새 연결을 막고 기존 연결 종료를 확인합니다.
 [원본 MQTT 차단](docs/recovery-mqtt-fence.md)은 기존 API의 관리 자격을 회수하고 Device/Task 접속을 차단합니다.
+[원본 S3 root 차단](docs/recovery-storage-fence.md)은 파일 버전을 보존하면서 원래 자격과 기존 URL의 새 요청을 차단합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

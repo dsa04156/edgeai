@@ -136,6 +136,11 @@ storage job은 빌드한 MinIO 이미지에서 동일 binary를 추출하고 고
 원본 종료·replica 재시작·거절/실패 정리를 확인한다. `storage-backup-report.json`만 공개
 요약으로 업로드하고 원본 파일·CA 개인 키·자격 증명·mc 진단 로그는 `.tools`에 남긴다.
 
+동일 binary로 `test-recovery-storage-fence.sh`의 실제 TLS18개도 실행한다. 원래 root와 기존
+PUT/GET URL의 거절·고정 버전 보존·중단/재개·강제 재시작·환경변수 override를 검증한다.
+`recovery-storage-fence-report.json`과 evidence 요약만 업로드하며 새 복구 자격·mc 설정·
+원문 관리 응답은 `.tools`에 남긴다. 진행 중 업로드의 소진과 전체 복원 활성화는 별도다.
+
 같은 job의 PostgreSQL 시작 뒤 `test-recovery-references.sh --transport compose`로 실제
 DB archive 복원과 모든 result/checkpoint 참조의 별도 TLS MinIO 대조를 실행한다. 원본 DB와
 원본 저장소를 사용할 수 없는 상태의 검증·누락 거절을 포함한다. Pod/broker receipt는 SQL

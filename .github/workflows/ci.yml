@@ -110,6 +110,8 @@ jobs:
           docker cp "$backup_tools_container:/usr/local/bin/minio" .tools/minio-backup-tested
           bash scripts/install-minio-client.sh
           bash scripts/collect-evidence.sh storage-backup bash scripts/test-storage-backup.sh --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/storage-backup-report.json
+      - name: Verify root S3 credential fencing, signed URL rejection and retained versions
+        run: bash scripts/collect-evidence.sh recovery-storage-fence bash scripts/test-recovery-storage-fence.sh --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-storage-fence-report.json
       - name: Start PostgreSQL for real storage-to-result transactions
         run: bash scripts/dev-up.sh
       - name: Verify restored database references with independent TLS backup storage
