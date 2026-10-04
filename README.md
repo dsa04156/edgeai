@@ -160,6 +160,7 @@ DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/r
 [진행 중 S3 요청 확인](docs/recovery-storage-drain.md)은 차단 전에 인증된 요청까지 끝났는지 단일 MinIO에서 별도로 검증합니다.
 [참조 Remote 복구 차단](docs/recovery-remote-fence.md)은 새 작업과 늦은 입력을 막고 기존 계산 스레드 종료를 확인합니다.
 [복원 Remote 이력 점검](docs/recovery-remote-inventory.md)은 전체 제공자 기록과 복원 DB의 누락·충돌을 대조합니다.
+[복원 Remote 실행 정리](docs/recovery-remote-retirement.md)는 실제 종료를 재확인하고 DB 관측·runtime·기존 명령을 원자적으로 정리합니다. 복원 DB는 격리를 유지합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

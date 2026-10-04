@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0075는 실제 종료한 Remote의 복원 DB 관측·runtime·기존 명령을 원자적으로 정리한다.
+실제 PG16/TLS13개(095215Z-59a4cda4), 기존 이력10개 회귀(095133Z-eaa68841) PASS다.
+DB 경쟁·잠금 제한·중간 오류 rollback·커밋 응답 유실·0변경 재실행·43테이블/결과/다른 DB 보존·
+일반 API 기동 차단을 확인했다. [검증 근거](docs/evidence/m9-recovery-remote-retirement.md).
+Compose17 CI gate를 추가했다. workflow 결과 확정·미반영 성공 파일·journal·전체 활성화는 남는다.
+
 ADR0074는 복원 DB와 차단된 참조 Remote 전체 이력을 읽기 전용으로 대조한다.
 실제 PG16/별도 TLS 제공자2·복원DB2의10개(092539Z-1d04c194), Python14/Java gateway13개
 (092408Z-ed5d7eed) PASS다. 백업 후 실제 할당·양쪽 누락·binding/신원/요청/관측 충돌과

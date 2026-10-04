@@ -1,6 +1,12 @@
 # 진행 상태
 
 [STATUS]
+ADR0075 복원 Remote 관측·runtime·기존 명령의 원자적 정리를 추가했다. 실제 PG16/TLS13개
+(095215Z-59a4cda4), 기존 이력10개 회귀(095133Z-eaa68841) PASS다. 실제 DB 경쟁·marker 변경·
+잠금 제한·중간 오류 rollback·커밋 응답 유실·0변경 재실행·43테이블/확정 결과/다른 DB 보존과
+일반 API 기동 격리를 확인했다. docs/evidence/m9-recovery-remote-retirement.md.
+새 Compose17 CI gate의 원격 확인, workflow 결과 확정·미반영 성공 파일·journal·종합 활성화는 남는다.
+
 ADR0074 복원 DB/참조 Remote 전체 이력 점검을 추가했다. 실제 PG/TLS10개
 (092539Z-1d04c194)·Python14/Java gateway13개(092408Z-ed5d7eed) PASS다.
 백업 후 할당·양쪽 누락·binding/신원/요청/관측 충돌·페이지 누락/중복·43테이블/제공자 보존을

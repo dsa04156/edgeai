@@ -135,6 +135,10 @@ ADR0074는 같은 시험에 페이지 경계/누락 거절2개를 추가한다. 
 `test-recovery-remote-inventory.sh --transport compose`는 실제 Java API가 만든 binding/할당과
 pg_dump/restore·별도 TLS 제공자2를 결합한10개를 수행한다. `recovery-remote-inventory-report.json`에는
 집계/정리 여부만 기록하고 원본 SQLite·SQL/API 로그·작업 신원/출력 metadata inventory는 업로드하지 않는다.
+ADR0075의 `test-recovery-remote-retire.sh --transport compose`는 같은 실제 API/PG/TLS 환경에서
+종료 관측·runtime·명령 원자적 반영, 동시 변경·잠금 제한·rollback·커밋 응답 유실·재실행·격리
+유지13개를 확인한다. 공개 산출물은 `recovery-remote-retire-report.json` 집계뿐이며 intent/SQL/
+receipt·자격·개인 로그는 `.tools`에 남긴다. workflow 결과 확정과 종합 복구 활성화는 후속이다.
 
 전체 단위 시험의 수는 `test-unit` evidence의 `UNIT_TEST_COUNTS`를 확인한다. 뒤에 실행하는
 계약 검증은 같은 Gradle `app:test`의 일부 사례만 선택하므로 최종 업로드 XML은 계약 시험

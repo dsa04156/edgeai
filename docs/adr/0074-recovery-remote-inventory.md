@@ -28,7 +28,7 @@ REPEATABLE READ 한 snapshot에서 모든 Remote allocation과 Attempt의 대상
 | 분류 | 의미 |
 |---|---|
 | MATCHED_TERMINAL | 전체 신원·요청 digest·마감이 같고 종료 관측이 기존 revision/terminal 관측과 충돌하지 않음 |
-| CANCELLED_BEFORE_RESERVATION | DB는 아직 관측 전이고 제공자에는 동일 신원의 선행 취소 tombstone만 존재 |
+| CANCELLED_BEFORE_RESERVATION | 제공자에 동일 신원의 선행 취소 tombstone이 있고 DB는 관측 전이거나 ADR0075로 정확히 같은 revision/관측을 기록한 상태. 확정 Result는 없음 |
 | ABSENT_FROM_RESTORED_DATABASE | 제공자 전체 이력에는 있으나 복원 DB에 없는 할당 |
 | ABSENT_FROM_PROVIDER | 선택한 DB 대상의 할당을 제공자 전체 이력에서 찾지 못함 |
 | BINDING_CONFLICT | 같은 allocation ID의 DB 대상 binding이 선택한 제공자와 다름 |

@@ -66,6 +66,8 @@ jobs:
         run: bash scripts/collect-evidence.sh recovery-mqtt-fence bash scripts/test-recovery-mqtt-fence.sh --report docs/evidence/runs/recovery-mqtt-fence-report.json
       - name: Verify restored Remote allocations against fenced provider history with real TLS
         run: bash scripts/collect-evidence.sh recovery-remote-inventory bash scripts/test-recovery-remote-inventory.sh --transport compose --report docs/evidence/runs/recovery-remote-inventory-report.json
+      - name: Verify atomic Remote retirement, rollback and lost commit reply with real PostgreSQL and TLS
+        run: bash scripts/collect-evidence.sh recovery-remote-retire bash scripts/test-recovery-remote-retire.sh --transport compose --report docs/evidence/runs/recovery-remote-retire-report.json
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh

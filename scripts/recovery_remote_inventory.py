@@ -15,8 +15,7 @@ from recovery_kubernetes import database_inventory
 from recovery_remote_fence import Client, token
 
 TERMINAL = {'SUCCEEDED', 'FAILED', 'CANCELLED'}
-DATABASE_SQL = """
-BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+DATABASE_QUERY = """
 SELECT json_build_object(
  'database',current_database(),
  'oid',(SELECT oid::text FROM pg_database WHERE datname=current_database()),
@@ -37,8 +36,8 @@ SELECT json_build_object(
     FROM edgeai.task_attempt WHERE mode='REMOTE'
     GROUP BY remote_provider_key,remote_configuration_digest,remote_source_mode) t)
 );
-COMMIT;
 """
+DATABASE_SQL = 'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;\n' + DATABASE_QUERY + '\nCOMMIT;'
 
 
 def canonical(value):
@@ -147,7 +146,11 @@ def classify(expected, actual):
     if actual['identity'] != identity or expected['work_identity'] != identity:
         return 'IDENTITY_CONFLICT'
     if actual['requestDigest'] is None:
-        return 'CANCELLED_BEFORE_RESERVATION' if expected['provider_revision'] == 0 and expected['result_id'] is None else 'OBSERVATION_CONFLICT'
+        observation = {k:v for k,v in actual.items() if k != 'executions'}
+        untouched = expected['provider_revision'] == 0
+        recorded = (expected['provider_revision'] == actual['revision'] and
+                    expected['provider_state'] == 'CANCELLED' and expected['observation'] == observation)
+        return 'CANCELLED_BEFORE_RESERVATION' if (untouched or recorded) and expected['result_id'] is None else 'OBSERVATION_CONFLICT'
     if actual['requestDigest'] != expected['request_digest'] or actual['expiresAt'] != expected['expires_at']:
         return 'REQUEST_CONFLICT'
     observation = {k:v for k,v in actual.items() if k != 'executions'}
@@ -159,11 +162,10 @@ def classify(expected, actual):
     return 'MATCHED_TERMINAL'
 
 
-def inspect(pg, args):
+def compare(catalog, args):
     uid(args.provider_id); uid(args.recovery_id)
     if not re.fullmatch('[a-z][a-z0-9]*(-[a-z0-9]+)*', args.provider_key) or len(args.provider_key) > 63 or not 1 <= args.page_size <= 100:
         raise ValueError('Explicit provider key and page size 1..100 required')
-    catalog = database_inventory(pg, args.database, args.restore_report, DATABASE_SQL)
     target = {'provider_key': args.provider_key, 'configuration_digest': binding_digest(args), 'source_mode': 'SYNTHETIC'}
     selected = lambda row: all(row[key] == value for key, value in target.items())
     expected = {row['id']: row for row in catalog['allocations'] if selected(row)}
@@ -192,6 +194,10 @@ def inspect(pg, args):
             'excluded': ['provider-output-bytes', 'database-reconciliation-writes', 'service-activation',
                          'external-provider-contract', 'other-provider-installations', 'device-journals',
                          'post-snapshot-database-changes']}
+
+
+def inspect(pg, args):
+    return compare(database_inventory(pg, args.database, args.restore_report, DATABASE_SQL), args)
 
 
 def main():
