@@ -26,6 +26,10 @@ Swagger에는 다음 두 API의 역할, 매개변수와 결과를 설명한다.
 접수한다. 저장할 수 없으면503 `AUDIT_STORE_UNAVAILABLE`을 반환하고 변경을 실행하지 않는다.
 접수가 저장되면 서버가 UUID를 반환한다. 요청자가 보낸 같은 이름의 헤더는 채택하지 않는다.
 
+[동시 커밋 실험](evidence/m9-audit-group-commit.md)은 부하 미발송을 해결하지 못해
+채택하지 않았다. 접수/결과는 각각 기존 개별 트랜잭션을 유지한다. DB 커밋 지연과 부하 안정화는
+계속 검증하며 성능 수용 완료로 표시하지 않는다.
+
 처리 결과 저장 실패는 이미 실행된 변경이나 실제 응답을 덮지 않는다. 접수 기록은 남고
 `edgeai.audit.storage.failures` 카운터의 `phase=completion` 및 audit UUID만 포함한 로그로
 관측한다. 접수·조회 거절·비동기 미확정은 각각 `admission`, `denial`, `async`다. async Servlet

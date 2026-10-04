@@ -2,13 +2,31 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0067 감사 동시 커밋 실험은 단위129·PG231·실제API8·백업13개를 통과했으나 미채택이다.
+기본 전체 부하의 첫 실행은200건 미발송 FAIL, 같은 조건 진단은9,240건/감사12,105쌍 보존이다.
+추가1,000대180초 진단은374건 미발송과 같은 구간의 JDBC commit/WAL 대기를 기록했다.
+제품은 기존 개별 transaction으로 복원했다. 부하 안정화와 합의 성능 수용은 미완료다.
+[동시 커밋 근거](docs/evidence/m9-audit-group-commit.md).
+실행저장소 회귀47개 중 공유 VD 복구1개가 MQTT 거절로 실패했고, 별도 실제 브로커 시험에서
+재접속 상태 오류와 heartbeat 이전 권한 회수 순서를 재현했다. ADR0068 수정의 SDK19·
+전체 MQTT95개·Runner111개는 PASS다. 프로토타입 조합의 전체 저장소47개도 통과했으며
+개별 감사 transaction을 유지하는 최종 PG230개와 실행저장소47개도 PASS다.
+최종 API JAR은 기존 검증·배포 JAR과 SHA256이 같아 단위122·API/Swagger·복원 근거를 재사용한다.
+최종 부하 판정4개도 PASS(055524Z-55dffcf0)이며 각60감사쌍/117transaction을 확인했다.
+[재연결 근거](docs/evidence/m7-broker-first-reconnect.md).
+
+선행0e9d7a0 CI37177835436의5jobs/원시23개(053859Z-52c9a721), GitOpsfe1a995의
+정확한imageID·Ready/PVC·ArgoSynced(053931Z-f013990c), 기존10파일/두PVC·TLS/S3보존
+(054004Z-40e28b5d)을 확인했다. 공유Ingress aggregatehealthProgressing이다.
+아래는 감사 기본 구현과 선행 배포 이력이며 ADR0068 새 CI·배포와 구분한다.
+
 ADR0066/V34 관리 HTTP 감사 접수·관측 결과·조회 API/UI를 연결했다. 단위122·실제PG229·
 패키징API8·실행저장소47·감사포함백업13/43테이블·참조9·Kubernetes점검6개 PASS다.
 실제API/브라우저/Swagger12개와 DB장애복구, 기존Task9,371개 V34보존도 확인했다.
 전체부하는 첫 실행1,000대에서108건미발송으로FAIL, 같은 설정의 진단 재실행은9,240요청/
 누락0·감사12,105쌍 보존이나 p95 228.13ms/WAL대기를 관측했다. 최초 실패 해결·합의 성능
 수용으로 판정하지 않는다. [관리 감사 근거](docs/evidence/m9-management-audit.md).
-신규 감사 변경의 CI/이미지·배포, 사용자별신원/RBAC·외부감사/보관정책은 남는다.
+감사 기본 구현의 CI/이미지·배포는 위에서 확인했다. 사용자별신원/RBAC·외부감사/보관정책은 남는다.
 
 선행4f408dd CI37174711098의5jobs/원시22개와 새키파일10·kind producer종료7개를
 확인했다(043600Z-294040c0). GitOpsee91977의 정확한이미지·Ready/PVC·ArgoSynced

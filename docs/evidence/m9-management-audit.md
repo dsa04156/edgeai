@@ -3,6 +3,14 @@
 2026-10-04. [ADR0066](../adr/0066-management-request-audit.md),
 [실행/조회 안내](../management-audit.md). 전체 M9 완료나 운영 사용자별 RBAC 수용이 아니다.
 
+소스 `0e9d7a0`의 CI37177835436은5개 job과 원시23개 결과가 모두 PASS다
+(`20261004T053859Z-52c9a721`). 단위122/PG229·감사API8·PG17 백업13/43테이블·
+키복원10·producer종료7·STREAM24/Node43·VD33Pods/S354를 확인했다.
+GitOps `fe1a995`의 정확한 API/dashboard/MinIO 이미지·Ready/PVCBound·ArgoSynced도
+확인했다(`20261004T053931Z-f013990c`). 기존10파일·두PVC·TLS/S3 보존은
+`20261004T054004Z-40e28b5d` PASS다. 공유 Ingress의 aggregate health는 Progressing이다.
+후속 ADR0067 동시 커밋 실험은 미채택이며, ADR0068 MQTT 수정의 새 CI/배포와 구분한다.
+
 검증 JAR SHA256은 `7aee29739c4a8fe4c7b2ea210b828e5ad9c5fa3a03dd5effead7a2237e9b8a7d`다.
 V34 SHA256은 `0020e710d7e3b597cbb62b8b867b4ec4b4dff53e23227f4db4732a5d7b1e95c4`이며
 적용 이후 수정하지 않는다. 실제 DB는 PostgreSQL16, 신규 CI 게이트는 Compose17이다.

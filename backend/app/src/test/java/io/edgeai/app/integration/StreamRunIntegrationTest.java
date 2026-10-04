@@ -38,18 +38,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Public MVC and real PostgreSQL transactions. Pod identities, broker receipts and S3 receipts are explicit fixtures. */
-@SpringBootTest(properties={"edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false","edgeai.runtime.namespace=public-stream-test",
+@SpringBootTest(properties={"edgeai.runtime.enabled=true","edgeai.runtime.worker-enabled=false",
     "edgeai.vd.enabled=true","edgeai.vd.lease-seconds=60",
     "edgeai.stream.enabled=true","edgeai.stream.bindings-enabled=true","edgeai.stream.runs-enabled=true",
     "edgeai.stream.broker-digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","edgeai.stream.lease-seconds=120"})
 @AutoConfigureMockMvc(print=org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 class StreamRunIntegrationTest {
+    private static final String NAMESPACE="public-stream-"+UUID.randomUUID();
     private static final Path KEY=key();
     private static Path key(){try{
         var p=Files.createTempFile("edgeai-public-stream-",".key",java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
         var bytes=new byte[32];new java.security.SecureRandom().nextBytes(bytes);Files.writeString(p,HexFormat.of().formatHex(bytes));return p;
     }catch(Exception e){throw new IllegalStateException(e);}}
-    @DynamicPropertySource static void properties(DynamicPropertyRegistry p){p.add("edgeai.runtime.key-file",KEY::toString);p.add("edgeai.stream.device-key-file",KEY::toString);}
+    @DynamicPropertySource static void properties(DynamicPropertyRegistry p){p.add("edgeai.runtime.namespace",()->NAMESPACE);p.add("edgeai.runtime.key-file",KEY::toString);p.add("edgeai.stream.device-key-file",KEY::toString);}
     @AfterAll static void removeKey()throws Exception{Files.delete(KEY);}
     @MockitoBean RuntimeGateway gateway;@MockitoBean S3ArtifactStore storage;@MockitoBean MosquittoStreamBroker broker;
     @MockitoBean VDGateway vdGateway;
@@ -149,7 +150,7 @@ class StreamRunIntegrationTest {
             .map(TaskRetry::availableAt).max(Comparator.naturalOrder()).orElseThrow();
         long millis=Duration.between(Instant.now(),latest).toMillis();if(millis>=0)Thread.sleep(millis+20);
     }
-    private void worker(){new StreamRunWorker(store,streams,lifecycle,"public-stream-test").tick();}
+    private void worker(){new StreamRunWorker(store,streams,lifecycle,NAMESPACE).tick();}
     private io.edgeai.app.config.RunnerPrincipal principal(UUID run,String name){
         var r=runtimes.byAttempt(attempt(run,name).id()).orElseThrow();
         if(r.vd()){
@@ -236,7 +237,7 @@ class StreamRunIntegrationTest {
             "sources",Map.of(),"state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",capacity,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
         var vd=virtualDevices.create(encode(Map.of("key","stream-vd-"+UUID.randomUUID(),"displayName","Stream VD fixture",
             "profileVersionId",profile.toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value();
-        var op=vdLifecycle.provision(vd.id(),0,"provision",new io.edgeai.app.config.RuntimeSettings("public-stream-test","edgeai-runner",URI.create("http://fixture.invalid"),120),false);
+        var op=vdLifecycle.provision(vd.id(),0,"provision",new io.edgeai.app.config.RuntimeSettings(NAMESPACE,"edgeai-runner",URI.create("http://fixture.invalid"),120),false);
         var r=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());
         var f=new VD(vd,r,UUID.randomUUID(),new VDGateway.PodIdentity(r.podUid(),UUID.randomUUID(),"fixture-node",true));
         poll(f,0,List.of(),List.of());return f;
@@ -425,7 +426,7 @@ class StreamRunIntegrationTest {
                 new OffloadMember(peerTask.id(),attempt(run,"sink").id(),null,saved.get("sink").id(),null,
                     change.equals("peer-auto")?null:change.equals("peer-vd")?source.device().id():sink.device().id(),List.of()));
             var op=new OffloadOperation(id,sourceTask.id(),run,attempt(run,"source").id(),null,target,id,"sha256:"+"a".repeat(64),
-                "public-stream-test","DRAINING",null,now.plusSeconds(60),60,null,now,now,"MANUAL",List.of(),null,null,members);
+                NAMESPACE,"DRAINING",null,now.plusSeconds(60),60,null,now,now,"MANUAL",List.of(),null,null,members);
             org.assertj.core.api.ThrowableAssert.ThrowingCallable insert=()->new TransactionTemplate(transactions).execute(tx->{
                 executions.run(run,true);assertThat(offloadStore.create(op)).isTrue();tx.setRollbackOnly();return null;});
             if(change.equals("valid"))assertThatCode(insert).doesNotThrowAnyException();
@@ -941,7 +942,7 @@ class StreamRunIntegrationTest {
         assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.stream_device_binding(route_id,run_id,device_id,session_id,epoch) VALUES (?,?,?,?,?)",UUID.randomUUID(),id,pin.deviceId(),pin.sessionId(),pin.epoch())).isInstanceOf(DataIntegrityViolationException.class);
         var version=version(Map.of("batch",service(null,false,false)),List.of());
         var batch=runs.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of()))).value();
-        assertThatThrownBy(()->store.create(new StreamRunRepository.Configuration(batch.id(),"public-stream-test","sha256:"+"b".repeat(64),120,Instant.now()))).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(()->store.create(new StreamRunRepository.Configuration(batch.id(),NAMESPACE,"sha256:"+"b".repeat(64),120,Instant.now()))).isInstanceOf(DataIntegrityViolationException.class);
         assertThat(store.find(batch.id())).isEmpty();
     }
 }

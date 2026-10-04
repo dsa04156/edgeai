@@ -46,3 +46,7 @@ generation ID를 전달하지 않는다. 실제 서버·SDK 경로와 fixture인
 재시도 정책 생성을 구분한다. 공개 retry와 실제 Kubernetes 장애 수용은 후속 게이트다.
 새 DB migration이나 HTTP 계약 변경은 없다. V1–V26은 변경하지 않는다.
 [검증 근거](../evidence/m7-device-reconnect.md).
+
+[ADR0068](0068-broker-first-device-reconnect.md)은 브로커 회수가 heartbeat보다 빠른 순서도
+처리한다. 브로커 거절 후 닫힌 transport에서 기존 세대의 HTTP 권한을 재확인하며, 여전히
+유효한 배정의 브로커 오류나 TLS·신원 오류는 종료한다.

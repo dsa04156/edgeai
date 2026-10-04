@@ -2,7 +2,10 @@ package io.edgeai.app.integration;
 
 import io.edgeai.app.service.ManagementAuditService;
 import io.edgeai.domain.audit.ManagementAudit;
+import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +22,20 @@ class ManagementAuditIntegrationTest {
     @Autowired PlatformTransactionManager transactions;
     private ManagementAudit.Request request() { return new ManagementAudit.Request(UUID.randomUUID(),"POST","createWorkflow","/api/v1/workflows",null,null); }
     private final ManagementAudit.Actor actor=new ManagementAudit.Actor("LOCAL_BASIC","audit-test","NAME");
+    @Test void concurrentAdmissionsAndResultsAreVisibleFromIndependentConnectionsWhenAcknowledged() throws Exception {
+        var calls=new ArrayList<FutureTask<Void>>();
+        for (int i=0; i<32; i++) {
+            var call=new FutureTask<Void>(()->{
+                var request=request(); service.begin(request);
+                assertThat(service.find(request.id()).orElseThrow().state()).isEqualTo("OUTCOME_UNKNOWN");
+                service.finish(request.id(),201,"HTTP_COMPLETED",actor);
+                assertThat(service.find(request.id()).orElseThrow().outcome().httpStatus()).isEqualTo(201);
+                return null;
+            });
+            calls.add(call); Thread.ofVirtual().start(call);
+        }
+        for (var call:calls) call.get(15,TimeUnit.SECONDS);
+    }
     @Test void admittedRequestSurvivesOuterRollbackAndMissingOutcomeRemainsExplicit() {
         var request=request();
         new TransactionTemplate(transactions).executeWithoutResult(status->{service.begin(request);status.setRollbackOnly();});

@@ -208,6 +208,7 @@ def main():
                              'invalidActors': 0, 'handlerFailures': 0}, 'Durable HTTP audit differs from acknowledged writes and denials'
             stage['integrity']['audit'] = audit
             stage['database'] = json.loads(sql("SELECT json_build_object('bytes',pg_database_size(current_database()),'connections',numbackends,'deadlocks',deadlocks,'commits',xact_commit,'rollbacks',xact_rollback) FROM pg_stat_database WHERE datname=current_database()"))
+            stage['database']['auditTransactions'] = int(sql("SELECT count(DISTINCT transaction_id) FROM (SELECT xmin::text AS transaction_id FROM edgeai.management_audit_request UNION ALL SELECT xmin::text FROM edgeai.management_audit_outcome) committed"))
             save()
             print('PASS: '+str(count)+' device correctness; scheduled p95='+str(round(summary['scheduledLatencyMs']['p95'], 2))+'ms; no request errors or drops', flush=True)
         assert report['apiResourceSamples'] and not report.get('apiResourceSamplingError'), 'API resource measurements unavailable'

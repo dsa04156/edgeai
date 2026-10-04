@@ -10,6 +10,7 @@ sys.path.insert(0, str(repo / 'runner'))
 from edgeai_runner.stream_assignment import AssignmentError, BindingClient
 from edgeai_runner.stream_device_run import DeviceRunSource
 from edgeai_runner.stream_journal import Emission
+from edgeai_runner.stream_mqtt import MqttError
 from edgeai_runner.stream_protocol import Producer
 from edgeai_runner.stream_source import SourceError
 
@@ -99,5 +100,12 @@ if __name__ == '__main__':
     except Exception as error:
         import traceback
         locations = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(error.__traceback__))
-        print('VD_STREAM_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + locations, flush=True)
+        mqtt_reason = {
+            'MQTT connection rejected': 'MQTT_CONNECT_REJECTED',
+            'MQTT subscription rejected': 'MQTT_SUBSCRIBE_REJECTED',
+            'MQTT publication rejected': 'MQTT_PUBLISH_REJECTED',
+            'MQTT subscription failed': 'MQTT_SUBSCRIBE_FAILED',
+            'MQTT TLS verification failed': 'MQTT_TLS_FAILED',
+        }.get(str(error), 'MQTT_OTHER') if isinstance(error, MqttError) else 'NONE'
+        print('VD_STREAM_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + mqtt_reason + ' ' + locations, flush=True)
         sys.exit(1)

@@ -1,6 +1,21 @@
 # 진행 상태
 
 [STATUS]
+ADR0067 감사 동시 커밋 실험은 단위129/PG231·실제API8·백업13 PASS지만 미채택이다. 기본 전체부하 첫실행
+200건미발송 FAIL, 진단재실행은9,240건/감사12,105쌍 보존이다. 추가1,000대180초 진단은
+374건미발송과JDBC commit/WAL대기를 같은구간에 기록했다. 기존 개별 감사 transaction으로
+복원했으며 부하안정화·성능수용은 미완료다.
+실행저장소47개 중 공유VD복구1개 MQTT거절 실패. 별도 실제브로커의 재접속상태/권한회수순서
+재현 후 ADR0068 수정의 SDK19·전체MQTT95·Runner111 PASS, 프로토타입 조합의 저장소47 PASS.
+최종 PG230 PASS(054856Z-986bd582). API JAR은 기존 검증본3968964d와 완전히 같으며
+단위122·API/Swagger·복원 근거를 재사용한다. 최종 실행저장소47 PASS(055136Z-ca618f1f).
+최종 부하 판정4개도 PASS(055524Z-55dffcf0), 각60감사쌍/117transaction·소유자원정리 확인.
+docs/evidence/m9-audit-group-commit.md, docs/evidence/m7-broker-first-reconnect.md.
+선행0e9d7a0 CI37177835436의5jobs/원시23개 PASS(053859Z-52c9a721), GitOpsfe1a995의
+정확한imageID/Ready/PVC/ArgoSynced(053931Z-f013990c), 기존10파일/두PVC·TLS/S3보존
+(054004Z-40e28b5d) PASS. 공유IngresshealthProgressing. ADR0068의 새CI·배포와 구분한다.
+M5잔여/M7/M8성능/M9전체/M10실장비수용 미완료·전체goal유지. 아래는 선행 이력이다.
+
 ADR0066/V34 관리HTTP의 영속접수·관측결과·감사조회API/화면 구현. 단위122/PG229,
 실제API8·저장소47·감사포함백업13/43테이블·참조9·Kubernetes복구점검6개 PASS.
 실API/Swagger12개·DB장애복구·V34의 기존Task9,371개 보존도 확인했다.

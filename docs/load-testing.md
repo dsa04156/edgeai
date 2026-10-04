@@ -51,6 +51,8 @@ bash scripts/test-load.sh
   수집하지 않으며 `cpuQuota=null`은 무제한 확인을 뜻하지 않는다. 호스트와 PostgreSQL instance는 공유한다.
 - `database`: 해당 DB의 크기·접속 수·누적 transaction/deadlock 통계다. 공유 PostgreSQL 전체의
   CPU를 이 시험 전용 CPU로 표시하지 않는다. DB 연결/transaction 통계는 sampling 시점 값이다.
+  `auditTransactions`는 새 시험 DB의 접수/결과 행 `xmin`에서 센 고유 transaction 수다.
+  동시 커밋 측정용이며, freeze 전의 짧은 시험 밖에서 장기 감사 식별자로 사용하지 않는다.
 - `ownedApiStopped`, `ownedDatabaseRemoved`: 시험이 만든 프로세스와 DB의 정리 확인이다.
   임시 DB 이름/oid를 대조하고 API 종료 후 그 DB만 제거한다. 실패에도 부분 report를 저장한다.
 

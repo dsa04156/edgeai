@@ -19,7 +19,7 @@ from test_stream_journal import A
 from edgeai_runner.stream_assignment import AssignmentFenced
 from edgeai_runner.stream_device_run import DeviceRunSource, SourceReconnecting
 from edgeai_runner.stream_journal import Backpressure, Emission, Journal, Limits
-from edgeai_runner.stream_mqtt import Link, MqttError
+from edgeai_runner.stream_mqtt import Link, MqttError, MqttBrokerRejected
 from edgeai_runner.stream_source import SourceError
 
 
@@ -172,6 +172,78 @@ class DeviceRunSourceTest(unittest.TestCase):
         with patch.object(source.source,'step',side_effect=MqttError('MQTT TLS verification failed')):
             with self.assertRaises(MqttError):source.step()
         self.assertTrue(source.closed)
+
+    def test_broker_revoke_before_heartbeat_rechecks_authority_and_preserves_source(self):
+        source=self.open();self.ready();self.emit()
+        eventually(self.pump,lambda:source.source.link.ready)
+        old=source.source
+        # Force the real broker to revoke first, before the next HTTP heartbeat.
+        old.next_at={identity:time.monotonic()+10 for identity in old.next_at}
+        self.api.status=409;self.api.generation_state='FENCED'
+        passwords=self.root/'passwords';original=passwords.read_text()
+        self.broker.stop()
+        passwords.write_text(''.join(line for line in original.splitlines(keepends=True) if not line.startswith('source-a:')))
+        self.broker.start()
+        try:
+            eventually(source.step,lambda:source.source is None)
+            self.assertFalse(source.closed);self.assertTrue(old.closed);self.assertTrue(old.link.closed)
+        finally:
+            passwords.write_text(original)
+        self.advance();self.ready()
+        self.assertEqual(2,source.connections)
+        self.assertEqual(b'offset1',source.checkpoint().state)
+        self.assertEqual(1,source.checkpoint().output_sequences[A.route_id])
+        eventually(self.pump,lambda:bool(self.sink.pending()))
+        frame=self.sink.pending()[0]
+        self.assertEqual((1,b'4',2),(frame.sequence,frame.payload,frame.binding.generation))
+
+    def test_actual_broker_restart_reconnects_live_assignment_without_replacing_source(self):
+        source=self.open();self.ready();self.emit()
+        eventually(self.pump,lambda:source.source.link.ready)
+        old=source.source
+        self.broker.stop()
+        eventually(source.step,lambda:not old.link._socket_open)
+        self.broker.start()
+        eventually(self.pump,lambda:old.link.ready and bool(self.sink.pending()))
+        self.assertIs(old,source.source);self.assertFalse(source.closed)
+        self.assertEqual(1,source.connections)
+        self.assertEqual(b'offset1',source.checkpoint().state)
+        self.assertEqual((1,b'4'),(self.sink.pending()[0].sequence,self.sink.pending()[0].payload))
+
+    def reject_before_heartbeat(self, status):
+        source=self.open();self.ready();self.emit()
+        old=source.source
+        old.next_at={identity:time.monotonic()+10 for identity in old.next_at}
+        self.api.status=status
+        old.link.error=MqttBrokerRejected('MQTT publication rejected')
+        return source,old
+
+    def test_broker_rejection_with_still_valid_authority_remains_terminal(self):
+        source,old=self.reject_before_heartbeat(None)
+        with self.assertRaises(MqttBrokerRejected):source.step()
+        self.assertTrue(source.closed);self.assertTrue(old.closed);self.assertTrue(old.link.closed)
+        self.assertEqual(1,source.connections)
+        with Journal(self.directory/'journal',[],[A]) as journal:
+            self.assertEqual(b'offset1',journal.checkpoint().state)
+
+    def test_broker_rejection_cannot_hide_http_identity_failure(self):
+        source,old=self.reject_before_heartbeat(401)
+        with self.assertRaises(AssignmentFenced) as result:source.step()
+        self.assertEqual(401,result.exception.status)
+        self.assertTrue(source.closed);self.assertTrue(old.link.closed)
+
+    def test_broker_rejection_during_api_outage_closes_transport_before_rediscovery(self):
+        source,old=self.reject_before_heartbeat(503)
+        source.step()
+        self.assertFalse(source.closed);self.assertIsNone(source.source);self.assertTrue(old.link.closed)
+        with self.assertRaises(SourceReconnecting):self.emit(b'5',b'offset2')
+        self.api.route_status=503
+        eventually(source.step,lambda:source.retries>=2)
+        self.assertIsNone(source.source);self.assertEqual(1,source.connections)
+        self.api.route_status=None;self.api.status=409;self.api.generation_state='FENCED'
+        self.advance();self.ready()
+        self.assertEqual(b'offset1',source.checkpoint().state)
+        self.assertEqual(1,source.checkpoint().output_sequences[A.route_id])
 
     def test_fanout_waits_for_every_selected_generation_before_opening_any_transport(self):
         self.source=DeviceRunSource(self.client,POD,[A.route_id,POD],self.directory,create=True)

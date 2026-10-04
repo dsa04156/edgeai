@@ -14,7 +14,7 @@ import time
 
 from edgeai_runner.stream_assignment import AssignmentExpired, AssignmentFenced, AssignmentUnavailable, BindingClient
 from edgeai_runner.stream_journal import Backpressure, Limits
-from edgeai_runner.stream_mqtt import MqttAuthorityExpired
+from edgeai_runner.stream_mqtt import MqttAuthorityExpired, MqttBrokerRejected
 from edgeai_runner.stream_protocol import Binding, _uuid
 from edgeai_runner.stream_source import DeviceSource, SourceError, require
 from edgeai_runner import stream_source_completion as completion_intent
@@ -149,6 +149,32 @@ class DeviceRunSource:
             self._waiting()
         except (AssignmentExpired, MqttAuthorityExpired, AssignmentUnavailable):
             self._waiting()
+        except MqttBrokerRejected:
+            # DeviceSource has closed the old transport/journal. A broker denial
+            # can beat the next HTTP heartbeat during generation revocation.
+            # Only an authenticated fence (or unavailable authority) permits
+            # rediscovery; a still-valid assignment means a terminal broker error.
+            try:
+                require(self.source is not None and self.source.closed, 'STREAM_SOURCE_SCOPE_MISMATCH')
+                for identity in self.source.assignments:
+                    self._check()
+                    timeout=max(.01,min(1.,(self.deadline-time.monotonic())/4))
+                    self.client.fetch(identity,timeout=timeout)
+                    self._check()
+            except AssignmentFenced as error:
+                if error.status == 409:
+                    self._waiting()
+                    return
+                self.close()
+                raise
+            except AssignmentUnavailable:
+                self._waiting()
+                return
+            except BaseException:
+                self.close()
+                raise
+            self.close()
+            raise
         except BaseException:
             self.close()
             raise

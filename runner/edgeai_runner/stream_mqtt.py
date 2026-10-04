@@ -30,6 +30,10 @@ class MqttAuthorityExpired(MqttError):
     """The Link has closed before any more queued packets can be sent."""
 
 
+class MqttBrokerRejected(MqttError):
+    """A broker denied CONNECT, SUBSCRIBE or PUBLISH; this grants no new authority."""
+
+
 class _Client(mqtt.Client):
     def _ssl_wrap_socket(self, tcp_sock):
         # Paho 2.1.0 performs a deferred handshake without closing its SSLSocket on
@@ -194,7 +198,7 @@ class Link:
     def _connected(self, client, userdata, flags, reason_code, properties):
         self._check_authority()
         if reason_code.is_failure:
-            self.error = MqttError('MQTT connection rejected')
+            self.error = MqttBrokerRejected('MQTT connection rejected')
             return
         subscriptions = [(name, SubscribeOptions(qos=1, retainAsPublished=True, retainHandling=2))
                          for name in (*self._incoming, *self._acks)]
@@ -205,7 +209,7 @@ class Link:
     def _subscribed(self, client, userdata, mid, reason_codes, properties):
         self._check_authority()
         if any(code.is_failure for code in reason_codes):
-            self.error = MqttError('MQTT subscription rejected')
+            self.error = MqttBrokerRejected('MQTT subscription rejected')
         else:
             self.ready = True
             self._publish_at = 0
@@ -217,7 +221,7 @@ class Link:
 
     def _published(self, client, userdata, mid, reason_code, properties):
         if reason_code.is_failure:
-            self.error = MqttError('MQTT publication rejected')
+            self.error = MqttBrokerRejected('MQTT publication rejected')
         # Broker acknowledgement deliberately does not touch the durable journal.
 
     def _message(self, client, userdata, message):
@@ -272,6 +276,9 @@ class Link:
             if time.monotonic() < self._retry_at:
                 return
             if self._assignments and self.client.socket() is None:
+                # Paho 2.1.0 can retain CONNECTION_LOST after closing its socket.
+                # Finalize that state through its public API before changing the timeout.
+                self.client.disconnect()
                 self.client.connect_timeout = min(self.client.connect_timeout, remaining)
             self.client.username_pw_set(self.endpoint.username, self.endpoint.credential())
             properties = Properties(PacketTypes.CONNECT)
