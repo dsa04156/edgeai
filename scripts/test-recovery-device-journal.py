@@ -36,8 +36,10 @@ def main():
     parser.add_argument('--transport',choices=['native','compose'],default='native')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-device-journal-test.json')
     parser.add_argument('--verify-authority',action='store_true')
+    parser.add_argument('--retire-routes',action='store_true')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     args = parser.parse_args(); identity = uuid.uuid4().hex
+    if args.retire_routes and not args.verify_authority:parser.error('--retire-routes requires --verify-authority')
     work = ROOT/'.tools'/('recovery-device-journal-test-'+identity); work.mkdir(mode=0o700)
     pg = Postgres(args.transport,diagnostics=work/'postgres'); age = material.Age()
     owned, apis = {}, []; fixtures=None; source = 'edgeai_backup_journal_'+identity
@@ -185,7 +187,8 @@ def main():
         if fixtures:fixtures.seal_storage()
         target,receipt=restore_database(middle,'mid'); empty,empty_receipt=restore_database(early,'early'); ended,ended_receipt=restore_database(terminal,'end')
         mismatched_restore=restore_database(mismatched,'mis') if fixtures else None
-        drop(source); report.update(sourceDatabaseRemoved=True,restoredDatabaseCount=4 if fixtures else 3)
+        route_restore=restore_database(middle,'routes') if args.retire_routes else None
+        drop(source); report.update(sourceDatabaseRemoved=True,restoredDatabaseCount=(5 if args.retire_routes else 4) if fixtures else 3)
         report['tableCount']=len(fingerprint(target)); assert report['tableCount']>=43
         base=source_snapshot('base'); result=compare(base,target,receipt,cli=True)
         assert len(result['routes'])==2 and {r['sourceAcknowledged'] for r in result['routes']}=={1,2}
@@ -266,6 +269,9 @@ def main():
                 fixedStorageVersions=4,verifiedCheckpointObjects=1,brokerAndStorageTls=True,
                 sourceOwnerRetirementVerified=True,retiredSourceRemoved=not retained_source.exists(),
                 minioBinarySha256=hashlib.sha256(args.minio_binary.read_bytes()).hexdigest())
+            if args.retire_routes:
+                from test_recovery_stream_retirement import exercise
+                report.update(exercise(fixtures,pg,route_restore,fingerprint,passed,args.transport))
         pg.sql('UPDATE edgeai.device_session SET closed_at=now()',target)
         compare(base,target,receipt,{'DEVICE_SESSION_NO_LONGER_CURRENT'})
         passed('closed-session-remains-ineligible-even-when-data-cursors-match')

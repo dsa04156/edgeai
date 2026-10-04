@@ -2,6 +2,13 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0091 원본 MQTT 차단의 실제 관측을 복원 DB STREAM 경로 종료에 연결했다.
+실제47개 `152904Z-e8228c9f` PASS: 기존 장치33개+경로14개, 복원DB5·경로4개 종료·
+다른broker1개/42개 타 테이블 보존·실잠금/원복/COMMIT응답 유실·0변경 재실행·소유 정리.
+[근거](docs/evidence/m9-recovery-stream-retirement.md). 원래 fence 이유·checkpoint·Task/Run과
+격리를 보존한다. STREAM 그룹 결과/재시도·전환·새 권한·종합 활성화와 전체 목표는 남는다.
+CI 결합 gate를47개로 확장했고 신규 원격 CI/배포는 후속 확인한다.
+
 ADR0090 원본 Device source의 영속 종료 marker·실제 owner 잠금 해제·최종 snapshot 보존을
 추가하고 DB/S3/브로커 결합 검사에 연결했다. 별도 writer11개150639Z-87144f5a·결합33개
 151649Z-82a21d30, Runner111/TLS MQTT97/백업13개151238Z 회귀 PASS.

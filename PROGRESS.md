@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+ADR0091 실제 원본 broker 차단→복원 STREAM generation 종료 결합47개
+`152904Z-e8228c9f` PASS. 새14개는 복원DB5·경로4개 종료·기존 취소 이유/시각·다른broker1개/
+42개 타 테이블 보존, 실제 잠금/SQL guard 경쟁/rollback/COMMIT응답 유실·권한 재활성화·
+0변경 재실행과 소유 정리를 검증했다. [근거](docs/evidence/m9-recovery-stream-retirement.md).
+기존 장치33개 회귀 포함. 경로 상태만 조정하며 Task/Run·checkpoint·격리는 보존한다.
+새 CI/배포·STREAM 그룹 결과/재시도/전환·종합 활성화·M5 잔여/M7–M10 전체 수용은 남는다.
+
 ADR0090 원본 Device source 종료11개 `150639Z-87144f5a`, 실제 복원 DB4/DB·TLS S3/MQTT·
 원본 journal 결합33개 `151649Z-82a21d30` PASS. Runner111 `151238Z-82901393`, MQTT97
 `151238Z-d7b91f12`, 백업13 `151238Z-fca4c959`도 PASS다. 원본 마지막 프레임 보존·잠금

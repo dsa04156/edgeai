@@ -25,7 +25,7 @@ from storage_backup import Client
 from edgeai_runner import stream_checkpoint as checkpoint
 
 
-def observe_broker(args, broker_digest, actor):
+def observe_broker(args, broker_digest, actor=None):
     directory=args.mqtt_state_directory.absolute(); journal.journals.private_directory(directory)
     state,state_sha=journal.read_json(directory/'recovery.json')
     required={'formatVersion','endpoint','certificateSha256','brokerDigest','adminUser','recoveryId','password'}
@@ -63,13 +63,16 @@ def observe_broker(args, broker_digest, actor):
         except mqtt.AuthenticationRejected:
             raise Blocked('Persisted recovery administrator is no longer accepted') from None
         if journal.read_json(directory/'recovery.json')[1]!=state_sha: raise Blocked('MQTT recovery state changed')
-    name='edgeai-device-'+actor.id+'-'+str(actor.epoch)
-    return {'scope':'fresh-original-mqtt-authority-observation','recoveryId':args.recovery_id,
+    result={'scope':'fresh-original-mqtt-authority-observation','recoveryId':args.recovery_id,
         'endpoint':state['endpoint'],'certificateSha256':state['certificateSha256'],'brokerDigest':broker_digest,
         'recoveryStateSha256':state_sha,'principalInventorySha256':hashlib.sha256(journal.canonical(before)).hexdigest(),
-        'disabledPrincipals':len(before)-1,'devicePrincipalPresent':name in before,
-        'devicePrincipalAbsentOrDisabled':name not in before or before[name].get('disabled') is True,
+        'disabledPrincipals':len(before)-1,
         'oldAdministratorRejected':True,'brokerModified':False}
+    if actor is not None:
+        name='edgeai-device-'+actor.id+'-'+str(actor.epoch)
+        result.update(devicePrincipalPresent=name in before,
+            devicePrincipalAbsentOrDisabled=name not in before or before[name].get('disabled') is True)
+    return result
 
 
 def verify_checkpoint_bytes(client,catalog):

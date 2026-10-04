@@ -145,7 +145,7 @@ jobs:
           EDGEAI_STREAM_PYTHON: ${{ github.workspace }}/.tools/stream-venv/bin/python
         run: |
           bash scripts/install-age.sh
-          bash scripts/collect-evidence.sh recovery-device-journal bash scripts/test-recovery-device-journal.sh --transport compose --verify-authority --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-device-journal-report.json
+          bash scripts/collect-evidence.sh recovery-device-journal bash scripts/test-recovery-device-journal.sh --transport compose --verify-authority --retire-routes --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-device-journal-report.json
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:

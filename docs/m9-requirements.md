@@ -90,6 +90,13 @@ ADR0089의 [결합 검증](recovery-device-readiness.md)은 실제 replica 고�
 checkpoint 내용, 원본 브로커의 관리자 자격 회수/계정 차단을 재관측한다. 실제 27개에서
 상태 summary 불일치·객체 삭제·권한 재활성화·DB 경쟁을 거절했다. 원본 Device 프로세스와
 다른 producer/API 권한 회수·새 권한 배정·전체 서비스 활성화는 남는다.
+ADR0090의 [원본 Device source 종료](recovery-device-source-retirement.md)는 실제 journal owner
+잠금 해제와 최종 snapshot을 복원 입력에 연결한다. 종료11개/결합33개로 마지막 프레임 보존·
+실제 DeviceSource 종료·잠금/파일/원본 쓰기 경쟁·격리를 확인했다. 전체 물리/전역 종료는 별도다.
+ADR0091의 [복원 STREAM 경로 종료](recovery-stream-retirement.md)는 현재 원본 broker의 실제
+차단을 재관측해 같은 digest의 generation만 fence/close한다. 결합47개에서 실제 DB 잠금·원복·
+응답 유실·기존 이유/42테이블·다른broker 보존을 검증했다. STREAM 그룹 업무 결과/재시도·
+진행 중 전환과 새 자격·종합 활성화는 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
