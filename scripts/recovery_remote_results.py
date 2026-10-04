@@ -19,7 +19,7 @@ from recovery_remote_storage import Storage, inputs, private_json, verify as ver
 TABLES = ('flyway_schema_history', 'remote_allocation', 'runtime_instance', 'runtime_command',
           'task_attempt', 'task_result', 'result_artifact', 'task', 'workflow_run', 'task_retry',
           'task_definition', 'task_dependency', 'workflow_version', 'profile_version',
-          'task_offload', 'task_offload_member')
+          'task_offload', 'task_offload_member', 'data_route')
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
     "encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text)"
@@ -31,7 +31,8 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
  'outputs',v.spec->'outputs','latestEpoch',(SELECT max(epoch) FROM edgeai.task_attempt WHERE task_id=t.id),
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),
  'activeOffload',EXISTS(SELECT FROM edgeai.task_offload WHERE run_id=t.run_id AND state IN ('DRAINING','STARTING','CANCELLING')),
- 'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM'),
+ 'hasStream',(EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM')
+   OR EXISTS(SELECT FROM edgeai.data_route WHERE run_id=w.id)),
  'pendingCommands',EXISTS(SELECT FROM edgeai.runtime_command c WHERE c.runtime_id=r.id
    AND (NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL)),
  'result',(SELECT to_jsonb(s) || jsonb_build_object('outputs',(

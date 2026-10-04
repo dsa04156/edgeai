@@ -17,7 +17,7 @@ from recovery_workflow_failures import transaction_sql as workflow_transaction
 import recovery_batch_offloads as offloads
 
 TABLES = (*retirement.TABLES, 'task_retry', 'task_definition', 'task_dependency',
-          'workflow_version', 'profile_version', 'task_offload', 'task_offload_member', 'remote_allocation')
+          'workflow_version', 'profile_version', 'task_offload', 'task_offload_member', 'remote_allocation', 'data_route')
 GUARD_QUERY = 'SELECT jsonb_build_object(' + ','.join(
     literal(name) + ", (SELECT encode(sha256(convert_to(coalesce(string_agg("
     "encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY " +
@@ -27,7 +27,8 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
  'runtime',to_jsonb(r),'attempt',to_jsonb(a),'task',to_jsonb(t),'runState',w.state,
  'latestEpoch',(SELECT max(epoch) FROM edgeai.task_attempt WHERE task_id=t.id),
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),
- 'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM'),
+ 'hasStream',(EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM')
+   OR EXISTS(SELECT FROM edgeai.data_route WHERE run_id=w.id)),
  'activeOffload',EXISTS(SELECT FROM edgeai.task_offload WHERE run_id=w.id AND state IN ('DRAINING','STARTING','CANCELLING')),
  'failedDrain',EXISTS(SELECT FROM edgeai.task_offload WHERE task_id=t.id AND source_attempt_id=a.id
    AND target_attempt_id IS NULL AND state='FAILED' AND failure_reason='SOURCE_DRAIN_TIMEOUT'),

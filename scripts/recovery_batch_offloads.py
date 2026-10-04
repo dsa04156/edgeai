@@ -10,7 +10,8 @@ SELECT coalesce(jsonb_agg(jsonb_build_object(
  'hasResult',EXISTS(SELECT FROM edgeai.task_result WHERE task_id=t.id),
  'retryPending',EXISTS(SELECT FROM edgeai.task_retry WHERE task_id=t.id),
  'hasMembers',EXISTS(SELECT FROM edgeai.task_offload_member WHERE operation_id=o.id),
- 'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=t.workflow_version_id AND mode='STREAM')
+ 'hasStream',(EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=t.workflow_version_id AND mode='STREAM')
+   OR EXISTS(SELECT FROM edgeai.data_route WHERE run_id=t.run_id))
 ) ORDER BY o.id),'[]'::jsonb) FROM edgeai.task_offload o JOIN edgeai.task t ON t.id=o.task_id
 JOIN edgeai.task_attempt s ON s.id=o.source_attempt_id LEFT JOIN edgeai.task_attempt a ON a.id=o.target_attempt_id
 WHERE o.state IN ('DRAINING','STARTING','CANCELLING')

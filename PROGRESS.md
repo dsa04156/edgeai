@@ -1,6 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0092 실제 STREAM 그룹 복구18개 `160510Z-580c6a40` PASS. 공개 Device fanout2/복원DB5·
+실제 컨테이너 종료·TLS broker·원래 그룹 기한/취소·checkpoint2와S3고정version2 보존,
+DB경쟁/잠금/원복/응답 유실을 확인했다. 기존 BATCH 명령의 Device-only STREAM 우회를
+실제 재현 후 수정했다. [근거](docs/evidence/m9-recovery-stream-workflows.md).
+Remote Result15개 `160510Z-69a92427`, 실패15개 `160510Z-d2fec081` 회귀 PASS.
+혼합69개 `161320Z-48dd1604`도 PASS. 실제 DiskPressure 퇴거를 관측한 뒤 시험 노드 선택과
+실패 관측을 보완했고 소유 자원을 정리했다. 새CI18개 gate 연결·미push,
+STREAM 전환/최종 처리·종합 활성화·전체 수용은 남는다.
+
+선행 c133315 CI37213721652 완료3jobs의 원시32개·PG230·Runner111/MQTT97·Device11/
+결합47개 부분 감사 `160737Z-4f2c931b` PASS. images/실제 Kubernetes는 진행 중이며
+ADR0092의 새18개나 새 배포 근거로 사용하지 않는다.
+
 선행42c4094 CI37209512541 전체5jobs/원시34개 PASS(`153553Z-573e4203`). GitOps6d876f5의
 정확한 API/dashboard/MinIO 이미지·Ready/PVC/ArgoSynced(`153534Z-5f51c056`)와 기존10파일/
 원래PVC·HTTPS256KiB/익명403/소유probe정리(`153651Z-90a91c7f`)도 PASS다.

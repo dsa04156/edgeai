@@ -342,6 +342,7 @@ jobs:
             .tools/kind-multidevice-demo.json
             .tools/kind-recovery-stop.json
             .tools/kind-recovery-kubernetes-retire.json
+            .tools/kind-recovery-stream-workflows.json
           include-hidden-files: true
           retention-days: 14
   gitops:

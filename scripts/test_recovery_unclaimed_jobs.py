@@ -17,14 +17,26 @@ import recovery_kubernetes_workflows as workflows
 def q(value): return literal(value)+'::uuid'
 
 
+def candidate_nodes(kube,excluded_uid=None):
+    candidates=[]
+    for node in kube.read('/api/v1/nodes')['items']:
+        conditions={c['type']:c for c in node.get('status',{}).get('conditions',[])}
+        if (node['metadata']['uid']==excluded_uid or node['metadata']['labels'].get('kubernetes.io/arch')!='amd64' or
+                node['spec'].get('unschedulable') or any(t['effect'] in ('NoSchedule','NoExecute') for t in node['spec'].get('taints',[])) or
+                conditions.get('Ready',{}).get('status')!='True' or any(conditions.get(kind,{}).get('status')!='False'
+                    for kind in ('DiskPressure','MemoryPressure','PIDPressure'))):continue
+        # Prefer a node whose healthy conditions have remained stable longest. A recently
+        # recovered pressure condition must not win merely because its name sorts first.
+        stable_since=max(conditions[k].get('lastTransitionTime','') for k in ('Ready','DiskPressure','MemoryPressure','PIDPressure'))
+        candidates.append((stable_since,node['metadata']['name'],node))
+    return [row[2] for row in sorted(candidates,key=lambda row:row[:2])]
+
+
 def seed(pg, db, kube, create, namespace, operation, pod_spec, source, original_attempt, original_run):
     source_node=pg.sql('SELECT node_uid::text FROM edgeai.runtime_instance WHERE id='+q(source['runtime']),db)
-    nodes=kube.read('/api/v1/nodes')['items']
-    candidates=[n for n in nodes if n['metadata']['uid']!=source_node and
-        n['metadata']['labels'].get('kubernetes.io/arch')=='amd64' and not n['spec'].get('unschedulable') and
-        any(c['type']=='Ready' and c['status']=='True' for c in n['status']['conditions'])]
-    assert candidates,'A separate Ready amd64 target is required for this owned fixture'
-    node=sorted(candidates,key=lambda n:n['metadata']['name'])[0]
+    candidates=candidate_nodes(kube,source_node)
+    assert candidates,'A separate Ready amd64 target without pressure or scheduling restrictions is required'
+    node=candidates[0]
     node_id,node_name=node['metadata']['uid'],node['metadata']['name']
     pg.sql('INSERT INTO edgeai.execution_node(id,name,architecture,operating_system,observed_status,cpu,memory,labels,observed_at) VALUES ('+
         q(node_id)+','+literal(node_name)+",'amd64','linux','READY','1','1Gi','{}',now()) ON CONFLICT(id) DO NOTHING",db)

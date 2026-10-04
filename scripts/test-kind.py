@@ -271,6 +271,14 @@ def main():
                 '--report', '.tools/kind-recovery-kubernetes-retire.json'], env=env, timeout=600)
             if result.returncode:
                 raise RuntimeError('kind restored Kubernetes runtime retirement acceptance failed')
+            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-workflows',
+                'bash', 'scripts/test-recovery-stream-workflows.sh', '--context', context, '--transport', 'compose',
+                '--minio-binary', '.tools/minio-recovery-tested',
+                '--runner-image', images['runner'], '--runner-source', source_revision,
+                '--report', '.tools/kind-recovery-stream-workflows.json'],
+                env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=600)
+            if result.returncode:
+                raise RuntimeError('kind restored STREAM workflow recovery acceptance failed')
             # Exercise the real component on the original persistent API/DB/storage deployment.
             with tempfile.TemporaryDirectory(prefix='.stream-', dir=ROOT / 'deploy/kind') as overlay:
                 (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))

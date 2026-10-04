@@ -170,6 +170,7 @@ DB에 없는 실행까지 찾는 조회 전용 [Kubernetes 복구 점검](docs/r
 [VD 내부 작업 복구 검증](docs/evidence/m9-recovery-vd-tasks.md)은 실제 supervisor 종료 후 열린 할당을 닫고 기존 종료 사유·성공 결과·미배정 작업을 보존합니다.
 [복원 Kubernetes/VD 작업 상태 조정](docs/recovery-kubernetes-workflows.md)은 기록된 취소와 원래 기한의 재시도 만료·후속 작업·Run을 정리하고, 결과 미확정 작업은 미해결로 남깁니다.
 같은 명령의 `--offloads`는 [증명 범위 안의 전환 취소·기한](docs/evidence/m9-recovery-batch-offloads.md)을 조정합니다. 미기록 target과 새 epoch는 보존하며 새 실행을 시작하지 않습니다.
+[복원 STREAM 그룹 정리](docs/recovery-stream-workflows.md)는 실제 producer·broker 종료를 다시 확인해 같은 Device fanout의 취소와 원래 그룹 재시도 기한을 함께 조정합니다. 새 실행과 서비스 재개는 종합 복구 단계에서 처리합니다.
 MinIO 파일·외부 인증 키·실행 중 작업을 포함한 [M9 전체 복구](docs/m9-requirements.md)는 별도 검증이 필요합니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.

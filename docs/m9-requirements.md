@@ -97,6 +97,11 @@ ADR0091의 [복원 STREAM 경로 종료](recovery-stream-retirement.md)는 현�
 차단을 재관측해 같은 digest의 generation만 fence/close한다. 결합47개에서 실제 DB 잠금·원복·
 응답 유실·기존 이유/42테이블·다른broker 보존을 검증했다. STREAM 그룹 업무 결과/재시도·
 진행 중 전환과 새 자격·종합 활성화는 남는다.
+ADR0092의 [STREAM 그룹 업무 상태 조정](recovery-stream-workflows.md)은 실제 producer/broker
+종료를 재관측해 기록된 취소와 원래 그룹 retry 기한 만료를 반영한다. 실제18개에서 같은 Device
+fanout의 원자성·checkpoint2/고정version2 보존·잠금/원복/응답 유실과 BATCH 명령의 잘못된
+우회 처리를 재현·수정했다. 기한 전 예약·최종 처리 중인 그룹·활성 전환은 보존하며 새 실행은
+만들지 않는다. STREAM 전환/최종 처리 복구·외부 시작 권한·종합 재가동 수용은 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를

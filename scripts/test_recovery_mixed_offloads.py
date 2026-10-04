@@ -16,6 +16,7 @@ from recovery_remote_inventory import binding_digest, canonical
 from recovery_remote_retire import durable_json
 import recovery_remote_retire as remote_retirement
 import recovery_kubernetes_workflows as workflows
+from test_recovery_unclaimed_jobs import candidate_nodes
 
 sys.path.insert(0,str(ROOT/'simulator/tests'))
 from test_remote_recovery import RemoteRecoveryTest
@@ -93,9 +94,9 @@ def seed(pg,db,kube,create,namespace,recovery_id,pod_spec,vd_work,kube_attempt,k
         'initial_mode':'REMOTE',**{'initial_'+k:v for k,v in frozen.items()}})
     remote_attempt(source,1,'INITIAL');allocate(source,1,'running')
     pg.sql("UPDATE edgeai.task_attempt SET state='OFFLOADED' WHERE id="+q(source['attempt']),db)
-    nodes=kube.read('/api/v1/nodes')['items']
-    node=next(n for n in nodes if n['metadata']['labels'].get('kubernetes.io/arch')=='amd64' and not n['spec'].get('unschedulable') and
-        any(c['type']=='Ready' and c['status']=='True' for c in n['status']['conditions']))
+    candidates=candidate_nodes(kube)
+    assert candidates,'A Ready amd64 target without pressure or scheduling restrictions is required'
+    node=candidates[0]
     node_id,node_name=node['metadata']['uid'],node['metadata']['name']
     pg.sql('INSERT INTO edgeai.execution_node(id,name,architecture,operating_system,observed_status,cpu,memory,labels,observed_at) VALUES ('+
         q(node_id)+','+literal(node_name)+",'amd64','linux','READY','1','1Gi','{}',now()) ON CONFLICT(id) DO NOTHING",db)

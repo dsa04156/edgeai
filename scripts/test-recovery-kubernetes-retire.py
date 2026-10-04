@@ -520,6 +520,24 @@ def main():
         code=0
     except Exception as error:
         report['failureType']=type(error).__name__
+        report['failureFrames']=[{'file':Path(frame.filename).name,'line':frame.lineno}
+            for frame in traceback.extract_tb(error.__traceback__)]
+        try:
+            if namespace_uid:
+                ns=kube.read('/api/v1/namespaces/'+namespace)
+                assert ns['metadata']['uid']==namespace_uid and ns['metadata']['labels']['edgeai.io/recovery-test']==token
+                report['failurePods']=[{'uid':pod['metadata']['uid'],'phase':pod.get('status',{}).get('phase'),
+                    'reason':pod.get('status',{}).get('reason'),
+                    'nodeName':pod.get('spec',{}).get('nodeName'),
+                    'conditions':[{'type':c.get('type'),'status':c.get('status'),'reason':c.get('reason')}
+                        for c in pod.get('status',{}).get('conditions',[])],
+                    'containers':[{'name':c['name'],'ready':c.get('ready'),'restartCount':c.get('restartCount'),
+                        'state':{kind:{k:v for k,v in state.items() if k in ('reason','exitCode','signal')}
+                            for kind,state in c.get('state',{}).items()}}
+                        for c in pod.get('status',{}).get('containerStatuses',[])]}
+                    for pod in kube.items(namespace,'Pod')[0]]
+        except Exception as observation_error:
+            report['failureObservationType']=type(observation_error).__name__
         with private_file(work/'failure.log','w') as log: traceback.print_exc(file=log)
         print('FAIL: Kubernetes retirement; private evidence retained',flush=True)
     finally:

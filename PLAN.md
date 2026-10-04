@@ -2,6 +2,20 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0092 복원 STREAM 그룹의 기록된 취소/공유 retry 기한 조정 실제18개
+`160510Z-580c6a40` PASS. 실제 컨테이너2·복원DB5·checkpoint2/고정S3version2 보존,
+경쟁/잠금/원복/COMMIT응답 유실·원래 예산·BATCH 우회 거절을 확인했다.
+[근거](docs/evidence/m9-recovery-stream-workflows.md). Device-only STREAM을 기존 BATCH
+명령이 취소하는 오류를 실제 재현 후 data_route 판별/guard로 수정했다. Remote15/15 회귀도
+PASS다. 혼합69개 회귀도 `161320Z-48dd1604` PASS다. 시험 노드의 실제 DiskPressure 퇴거를
+관측해 노드 선택·실패 관측을 보완했고 소유 자원 정리를 확인했다. 새 CI18개 gate를 연결했으며
+진행 중 선행 CI 종료 전이므로 아직 미push다.
+STREAM offload/finalization·새 권한/전역 writer·종합 활성화와 전체 목표는 남는다.
+
+선행 c133315 CI37213721652의 완료3jobs 원시32개·PG230·Runner111/MQTT97·Device11/
+결합47개를 `160737Z-4f2c931b`에서 감사했다. images의 실제 Kubernetes 검증은 진행 중이며
+해당 CI에는 ADR0092가 없다. 실행 중 CI를 취소하지 않도록 후속 push는 종료 뒤 진행한다.
+
 선행42c4094 CI37209512541의5jobs/원시34개를 `153553Z-573e4203`에서 감사했다.
 GitOps6d876f5의 정확한 이미지·Ready/ArgoSynced `153534Z-5f51c056`, 기존10파일/원래PVC·
 HTTPS 보존 `153651Z-90a91c7f` PASS다. ADR0089–0091을 pin 변경 위로 rebase했고
