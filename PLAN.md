@@ -2,6 +2,17 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+소스60c8be3의 main CI37223827513에서 native amd64/arm64 Runner와 index 발행3jobs가
+성공했다. 원시4개·각Runner111/MQTT97·실제registry의 두manifest를 `182346Z-6cf4c91c`
+감사 PASS. 새 index8a2f8067로 공개 API→ARM서버 GB10→고정S3결과1개 검증도 PASS다.
+`182404Z-6448ff9a`의 엣지GPU case는 가용 노드 부재로 BLOCKED이므로 전체 명령은 exit2.
+소유runtime정리 확인. ARM 공개 STREAM AUTO/NODE/cancel도 `182458Z-f434c88e`
+8Pod/S36개·checkpoint·소유정리 PASS. 전체CI·새API배포는 후속 확인한다.
+엣지 연결 복귀 뒤 공개Jetson GPU 실행 `182709Z-151e67f8` 1Pod/고정S3결과/정리 PASS.
+엣지전용 STREAM AUTO/NODE/cancel `182820Z-f547a037`도 실제Jetson8Pod/고정S36개/
+checkpoint·취소·정리 PASS. 실제모델·NPU추론·장치단절복구와 전체단계 수용은 남는다.
+[native 근거](docs/evidence/m10-native-runner-ci.md)·[실행 근거](docs/evidence/m10-hardware-runtime.md).
+
 ADR0096 MQTT 관리 응답 경합 수정: 실제80회 중 콜백 NPE1개를 `180109Z-585a08ed`에서
 관측했고 요청별 correlation/큐와 단일 snapshot으로 수정했다. 같은80회
 `180704Z-af18f0f5` 예외0/PASS, 최종코드 전체broker14개 `181144Z-36506086` PASS.

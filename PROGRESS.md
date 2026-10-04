@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+최신main소스60c8be3 CI37223827513: native ARM/x86와index발행3jobs 성공.
+`182346Z-6cf4c91c` 원시4개/각Runner111·MQTT97/두manifest 감사 PASS.
+새index8a2f8067의 공개 ARM서버GPU 실행·S3결과·소유정리 PASS. 같은
+`182404Z-6448ff9a`의 엣지GPU는 가용노드부재로 BLOCKED, 전체명령 exit2.
+ARM 공개 STREAM AUTO/NODE/cancel `182458Z-f434c88e` 8Pod/S36개·소유정리 PASS.
+엣지 연결 복귀 뒤 Jetson GPU 공개실행 `182709Z-151e67f8` 1Pod/S3결과/정리 PASS.
+엣지전용 STREAM AUTO/NODE/cancel `182820Z-f547a037` Jetson8Pod/S36개/정리 PASS.
+전체CI/새API·GitOps배포·장치단절복구·실제모델 수용은 아직 완료되지 않았다.
+아래는 이 확인에 앞선 검증 이력이다.
+
 ADR0096의 요청별 broker 응답 수명 수정: 기존80회 콜백NPE1개 확인 후 같은80회
 `180704Z-af18f0f5` 예외0/PASS, 최종broker14개 `181144Z-36506086` PASS/정리.
 최종 단위122개 `181439Z-4e038d42` PASS.

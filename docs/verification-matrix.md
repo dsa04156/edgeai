@@ -118,7 +118,11 @@
 | M8-LOAD | scripts/test-load.sh | 실제 API/PG의100→300→1,000 장치·고정 발송·지연/누락·DB정합성·재접속·자원/정리 | --measure-only는 측정 범위; 합의 성능 예산은 별도, docs/load-testing.md |
 | M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과 및 큐 포화 실패의 DB 관측값 보존·종료 코드/정리 확인 | 10대/2초 회귀; 실패 시험만 클라이언트 지연 주입, 전체 규모·장비 성능 수용과 구분 |
 | M8-AUTH-CACHE | scripts/test-unit.sh + scripts/test-load.sh --measure-only | 성공 비교64개/30초·고정 만료·hash/비밀번호/권한/잠금 변경·실HTTP401/403·동일 규모 지연/CPU 측정 | 단위111개·실제9,240요청/오류0·DB정합성 PASS; docs/evidence/m8-authentication-load.md |
-| M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |
+| M10-NATIVE-RUNNER | CI runner-native + scripts/runner_platform.py | 실제 amd64/arm64 호스트와 컨테이너·Runner111/MQTT97씩·동일 소스·시험한 두 manifest만 index 발행 | main60c8be3의3jobs/원시4개/registry 감사182346Z-6cf4c91c PASS; 전체 CI·API 배포와 구분, docs/evidence/m10-native-runner-ci.md |
+| M10-HARDWARE-COMPONENTS | scripts/test-hardware-components.py --context <context> | CPU amd64/ARM·CUDA 서버/엣지·ARIES 비루트 장치 접근·소유 자원 정리 | 전체7개174327Z-583d0e77 PASS; NPU 추론·실제 모델 수용 아님, docs/evidence/m10-hardware-components.md |
+| M10-PUBLIC-HARDWARE | scripts/test-hardware-runtime.py --context <context> | 공개 Profile/Run·실제 GPU/NPU 자원 배정·Attempt/Pod/Node·고정 S3 결과와 bytes/SHA | amd64 CUDA/ARIES 접근2개 PASS; 새native ARM서버 CUDA PASS, 당시 엣지 부재로 전체182404Z-6448ff9a BLOCKED. 복귀 후 엣지CUDA182709Z-151e67f8 PASS, docs/evidence/m10-hardware-runtime.md |
+| M10-PUBLIC-ARM-STREAM | scripts/demo-multidevice.py --context <context> --architecture arm64 [--edge-only --node <node>] | 공개 AUTO/NODE/cancel·실제 ARM Runner·checkpoint·고정 S3 결과·소유 정리 | ARM서버182458Z-f434c88e 및 KubeEdge Jetson182820Z-f547a037 각8Pod/6결과 PASS; 장치 단절·실제 모델 수용과 구분, docs/evidence/m10-native-runner-ci.md |
+| M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 전체 수용 | BLOCKED/exit2; 위 구성 요소 성공만으로 전체 수용을 판정하지 않음 |
 
 `SCAFFOLD_VERIFIED`는 M0 일부 시험에 한정한다. `LOCAL_VERIFIED`는 kind/UI/fault 등 필수
 플랫폼 시험까지, `FULL_ACCEPTANCE`는 실장비 증거까지 충족해야 하며 현재 둘 다 해당하지 않는다.
