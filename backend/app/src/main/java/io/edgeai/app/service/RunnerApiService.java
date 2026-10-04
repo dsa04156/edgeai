@@ -16,8 +16,9 @@ public final class RunnerApiService {
     private final ArtifactStore storage;
     private final ArtifactCommitService commits;
     private final Clock clock;
-    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock) {
-        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;
+    private final RuntimeStartJournal starts;
+    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts) {
+        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;
     }
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
@@ -41,6 +42,12 @@ public final class RunnerApiService {
                 "stepTimeoutSeconds",stream.stepTimeoutSeconds(),"limits",Map.of("maxFrames",limits.maxFrames(),
                     "maxBufferBytes",limits.maxBufferBytes(),"maxStateBytes",limits.maxStateBytes())));
         }
+        if(!runtime.vd()){
+            starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
+            // External persistence must not let a concurrent cancellation or lease expiry issue a stale response.
+            lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
+        }
+        response.put("timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds())));
         return response;
     }
     private static Map<String,Object> streamPorts(Map<String,StreamExecutionSpec.Port> ports){

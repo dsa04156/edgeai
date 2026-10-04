@@ -30,7 +30,7 @@ class RuntimeConfiguration {
             @Value("${edgeai.storage.runner-endpoint}") String runnerEndpoint,@Value("${edgeai.storage.access-key}") String access,
             @Value("${edgeai.storage.secret-key}") String secret,@Value("${edgeai.storage.bucket}") String bucket){return new S3ArtifactStore(endpoint,runnerEndpoint,access,secret,bucket,clock);}
     @Bean ArtifactCommitService artifactCommitService(RuntimeLifecycleService lifecycle,ArtifactStore store){return new ArtifactCommitService(lifecycle,store);}
-    @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock){return new RunnerApiService(lifecycle,runtimes,store,commit,clock);}
+    @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock,io.edgeai.domain.storage.RuntimeStartJournal starts){return new RunnerApiService(lifecycle,runtimes,store,commit,clock,starts);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     OffloadWorker offloadWorker(OffloadService service,RuntimeSettings settings){return new OffloadWorker(service,settings);}

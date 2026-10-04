@@ -32,6 +32,10 @@ paths:
       summary: 실제 Pod의 producer claim 및 실행 입력 조회
       description: 토큰의 attempt/epoch/claim과 실제 Kubernetes Pod UID·Job 소유 관계를 확인한다.
         같은 producer 재전송은 같은 실행 입력이며 다른 Pod는409다. 입력 URL은 고정 object version만 가리킨다.
+        Kubernetes 작업은 성공 응답 전에 최초 시작 허가의 신원·작업 digest·원래 실행/전환 기한을
+        버전 관리 S3에 저장하고 다시 읽어 확인한다. 재요청은 최초 기록을 보존한다.
+        저장 후 현재 실행 권한을 다시 검사하므로 저장 도중 취소·기한 만료는409다.
+        VD 자식은 기존 supervisor 배정 절차를 따른다. 시작 기록은 실제 계산 완료나 결과 성공을 뜻하지 않는다.
       parameters:
       - name: attemptId
         in: path
@@ -53,7 +57,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Assignment'
         '400':
-          description: 형식·한도·출력 계약 오류
+          description: 형식·한도·계약 오류 또는 기존 시작 기록 불일치·버전 관리 미설정
         '401':
           description: Runner 토큰 누락·검증 실패
         '409':

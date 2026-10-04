@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0101 Kubernetes claim 성공 응답 전 최초 허가를 버전 관리 S3에 보존한다.
+같은 요청은 최초 version/시각을 유지하고 신원/작업/원래 기한 충돌은 거절한다.
+실제 API/S3 응답 유실·저장소 복귀·저장 중 취소를 포함한 전체 회귀
+`201849Z-7a15a836`: 단위122/PG232/runtime53/storage11개 PASS/소유정리.
+[근거](docs/evidence/m9-kubernetes-start-journal.md). 실제 Kubernetes AUTO/전환/취소3개
+202525Z-305738ce도10Pod/시작기록10·고정S3결과6·API교체·소유정리 PASS.
+계약202358Z-55730dde/패키징202504Z-9ed703bc PASS. 복원 DB의 기록 소비·STREAM/VD
+종합 복구와 전체 수용, 신규 CI/배포는 후속이다.
+선행 f66c4cd CI37228787573은5jobs성공/images진행 중이므로 후속 push는 대기한다.
+
 ADR0100 원래 Remote 시작 기록→복원 BATCH 전환 성공→고정 S3 Result 확정을 연결했다.
 실제79개 `195042Z-fa32af0a` PASS: 복원DB6·부모/자식5쌍·Remote할당6·전환1/결과1,
 기한/취소/최신시도·관측변경/경쟁/원복/COMMIT응답유실·재실행0·42테이블/소유정리 확인.

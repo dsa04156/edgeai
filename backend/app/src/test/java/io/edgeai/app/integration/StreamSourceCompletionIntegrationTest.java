@@ -61,6 +61,7 @@ class StreamSourceCompletionIntegrationTest {
     @Autowired StreamAuthorityWorker worker;@Autowired MockMvc mvc;
     @Autowired StreamRunService streamRuns;
     @Autowired OffloadService offloads;@Autowired NodeService nodes;@Autowired NodeRepository nodeStore;
+    @Autowired OffloadRepository offloadStore;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean RuntimeGateway gateway;
     @MockitoBean VDGateway vdGateway;
@@ -433,6 +434,7 @@ class StreamSourceCompletionIntegrationTest {
             }
             until(()->routeStore.forRun(e.run(),20,0).stream().noneMatch(r->routeStore.open(r.id()).isPresent()));
             for(var r:routeStore.forRun(e.run(),20,0))assertThat(routeStore.history(r.id(),20,0)).hasSize(recovery?2:1).allMatch(g->g.closedAt()!=null);
+            assertStartJournals(e.run());
         }finally{
             if(child.isAlive()){
                 child.descendants().forEach(ProcessHandle::destroy);child.destroy();
@@ -445,6 +447,29 @@ class StreamSourceCompletionIntegrationTest {
     @Test void realGroupRetryAutomaticallyReconnectsSameDeviceOwnersAndRestoresBothRunners()throws Exception{dagProbe(false,true);}
     @Test void publicNodeOffloadRestoresActualGroupCheckpointsAndReconnectsSameDeviceOwners()throws Exception{dagProbe(false,true,true);}
     @Test void runnerMeasurementsAutomaticallyTransferActualGroupStateAndReconnectSameDeviceOwners()throws Exception{dagProbe(false,true,true,true);}
+
+    /** Inspect the actual records from HTTP claims, including both transferred peers and the BATCH child. */
+    private void assertStartJournals(UUID run)throws Exception{
+        int checked=0;
+        for(var task:executions.tasks(run))for(var attempt:executions.attempts(task.id())){
+            var runtime=runtimes.byAttempt(attempt.id()).orElseThrow();if(runtime.vd() || runtime.producerPodUid()==null)continue;
+            String key="authority/runtime-start/"+runtime.id()+".json";
+            var versions=new ArrayList<io.minio.messages.Item>();
+            for(var result:MINIO.listObjects(ListObjectsArgs.builder().bucket(BUCKET).prefix(key).recursive(true).includeVersions(true).build()))versions.add(result.get());
+            assertThat(versions).hasSize(1);assertThat(versions.getFirst().versionId()).isNotBlank();
+            Map<?,?> document;
+            try(var input=MINIO.getObject(GetObjectArgs.builder().bucket(BUCKET).object(key).versionId(versions.getFirst().versionId()).build())){
+                document=(Map<?,?>)json.decode(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));}
+            var admitted=Instant.parse((String)document.get("admittedAt"));
+            assertThat(admitted).isBefore(runtime.expiresAt()).isAfterOrEqualTo(runtime.createdAt());
+            var transfer=offloadStore.forTask(task.id()).stream().filter(o->attempt.id().equals(o.targetAttemptId()) ||
+                o.members().stream().anyMatch(m->attempt.id().equals(m.targetAttemptId()))).findFirst().orElse(null);
+            if(transfer!=null)assertThat(admitted).isBefore(transfer.startDeadline());
+            var expected=new RuntimeStartAuthority(runtime,(String)document.get("workDigest"),transfer==null?null:transfer.id(),transfer==null?null:transfer.startDeadline(),admitted);
+            assertThat(json.canonical(document)).isEqualTo(json.canonical(expected.document())).doesNotContain(runtime.claimNonce().toString());checked++;
+        }
+        assertThat(checked).isGreaterThanOrEqualTo(2);
+    }
 
     /** Real supervisor poll and child processes. Only Kubernetes submission/Pod identity are fixtures. */
     private Supervisor startSupervisor(UUID service,int capacity,Path parent,String name)throws Exception{

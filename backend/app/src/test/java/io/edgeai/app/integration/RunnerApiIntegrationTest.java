@@ -119,6 +119,21 @@ class RunnerApiIntegrationTest {
         // The stateless Runner chain does not relax CSRF for user-facing writes.
         mvc.perform(post("/api/v1/workflows").with(user("fixture")).contentType("application/json").content("{}")).andExpect(status().isForbidden());
     }
+    @Test void unavailableStartJournalCannotIssueAssignmentAndRetryKeepsSameAttempt() throws Exception {
+        var e=execution();doThrow(new ArtifactStoreUnavailableException()).doNothing().when(storage).retainStart(any());
+        assertThat(request(e,"claim",identity(e),503)).contains("RUNTIME_UNAVAILABLE").doesNotContain("command","parameters");
+        assertThat(request(e,"claim",identity(e),200)).contains(e.attempt().toString());
+        var values=org.mockito.ArgumentCaptor.forClass(RuntimeStartAuthority.class);verify(storage,times(2)).retainStart(values.capture());
+        var first=values.getAllValues().getFirst();var retry=values.getAllValues().getLast();
+        assertThat(first.runtime().id()).isEqualTo(retry.runtime().id());assertThat(first.workDigest()).isEqualTo(retry.workDigest());
+        assertThat(first.runtime().producerPodUid()).isEqualTo(e.pod().podUid());
+        assertThat(executions.taskDetail(e.task()).attempts()).hasSize(1);assertThat(runtimes.result(e.task())).isEmpty();
+    }
+    @Test void cancellationDuringStartPublicationPreventsSuccessfulClaimResponse() throws Exception {
+        var e=execution();doAnswer(call->{executions.cancelTask(e.task(),"{}");return null;}).when(storage).retainStart(any());
+        request(e,"claim",identity(e),409);assertThat(executions.taskDetail(e.task()).task().state()).isEqualTo("CANCELLING");
+        assertThat(runtimes.result(e.task())).isEmpty();verify(storage).retainStart(any());
+    }
     @Test void cancelledProducerAndInvalidOutputNeverGetStorageAuthority() throws Exception {
         var e=execution();request(e,"claim",identity(e),200);
         var extra=output(false);extra.put("bucket","untrusted");request(e,"uploads",with(e,"outputs",List.of(extra)),400);

@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+ADR0101 Kubernetes 시작 기록: 최초 허가를 S3 조건부 쓰기/고정 version 재검증 후
+성공 응답하며 재요청은 원래 시각/기한을 보존한다. 실제 API/PG/S3의 응답 유실·
+저장소 복귀·취소·변조 거절, 전체 회귀201849Z-7a15a836 단위122/PG232/runtime53/
+storage11개 PASS/소유정리. [근거](docs/evidence/m9-kubernetes-start-journal.md).
+실제 Kubernetes3개202525Z-305738ce도10Pod/시작기록10/고정S3결과6·API교체·소유정리 PASS.
+계약202358Z-55730dde/패키징202504Z-9ed703bc PASS. 복원 기록 소비/종합 활성화와 전체단계 미완료.
+선행 f66c4cd CI37228787573은5jobs성공/images진행 중이며 신규 변경은 미push다.
+
+아래는 선행 구현·검증 이력이다.
 ADR0100 Remote 시작 기록 복구: 실제79개195042Z-fa32af0a PASS. 복원DB6/부모자식5쌍·
 기한 내 실제 접수→전환 성공1→고정S3 Result1, 최신시도/취소/기한변경/응답유실·재실행0·
 42테이블/소유정리 확인. 기존 실패15개194916Z-94803bf0·결과15개195043Z-d0759979 PASS.

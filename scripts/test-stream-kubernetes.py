@@ -726,6 +726,24 @@ with response: print(response.status)
                         assert query('SELECT count(*) FROM edgeai.task_result') == '0'
                         print('PASS: cancellation-only selection has no committed Result; no artifact download claimed', flush=True)
                     snapshot['verifiedArtifacts'] = len(artifacts)
+                    starts = json.loads(query("""
+                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                            'runtimeId',r.id,'runId',r.run_id,'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,
+                            'namespace',r.namespace,'jobName',r.job_name,'jobUid',r.job_uid,'podUid',r.producer_pod_uid,
+                            'nodeUid',r.node_uid,'nodeName',r.node_name,'expiresAt',r.expires_at,'createdAt',r.created_at,
+                            'offloadId',o.id,'startDeadline',o.start_deadline)), '[]'::jsonb)
+                        FROM edgeai.runtime_instance r LEFT JOIN edgeai.task_offload o ON
+                            (o.target_attempt_id=r.attempt_id OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m
+                             WHERE m.operation_id=o.id AND m.target_attempt_id=r.attempt_id))
+                        WHERE r.remote_allocation_id IS NULL AND r.vd_id IS NULL AND r.producer_pod_uid IS NOT NULL
+                        """))
+                    for receipt in starts:
+                        observed = seen[receipt['podUid']]
+                        assert all(receipt[field] == observed[field] for field in ('runId', 'taskId', 'attemptId', 'nodeUid', 'nodeName'))
+                    result = subprocess.run(['node', 'scripts/verify-runtime-start-journals.mjs'], input=json.dumps(starts).encode(), env=verify_env, capture_output=True, timeout=60)
+                    assert result.returncode == 0, 'Actual Kubernetes start records differed; private output suppressed'
+                    print(result.stdout.decode().strip(), flush=True)
+                    snapshot['verifiedStartJournals'] = len(starts)
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
                     succeeded = True
                     break

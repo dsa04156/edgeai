@@ -47,8 +47,9 @@ public class RuntimeLifecycleService {
         this.streams=streams;this.streamRecovery=streamRecovery;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
-    public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs) {
+    public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs,RuntimeStartAuthority startAuthority) {
         public Assignment { inputs=List.copyOf(inputs); }
+        public Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs){this(runtime,spec,parametersJson,inputs,null);}
     }
     public record CommitPermit(RuntimeInstance runtime,ResultManifest manifest,String digest,TaskResult replay) {}
     public record Dispatch(RuntimeInstance runtime,ServiceExecutionSpec spec,UUID nodeId,String nodeName,List<String> excludedNodeNames) {}
@@ -291,7 +292,19 @@ public class RuntimeLifecycleService {
         if(c.attempt().excludedNodeNames().contains(pod.nodeName()))throw fenced();
         if(r.producerPodUid()!=null && (!r.nodeUid().equals(pod.nodeUid()) || !r.nodeName().equals(pod.nodeName())))throw fenced();
         var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
-        runtimes.claimed(r.id(),pod,clock.instant());offloads.completedByClaim(attemptId,clock.instant());return new Assignment(runtime(attemptId),spec,parameters,inputs);
+        var transfers=offloads.forTask(c.task().id()).stream().filter(o->attemptId.equals(o.targetAttemptId()) ||
+            o.members().stream().anyMatch(m->attemptId.equals(m.targetAttemptId()))).toList();
+        if(transfers.size()>1)throw fenced();
+        var transfer=transfers.isEmpty()?null:transfers.getFirst();
+        if(transfer!=null && (transfer.startDeadline()==null || !Set.of("STARTING","SUCCEEDED").contains(transfer.state())))throw fenced();
+        var inputIdentity=inputs.stream().map(i->{var a=i.artifact();return Map.of("port",i.port(),"bucket",a.bucket(),"key",a.objectKey(),
+            "versionId",a.versionId(),"bytes",a.bytes(),"sha256",a.sha256(),"mediaType",a.mediaType());}).sorted(Comparator.comparing(i->(String)i.get("port"))).toList();
+        var digest=JSON.digest("edgeai-runtime-start-work-v1",Map.of("spec",JSON.decode(profiles.find(definition(c).serviceProfileVersionId()).orElseThrow().specJson()),
+            "parameters",JSON.decode(parameters),"inputs",inputIdentity));
+        var now=clock.instant();runtimes.claimed(r.id(),pod,now);offloads.completedByClaim(attemptId,now);
+        var claimed=runtime(attemptId);
+        return new Assignment(claimed,spec,parameters,inputs,new RuntimeStartAuthority(claimed,digest,
+            transfer==null?null:transfer.id(),transfer==null?null:transfer.startDeadline(),now));
     }
     @Transactional
     public Assignment authorize(UUID attemptId,long epoch,UUID podUid) {

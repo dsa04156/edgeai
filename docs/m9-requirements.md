@@ -120,6 +120,10 @@ ADR0099의 [Remote 시작 기록](evidence/m9-remote-start-authority.md)은 계�
 실제79개에서 원래 전환/기한/최신 Attempt·종료 증거를 대조해 전환1개와 고정 S3 Result1개를
 순서대로 확정했다. 누락/변형/취소/새 시도·경쟁/원복/응답 유실·변경0 재실행을 검증했으며
 실제 외부 계약·Kubernetes/STREAM 시작 권한·종합 활성화와 새 CI/배포는 별도다.
+ADR0101의 [Kubernetes 시작 기록](evidence/m9-kubernetes-start-journal.md)은 claim 성공 응답 전에
+최초 허가를 버전 관리 S3에 조건부 저장하고 고정 version으로 다시 검증한다.
+실제 저장소 동시 쓰기·충돌, API 응답 유실·저장소 복귀·취소와 STREAM 후속 peer/BATCH
+기록을 검증했다. 복원 DB에서 기록을 소비하는 경로·VD 독립 시작 증거·종합 활성화는 남는다.
 ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
 분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
