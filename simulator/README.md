@@ -1,4 +1,11 @@
-# Remote 참조 계산 시뮬레이터
+# 합성 장치와 Remote 참조 시뮬레이터
+
+`device_load.py`는 실제 관리 API를 호출하는 고정 발송 스케줄·제한된 대기열·개별 지연 표본을
+제공한다. `bash scripts/test-load.sh --measure-only`로 전용 PostgreSQL DB와 API를 구성하고
+100→300→1,000대 관측·조회·재접속을 측정한다. 실행 방법과 실제 장비 시험과의 경계는
+[부하 시험](../docs/load-testing.md)을 따른다. 아래 Remote 참조 계산과 별개다.
+
+## Remote 참조 계산
 
 `remote_server.py`는 별도 Python 프로세스·실제 HTTP·SQLite·파일로 RemoteGateway 계약을 시험한다.
 자동 시험은 저장소 루트에서 `bash scripts/test-remote.sh`로 실행한다. Python3와 JDK21이 필요하다.

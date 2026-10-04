@@ -31,7 +31,7 @@ jobs:
       - name: Verify real TLS broker authority and revocation
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends mosquitto
+          sudo apt-get install -y --no-install-recommends mosquitto postgresql-client
           python3 -m venv .tools/stream-venv
           .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
           export EDGEAI_STREAM_PYTHON="$PWD/.tools/stream-venv/bin/python"
@@ -42,6 +42,8 @@ jobs:
       - run: bash scripts/collect-evidence.sh postgres bash scripts/test-integration.sh
       - name: Verify PostgreSQL → Spring → Next.js
         run: bash scripts/collect-evidence.sh health bash scripts/test-profiles-stack.sh compose
+      - name: Verify load measurement and acceptance classification
+        run: bash scripts/collect-evidence.sh load-acceptance bash scripts/test-load-acceptance.sh
       - name: Stop test services and retain volumes
         if: always()
         run: bash scripts/dev-down.sh

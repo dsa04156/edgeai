@@ -79,7 +79,8 @@
 | M7-KIND | scripts/test-kind.sh | 위 STREAM 시나리오를 빌드된 API 이미지와 CI-tested Runner/MinIO digest로 수행 | fe32ed8 CI37149032705의11개/Pod39개/S324·그룹/최종 처리 복구·수동/자동 전환·작업별 노드 배치 PASS; V30 VD 혼합 추가 게이트는 후속 |
 | M7-PUBLIC-UI | scripts/test-ui.sh + scripts/test-profiles-stack.sh | PC/모바일 입력 재전송·오류/경로/페이지/출처, 실제 BATCH 빈 경로 조회와 Swagger41개 | STREAM 화면은 명시적 HTTP fixture, 실제 API 시험은 기본 비활성 |
 | M5/M9-FAULT | scripts/test-fault.sh | 실패·취소·복구 | NOT_IMPLEMENTED |
-| M8-LOAD | scripts/test-load.sh | 100→300→1,000 관리 부하 | NOT_IMPLEMENTED |
+| M8-LOAD | scripts/test-load.sh | 실제 API/PG의100→300→1,000 장치·고정 발송·지연/누락·DB정합성·재접속·자원/정리 | --measure-only는 측정 범위; 합의 성능 예산은 별도, docs/load-testing.md |
+| M8-LOAD-ACCEPTANCE | scripts/test-load-acceptance.sh | 실제 API/PG의 측정 전용·예산 미정·초과·소규모 통과를 구분하고 종료 코드/정리 확인 | 10대/2초 회귀; 전체 규모·장비 성능 수용과 구분 |
 | M10-HW | scripts/test-hardware.sh | KubeEdge/장비/2세부/성능 | NOT_IMPLEMENTED |
 
 `SCAFFOLD_VERIFIED`는 M0 일부 시험에 한정한다. `LOCAL_VERIFIED`는 kind/UI/fault 등 필수

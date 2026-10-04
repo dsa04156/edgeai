@@ -262,7 +262,7 @@ with response: print(response.status)
                 process = subprocess.Popen(k + ['-n', 'edgeai', 'exec', '-i', db, '--', 'psql', '-U', 'edgeai', '-d', 'edgeai', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1'],
                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 held_vds[identity] = process
-                # Permit the offload member's VD foreign-key check while blocking poll's FOR UPDATE.
+                # Permit the offload member's VD foreign-key check while blocking the poll row mutex.
                 process.stdin.write(("SET application_name='" + application + "'; BEGIN; SELECT id FROM edgeai.virtual_device WHERE id='" + identity + "' FOR NO KEY UPDATE;\n").encode())
                 process.stdin.flush()
                 def locked():

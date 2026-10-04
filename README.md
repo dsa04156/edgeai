@@ -124,9 +124,12 @@ bash scripts/test-runner.sh       # 실제 Python 자식 프로세스 + 격리 H
 bash scripts/test-stream.sh       # 고정 Paho Python 의존성 + 실제 Mosquitto: 다중 입력·복구·ACL·TLS
 bash scripts/test-stream-broker.sh # 실제 PostgreSQL + Mosquitto dynamic security: 권한 수명·세대 전환
 bash scripts/test-remote.sh       # 실제 Remote 참조 프로세스/HTTP/SQLite·파일·장애 시험
+bash scripts/test-load.sh --measure-only # 별도 API/전용 PG DB: 100→300→1,000대 관리 부하 측정
+bash scripts/test-load-acceptance.sh # 실제 API/DB로 측정·미정·실패·부분 규모 판정 회귀
 ```
 
-`verify-all.sh local|full`은 미구현 fault/load/hardware 시험을 숨기지 않고 nonzero를 반환합니다.
+`verify-all.sh local|full`은 미구현 fault/hardware 시험과 부하 성능 기준 미정을 숨기지 않고 nonzero를 반환합니다.
+관리 부하의 측정 범위·실행 방법·합격 판정은 [부하 시험 문서](docs/load-testing.md)를 따릅니다.
 모든 테스트는 실행 환경과 함께 기록하며 `docs/evidence/runs/`의 원시 로그는 Git에서 제외합니다.
 GitHub Actions는 Linux/JDK 21/Node 22/Compose PostgreSQL 17 환경에서 M0–M4와 추가된 재시도 회귀를 검증합니다.
 저장소·Runner 컨테이너와 실제3노드 kind 종단 시험이 이미지 발행 게이트에 포함됩니다.

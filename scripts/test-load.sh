@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
-printf "%s\n" "BLOCKED: M8 management load scenarios and acceptance thresholds are not implemented." >&2
-exit 2
+source "$(dirname "$0")/lib.sh"
+load_env
+backend/gradlew -p backend :app:bootJar --console=plain
+exec python3 scripts/test-device-load.py "$@"
