@@ -727,10 +727,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 관리 요청의 접수·인증 주체·HTTP 결과 조회
+         * @description 변경 요청과 조회의401/403을 저장한 이력입니다. 정상 조회·내부 장치/Runner·직접 DB 변경은 포함하지 않습니다. 결과 미기록은 성공으로 추정하지 않습니다. 페이지 사이의 동시 변경으로 중복/누락이 있을 수 있어 손실 없는 export 용도가 아닙니다.
+         */
+        get: operations["listManagementAuditRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audit-requests/{auditId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 응답의 감사 ID로 특정 요청 결과 확인
+         * @description X-EdgeAI-Audit-Id의 서버 발급 UUID를 조회합니다. OUTCOME_UNKNOWN이면 실행 결과를 확인할 수 없으므로 원래 도메인의 조회와 idempotency 계약으로 확인해야 합니다. 새 감사 ID로 원래 작업을 재실행하지 않습니다.
+         */
+        get: operations["getManagementAuditRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagementAuditPage: {
+            items: components["schemas"]["ManagementAudit"][];
+            nextOffset: number | null;
+        };
+        /**
+         * @example {
+         *       "id": "00000000-0000-4000-8000-000000000002",
+         *       "startedAt": "2026-10-04T00:00:01Z",
+         *       "method": "POST",
+         *       "operation": "publishProfile",
+         *       "routeTemplate": "/api/v1/profiles/{kind}",
+         *       "targetId": null,
+         *       "relatedId": null,
+         *       "state": "OUTCOME_UNKNOWN",
+         *       "outcome": null
+         *     }
+         */
+        ManagementAudit: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startedAt: string;
+            method: string;
+            /** @description 서버의 고정 operation ID 또는 unmappedManagementRequest */
+            operation: string;
+            /** @description 원문 경로/쿼리 없이 서버가 정한 route template */
+            routeTemplate: string;
+            /** Format: uuid */
+            targetId: string | null;
+            /** Format: uuid */
+            relatedId: string | null;
+            /** @enum {string} */
+            state: "OUTCOME_UNKNOWN" | "OUTCOME_RECORDED";
+            outcome: components["schemas"]["ManagementAuditOutcome"] | null;
+        };
+        ManagementAuditOutcome: {
+            /** Format: date-time */
+            completedAt: string;
+            httpStatus: number;
+            /** @enum {string} */
+            disposition: "HTTP_COMPLETED" | "HANDLER_FAILED";
+            actor: {
+                /** @enum {string} */
+                type: "LOCAL_BASIC" | "UNAUTHENTICATED";
+                subject: string | null;
+                /**
+                 * @description 인증된 정상 이름·긴/제어문자 이름의 해시·미인증을 구분. 원래 인증 헤더는 저장하지 않음
+                 * @enum {string}
+                 */
+                subjectFormat: "NAME" | "SHA256" | "NONE";
+            };
+        };
         /**
          * @description 소문자 영문으로 시작하는 프로필 키. 영문 소문자·숫자와 구분자 점/밑줄/하이픈을 사용하며 최대 100자입니다.
          * @example temperature-sensor
@@ -1626,6 +1718,36 @@ export interface components {
         };
     };
     responses: {
+        /** @description 감사 ID의 UUID 형식 또는 페이지 범위가 잘못되었습니다. */
+        InvalidAuditQuery: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "INVALID_AUDIT_QUERY",
+                 *       "message": "감사 ID와 페이지 범위를 확인하세요."
+                 *     }
+                 */
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
+        /** @description 감사 저장소 조회 불가 */
+        AuditUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "AUDIT_STORE_UNAVAILABLE",
+                 *       "message": "감사 저장소에 연결할 수 없습니다."
+                 *     }
+                 */
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
         /** @description 잘못된 입력400·없는 VD/Profile/Device/Node404·중복 키/revision/원본 충돌409·64KiB 초과413·DB 장애503입니다. code와 message를 확인하세요. */
         VirtualDeviceError: {
             headers: {
@@ -4257,6 +4379,76 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listManagementAuditRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 최신 접수부터 정렬한 감사 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAuditPage"];
+                };
+            };
+            400: components["responses"]["InvalidAuditQuery"];
+            /** @description 관리 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["AuditUnavailable"];
+        };
+    };
+    getManagementAuditRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                auditId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 불변 접수 기록과 선택적 HTTP 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAudit"];
+                };
+            };
+            400: components["responses"]["InvalidAuditQuery"];
+            /** @description 관리 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 해당 감사 접수 기록 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["AuditUnavailable"];
         };
     };
 }

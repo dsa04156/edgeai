@@ -9,7 +9,7 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 |---|---|---|
 | 영속 명령·재조정·재시작 | 실행 lease·producer fencing·broker 권한 조정·API/Runner/VD 교체·재시도, ADR0062 복원 DB 기동 격리/조회 점검 | 서로 다른 장애가 겹친 상태와 DB 복원 이후 외부 실행의 회수·일치·활성화 |
 | 사용자 신원·RBAC | 관리 Basic/CSRF, 내부 Device·Runner 인증 및 토큰 경계 | 실제 신원 제공자/사용자별 역할·권한 행렬·회수·운영 키 수명 |
-| 감사 | Run/Task/Attempt·전환·작업 이력 | 사용자 행위/권한 거절/설정 변경의 감사 주체·보존·조회·비밀값 제외 검증 |
+| 감사 | Run/Task/Attempt·전환 이력, ADR0066 관리 HTTP의 영속 접수/관측 결과·현재 Basic 주체·401/403·조회·비밀값 배제 | 사용자별 신원/RBAC, 내부 worker·직접 설정 변경, 도메인 변경과 원자적 연결·외부 보존/보관 정책 |
 | 전송 보호 | dev API·MinIO·MQTT TLS 및 CA 전달·인증서 오류 시험 | 실제 접근 경로 전체와 인증서 갱신·만료·키 유실 시 절차 |
 | DB 백업·복원 | ADR0059의 실제 archive·새 DB 복원 구성 요소 | 배포 환경 복원·별도 장애 영역 저장·암호화·보관 정책·주기 실행 |
 | 파일·상태·키 복원 | ADR0060 버전 보존·ADR0061 복원 DB 참조 대조·ADR0065 선택한 정적 키 파일의 암호화/새 경로 복원 | 배포 환경 결합 복원, 실제 Secret/CA 인벤토리·키 전달/회전, broker·장치 journal, 외부 producer 재조정·활성화 |
@@ -23,6 +23,10 @@ ADR0064의 [producer 중지](recovery-producer-stop.md)는 전용 namespace에�
 ADR0065의 [키 파일 백업](private-material-backup.md)은 명시한 정적 파일을 공개 수신자 키로
 암호화하고 별도 개인 키로 새 경로에 복원한다. 실제 age/OpenSSL의 합성 키 시험을 수행한다.
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.
+ADR0066의 [관리 감사 기록](management-audit.md)은 변경 실행 전 접수 저장과 처리 후 HTTP 결과를
+분리한다. 접수 저장 실패는 실행 전503, 결과 저장 실패는 실제 응답을 유지하며 미확정으로 남긴다.
+현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
+검증한다. 운영 사용자별 역할·외부 감사·보관 정책 및 전체 M9 수용은 포함하지 않는다.
 
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,

@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0066/V34 관리HTTP의 영속접수·관측결과·감사조회API/화면 구현. 단위122/PG229,
+실제API8·저장소47·감사포함백업13/43테이블·참조9·Kubernetes복구점검6개 PASS.
+실API/Swagger12개·DB장애복구·V34의 기존Task9,371개 보존도 확인했다.
+첫100→300→1,000대 부하는1,000대108건미발송 FAIL. 같은설정의진단재실행은
+9,240요청/누락0·감사12,105쌍 보존,1,000대p95 228.13ms와WAL대기를 관측했다.
+최초실패원인/해결과M8수용은미확정. docs/evidence/m9-management-audit.md.
+선행4f408dd CI37174711098의5jobs/원시22개·키복원10·kind종료7 PASS(043600Z-294040c0).
+GitOpsee91977 정확한imageID/Ready/PVC/ArgoSynced(043601Z-82aa8520), 기존10파일/두PVC
+보존(043807Z-5d799a7c) PASS. 공유IngresshealthProgressing. 신규감사CI/배포는후속.
+M5잔여/M7/M8성능/M9전체/M10실장비수용 미완료·전체goal유지.
+
 ADR0065 정적 키 파일 암호화·새 경로 복원10개가 PASS(033214Z-e49bced8)다.
 실제 age/OpenSSL·합성4파일/3,009bytes·원본 삭제 뒤TLS키쌍복원·손상/잘못된키/경로/링크/
 덮어쓰기/변경입력 거절·native X25519/PQ를 확인했다. docs/evidence/m9-private-material.md.

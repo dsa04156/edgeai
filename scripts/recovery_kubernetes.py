@@ -10,7 +10,7 @@ import uuid
 from urllib.parse import urlencode
 
 from postgres_backup import Blocked, Postgres, ROOT, identifier, private_file
-from recovery_references import SUPPORTED_VERSIONS, read_json
+from recovery_references import supported_schema, read_json
 
 PART = 'app.kubernetes.io/part-of'
 MANAGER = 'app.kubernetes.io/managed-by'
@@ -106,8 +106,7 @@ def database_inventory(pg,database,restore_path):
             or value['marker'] != 'edgeai-restore:'+restored['restoreIdentity'] or value['readOnly'] != 'on'):
         raise ValueError('Restored database identity or read-only snapshot differs')
     migrations = value['migrations'] or []
-    if (len(migrations) != len(SUPPORTED_VERSIONS) or {r['version'] for r in migrations} != SUPPORTED_VERSIONS
-            or any(r['success'] is not True for r in migrations)):
+    if not supported_schema(migrations):
         raise Blocked('Review the runtime inventory for this database schema before proceeding')
     value['restoreReportSha256'] = digest
     return value

@@ -87,6 +87,7 @@ bash scripts/dev-dashboard.sh
 - 장치·노드 관리: <http://127.0.0.1:13080/devices>
 - 가상 장치·원본 연결 관리: <http://127.0.0.1:13080/virtual-devices>
 - 워크플로·실행 요청 관리: <http://127.0.0.1:13080/workflows>
+- 관리 요청 감사 기록: <http://127.0.0.1:13080/audit> (접수·인증 주체·HTTP 결과 및 미확정 구분)
 - Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
 - Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
 - 스트림 내부 API 설명: <http://127.0.0.1:18080/swagger-ui/index.html?contract=streams>
@@ -136,11 +137,14 @@ python3 scripts/test-recovery-stop.py # 종료 상태·신원·불확실한 종�
 bash scripts/test-recovery-stop-live.sh --context <시험-context> # 실제 부모/자식 종료·생성 차단·timeout/재개
 bash scripts/install-age.sh # 고정 공식 age 배포 파일·실행 파일 checksum 확인
 bash scripts/test-private-material.sh # 합성 키의 실제 암호화·복원·손상/경로/덮어쓰기 거절
+bash scripts/test-management-audit.sh # 격리 API/DB의 감사 접수·결과 저장 실패·재시작·비밀값 배제
 ```
 
 `verify-all.sh local|full`은 미구현 fault/hardware 시험과 부하 성능 기준 미정을 숨기지 않고 nonzero를 반환합니다.
 관리 부하의 측정 범위·실행 방법·합격 판정은 [부하 시험 문서](docs/load-testing.md)를 따릅니다.
 DB 백업과 새 DB로의 복원은 [백업 실행 문서](docs/postgres-backup.md)를 따릅니다.
+관리 API의 변경 접수와 HTTP 결과는 [감사 기록 안내](docs/management-audit.md)를 따릅니다.
+Swagger의43개 관리 operation에 감사 목록/UUID 조회를 포함하며 HTTP 응답과 실제 작업 완료를 구분합니다.
 고정 S3 버전 복제와 독립 검증은 [MinIO 백업 문서](docs/storage-backup.md)를 따릅니다.
 정적 Secret·CA 파일의 암호화 백업과 새 경로 복원은 [키 파일 백업 문서](docs/private-material-backup.md)를 따릅니다.
 복원 DB의 모든 결과/checkpoint 참조 대조는 [DB/S3 복원 검증](docs/recovery-references.md)을 따릅니다.

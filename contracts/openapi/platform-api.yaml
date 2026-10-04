@@ -5,6 +5,8 @@ info:
   description: Profile → Device/Node → Workflow DAG → Run/Task/Attempt와 검증된 결과 조회 API입니다.
     실제 Kubernetes 실행은 서버의 runtime 설정이 활성화된 환경에서 동작합니다. 쓰기 요청은 실제 DB에 반영되고 Swagger의 CSRF 토큰/쿠키는 자동 연결됩니다.
     복원 DB의 조회 전용 점검 모드에서는 실행 기능이 비활성화되고 인증·CSRF가 유효한 쓰기 요청도 403으로 거절됩니다.
+    일반 관리 API의 변경 요청은 먼저 감사 접수 기록을 저장하며 X-EdgeAI-Audit-Id를 반환합니다. 접수 저장 실패는503/AUDIT_STORE_UNAVAILABLE이며 변경을 실행하지 않습니다.
+    감사의 HTTP 결과는 비동기 작업 성공을 뜻하지 않으며, 결과가 없는 접수 기록은 OUTCOME_UNKNOWN입니다. 복구 점검 모드에서는 감사 쓰기도 비활성화됩니다.
 servers:
 - url: /
 security:
@@ -1921,6 +1923,71 @@ paths:
           description: 스트림 배정 비활성
         '503':
           description: DB/토큰 키 설정 장애
+  /api/v1/audit-requests:
+    get:
+      operationId: listManagementAuditRequests
+      summary: 관리 요청의 접수·인증 주체·HTTP 결과 조회
+      tags: [감사]
+      description: 변경 요청과 조회의401/403을 저장한 이력입니다. 정상 조회·내부 장치/Runner·직접 DB 변경은 포함하지 않습니다. 결과 미기록은 성공으로 추정하지 않습니다. 페이지 사이의 동시 변경으로 중복/누락이 있을 수 있어 손실 없는 export 용도가 아닙니다.
+      parameters:
+      - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      - {in: query, name: offset, schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}}
+      responses:
+        '200':
+          description: 최신 접수부터 정렬한 감사 목록
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManagementAuditPage'}
+        '400': {$ref: '#/components/responses/InvalidAuditQuery'}
+        '401': {description: 관리 인증 필요}
+        '503': {$ref: '#/components/responses/AuditUnavailable'}
+  /api/v1/audit-requests/{auditId}:
+    get:
+      operationId: getManagementAuditRequest
+      summary: 응답의 감사 ID로 특정 요청 결과 확인
+      tags: [감사]
+      description: X-EdgeAI-Audit-Id의 서버 발급 UUID를 조회합니다. OUTCOME_UNKNOWN이면 실행 결과를 확인할 수 없으므로 원래 도메인의 조회와 idempotency 계약으로 확인해야 합니다. 새 감사 ID로 원래 작업을 재실행하지 않습니다.
+      parameters:
+      - {in: path, name: auditId, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 불변 접수 기록과 선택적 HTTP 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManagementAudit'}
+              examples:
+                recorded:
+                  summary: HTTP 응답을 기록한 요청
+                  value:
+                    id: 00000000-0000-4000-8000-000000000001
+                    startedAt: '2026-10-04T00:00:00Z'
+                    method: POST
+                    operation: publishProfile
+                    routeTemplate: /api/v1/profiles/{kind}
+                    targetId: null
+                    relatedId: null
+                    state: OUTCOME_RECORDED
+                    outcome:
+                      completedAt: '2026-10-04T00:00:00.050Z'
+                      httpStatus: 201
+                      disposition: HTTP_COMPLETED
+                      actor: {type: LOCAL_BASIC, subject: example-operator, subjectFormat: NAME}
+                unknown:
+                  summary: 접수 뒤 결과가 아직 확인되지 않은 요청
+                  value:
+                    id: 00000000-0000-4000-8000-000000000002
+                    startedAt: '2026-10-04T00:00:01Z'
+                    method: POST
+                    operation: publishProfile
+                    routeTemplate: /api/v1/profiles/{kind}
+                    targetId: null
+                    relatedId: null
+                    state: OUTCOME_UNKNOWN
+                    outcome: null
+        '400': {$ref: '#/components/responses/InvalidAuditQuery'}
+        '401': {description: 관리 인증 필요}
+        '404': {description: 해당 감사 접수 기록 없음}
+        '503': {$ref: '#/components/responses/AuditUnavailable'}
 components:
   securitySchemes:
     csrfToken:
@@ -1945,6 +2012,18 @@ components:
         - VD
       description: 'DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다.'
   responses:
+    InvalidAuditQuery:
+      description: 감사 ID의 UUID 형식 또는 페이지 범위가 잘못되었습니다.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+          example: {code: INVALID_AUDIT_QUERY, message: 감사 ID와 페이지 범위를 확인하세요.}
+    AuditUnavailable:
+      description: 감사 저장소 조회 불가
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+          example: {code: AUDIT_STORE_UNAVAILABLE, message: 감사 저장소에 연결할 수 없습니다.}
     VirtualDeviceError:
       description: 잘못된 입력400·없는 VD/Profile/Device/Node404·중복 키/revision/원본 충돌409·64KiB 초과413·DB 장애503입니다. code와 message를 확인하세요.
       content:
@@ -1987,6 +2066,52 @@ components:
             code: PROFILE_STORE_UNAVAILABLE
             message: Profile 저장소에 연결할 수 없습니다. 잠시 후 다시 시도하세요.
   schemas:
+    ManagementAuditPage:
+      type: object
+      required: [items, nextOffset]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ManagementAudit'}}
+        nextOffset: {type: [integer, 'null'], minimum: 0}
+    ManagementAudit:
+      type: object
+      example:
+        id: 00000000-0000-4000-8000-000000000002
+        startedAt: '2026-10-04T00:00:01Z'
+        method: POST
+        operation: publishProfile
+        routeTemplate: /api/v1/profiles/{kind}
+        targetId: null
+        relatedId: null
+        state: OUTCOME_UNKNOWN
+        outcome: null
+      required: [id, startedAt, method, operation, routeTemplate, targetId, relatedId, state, outcome]
+      properties:
+        id: {type: string, format: uuid}
+        startedAt: {type: string, format: date-time}
+        method: {type: string}
+        operation: {type: string, description: 서버의 고정 operation ID 또는 unmappedManagementRequest}
+        routeTemplate: {type: string, description: 원문 경로/쿼리 없이 서버가 정한 route template}
+        targetId: {type: [string, 'null'], format: uuid}
+        relatedId: {type: [string, 'null'], format: uuid}
+        state: {type: string, enum: [OUTCOME_UNKNOWN, OUTCOME_RECORDED]}
+        outcome:
+          oneOf:
+          - {$ref: '#/components/schemas/ManagementAuditOutcome'}
+          - {type: 'null'}
+    ManagementAuditOutcome:
+      type: object
+      required: [completedAt, httpStatus, disposition, actor]
+      properties:
+        completedAt: {type: string, format: date-time}
+        httpStatus: {type: integer, minimum: 100, maximum: 599}
+        disposition: {type: string, enum: [HTTP_COMPLETED, HANDLER_FAILED]}
+        actor:
+          type: object
+          required: [type, subject, subjectFormat]
+          properties:
+            type: {type: string, enum: [LOCAL_BASIC, UNAUTHENTICATED]}
+            subject: {type: [string, 'null'], maxLength: 256}
+            subjectFormat: {type: string, enum: [NAME, SHA256, NONE], description: 인증된 정상 이름·긴/제어문자 이름의 해시·미인증을 구분. 원래 인증 헤더는 저장하지 않음}
     ProfileKey:
       type: string
       maxLength: 100
@@ -3458,6 +3583,8 @@ components:
 
 
 tags:
+- name: 감사
+  description: 관리 HTTP 요청의 불변 접수 기록과 관측 결과. 도메인 작업의 최종 성공과 구분합니다.
 - name: 플랫폼
   description: 현재 서버 정보와 실제 구현된 기능을 확인합니다.
 - name: 상태 확인

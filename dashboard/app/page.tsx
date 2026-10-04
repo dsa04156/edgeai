@@ -24,6 +24,7 @@ export default async function Home() {
           <div><dt>Profile</dt><dd><Link href="/profiles">Profile 관리 →</Link></dd></div>
           <div><dt>Device · Node</dt><dd><Link href="/devices">장치·노드 관리 →</Link></dd></div><div><dt>Workflow · Run</dt><dd><Link href="/workflows">워크플로·실행 관리 →</Link></dd></div>
           <div><dt>Virtual Device</dt><dd><Link href="/virtual-devices">가상 장치 관리 →</Link></dd></div>
+          <div><dt>Audit</dt><dd><Link href="/audit">감사 기록 →</Link></dd></div>
           <div><dt>실장비 실행</dt><dd className="muted">아직 검증하지 않음</dd></div>
         </dl>
       </section>

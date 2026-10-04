@@ -147,6 +147,7 @@ def main():
         report['authenticationGuards'] = {'correctBasic': True, 'cookieAloneDenied': True,
             'wrongPasswordDenied': True, 'unknownUserDenied': True, 'csrfRequired': True}
         devices = []
+        audit_expected = 5  # Profile publication, three read denials, one CSRF denial.
         def register(index):
             d = client.expect('POST', 'devices', {'key': 'load-'+identity+'-'+str(index).zfill(4), 'displayName': 'Synthetic management load',
                 'profileVersionId': profile['id'], 'sourceMode': 'SYNTHETIC'}, 201)
@@ -156,6 +157,7 @@ def main():
             return {'id': d['id'], 'session': session, 'sequence': 0, 'lastBody': body, 'observationCount': 1}
         for count in a.counts:
             began = time.monotonic()
+            added_devices = count-len(devices)
             with ThreadPoolExecutor(max_workers=a.workers) as executor:
                 devices.extend(executor.map(register, range(len(devices), count)))
             setup_seconds = time.monotonic()-began
@@ -195,6 +197,16 @@ def main():
             assert sql("SELECT count(*) FROM edgeai.device_observation WHERE attributes->>'source'<>'management-load' OR (attributes->>'sequence')::bigint<>sequence") == '0'
             stage['integrity'] = {'devices': count, 'latestSessionsAndSequences': True, 'exactObservationCounts': True,
                                   'observations': sum(d['observationCount'] for d in devices), 'reconnectAndReplayProbes': len(probes)}
+            audit_expected += 3*added_devices + count*(a.seconds//a.interval) + 5*len(probes)
+            audit_deadline = time.monotonic()+5
+            while True:
+                audit = json.loads(sql("SELECT json_build_object('requests',count(*),'outcomes',count(o.request_id),'unauthenticated',count(*) FILTER (WHERE o.actor_type='UNAUTHENTICATED'),'invalidActors',count(*) FILTER (WHERE o.actor_type='LOCAL_BASIC' AND (o.actor_subject<>'load-test' OR o.subject_format<>'NAME')),'handlerFailures',count(*) FILTER (WHERE o.disposition='HANDLER_FAILED')) FROM edgeai.management_audit_request r LEFT JOIN edgeai.management_audit_outcome o ON o.request_id=r.id"))
+                if audit['outcomes'] == audit_expected or time.monotonic() >= audit_deadline:
+                    break
+                time.sleep(.05)
+            assert audit == {'requests': audit_expected, 'outcomes': audit_expected, 'unauthenticated': 4,
+                             'invalidActors': 0, 'handlerFailures': 0}, 'Durable HTTP audit differs from acknowledged writes and denials'
+            stage['integrity']['audit'] = audit
             stage['database'] = json.loads(sql("SELECT json_build_object('bytes',pg_database_size(current_database()),'connections',numbackends,'deadlocks',deadlocks,'commits',xact_commit,'rollbacks',xact_rollback) FROM pg_stat_database WHERE datname=current_database()"))
             save()
             print('PASS: '+str(count)+' device correctness; scheduled p95='+str(round(summary['scheduledLatencyMs']['p95'], 2))+'ms; no request errors or drops', flush=True)

@@ -136,7 +136,9 @@ def main():
             'dependencies':[{'fromTask':'root','toTask':'child','fromPort':'output','toPort':'input','mode':'BATCH'}]},201)
         run = api.request('POST','workflow-runs',{'workflowVersionId':version['id'],'execution':{'mode':'AUTO'},'parameters':{}},201,str(uuid.uuid4()))
         api.request('POST','workflow-runs/'+run['id']+'/cancel',{})
-        fixed_paths = ['profiles/DEVICE/'+profile_key+'/versions/1.0.0','workflows/'+workflow['id'],'workflow-runs/'+run['id']]
+        audit_id = pg.sql('SELECT id FROM edgeai.management_audit_request ORDER BY started_at,id LIMIT 1',source)
+        assert audit_id
+        fixed_paths = ['profiles/DEVICE/'+profile_key+'/versions/1.0.0','workflows/'+workflow['id'],'workflow-runs/'+run['id'],'audit-requests/'+audit_id]
         expected_api = {path:api.request('GET',path) for path in fixed_paths}
         before = fingerprints(source)
         bundle = work/'snapshot'

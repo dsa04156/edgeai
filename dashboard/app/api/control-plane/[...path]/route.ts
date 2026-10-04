@@ -8,6 +8,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const target = path.join("/");
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const allowed = request.method === "GET" ? target === "csrf"
+    || new RegExp(`^audit-requests(/${uuid})?$`).test(target)
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^virtual-devices/${uuid}/execution$`).test(target)
     || new RegExp(`^workflow-runs/${uuid}/streams$`).test(target)
@@ -60,6 +61,8 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     if (cookie) outgoing.set("Set-Cookie", cookie);
     const location = response.headers.get("location");
     if (location) outgoing.set("Location", location.replace("/api/v1/", "/api/control-plane/"));
+    const auditId = response.headers.get("x-edgeai-audit-id");
+    if (auditId && new RegExp(`^${uuid}$`).test(auditId)) outgoing.set("X-EdgeAI-Audit-Id", auditId);
     return new NextResponse(response.body, { status: response.status, headers: outgoing });
   } catch {
     return NextResponse.json({ message: "Control Plane에 연결할 수 없습니다. 실행 상태를 확인하세요." }, { status: 503 });

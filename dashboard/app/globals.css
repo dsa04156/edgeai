@@ -98,3 +98,5 @@ select { min-width: 0; max-width: 100%; }
 .vd-table { min-width: 480px; }
 .vd-table th, .vd-table td:not(:first-child) { white-space: nowrap; }
 .vd-table td:first-child { width: 55%; }
+.audit-table { min-width: 640px; }
+.audit-table td:nth-child(2) { max-width: 160px; overflow-wrap: anywhere; }

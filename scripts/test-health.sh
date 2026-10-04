@@ -38,6 +38,10 @@ if expected=='DOWN':
     status,body=get(api+'/api/v1/tasks/00000000-0000-4000-8000-000000000000/results',{'Authorization':'Basic '+credentials})
     assert status==503 and body['code']=='RESULT_STORE_UNAVAILABLE'
     print('PASS: Result reads return a sanitized 503 instead of an empty result during a real database outage')
+    for resource in ['audit-requests', 'audit-requests/00000000-0000-4000-8000-000000000000']:
+        status,body=get(api+'/api/v1/'+resource,{'Authorization':'Basic '+credentials})
+        assert status==503 and body['code']=='AUDIT_STORE_UNAVAILABLE'
+    print('PASS: Audit list/detail return a sanitized 503 during a real database outage')
     print('PASS: PostgreSQL outage → Spring readiness 503/DOWN → Next.js health 503/DOWN')
     raise SystemExit(0)
 assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
@@ -51,5 +55,7 @@ if body['items']:
     vd_id=body['items'][0]['id']
     status,execution=get(api+'/api/v1/virtual-devices/'+vd_id+'/execution',{'Authorization':'Basic '+credentials})
     assert status==200 and execution['vdId']==vd_id and isinstance(execution['operations'],list)
+status,audits=get(api+'/api/v1/audit-requests?limit=1',{'Authorization':'Basic '+credentials})
+assert status==200 and isinstance(audits['items'],list)
 print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
 PY

@@ -17,7 +17,14 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await expect(page.getByRole("heading", { name: /EdgeAI Control Plane/ })).toBeVisible();
   const contract = await page.request.get(`${api}/openapi.yaml`);
   expect(await contract.text()).toBe(await readFile("../contracts/openapi/platform-api.yaml", "utf8"));
-  await expect(page.locator(".opblock")).toHaveCount(41);
+  await expect(page.locator(".opblock")).toHaveCount(43);
+  const auditOperation = page.locator("[id$='-getManagementAuditRequest']");
+  await expect(auditOperation.locator(".opblock-summary-description")).toHaveText("응답의 감사 ID로 특정 요청 결과 확인");
+  await auditOperation.locator(".opblock-summary-control").click();
+  await expect(auditOperation.locator(".opblock-description-wrapper").filter({ hasText: "OUTCOME_UNKNOWN" })).toContainText("원래 도메인의 조회와 idempotency 계약");
+  await auditOperation.screenshot({ path: testInfo.outputPath("management-audit-swagger.png") });
+  await auditOperation.locator(".opblock-summary-control").click();
+  await expect(page.locator("[id$='-listManagementAuditRequests'] .opblock-summary-description")).toHaveText("관리 요청의 접수·인증 주체·HTTP 결과 조회");
   await expect(page.locator("#operations-Device-registerDevice .opblock-summary-description")).toHaveText("물리 장치 등록");
   await expect(page.locator("#operations-Device-reportDeviceObservation .opblock-summary-description")).toHaveText("장치 상태·작은 관측 데이터 보고");
   await expect(page.locator("#operations-Device-issueDeviceStreamToken .opblock-summary-description")).toHaveText("현재 장치 세션의 스트림 배정 토큰 발급");
@@ -56,6 +63,7 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await operation.getByRole("button", { name: "Execute", exact: true }).click();
   const response = await published;
   expect(response.status()).toBe(201);
+  expect(response.headers()["x-edgeai-audit-id"]).toMatch(/^[a-f0-9-]{36}$/);
   expect(response.request().headers()["x-csrf-token"]).toBeTruthy();
   expect((await response.json()).key).toBe(key);
   expect((await page.request.get(`${api}/api/v1/profiles/DEVICE/${key}/versions/1.0.0`)).status()).toBe(200);

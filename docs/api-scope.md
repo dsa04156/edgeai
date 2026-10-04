@@ -1,8 +1,8 @@
 # API 범위
 
 API 정의서의 30개 작업은 설계 초안이다. 공통 prefix는 ADR-0001에서 `/api/v1`으로 정합화했다.
-현재 관리 REST 계약은 `contracts/openapi/platform-api.yaml`의41개 operation이다. 원문 초안의30개와 범위는 다르다.
-M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10개 + M4 Result1개 + M5 전환2개 + M6 VD9개 + M7 장치 토큰/경로 조회2개다.
+현재 관리 REST 계약은 `contracts/openapi/platform-api.yaml`의43개 operation이다. 원문 초안의30개와 범위는 다르다.
+M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10개 + M4 Result1개 + M5 전환2개 + M6 VD9개 + M7 장치 토큰/경로 조회2개 + M9 감사 조회2개다.
 
 | 단계 | 설계 영역 | 예정 작업 |
 |---|---|---|
@@ -17,6 +17,7 @@ M0 기반·CSRF + M1 Profile3개 + M2 Device/Node10개 + M3 Workflow/Run/Task10�
 | M6 | VD | 생성·목록·상세·수정·해제 (5), 시작·교체·종료·실행 상태 (4) |
 | M5/M6 | Operation | TASK_OFFLOAD 및 VD_PROVISION/VD_REPLACE/VD_DRAIN 합집합 조회 (1) |
 | M7 | Stream | 현재 Device Session 토큰 발급(1), Run의 고정 경로/그룹/세대 조회(1), 기존 Run 생성의 streamInputs |
+| M9 | 감사 | 관리 요청 접수/HTTP 결과 목록·감사 UUID 조회(2), 현재 Basic 주체·미확정 결과 구분 |
 
 각 슬라이스에서 Request/Response/Error, idempotency, 상태 전이, 권한, 수용시험을 구체화한 뒤 구현한다.
 TaskAttempt 생성은 사용자 공개 API가 아니라 내부 재시도·오프로딩 정책이다.
@@ -33,5 +34,6 @@ ADR0055는 VD STREAM 실행·그룹/최종 처리 복구, ADR0056은 VD 포함 �
 동료 VD 유지를 연결한다. Remote STREAM과 VD 자동 전환은 지원하지 않는다.
 기본 STREAM 비활성501은 유지한다. 배포별 활성화·검증 판정은 해당 evidence를 따른다.
 별도 `stream-api.yaml`에는 Device/Runner 배정·heartbeat·checkpoint·공동 완료·복구와
-Device의 Run 경로 조회를 포함한 내부13개 operation이 있다. 이번 변경은 공개 operation41개를 유지한다.
+Device의 Run 경로 조회를 포함한 내부13개 operation이 있다. M7 변경 당시 공개 operation은41개였고,
+ADR0066의 [관리 감사 조회](management-audit.md)2개를 추가해 현재43개다.
 [VD 그룹 전환 검증](evidence/m7-vd-stream-group-offload.md)에서 로컬·실제 Kubernetes와 이미지 CI·배포 범위를 구분한다.

@@ -42,6 +42,9 @@ bash scripts/test-load.sh
   하나라도 있으면 실패다. 오류를 숨기는 자동 재시도나 부하 하향은 없다.
 - `integrity`: 페이지 조회의 정확한 장치 집합, DB의 최신 세션/sequence·총 관측 수·본문 속성,
   동일 요청 재전송·새 세션 epoch·이전 세션 거절 결과다. 등록과 정합성 probe는 timed window 밖이다.
+  `audit`는 프로필/장치/세션/관측 변경·재전송 및 인증/CSRF 거절의 접수와 결과를 실제 DB에서
+  대조한다. 각 단계의 예상 요청 수와 결과 수, 미인증4건·잘못된 주체0·처리 예외0을 확인한다.
+  응답 전송 뒤 결과 저장이 완료될 수 있어 단계 종료 후 최대5초 확인하며 측정 지연에는 넣지 않는다.
 - `apiResources`: `/proc`로 측정한 해당 API의 최고 RSS와 CPU 사용량이다. CPU core equivalent1은
   표본 구간에서 CPU1개분 사용을 뜻하며, 백분율이나 CPU quota가 아니다. JVM 최대 heap은512MiB,
   Hikari pool은5개다. 도구는 별도 CPU 제한을 설정하지 않는다. 상위 실행 환경의 CPU 제한은

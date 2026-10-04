@@ -28,8 +28,13 @@ FIFO/설치 링크 시험을 포함한다. 중간 `033140Z-533fa012`는 기존 �
 - arm64: `6b8dc4333c53a5a57c9e5834e3a48f92605d7154014cd07269ff3327db5d37f4`
 
 매 실행에서 archive와 실제 도구를 대조했다. 로컬 실행은 amd64이며 arm64 실행 수용은 남는다.
-CI scaffold에 설치·실제10개 시험·안전한 요약 업로드를 연결했다. 이 문서 작성 시점에는 새
-CI 게이트의 원격 실행을 아직 확인하지 않았다.
+CI scaffold에 설치·실제10개 시험·안전한 요약 업로드를 연결했다. 소스4f408dd의
+CI37174711098은5jobs 성공, 원시22개 PASS/0을 직접 확인했다(`20261004T043600Z-294040c0`).
+실제 CI age10개·X25519/PQ·4파일 복원/정리와 kind producer 종료7개도 포함한다.
+GitOpsee9197719d02bcff13c72ff2a1f9d6928ea31540의 정확한 API/dashboard/MinIO imageID·
+Ready·PVC Bound·Argo Synced는 `043601Z-82aa8520`에서 PASS다. 공유 Ingress의 aggregate
+health는 Progressing이다. 원래10파일/두PVC 및 실제 TLS/S3 probe 보존도
+`043807Z-5d799a7c`에서 PASS다. 후속 ADR0066 감사 변경의 CI 증거는 아니다.
 
 운영 키/Secret은 읽거나 교체하지 않았다. 개인 키와 평문 합성 fixture는 Git에서 제외된
 소유자 전용 경로에만 두었다. 파일 복원은 작성자 서명 검증이나 서비스 활성화를 뜻하지 않는다.

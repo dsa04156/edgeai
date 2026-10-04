@@ -27,6 +27,10 @@ Runner SDK 프로토콜·복원 DB 재활성화의 검증으로 확대하지 않
 컨테이너·실행 중 sidecar·ephemeral container, 다른 quota UID/정책/복구 ID, 이미 종료가
 시작된 Pod 및 다른 소유자를 보수적으로 거절하는 판정을 다룬다.
 
-새 kind CI 게이트에는 같은 source의 Runner digest와7개 실제 사례를 연결한다. 이 문서 작성
-시점에는 새 게이트를 아직 원격 CI에서 실행하지 않았다. 전체 제어기/Remote/broker/장치/저장소
+kind CI 게이트에는 같은 source의 Runner digest와7개 실제 사례를 연결했다.
+소스4f408dd의 CI37174711098은5jobs/원시22개 PASS이며 종료7개·부모2/자식2 종료 확인·
+Pod/Job 생성 차단·소유 자원 정리를 직접 대조했다(`20261004T043600Z-294040c0`).
+새 이미지의 GitOpsee91977·정확한 imageID/Ready/PVC/Argo Synced와 기존10파일/두PVC 보존은
+`043601Z-82aa8520`/`043807Z-5d799a7c`에서 PASS다. 공유 Ingress health는 Progressing이다.
+전체 제어기/Remote/broker/장치/저장소
 쓰기 차단과 fence 해제·복원 DB 활성화, 전체 M9·RPO/RTO 수용은 남는다.
