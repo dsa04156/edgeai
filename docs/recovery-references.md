@@ -39,8 +39,10 @@ bash scripts/verify-recovery-references.sh \
 성공한 새 디렉터리에는0600 `verification-report.json`이 생긴다. 개수·정확한 참조 집합 SHA·
 archive/manifest SHA·snapshot·시각을 기록한다. 원문 DB 내용이나 파일은 공개 report에 넣지
 않는다. 실패는 nonzero이며 `failure.json`과 비공개 진단을 확인한다. 기존 output을 덮어쓰지 않는다.
-지원하지 않는 migration 이력은 exit2/BLOCKED다. V1–V33 이후 schema에서는 수집해야 하는
-참조를 검토한 뒤 명령과 시험을 함께 갱신해야 한다.
+V1부터 빠짐없이 적용된 V33·V34·V35·V36 schema를 지원한다. V35/V36의 결과 발행 큐는
+기존 Result를 참조하며 새 고정 S3 파일 참조를 추가하지 않는다. 독립 시작/결과 기록은
+별도 복구 증거다. 그 밖의 migration 이력은 exit2/BLOCKED이며 수집해야 하는 참조를
+검토한 뒤 명령과 시험을 함께 갱신해야 한다.
 
 권장 순서는 DB 백업 → MinIO 고정 버전 백업 → 새 DB 복원 → 이 대조다. 중간에 필요한 버전을
 영구 삭제하면 검증이 실패한다. 운영 활성화 전 실행 중 producer와 worker의 권한·Secret·

@@ -15,7 +15,7 @@ import java.util.*;
 import okhttp3.OkHttpClient;
 
 /** Fixed-bucket, version-bound artifact verification; never trusts ETag or user SHA metadata. */
-public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, VDTaskStartJournal, AutoCloseable {
+public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, VDTaskStartJournal, VDTaskResultJournal, AutoCloseable {
     private static final int EXPIRY_SECONDS = 600;
     private final MinioClient client, signer;
     private final String bucket;
@@ -45,6 +45,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
     @Override public void retainStart(io.edgeai.domain.runtime.RuntimeStartAuthority authority){starts.retainStart(authority);}
     @Override public void retainResult(io.edgeai.domain.runtime.RuntimeResultAuthority authority){results.retainResult(authority);}
     @Override public void retainVDStart(io.edgeai.domain.vd.VDTaskStartAuthority authority){vdStarts.retainVDStart(authority);}
+    @Override public void retainVDResult(io.edgeai.domain.vd.VDTaskResultAuthority authority){results.retainVDResult(authority);}
     @Override public ArtifactGrant upload(ArtifactContent expected) {
         try {
             if (client.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(bucket).build()).status() != VersioningConfiguration.Status.ENABLED)

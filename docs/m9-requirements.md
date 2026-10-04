@@ -149,7 +149,14 @@ ADR0105의 [VD 자식 시작 기록](evidence/m9-vd-task-start-journal.md)은 �
 배정 ID·세션/세대·슬롯·설정·허가 당시 lease와 원래 기한을 S3에 보존한다. 대상8개와
 실 Kubernetes7개에서27개 VD 기록·18개 고정 결과를 검증했다. 최종 개별 수트의
 단위122/PG232/runtime70/저장소11개 통과와 전체 명령의 간헐 실패를 구분한다.
-VD Result 기록·복원 DB 소비·STREAM 권한/종합 활성화는 남는다.
+VD Result 기록은 아래 ADR0106으로 확장했으며 복원 DB 소비·STREAM 권한/종합 활성화는 남는다.
+
+ADR0106의 [VD 확정 결과 기록](evidence/m9-vd-task-result-journal.md)은 V36에서 기존 독립
+발행 큐를 확장하고 DB commit 뒤 원래 배정·세션/세대·결과 신원과 고정 출력을 S3에 보존한다.
+대상9개 포함 runtime79/PG232/저장소11·단위122 개별 수트와 실제 Kubernetes7개를 통과했다.
+VD 결과16개/Node2개·시작27개/Node2개·출력18개·발행 대기0·소유 정리를 확인했다.
+기존 전체 명령의 시간 초과와 최초 Kube 실패는 원인 미확정으로 보존한다. VD 시작/결과의
+복원 DB 소비, 전역 writer/API 차단·STREAM 권한/전체 활성화와 새 CI/배포는 별도다.
 
 M9 복원 수용에는 과거 DB만 복원한 상태에서 worker가 중복 작업을 시작하지 않도록 원래
 Pod/Remote/장치 producer와의 경계를 확인하는 절차가 필요하다. 이전 실행의 권한을 회수하고,

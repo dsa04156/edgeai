@@ -11,8 +11,9 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
-final class S3RuntimeResultJournal implements RuntimeResultJournal {
+final class S3RuntimeResultJournal implements RuntimeResultJournal, VDTaskResultJournal {
     static final String MEDIA_TYPE="application/vnd.edgeai.runtime-result+json";
+    static final String VD_MEDIA_TYPE="application/vnd.edgeai.vd-task-result+json";
     private static final int MAX_BYTES=1048576;
     private final MinioClient client;
     private final String bucket;
@@ -21,22 +22,29 @@ final class S3RuntimeResultJournal implements RuntimeResultJournal {
     S3RuntimeResultJournal(MinioClient client,String bucket){this.client=client;this.bucket=bucket;}
     @Override public void retainResult(RuntimeResultAuthority authority){
         Objects.requireNonNull(authority);
+        retain(authority.objectKey(),authority.document(),MEDIA_TYPE);
+    }
+    @Override public void retainVDResult(io.edgeai.domain.vd.VDTaskResultAuthority authority){
+        Objects.requireNonNull(authority);
+        retain(authority.objectKey(),authority.document(),VD_MEDIA_TYPE);
+    }
+    private void retain(String key,Map<String,Object> document,String mediaType){
         try{
             if(client.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(bucket).build()).status()!=VersioningConfiguration.Status.ENABLED)
                 throw new ArtifactVerificationException("Result journal requires versioned storage");
-            byte[] body=json.writeValueAsBytes(authority.document());
+            byte[] body=json.writeValueAsBytes(document);
             if(body.length>MAX_BYTES)throw new ArtifactVerificationException("Result journal exceeds size limit");
-            byte[] saved=read(authority.objectKey());
+            byte[] saved=read(key,mediaType);
             if(saved==null){
                 try(var input=new ByteArrayInputStream(body)){
                     try{
-                        client.putObject(PutObjectArgs.builder().bucket(bucket).object(authority.objectKey()).stream(input,(long)body.length,-1L)
-                            .contentType(MEDIA_TYPE).extraHeaders(Map.of("If-None-Match","*")).build());
+                        client.putObject(PutObjectArgs.builder().bucket(bucket).object(key).stream(input,(long)body.length,-1L)
+                            .contentType(mediaType).extraHeaders(Map.of("If-None-Match","*")).build());
                     }catch(ErrorResponseException error){
                         if(!Set.of("PreconditionFailed","ConditionalRequestConflict").contains(error.errorResponse().code()))throw error;
                     }
                 }
-                saved=read(authority.objectKey());
+                saved=read(key,mediaType);
             }
             if(saved==null)throw new ArtifactVerificationException("Result journal publication is not observable");
             try{
@@ -45,7 +53,7 @@ final class S3RuntimeResultJournal implements RuntimeResultJournal {
         }catch(ArtifactVerificationException error){throw error;}
         catch(Exception error){throw new ArtifactStoreUnavailableException();}
     }
-    private byte[] read(String key)throws Exception{
+    private byte[] read(String key,String mediaType)throws Exception{
         StatObjectResponse stat;
         try{stat=client.statObject(StatObjectArgs.builder().bucket(bucket).object(key).build());}
         catch(ErrorResponseException error){
@@ -53,7 +61,7 @@ final class S3RuntimeResultJournal implements RuntimeResultJournal {
             throw error;
         }
         if(stat.versionId()==null || stat.versionId().equals("null") || stat.versionId().isBlank() ||
-                !MEDIA_TYPE.equals(stat.contentType()) || stat.size()<2 || stat.size()>MAX_BYTES ||
+                !mediaType.equals(stat.contentType()) || stat.size()<2 || stat.size()>MAX_BYTES ||
                 stat.headers().get("Content-Encoding")!=null)
             throw new ArtifactVerificationException("Invalid Result journal object metadata");
         try(var input=client.getObject(GetObjectArgs.builder().bucket(bucket).object(key).versionId(stat.versionId()).build())){

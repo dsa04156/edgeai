@@ -12,12 +12,13 @@ from storage_backup import Client, validate_manifest
 
 
 # A migration that adds another durable S3 reference must extend this inventory before acceptance.
-SUPPORTED_VERSIONS = {str(version) for version in range(1, 36)}
+SUPPORTED_VERSIONS = {str(version) for version in range(1, 37)}
 # V35 adds an outbox referring to existing immutable Results, without new fixed S3 references.
 # Start/Result authority journals are separate post-snapshot recovery evidence.
+# V36 extends the same outbox to VD Results; it adds no table or fixed S3 reference.
 def supported_schema(migrations):
     versions={row['version'] for row in migrations}
-    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35))
+    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35,36))
             and all(row['success'] is True for row in migrations))
 INVENTORY_SQL = """
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
@@ -74,7 +75,7 @@ def verify(pg, client, database, restore_report_path, storage_bundle):
         raise ValueError('Restored database identity or read-only snapshot differs')
     migrations = inventory['migrations'] or []
     if not supported_schema(migrations):
-        raise Blocked('This verifier inventories the complete V33/V34/V35 artifact reference schema; review other migration versions first')
+        raise Blocked('This verifier inventories the complete V33/V34/V35/V36 artifact reference schema; review other migration versions first')
     references = inventory['references']
     versions = {(item['bucket'],item['key'],item['versionId']):item for item in manifest['versions']}
     required = {}

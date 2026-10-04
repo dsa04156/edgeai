@@ -146,7 +146,7 @@ class VDTaskArtifactIntegrationTest {
         for(var task:executions.tasks(run)) {
             var result=runtimes.result(task.id()).orElseThrow();assertThat(result.vdRuntimeId()).isEqualTo(supervisor.id());assertThat(result.producerPodUid()).isEqualTo(supervisor.podUid());assertThat(executions.attempts(task.id())).hasSize(1);
             var r=runtimes.runtime(result.runtimeId()).orElseThrow();assertThat(r.jobName()).isNull();assertThat(r.observedState()).isEqualTo("TERMINATED");
-            verifyStart(r);
+            verifyStart(r);verifyResult(r);
             var artifact=result.outputs().getFirst().artifact();var grant=storage.download(artifact);
             var response=client.send(HttpRequest.newBuilder(grant.url()).timeout(Duration.ofSeconds(5)).GET().build(),HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);var data=(Map<?,?>)json.decode(response.body());assertThat(data.get("sourceMode")).isEqualTo("SYNTHETIC");assertThat(((Number)data.get("score")).doubleValue()).isEqualTo(8);
@@ -160,7 +160,26 @@ class VDTaskArtifactIntegrationTest {
         await(()->executions.task(fast.id()).orElseThrow().state().equals("SUCCEEDED"),15,"Other child did not succeed");await(()->allocations.open(supervisor.id()).isEmpty(),10,"Final slots not acknowledged");
         assertThat(runtimes.result(slow.id())).isEmpty();assertThat(runtimes.result(fast.id())).isPresent();assertThat(process.isAlive()).isTrue();assertThat(vdLifecycle.get(supervisor.id()).ready(Instant.now())).isTrue();
         assertThat(allocations.byRuntime(runtimes.byAttempt(attempt).orElseThrow().id()).orElseThrow().exitCode()).isNotZero();
-        verifyStart(runtimes.runtime(runtimes.result(fast.id()).orElseThrow().runtimeId()).orElseThrow());drain();verifyNoInteractions(jobs);
+        var accepted=runtimes.runtime(runtimes.result(fast.id()).orElseThrow().runtimeId()).orElseThrow();
+        verifyStart(accepted);verifyResult(accepted);drain();verifyNoInteractions(jobs);
+    }
+    private void verifyResult(RuntimeInstance runtime)throws Exception {
+        String key="authority/vd-task-result/"+runtime.id()+".json";var versions=new ArrayList<String>();
+        for(var value:admin.listObjects(ListObjectsArgs.builder().bucket(BUCKET).prefix(key).includeVersions(true).build()))versions.add(value.get().versionId());
+        assertThat(versions).hasSize(1);var stat=admin.statObject(StatObjectArgs.builder().bucket(BUCKET).object(key).build());
+        assertThat(stat.versionId()).isEqualTo(versions.getFirst());assertThat(stat.contentType()).isEqualTo("application/vnd.edgeai.vd-task-result+json");
+        var result=runtimes.result(runtime.taskId()).orElseThrow();var allocation=allocations.byRuntime(runtime.id()).orElseThrow();
+        try(var input=admin.getObject(GetObjectArgs.builder().bucket(BUCKET).object(key).versionId(stat.versionId()).build())){
+            var document=(Map<?,?>)json.decode(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
+            assertThat(document.get("apiVersion")).isEqualTo("edgeai.vd.task.result/v1");
+            assertThat(document.get("resultId")).isEqualTo(result.id().toString());assertThat(document.get("committedAt")).isEqualTo(result.createdAt().toString());
+            assertThat(document.get("allocationId")).isEqualTo(allocation.id().toString());assertThat(document.get("sessionId")).isEqualTo(allocation.sessionId().toString());
+            assertThat(document.get("vdRuntimeId")).isEqualTo(supervisor.id().toString());assertThat(document.get("podUid")).isEqualTo(supervisor.podUid().toString());
+            assertThat(document.get("manifestDigest")).isEqualTo(result.manifestDigest());
+            var expected=result.outputs().stream().sorted(Comparator.comparing(io.edgeai.domain.storage.TaskResult.Output::port)).map(o->{var a=o.artifact();
+                return Map.of("port",o.port(),"bucket",a.bucket(),"objectKey",a.objectKey(),"versionId",a.versionId(),"bytes",a.bytes(),"sha256",a.sha256(),"mediaType",a.mediaType());}).toList();
+            assertThat(json.canonical(document.get("outputs"))).isEqualTo(json.canonical(expected));
+        }
     }
     private void verifyStart(RuntimeInstance runtime)throws Exception {
         String key="authority/vd-task-start/"+runtime.id()+".json";var versions=new ArrayList<String>();

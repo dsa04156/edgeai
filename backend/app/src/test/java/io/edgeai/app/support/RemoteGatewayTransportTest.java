@@ -87,8 +87,11 @@ class RemoteGatewayTransportTest {
     @Test void wholeBodyDeadlineCancelsAStalledDownloadAndCleansPartialFile() throws Exception {
         byte[] bytes="abcd".getBytes();var metadata=output(bytes);Path target=directory.resolve("result");
         handler.set(exchange->{exchange.getResponseHeaders().set("Content-Type","application/json");exchange.sendResponseHeaders(200,4);exchange.getResponseBody().write('a');exchange.getResponseBody().flush();try{Thread.sleep(1500);}catch(InterruptedException ignored){Thread.currentThread().interrupt();}});
-        long started=System.nanoTime();try(var impatient=client(Duration.ofMillis(250))){rejected(()->impatient.downloadOutput(id,metadata,target),UNAVAILABLE);}
-        assertThat(Duration.ofNanos(System.nanoTime()-started)).isLessThan(Duration.ofSeconds(1));assertThat(Files.exists(target)).isFalse();noTemporaryFiles();
+        long started=System.nanoTime(),created,downloaded;
+        try(var impatient=client(Duration.ofMillis(250))){created=System.nanoTime();rejected(()->impatient.downloadOutput(id,metadata,target),UNAVAILABLE);downloaded=System.nanoTime();}
+        long closed=System.nanoTime();
+        assertThat(Duration.ofNanos(closed-started)).as("client construction=%dms, download=%dms, close=%dms",(created-started)/1000000,(downloaded-created)/1000000,(closed-downloaded)/1000000)
+            .isLessThan(Duration.ofSeconds(1));assertThat(Files.exists(target)).isFalse();noTemporaryFiles();
     }
     @Test void sameSizeCorruptionAndOversizedOutputCannotPublish() throws Exception {
         var metadata=output("abcd".getBytes());Path target=directory.resolve("result");

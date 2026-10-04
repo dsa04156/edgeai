@@ -31,7 +31,7 @@ class RuntimeConfiguration {
             @Value("${edgeai.storage.secret-key}") String secret,@Value("${edgeai.storage.bucket}") String bucket){return new S3ArtifactStore(endpoint,runnerEndpoint,access,secret,bucket,clock);}
     @Bean ArtifactCommitService artifactCommitService(RuntimeLifecycleService lifecycle,ArtifactStore store){return new ArtifactCommitService(lifecycle,store);}
     @Bean RuntimeResultPublicationRepository runtimeResultPublications(org.springframework.jdbc.core.JdbcTemplate jdbc){return new io.edgeai.adapters.repository.JdbcRuntimeResultPublicationRepository(jdbc);}
-    @Bean RuntimeResultPublisher runtimeResultPublisher(RuntimeRepository runtimes,io.edgeai.domain.storage.RuntimeResultJournal journal){return new RuntimeResultPublisher(runtimes,journal);}
+    @Bean RuntimeResultPublisher runtimeResultPublisher(RuntimeRepository runtimes,io.edgeai.domain.storage.RuntimeResultJournal journal,VDTaskRepository allocations,VDRuntimeRepository supervisors,io.edgeai.domain.storage.VDTaskResultJournal vdJournal){return new RuntimeResultPublisher(runtimes,journal,allocations,supervisors,vdJournal);}
     @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock,io.edgeai.domain.storage.RuntimeStartJournal starts,RuntimeResultPublisher results,io.edgeai.domain.storage.VDTaskStartJournal vdStarts){return new RunnerApiService(lifecycle,runtimes,store,commit,clock,starts,results,vdStarts);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)

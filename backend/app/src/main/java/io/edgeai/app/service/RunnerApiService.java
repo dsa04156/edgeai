@@ -74,7 +74,6 @@ public final class RunnerApiService {
     public Creation<TaskResult> commit(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");
         var committed=commits.commit(principal.attemptId(),principal.epoch(),principal.podUid(),RunnerInput.manifest(root.get("outputs")));
-        if(committed.value().vdRuntimeId()!=null)return committed;
         return new Creation<>(results.publish(committed.value().runtimeId()),committed.created());
     }
     public Object fail(RunnerPrincipal principal,String body) {

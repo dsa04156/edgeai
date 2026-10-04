@@ -50,6 +50,7 @@ class RuntimeResultJournalIntegrationTest {
     @Autowired ExecutionService executions;@Autowired RuntimeRepository runtimes;@Autowired RunnerTokenService tokens;
     @Autowired RuntimeLifecycleService lifecycle;@Autowired RuntimeResultPublisher publisher;
     @Autowired RuntimeResultPublicationRepository publications;@Autowired RuntimeSettings settings;
+    @Autowired VDTaskRepository allocations;@Autowired VDRuntimeRepository supervisors;
     @Autowired JdbcTemplate jdbc;@Autowired PlatformTransactionManager transactions;
     @MockitoBean RuntimeGateway gateway;@MockitoSpyBean S3ArtifactStore storage;
     private final JsonDocuments json=new JsonDocuments();
@@ -100,7 +101,7 @@ class RuntimeResultJournalIntegrationTest {
         try(var unavailable=new S3ArtifactStore(origin,origin,required("EDGEAI_MINIO_USER"),required("EDGEAI_MINIO_PASSWORD"),BUCKET,Clock.systemUTC())){
             doAnswer(call->{unavailable.retainResult(call.getArgument(0));return null;}).when(storage).retainResult(any());
             commit(e,503);assertThat(versions(resultKey(e))).isEmpty();assertThat(completed(e)).isFalse();
-            assertThat(worker(new RuntimeResultPublisher(runtimes,unavailable),Instant.now()).publishOne()).isTrue();
+            assertThat(worker(new RuntimeResultPublisher(runtimes,unavailable,allocations,supervisors,unavailable),Instant.now()).publishOne()).isTrue();
         }
         var result=runtimes.result(e.task()).orElseThrow();pods.remove(e.attempt());when(gateway.stop(any())).thenReturn(true);
         new RuntimeWorker(runtimes,lifecycle,gateway,tokens,settings,Clock.systemUTC()).commands();commit(e,401);
@@ -109,7 +110,7 @@ class RuntimeResultJournalIntegrationTest {
         Instant now=Instant.now().plusSeconds(10);var old=publications.lease(BUCKET,UUID.randomUUID(),now,Duration.ofSeconds(1)).orElseThrow();
         assertThat(publications.lease(BUCKET,UUID.randomUUID(),now,Duration.ofSeconds(1))).isEmpty();
         doCallRealMethod().when(storage).retainResult(any());
-        var restarted=new RuntimeResultPublisher(runtimes,storage);
+        var restarted=new RuntimeResultPublisher(runtimes,storage,allocations,supervisors,storage);
         assertThat(worker(restarted,now.plusSeconds(2)).publishOne()).isTrue();assertThat(completed(e)).isTrue();
         assertThat(publications.finish(old.resultId(),old.leaseOwner(),now.plusSeconds(2))).isFalse();
         assertThat(journal(e).get("resultId")).isEqualTo(result.id().toString());assertThat(versions(resultKey(e))).hasSize(1);

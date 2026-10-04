@@ -1,6 +1,19 @@
 # 진행 상태
 
 [STATUS]
+ADR0106 VD 확정 결과를 원래 배정/세션·고정 출력과 함께 독립 S3 기록으로 보존한다.
+V36 영속 발행 큐·종료 뒤 재발행·rollback/응답 유실/동시 쓰기와 실제 Python Runner를 포함한
+대상20개231739Z-b6c02814 PASS. 실Kube7개233237Z-411e4f13에서VD Result16/Node2·출력18·
+pending0·소유정리 PASS. [근거](docs/evidence/m9-vd-task-result-journal.md).
+PG232/runtime79/저장소11개231954Z-ea0c46d7와단위122개232535Z-740799bc는개별통과다.
+전체 명령은 단위 다운로드 시간 초과1개로FAIL이며 최초Kube 실패/분리재검증과 원인 미확정을 보존한다.
+V36백업13개233839Z-eb4b1056·참조9개233924Z-6092f907·기존Result복원20개234127Z-1fa39195 PASS.
+선행077d139 CI37239863156 7jobs/원시40개·GitOps c6d12ce 실제배포/원래데이터보존 PASS.
+[CI 근거](docs/evidence/m9-kubernetes-result-recovery-ci.md). 새VD변경의CI/배포·복원 소비/STREAM권한·
+전역writer/API 차단·종합 활성화와 전체 M0–M10 수용은 미완료다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0105 VD 자식의 최초 허가를 성공 응답 전에 S3에 보존한다. 같은 Pod의 별도 배정,
 heartbeat/drain·동시 요청·응답 유실·취소/만료를 대상8개223308Z-da0e87ed에서 검증했다.
 실 Kubernetes7개224349Z-50a87186 PASS: VD 기록27개/Node2개·고정 출력18개·소유정리.

@@ -785,6 +785,30 @@ with response: print(response.status)
                     assert result.returncode == 0, 'Actual Kubernetes committed Result records differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedResultJournals'] = len(results)
+                    vd_results = json.loads(query("""
+                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                            'apiVersion','edgeai.vd.task.result/v1','resultId',s.id,'runtimeId',r.id,'runId',r.run_id,
+                            'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,'namespace',r.namespace,
+                            'vdId',a.vd_id,'allocationId',a.id,'vdRuntimeId',a.vd_runtime_id,'generation',a.generation,
+                            'sessionId',a.session_id,'podName',v.pod_name,'podUid',r.producer_pod_uid,'nodeUid',r.node_uid,'nodeName',r.node_name,
+                            'slot',a.slot,'assignedSequence',a.assigned_sequence,'assignedAt',a.assigned_at,'configurationDigest',v.configuration_digest,
+                            'startKey','authority/vd-task-start/'||r.id||'.json','manifestDigest',s.manifest_digest,'committedAt',s.created_at,
+                            'outputs',(SELECT jsonb_agg(jsonb_build_object('port',o.port,'bucket',o.bucket,'objectKey',o.object_key,
+                                'versionId',o.object_version,'bytes',o.bytes,'sha256',o.sha256,'mediaType',o.media_type) ORDER BY o.port)
+                                FROM edgeai.result_artifact o WHERE o.result_id=s.id))), '[]'::jsonb)
+                        FROM edgeai.task_result s JOIN edgeai.runtime_instance r ON r.id=s.runtime_id
+                        JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id JOIN edgeai.vd_runtime v ON v.id=a.vd_runtime_id
+                        WHERE s.committed AND s.vd_runtime_id IS NOT NULL
+                        """))
+                    for receipt in vd_results:
+                        observed = vd_observer.pods[receipt['podUid']]
+                        assert receipt['vdRuntimeId'] == observed['runtimeId'] and receipt['vdId'] == observed['vdId']
+                        assert receipt['nodeUid'] == observed['nodeUid'] and receipt['nodeName'] == observed['nodeName']
+                    result = subprocess.run(['node', 'scripts/verify-runtime-result-journals.mjs', '--vd'], input=json.dumps(vd_results).encode(), env=verify_env, capture_output=True, timeout=60)
+                    assert result.returncode == 0, 'Actual VD committed Result records differed; private output suppressed'
+                    print(result.stdout.decode().strip(), flush=True)
+                    snapshot['verifiedVDResultJournals'] = len(vd_results)
+                    assert len(results) + len(vd_results) == len(artifacts)
                     snapshot['pendingResultPublications'] = 0
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
                     succeeded = True

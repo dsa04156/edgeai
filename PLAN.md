@@ -2,6 +2,22 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0106의 VD 확정 결과 독립 보존을 구현했다. V36이 기존 발행 큐를 확장하며 원래
+배정/세션·결과 신원·고정 출력을 DB commit 후 S3 한 version에 보존한다. 대상20개
+231739Z-b6c02814·실Kube7개233237Z-411e4f13 PASS: VD Result16/Node2·출력18·pending0·소유정리.
+[근거](docs/evidence/m9-vd-task-result-journal.md). PG232/runtime79/저장소11은231954Z-ea0c46d7에서
+통과했지만 단위 시간 초과1개로 전체 명령 FAIL이다. 단위122개232535Z-740799bc는 재검증 PASS.
+최초 Kube 복구 실패와 분리 재검증 통과를 보존하며 원인 해결로 간주하지 않는다.
+V36 백업13개233839Z-eb4b1056·참조9개233924Z-6092f907·기존 Result 복원20개234127Z-1fa39195 PASS.
+
+선행077d139 CI37239863156은7jobs/원시40개 감사234433Z-9addfe67 PASS다. GitOps c6d12ce의
+정확한 이미지/Ready/ArgoSynced234236Z-b594c163·기존10파일/원래PVC/HTTPS 보존234236Z-e6ab6964도
+PASS다. [CI/배포 근거](docs/evidence/m9-kubernetes-result-recovery-ci.md). 새 VD 시작/결과 변경의
+원격 CI/배포는 후속 검증한다. VD 기록의 복원 소비·STREAM 권한·전역writer/API 차단·종합 활성화,
+실모델/외부 계약과 전체 M0–M10 목표는 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0105의 VD 자식 최초 실행 허가 기록을 구현했다. 배정/세션/세대/슬롯·원래 lease와
 기한을 S3 한 version으로 보존한다. 대상8개223308Z-da0e87ed·실 Kubernetes7개
 224349Z-50a87186 PASS: VD 시작 기록27개/Node2개·고정 출력18개·소유 자원 정리.
