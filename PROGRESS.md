@@ -1,6 +1,11 @@
 # 진행 상태
 
 [STATUS]
+선행 be41a8b CI37200100790 전체5jobs/원시32개 PASS(125138Z-05565ce2), GitOps2f88205
+실제API/dashboard/MinIO imageID·Ready/PVC/ArgoSynced(125137Z-ff9020e5), 이후 원래10파일/
+PVCUID·TLS256KiB/익명403·probe정리(125229Z-73489f8b) PASS. 공유Ingress health Progressing 유지.
+docs/evidence/m9-kubernetes-recovery-ci.md. ADR0081–0083의 새46개 CI/배포 근거와 구분한다.
+
 ADR0083 BATCH offload 복구를 포함한 실제46개(124649Z-b0e9247f)와 Remote 공통 회귀15개
 (124502Z-1302d13a) PASS. 취소2·drain 만료2·원본 OFFLOADED/고정 target/39테이블 보존,
 source claim 거절·미기록 target/새 epoch 미해결, 경쟁/마지막 쓰기 원복/실COMMIT응답 유실·

@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+선행 be41a8b CI37200100790은5jobs/원시32개 PASS(125138Z-05565ce2)다.
+GitOps2f88205 실제 imageID/Ready/PVC/ArgoSynced(125137Z-ff9020e5)와 그 뒤 기존10파일/
+원래PVC·TLS256KiB/익명403/소유probe정리(125229Z-73489f8b)를 확인했다.
+[감사](docs/evidence/m9-kubernetes-recovery-ci.md). ADR0081–0083은 이 소스에 없으며,
+rebase 뒤 pin2개 외 테스트 소스 동일성을 확인했다. 새46개 게이트의 CI/배포는 후속이다.
+
 ADR0083으로 BATCH offload 취소·기록된 기한 조정을 `--offloads`로 연결했다.
 실제46개(124649Z-b0e9247f)·공통 Remote15개(124502Z-1302d13a) PASS.
 전환 취소2·drain 만료2·39테이블/원본 OFFLOADED 보존, source claim 누락 거절,

@@ -1,5 +1,9 @@
 # 검증 증거
 
+be41a8b [복구 CI·실제 배포 감사](m9-kubernetes-recovery-ci.md): CI37200100790의5jobs/원시32개
+PASS, GitOps2f88205 실제 이미지/Ready/ArgoSynced·배포 후 기존10파일/PVC/TLS 보존 확인.
+ADR0081–0083 후속 확장의 새 CI 판정은 별도다.
+
 ADR0083 [복원 BATCH 전환 조정](m9-recovery-batch-offloads.md): 기존37개와 전환 복구9개를
 합친 실제46개·공통 Remote15개 PASS. 취소/drain 만료·미기록 target/새 epoch 보존과
 원복/응답 유실을 검증했다. 새 CI/전체 target 복구·종합 활성화는 별도다.
