@@ -19,13 +19,13 @@ WHERE o.state IN ('DRAINING','STARTING','CANCELLING')
 """
 
 
-def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None):
+def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None, runtime_starts=None):
     entries, unresolved, blocked_runs = [], [], set()
     for row in rows:
         op, task, source, target = (row[k] for k in ('operation','task','source','target'))
         runtimes = {r['attempt_id']:r for r in row['runtimes']}
         required = [source] + ([target] if target else [])
-        reason,remote_failure,remote_success = None,None,False
+        reason,remote_failure,remote_success,kubernetes_start = None,None,False,False
         if op['namespace'] != namespace:
             reason='OUTSIDE_SELECTED_NAMESPACE'
         elif row['hasStream'] or row['hasMembers']:
@@ -75,6 +75,20 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
                             instant(receipt['acceptedAt'])<max(instant(op['created_at']),instant(target['created_at']),instant(op['updated_at']))):
                         raise Blocked('Remote start admission contradicts its original transfer or active work')
                     remote_success=True
+            if (not remote_target and op['state']=='STARTING' and task['state'] in ('READY','RUNNING') and
+                    runtimes[target['id']]['runtime_kind']=='KUBERNETES' and runtime_starts is not None):
+                record=runtime_starts.get(runtimes[target['id']]['id'])
+                if record is None:
+                    # Backup absence cannot prove that a post-snapshot claim never
+                    # happened; do not turn uncertain admission into a timeout.
+                    unresolved.append({'operationId':op['id'],'reason':'KUBERNETES_START_AUTHORITY_NOT_PROVEN'})
+                    blocked_runs.add(task['run_id']);continue
+                authority=record['authority']
+                if (task['state']!='RUNNING' or row['runState']!='RUNNING' or target['state'] not in ('DISPATCHING','RUNNING') or
+                        task['cancellation_reason'] is not None or runtimes[target['id']]['failure_reason'] is not None or
+                        authority['offloadId']!=op['id']):
+                    raise Blocked('Kubernetes admission contradicts its original transfer or active work')
+                kubernetes_start=True
         if row['latestEpoch'] != (target or source)['epoch']:
             unresolved.append({'operationId':op['id'],'reason':'NEWER_ATTEMPT_RECORDED'}); blocked_runs.add(task['run_id']); continue
         if (op['state']=='DRAINING' and (target is not None or op['start_deadline'] is not None) or
@@ -94,6 +108,8 @@ def classify(rows, proven, namespace, remote_outcomes=None, remote_binding=None)
             action='FAIL_REMOTE_OFFLOAD'
         elif remote_success:
             action='COMPLETE_REMOTE_OFFLOAD'
+        elif kubernetes_start:
+            action='COMPLETE_KUBERNETES_OFFLOAD'
         elif op['state']=='STARTING' and task['state'] in ('READY','RUNNING') and target['state'] in ('QUEUED','DISPATCHING'):
             action='CHECK_OFFLOAD_START'
         else:

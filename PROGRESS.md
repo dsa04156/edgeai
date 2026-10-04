@@ -1,6 +1,18 @@
 # 진행 상태
 
 [STATUS]
+ADR0102 Kubernetes 시작 기록 복구: 별도 S3 백업의 원래 허가·작업 digest·기한·실제
+보존 Pod 종료를 복원 DB와 대조해 BATCH 전환만 조정한다. 최종 결합90개
+205153Z-094ba230·Java해시17입력·Remote 실패15개205154Z-38c5569a/결과15개
+205155Z-9a779d98 PASS/소유 정리. [근거](docs/evidence/m9-recovery-kubernetes-start-journals.md).
+시작 허가는 명시적 fixture이며 실제 정상 claim 생성은 ADR0101에서 별도 검증했다.
+원래 claim/Result·42테이블을 보존한다. 실제 API부터 복원 종단·Kubernetes Result·
+STREAM/VD/전역writer·종합 활성화와 전체 단계 수용은 미완료다.
+선행 f66c4cd CI37228787573은7jobs/원시39개 감사204930Z-a54f4f06 PASS.
+GitOps f6bed7d 실제 이미지/Ready/ArgoSynced204946Z-537c82b8·기존10파일/PVC/HTTPS
+보존205024Z-b715bfc8 PASS. 새 ADR0100–0102 변경의 CI/배포와 구분한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
 ADR0101 Kubernetes 시작 기록: 최초 허가를 S3 조건부 쓰기/고정 version 재검증 후
 성공 응답하며 재요청은 원래 시각/기한을 보존한다. 실제 API/PG/S3의 응답 유실·
 저장소 복귀·취소·변조 거절, 전체 회귀201849Z-7a15a836 단위122/PG232/runtime53/

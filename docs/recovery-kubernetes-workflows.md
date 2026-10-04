@@ -77,6 +77,28 @@ bearer와 작업 본문은 포함하지 않는다. 현재 한 DB의 단일 SYNTH
 기록 부재는 미해결, 신원/원래 기한 불일치·미지원 제공자는 거절한다. 이 옵션도 격리를
 유지하며 새 실행이나 권한을 만들지 않는다. [ADR0100](adr/0100-recovery-remote-start-receipts.md).
 
+Kubernetes 시작 기록을 보존하는 배포는 `--offloads`와 함께 아래 옵션을 지정한다.
+복원 DB에 claim이 누락됐다면 실행 정리와 이 명령 모두 `--unclaimed-jobs`도 필요하다.
+
+```bash
+--runtime-start-backup /private/storage-backup \
+--runtime-start-bucket <원래-artifact-bucket> \
+--runtime-start-certificate-sha256 <백업-MinIO-leaf-인증서-SHA256>
+```
+
+접속은 `EDGEAI_BACKUP_STORAGE_URL/USER/PASSWORD`, `EDGEAI_BACKUP_CA_FILE`을 사용한다.
+별도 설치에 버전을 보존한 백업의 `manifest.json`과 실제 고정 version을 대조한다.
+원래 신원·작업 digest·lease/전환 기한·허가 시각과 보존 Pod의 실제 종료가 모두 일치하면
+전환만 SUCCEEDED로 반영한다. `runtimeStartEvidence`에 고정 객체와 시작 허가가 남으며,
+Task/Attempt/claim/Result를 새로 만들거나 성공 처리하지 않는다. 현재 기한이 지났더라도
+원래 기한 안의 허가를 시작 실패로 바꾸지 않는다.
+
+이 옵션에서 기록 부재는 `KUBERNETES_START_AUTHORITY_NOT_PROVEN`이다. 백업에 없는 기록을
+실행 부재로 해석하지 않으며, 캡처된 기록 삭제·교체·변조는 거절한다. 옵션 없는 기존 기한
+복구는 별도 경로이므로 ADR0101 배포 이후에는 시작 기록 백업을 함께 지정한다.
+작업 결과와 STREAM/VD 종합 복구·새 권한·서비스 활성화는 여전히 별도다.
+[ADR0102](adr/0102-recovery-kubernetes-start-journals.md).
+
 실제 종료 증거가 없는 후손 작업의 취소, 바뀐 재시도 기한, 모순된 Result/Attempt는 거절한다.
 이미 완료된 결과와 실패/취소 이력은 보존한다. Pod exit code만으로 업무 결과를 만들지 않는다.
 

@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0102 시작 기록→복원 BATCH 전환 조정을 구현했다. 실제 PG/보존 Pod/TLS S3 백업
+결합90개205153Z-094ba230·Java해시17입력·Remote 실패/결과 각15개 회귀 PASS다.
+[근거](docs/evidence/m9-recovery-kubernetes-start-journals.md). 명시적 시작 허가 fixture와
+실제 API부터의 복원 종단은 구분한다. Kubernetes Result·VD 독립 기록·STREAM 권한·
+전역writer 차단·새 권한/종합 활성화와 전체 단계 수용을 계속 진행한다.
+선행 f66c4cd CI37228787573 7jobs/원시39개, GitOps f6bed7d의 실제 배포 및 기존 데이터
+보존 검증은 PASS다. [근거](docs/evidence/m9-native-recovery-ci.md). 새 변경의 CI/배포는 후속이다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0101 Kubernetes claim 성공 응답 전 최초 허가를 버전 관리 S3에 보존한다.
 같은 요청은 최초 version/시각을 유지하고 신원/작업/원래 기한 충돌은 거절한다.
 실제 API/S3 응답 유실·저장소 복귀·저장 중 취소를 포함한 전체 회귀

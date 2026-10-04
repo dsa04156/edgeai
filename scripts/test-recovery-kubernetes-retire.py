@@ -47,6 +47,7 @@ def main():
     p.add_argument('--unclaimed-jobs',action='store_true',help='Exercise recorded Jobs whose Pod never claimed its runtime')
     p.add_argument('--remote-offloads',action='store_true',help='Combine actual reference Remote and Kubernetes offload evidence')
     p.add_argument('--remote-start-receipts',action='store_true',help='Include actual timely Remote start receipts and recovered successful Results')
+    p.add_argument('--runtime-start-journals',action='store_true',help='Verify Kubernetes admission fixtures with actual restored DB, retained Pods and replicated TLS S3')
     p.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     p.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-retire-test.json')
     args=p.parse_args()
@@ -55,6 +56,7 @@ def main():
     if args.unclaimed_jobs and not args.offloads: p.error('--unclaimed-jobs requires --offloads')
     if args.remote_offloads and not args.unclaimed_jobs: p.error('--remote-offloads requires --unclaimed-jobs')
     if args.remote_start_receipts and not args.remote_offloads: p.error('--remote-start-receipts requires --remote-offloads')
+    if args.runtime_start_journals and not args.unclaimed_jobs: p.error('--runtime-start-journals requires --unclaimed-jobs')
     token=uuid.uuid4().hex; operation=str(uuid.uuid4())
     namespace='edgeai-retire-test-'+token[:16]
     work=ROOT/'.tools'/('recovery-kubernetes-retire-test-'+token); work.mkdir(mode=0o700)
@@ -267,6 +269,17 @@ def main():
                 vd_work,attempt,run['id'],runtime,provider,work,start_receipts=args.remote_start_receipts)
             remote_fixtures['minioBinary']=args.minio_binary
         passed('real-running-parent-child-containers-backed-up-to-isolated-restores-and-source-database-removed')
+
+        start_fixture=None
+        if args.runtime_start_journals:
+            from test_recovery_runtime_starts import Fixture
+            from test_recovery_work_digest import check as check_digest
+            report['runtimeStartDigestComparisons']=check_digest(work)
+            passed('packaged-java-and-recovery-work-digests-agree-on-precision-unicode-and-invalid-json')
+            start_fixture=Fixture('test_separate_credentials_identity_tls_pin_and_inspection')
+            providers.append(start_fixture);start_fixture.setUp();start_fixture.configure(work,args.minio_binary)
+            start_fixture.seed(pg,targets[4][0],owned,args.transport,kube,namespace,unclaimed_fixtures)
+            passed('explicit-kubernetes-admission-fixture-backed-up-to-distinct-tls-minio-with-source-db-and-storage-removed')
 
         extra_vr=str(uuid.uuid4())
         unbound=copy.deepcopy(pod_spec)
@@ -502,6 +515,9 @@ def main():
         if args.remote_offloads:
             from test_recovery_mixed_offloads import check as check_remote
             check_remote(pg,*targets[5],options,cli,fingerprints,passed,work,remote_fixtures,report)
+        if start_fixture:
+            from test_recovery_runtime_starts import check as check_starts
+            check_starts(pg,start_fixture,options,cli,fingerprints,passed,report)
 
         inspection=Api(db,work,inspection=True); apis.append(inspection)
         inspection.request('GET','workflow-runs/'+run['id'])
@@ -548,6 +564,8 @@ def main():
             report['ownedApisStopped']=all(api.process is None or api.process.poll() is not None for api in apis)
             for provider in providers:provider.doCleanups()
             if providers:report['ownedRemoteProvidersStopped']=all(getattr(p,'process',None) is None or p.process.poll() is not None for p in providers)
+            if args.runtime_start_journals:
+                report['ownedStartStorageStopped']=all(p.poll() is not None for provider in providers for p in getattr(provider,'processes',[]))
             for database in list(owned): drop(database)
             report['ownedDatabasesRemoved']=not owned
             if namespace_uid:

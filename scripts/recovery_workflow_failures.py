@@ -4,7 +4,7 @@ from recovery_remote_inventory import canonical
 
 
 def transaction_sql(plan, tables, guard_query, proven_runtimes=None):
-    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START','FAIL_REMOTE_OFFLOAD','COMPLETE_REMOTE_OFFLOAD')
+    offload_actions=('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START','FAIL_REMOTE_OFFLOAD','COMPLETE_REMOTE_OFFLOAD','COMPLETE_KUBERNETES_OFFLOAD')
     if any(entry['action'] not in ('CANCEL', 'CHECK_RETRY', 'FINAL_FAILURE', 'FAIL', 'RECONCILE_RUN', *offload_actions) for entry in plan['entries']):
         raise ValueError('Unsupported failure reconciliation action')
     if any(e['action'] in offload_actions for e in plan['entries']) and (proven_runtimes is None or not plan.get('reconcileOffloads')):
@@ -37,11 +37,11 @@ FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
   WHERE id=(entry->>'operationId')::uuid;
   offloads_failed:=offloads_failed+1;
  END IF;
- IF entry->>'action'='COMPLETE_REMOTE_OFFLOAD' THEN
+ IF entry->>'action' IN ('COMPLETE_REMOTE_OFFLOAD','COMPLETE_KUBERNETES_OFFLOAD') THEN
   UPDATE edgeai.task_offload SET state='SUCCEEDED',updated_at=transaction_timestamp()
   WHERE id=(entry->>'operationId')::uuid AND state='STARTING' AND failure_reason IS NULL;
   GET DIAGNOSTICS changed=ROW_COUNT;
-  IF changed<>1 THEN RAISE EXCEPTION 'Original Remote transfer is no longer pending'; END IF;
+  IF changed<>1 THEN RAISE EXCEPTION 'Original admitted transfer is no longer pending'; END IF;
   offloads_completed:=offloads_completed+1;
  ELSIF entry->>'action' IN ('CANCEL_OFFLOAD','FAIL_OFFLOAD','CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
   SELECT * INTO STRICT operation FROM edgeai.task_offload WHERE id=(entry->>'operationId')::uuid;
