@@ -1,6 +1,18 @@
 # 진행 상태
 
 [STATUS]
+ADR0107 VD BATCH 결과 복원24개001119Z-2e34d057 PASS. 원래 배정/세션·시작/결과·실제
+종료·고정 S3 출력을 대조해 복원DB5개에서 원래 결과/시각/producer·자식 대기를 반영했다.
+경쟁/원복/응답 유실·타38테이블/VD이력·소유정리를 확인했다.
+[근거](docs/evidence/m9-recovery-vd-results.md). 기존Kube20개001319Z-48d6d047와
+Remote15개001459Z-362633f0 PASS. 기존 시작 복구91개001546Z-842f567c도 PASS/소유 정리다.
+첫 fixture lease 오류와 후속 DB정리 시간 초과를 보존하고, 정리 원인 해결을 주장하지 않는다.
+선행edc9625 CI37245085073은5jobs/원시35개·native index 감사 PASS, images 진행 중이다.
+새 VD복원 코드는 이 원격 CI 범위에 없으며 새24개 gate/전체 CI·배포는 후속이다.
+VD 전환 시작 조정·STREAM 권한·전역 writer/API 차단·종합 활성화와 전체 단계는 미완료다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0106 VD 확정 결과를 원래 배정/세션·고정 출력과 함께 독립 S3 기록으로 보존한다.
 V36 영속 발행 큐·종료 뒤 재발행·rollback/응답 유실/동시 쓰기와 실제 Python Runner를 포함한
 대상20개231739Z-b6c02814 PASS. 실Kube7개233237Z-411e4f13에서VD Result16/Node2·출력18·

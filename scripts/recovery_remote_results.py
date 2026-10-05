@@ -138,16 +138,18 @@ def prepare(pg, storage, args):
             'beforeGuard': catalog['guard'], 'entries': entries, 'preparedAt': datetime.now(timezone.utc).isoformat()}
 
 
-def transaction_sql(plan, *, tables=TABLES, guard_query=GUARD_QUERY, kubernetes=False):
-    # Both recovery paths use the same atomic BATCH readiness/Run aggregation.
-    # Kubernetes alone preserves an already committed Result ID/time and Pod binding.
+def transaction_sql(plan, *, tables=TABLES, guard_query=GUARD_QUERY, kubernetes=False, vd=False):
+    # All producers share atomic BATCH readiness/Run aggregation. Pod-backed
+    # journals retain original Result ID/time and producer/allocation identity.
+    if kubernetes and vd:raise ValueError('Select exactly one producer kind')
+    pod_bound=kubernetes or vd
     binding = """
  IF (entry->>'restoreBinding')::boolean THEN
   UPDATE edgeai.runtime_instance SET producer_pod_uid=(entry->>'podUid')::uuid,
    node_uid=(entry->>'nodeUid')::uuid,node_name=entry->>'nodeName' WHERE id=(entry->>'runtimeId')::uuid;
   bindings:=bindings+1;
  END IF;
-""" if kubernetes else ''
+""" if pod_bound else ''
     publication = """
  IF NOT (entry->>'existing')::boolean OR (entry->>'publicationPending')::boolean THEN
   UPDATE edgeai.runtime_result_publication SET completed=true,lease_owner=NULL,lease_until=NULL,
@@ -157,7 +159,7 @@ def transaction_sql(plan, *, tables=TABLES, guard_query=GUARD_QUERY, kubernetes=
   IF changed<>1 THEN RAISE EXCEPTION 'Result publication history differs'; END IF;
   publications:=publications+changed;
  END IF;
-""" if kubernetes else ''
+""" if pod_bound else ''
     identity = """
 IF current_database()<>{database} OR NOT EXISTS (SELECT FROM pg_database WHERE datname=current_database()
  AND oid::text={oid} AND shobj_description(oid,'pg_database')={marker}) THEN
@@ -175,9 +177,9 @@ END IF;
 FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
 {binding}
  IF NOT (entry->>'existing')::boolean THEN
-  INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,{producer_column},manifest_digest,created_at)
+  INSERT INTO edgeai.task_result(id,task_id,attempt_id,runtime_id,epoch,{producer_column}{vd_column},manifest_digest,created_at)
   VALUES ((entry->>'resultId')::uuid,(entry->>'taskId')::uuid,(entry->>'attemptId')::uuid,
-    (entry->>'runtimeId')::uuid,(entry->>'epoch')::bigint,(entry->>'{producer_field}')::uuid,
+    (entry->>'runtimeId')::uuid,(entry->>'epoch')::bigint,(entry->>'{producer_field}')::uuid{vd_value},
     entry->>'manifestDigest',{created_at});
   FOR artifact IN SELECT * FROM jsonb_array_elements(entry->'outputs') LOOP
    INSERT INTO edgeai.result_artifact(id,result_id,port,bucket,object_key,object_version,sha256,bytes,media_type)
@@ -223,10 +225,11 @@ INSERT INTO recovery_result VALUES (jsonb_build_object('resultsCreated',results,
 END
 """.format(identity=identity, guard=guard_query, before=literal(canonical(plan['beforeGuard']).decode()),
            entries=literal(canonical(plan['entries']).decode()), binding=binding, publication=publication,
-           producer_column='producer_pod_uid' if kubernetes else 'remote_allocation_id',
-           producer_field='podUid' if kubernetes else 'allocationId',
-           created_at="(entry->>'committedAt')::timestamptz" if kubernetes else 'transaction_timestamp()',
-           counters=",'bindingsRestored',bindings,'publicationsCompleted',publications" if kubernetes else '')
+           producer_column='producer_pod_uid' if pod_bound else 'remote_allocation_id',
+           producer_field='podUid' if pod_bound else 'allocationId',
+           vd_column=',vd_runtime_id' if vd else '', vd_value=",(entry->>'vdRuntimeId')::uuid" if vd else '',
+           created_at="(entry->>'committedAt')::timestamptz" if pod_bound else 'transaction_timestamp()',
+           counters=",'bindingsRestored',bindings,'publicationsCompleted',publications" if pod_bound else '')
     return ("BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';\nLOCK TABLE " +
             ','.join('edgeai.' + table for table in tables) + ' IN SHARE ROW EXCLUSIVE MODE;\n'
             'CREATE TEMP TABLE recovery_result(value jsonb) ON COMMIT DROP; DO ' + literal(body) +

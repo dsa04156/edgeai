@@ -2,6 +2,19 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0107 VD BATCH 결과 복원을 구현했다. 원래 배정/세션/슬롯·설정·시작/결과 기록과
+실제 종료·고정 파일을 대조해 격리 DB에 원래 Result ID/시각·producer를 반영한다.
+새24개001119Z-2e34d057 PASS: 복원DB5·타38테이블/원래VD이력 보존·경쟁/원복/응답유실·소유정리.
+[근거](docs/evidence/m9-recovery-vd-results.md). 기존 Kube20개001319Z-48d6d047와
+Remote15개001459Z-362633f0 PASS, 기존 시작 복구91개001546Z-842f567c도 PASS/소유 정리다.
+최초 잘못된 fixture lease와 후속 정리 시간 초과를 보존하며 정리 원인은 미확정이다.
+새24개 kind gate를 연결했다. 선행edc9625 CI37245085073은5jobs/원시35개·native index 감사
+PASS이며 images 진행 중이다. 진행 중 CI 종료 전에 새 push는 하지 않는다.
+VD 전환 시작 조정·STREAM 권한·전역 writer/API 차단·종합 활성화·실모델/외부 계약과
+전체 M0–M10 목표를 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0106의 VD 확정 결과 독립 보존을 구현했다. V36이 기존 발행 큐를 확장하며 원래
 배정/세션·결과 신원·고정 출력을 DB commit 후 S3 한 version에 보존한다. 대상20개
 231739Z-b6c02814·실Kube7개233237Z-411e4f13 PASS: VD Result16/Node2·출력18·pending0·소유정리.

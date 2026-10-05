@@ -395,6 +395,7 @@ jobs:
             .tools/kind-recovery-stop.json
             .tools/kind-recovery-kubernetes-retire.json
             .tools/kind-recovery-kubernetes-results.json
+            .tools/kind-recovery-vd-results.json
             .tools/kind-recovery-stream-workflows.json
           include-hidden-files: true
           retention-days: 14

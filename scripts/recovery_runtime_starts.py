@@ -24,8 +24,10 @@ FIELDS={'apiVersion','runtimeId','runId','taskId','attemptId','epoch','namespace
         'podUid','nodeUid','nodeName','workDigest','expiresAt','offloadId','startDeadline','admittedAt'}
 
 # Preserve numbers in the work document as text until the lossless parser is used.
-QUERY="""
+def context_query(vd=False):
+    return """
 SELECT coalesce(jsonb_agg(jsonb_build_object('runtime',to_jsonb(r)-'claim_nonce',
+ {extra}
  'attempt',to_jsonb(a),'hasStream',EXISTS(SELECT FROM edgeai.task_dependency WHERE workflow_version_id=w.workflow_version_id AND mode='STREAM')
    OR EXISTS(SELECT FROM edgeai.data_route WHERE run_id=w.id),
  'offloads',(SELECT coalesce(jsonb_agg(to_jsonb(o)),'[]'::jsonb) FROM edgeai.task_offload o
@@ -42,8 +44,16 @@ SELECT coalesce(jsonb_agg(jsonb_build_object('runtime',to_jsonb(r)-'claim_nonce'
 FROM edgeai.runtime_instance r JOIN edgeai.task_attempt a ON a.id=r.attempt_id
 JOIN edgeai.task t ON t.id=r.task_id JOIN edgeai.workflow_run w ON w.id=t.run_id
 JOIN edgeai.task_definition d ON d.id=t.definition_id JOIN edgeai.profile_version v ON v.id=d.service_profile_version_id
-WHERE r.runtime_kind='KUBERNETES'
-"""
+WHERE r.runtime_kind='{kind}'
+""".format(kind='VD' if vd else 'KUBERNETES', extra="""
+ 'allocation',(SELECT to_jsonb(x) FROM edgeai.vd_task_allocation x WHERE x.runtime_id=r.id),
+ 'supervisor',(SELECT to_jsonb(s)-'claim_nonce' FROM edgeai.vd_runtime s
+   JOIN edgeai.vd_task_allocation x ON x.vd_runtime_id=s.id WHERE x.runtime_id=r.id),
+ 'serviceProfileVersionId',d.service_profile_version_id,
+ """ if vd else '')
+
+
+QUERY=context_query()
 
 
 def instant_ns(value):
@@ -113,7 +123,12 @@ def validate(authority,context,pod,node,proof,namespace):
     return authority
 
 
-def observe(catalog,args,retired):
+def observe(catalog,args,retired,vd=False):
+    if vd:
+        from recovery_vd_starts import validate as validator, MEDIA_TYPE as media_type
+    else:
+        validator,media_type=validate,MEDIA_TYPE
+    prefix='authority/vd-task-start/' if vd else 'authority/runtime-start/'
     selected=[getattr(args,name,None) for name in ('runtime_start_backup','runtime_start_bucket','runtime_start_certificate_sha256')]
     if not any(selected):return None
     if not all(selected):raise ValueError('Runtime start inspection requires backup, bucket and TLS certificate pin')
@@ -128,11 +143,11 @@ def observe(catalog,args,retired):
     store.versioned(bucket);records={};kube=Kubernetes(args.context)
     proofs={p['uid']:p for p in retired['evidence']['pods']}
     identities={r['uid']:r for r in retired['evidence']['identities'] if r['kind']=='Pod'}
-    proven=set(retired['selected']['runtimes'])
+    proven=set(retired['selected']['vdTasks' if vd else 'runtimes'])
     for context in catalog['runtimeStartContexts']:
         runtime=context['runtime']
         if runtime['namespace']!=args.namespace or runtime['id'] not in proven:continue
-        key='authority/runtime-start/'+runtime['id']+'.json';matches=[o for o in manifest['versions'] if o['bucket']==bucket and o['key']==key]
+        key=prefix+runtime['id']+'.json';matches=[o for o in manifest['versions'] if o['bucket']==bucket and o['key']==key]
         code,headers,_=store.request('HEAD','/'+bucket+'/'+key)
         if not matches:
             if code!=404:raise Blocked('Uncaptured start journal exists or its absence cannot be verified')
@@ -142,7 +157,7 @@ def observe(catalog,args,retired):
         if code!=200 or version(header(headers,'x-amz-version-id'))!=item['versionId']:raise Blocked('Start journal latest version differs from its backup')
         code,headers,raw=store.request('GET','/'+bucket+'/'+key,{'versionId':version(item['versionId'])},max_bytes=8192)
         if (code!=200 or version(header(headers,'x-amz-version-id'))!=item['versionId'] or
-                header(headers,'Content-Type')!=MEDIA_TYPE or header(headers,'Content-Length')!=str(item['bytes']) or
+                header(headers,'Content-Type')!=media_type or header(headers,'Content-Length')!=str(item['bytes']) or
                 any(k.lower() in ('content-encoding','transfer-encoding') for k,v in headers) or
                 len(raw)!=item['bytes'] or hashlib.sha256(raw).hexdigest()!=item['sha256']):
             raise Blocked('Pinned start journal bytes differ from the backup')
@@ -154,7 +169,7 @@ def observe(catalog,args,retired):
         node_name=pod.get('spec',{}).get('nodeName')
         if not isinstance(node_name,str) or not re.fullmatch('[a-z0-9][a-z0-9.-]{0,252}',node_name):raise Blocked('Invalid start producer node')
         node=kube.read('/api/v1/nodes/'+node_name)
-        records[runtime['id']]={'object':item,'authority':validate(authority,context,pod,node,proofs[authority['podUid']],args.namespace)}
+        records[runtime['id']]={'object':item,'authority':validator(authority,context,pod,node,proofs[authority['podUid']],args.namespace)}
     if store.identity()!=manifest['targetDeploymentId'] or private_json(backup_path/'manifest.json')[1]!=backup_hash:
         raise Blocked('Start journal inputs changed during observation')
     # Recheck both retained physical evidence and each current object head. A
@@ -163,7 +178,7 @@ def observe(catalog,args,retired):
     if retirement.live_evidence(args)[0]!=retired['evidence']:
         raise Blocked('Retained producer evidence changed during start inspection')
     for rid,record in records.items():
-        code,headers,_=store.request('HEAD','/'+bucket+'/authority/runtime-start/'+rid+'.json')
+        code,headers,_=store.request('HEAD','/'+bucket+'/'+prefix+rid+'.json')
         if record is None:
             if code!=404:raise Blocked('Start journal absence changed during inspection')
         elif code!=200 or version(header(headers,'x-amz-version-id'))!=record['object']['versionId']:

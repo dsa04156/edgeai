@@ -1,7 +1,8 @@
 # 복원 Kubernetes BATCH 성공 결과 반영
 
 [실행 종료 조정](recovery-kubernetes-retirement.md) 후 V35 또는 V36 격리 DB에서 실행한다.
-V36의 VD 발행 큐 확장도 보존하지만, 이 명령의 복원 대상은 Kubernetes BATCH Result다.
+기본 대상은 Kubernetes BATCH Result다. V36 VD 자식은 [VD 복원 절차](recovery-vd-results.md)의
+`--vd-tasks` 옵션으로 명시적으로 선택한다.
 원래 시작 허가·확정 Result 기록과 출력 파일이 같은 독립 S3 백업에 있어야 한다.
 실행이 전환 target이면 먼저 원래 시작 기록으로 전환 성공을 조정한다.
 

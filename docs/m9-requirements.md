@@ -171,3 +171,9 @@ RPO/RTO, 보관 기간·저장 위치, 사용자/역할 정책과 외부 신원 
 API로 만든 합성 데이터를 사용한다. 상세 동작은 [ADR0059](adr/0059-postgres-backup-restore.md),
 실행법은 [백업 문서](postgres-backup.md), 근거는 [DB 복원 시험](evidence/m9-postgres-backup.md)을 따른다.
 전체 단계의 판정은 [PLAN](../PLAN.md)과 [검증 목록](verification-matrix.md)을 유지한다.
+
+ADR0107은 [VD BATCH 결과 복원](recovery-vd-results.md)을 연결한다. 실제 TLS claim/commit과
+원래 배정/세션/슬롯·설정·물리 종료·고정 출력을 대조하여 격리 DB에 원래 Result를 반영한다.
+복원 DB5개·새24개에서 경쟁/원복/응답 유실·무변경 재실행·타38테이블/소유 정리를 확인했다.
+[근거](evidence/m9-recovery-vd-results.md). STREAM·진행 중 VD 전환의 시작 허가 소비,
+전역 writer/API 차단과 종합 활성화는 남으며 전체 M9 수용 완료가 아니다.

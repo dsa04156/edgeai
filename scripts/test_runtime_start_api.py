@@ -21,6 +21,7 @@ Api=runpy.run_path(str(ROOT/'scripts/test-postgres-backup.py'))['Api']
 
 def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None):
     runtime=context['runtime'];work=fixture.work
+    vd=runtime['runtime_kind']=='VD'
     def capture(arguments,document=None):
         result=subprocess.run(kube.command+arguments,input=None if document is None else json.dumps(document).encode(),
             capture_output=True,timeout=30)
@@ -35,7 +36,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
     labels={'app.kubernetes.io/part-of':'edgeai','app.kubernetes.io/managed-by':'edgeai-bootstrap'}
     create({'apiVersion':'rbac.authorization.k8s.io/v1','kind':'Role',
         'metadata':{'namespace':namespace,'name':'start-claim-read','labels':labels},
-        'rules':[{'apiGroups':[''],'resources':['pods'],'verbs':['get']},
+        'rules':[{'apiGroups':[''],'resources':['pods','secrets'] if vd else ['pods'],'verbs':['get']},
                  {'apiGroups':['batch'],'resources':['jobs'],'verbs':['get']}]})
     create({'apiVersion':'rbac.authorization.k8s.io/v1','kind':'RoleBinding',
         'metadata':{'namespace':namespace,'name':'start-claim-read','labels':labels},
@@ -52,7 +53,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
     fixture.addCleanup(Path(key_file).unlink,missing_ok=True)
     account=pod['spec']['serviceAccountName']
     request={'apiVersion':'authentication.k8s.io/v1','kind':'TokenRequest','spec':{
-        'audiences':['edgeai-runner'],'expirationSeconds':600,
+        'audiences':['edgeai-vd' if vd else 'edgeai-runner'],'expirationSeconds':600,
         'boundObjectRef':{'apiVersion':'v1','kind':'Pod','name':pod['metadata']['name'],'uid':pod['metadata']['uid']}}}
     pod_token=json.loads(capture(['create','--raw','/api/v1/namespaces/'+namespace+'/serviceaccounts/'+account+'/token','-f','-'],request))['status']['token']
     keytool=ROOT/'.tools/jdk/bin/keytool'
@@ -64,6 +65,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
     with socket.socket() as probe:probe.bind(('127.0.0.1',0));tls_port=probe.getsockname()[1]
     api=Api(database,work,extra_env={
         'EDGEAI_RUNTIME_ENABLED':'true','EDGEAI_RUNTIME_WORKER_ENABLED':'false','EDGEAI_RUNTIME_NAMESPACE':namespace,
+        'EDGEAI_VD_ENABLED':str(vd).lower(),
         'EDGEAI_RUNTIME_SERVICE_ACCOUNT':account,'EDGEAI_RUNNER_KEY_FILE':key_file,
         'EDGEAI_KUBE_API_URL':server,'EDGEAI_KUBE_TOKEN_FILE':control_token,'EDGEAI_KUBE_CA_FILE':ca_file,
         'EDGEAI_STORAGE_URL':fixture.environment['EDGEAI_BACKUP_SOURCE_URL'],
@@ -96,7 +98,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
     try:
         with patch.dict(os.environ,{**fixture.environment,**origin_env}):
             store=Storage(SimpleNamespace(certificate_sha256=fixture.pin,timeout=60))
-            path='/'+fixture.bucket+'/authority/runtime-start/'+runtime['id']+'.json'
+            path='/'+fixture.bucket+('/authority/vd-task-start/' if vd else '/authority/runtime-start/')+runtime['id']+'.json'
             assert store.request('HEAD',path)[0]==404
             request('claim',{},401,'invalid-pod-proof')
             assert store.request('HEAD',path)[0]==404
