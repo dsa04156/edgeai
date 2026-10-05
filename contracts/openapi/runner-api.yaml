@@ -72,6 +72,7 @@ paths:
       summary: 현재 Attempt에 제한된 출력 업로드 권한 발급
       description: SERVICE 출력 포트·크기·media type을 검증하고 전용 S3 키와 checksum header를 서명한다.
         각 포트별 요청도 허용한다. 자격 증명을 영속 metadata 또는 로그에 남기지 않는다.
+        STREAM 공동 완료 허가가 있는 작업은 그룹 허가의 독립 S3 보존도 확인한다. 보존 장애는503이며 같은 요청으로 재시도한다.
       parameters:
       - name: attemptId
         in: path
@@ -109,6 +110,7 @@ paths:
         동일 요청은 원래 결과·기록을 재사용하며, 영속 발행 큐는 API 재시작·Pod 종료 뒤에도 재처리한다.
         VD 기록은 원래 배정·supervisor 세대·세션·슬롯·설정 digest도 보존한다. 종료된 supervisor의
         확정 결과도 발행할 수 있지만 새 실행 권한이나 과거 시작 기록을 만들지는 않는다.
+        STREAM 결과 확정 전에는 원래 연결 그룹의 완료 허가가 별도 S3 기록에 보존됐는지 확인한다. 이 단계의503에서는 Result를 새로 확정하지 않는다.
       parameters:
       - name: attemptId
         in: path

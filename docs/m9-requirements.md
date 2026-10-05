@@ -5,6 +5,12 @@
 Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sources.md)과 같다.
 이 문서는 남은 수용 범위이며 M9 완료 선언이 아니다.
 
+ADR0110의 [STREAM 완료 허가 보존](adr/0110-stream-completion-journal.md)을 추가한다.
+연결 그룹 전체의 원래 허가를 DB transaction과 독립 S3 기록에 보존하며, 저장 장애·
+응답 유실·재시작/producer 종료 뒤 재발행과 V37 기존 이력 보존을 검증한다.
+검증 수치는 [근거](evidence/m9-stream-completion-journal.md)를 따른다. 이 기록을 소비해
+백업에 없는 허가·checkpoint 선행 이력·실행을 복원하는 CLI와 종합 활성화는 남는다.
+
 | 요구 영역 | 현재 근거 | 남은 수용 |
 |---|---|---|
 | 영속 명령·재조정·재시작 | 실행 lease·producer fencing·broker 권한 조정·API/Runner/VD 교체·재시도, ADR0062 복원 DB 기동 격리/조회 점검·ADR0069 원본 DB 연결 차단 | 서로 다른 장애가 겹친 상태와 DB 복원 이후 외부 실행의 회수·일치·활성화 |

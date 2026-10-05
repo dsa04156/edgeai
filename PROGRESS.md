@@ -1,6 +1,22 @@
 # 진행 상태
 
 [STATUS]
+ADR0110/V37 STREAM 그룹 완료 허가의 독립 S3 보존을 구현했다. 대상13개·V36→V37
+기존44테이블 보존/그룹97개 backfill·독립 백업 참조9개·혼합 완료 백업 metadata5개·
+OpenAPI 계약을 통과했다. [근거](docs/evidence/m9-stream-completion-journal.md).
+전체 회귀는 단위122/PG232 통과, STREAM runtime의 DB 연결 대기·실행 응답 실패로 FAIL이다.
+V37 혼합 복구16개 뒤의 실패와 DB 정리 관측 제한을 보존하며, 남은 DB5개/namespace는
+040247Z-36992bb8에서 소유권/실제 종료 확인 후 제거했다. 분리15개 재검증은
+041016Z-73b99690에서 통과했고 완료 기록 참조22개도 확인했다. 저장소11개/최종 패키징은
+041327Z-5f6ab6f7 PASS다. 앞선 DB 연결 대기의 근본 원인이 해결됐다는 판정은 아니다.
+독립 보존5개를 포함한 혼합 복구041417Z-c286beeb는 기능24개를 통과했으나 namespace
+정리 관측 중 Kubernetes 조회가 실패하여 전체 FAIL이다. 후속042012Z-b6965e30에서
+복원DB6개와 소유 namespace의 실제 부재를 확인했다. 최초 실패의 원인은 미확정이다.
+V37 PostgreSQL 백업/격리 복원13개042201Z-6cea6f03도 PASS이며45테이블/소유 정리를 확인했다.
+새 변경은 원격 push 전이다. 누락 완료 허가/선행 checkpoint/실행을 복원하는 소비 CLI,
+새 CI/배포·전역 writer/API 차단·종합 활성화·전체 M0–M10 수용은 남는다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
 혼합 NODE/VD STREAM 그룹 결과 복원 최종19개031714Z-75dce089 PASS다.
 실제 checkpoint API5개·시작/결과 기록 각2·공통 완료 허가·독립 복원DB6·종료Pod2·broker
 principal3과 원본 제거를 연결했다. 어느 순서로 복원해도 두 번째 결과 전에는 자식이 대기하고

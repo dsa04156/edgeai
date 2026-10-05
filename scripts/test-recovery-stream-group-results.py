@@ -172,6 +172,8 @@ def main():
             a=options(index);a.output.mkdir(mode=0o700);retirement.apply(pg,a,retirement.prepare(pg,a))
             a=options(index);a.output.mkdir(mode=0o700);broker.apply(pg,a,broker.prepare(pg,a))
         passed('independent backups survive source removal; both retained Pods and all three broker principals are retired')
+        from test_stream_completion_backup import check as check_completion_backup
+        check_completion_backup(pg,targets[0][0],targets[0][1],bundle,client,fixture.pin,passed,report)
         for key in members:refuse_cli(options(5,key))
         passed('neither member can invent an absent group completion grant from a before-claim backup')
         from test_stream_group_result_checks import check
@@ -239,7 +241,13 @@ def main():
             if stream is not None:report['ownedStreamAuthorityStopped']=stream.close()
             report['ownedApisStopped']=all(api.process is None or api.process.poll() is not None for api in apis) and getattr(fixture,'api_claim_source_stopped',True)
             report['ownedStorageStopped']=all(p.poll() is not None for p in getattr(fixture,'processes',[]))
-            for db in list(owned):drop(db)
+            for db in list(owned):
+                try:drop(db)
+                except Exception as error:
+                    # A slow/failed DROP must not skip other owned databases or the namespace.
+                    # Do not retry a timed-out command; observe its eventual state below.
+                    report.setdefault('databaseCleanupFailures',[]).append({'database':db,'type':type(error).__name__});code=1
+                    with private_file(work/('database-cleanup-'+uuid.uuid4().hex+'.log'),'w') as log:traceback.print_exc(file=log)
             report['ownedDatabasesRemoved']=not owned
             if namespace_uid:
                 ns=kube.read('/api/v1/namespaces/'+namespace)
@@ -260,6 +268,11 @@ def main():
                     time.sleep(.3)
                 else:raise AssertionError('Owned namespace cleanup not confirmed')
             report['ownedNamespaceRemoved']=True
+            for db in list(owned):
+                current=pg.sql('SELECT oid::text FROM pg_database WHERE datname='+q(db),'postgres')
+                if not current:del owned[db]
+                else:assert current==owned[db],'Owned database identity changed during cleanup observation'
+            report['ownedDatabasesRemoved']=not owned
         except Exception as error:
             report['cleanupFailureType']=type(error).__name__;code=1
             with private_file(work/'cleanup-failure.log','w') as log:traceback.print_exc(file=log)

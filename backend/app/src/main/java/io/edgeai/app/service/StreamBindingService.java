@@ -24,15 +24,33 @@ public class StreamBindingService {
     private final String digest;private final Clock clock;
     private final StreamExecutionService execution;
     private final StreamRunService runs;
+    private final StreamCompletionPublisher completions;
     public StreamBindingService(DeviceRepository devices,DeviceStreamTokenService tokens,DataRouteService routes,RuntimeLifecycleService runtimes,
-            MosquittoStreamBroker broker,StreamConnectionSettings connection,@Value("${edgeai.stream.broker-digest}") String digest,Clock clock,StreamExecutionService execution,StreamRunService runs){
+            MosquittoStreamBroker broker,StreamConnectionSettings connection,@Value("${edgeai.stream.broker-digest}") String digest,Clock clock,StreamExecutionService execution,StreamRunService runs,StreamCompletionPublisher completions){
         this.devices=devices;this.tokens=tokens;this.routes=routes;this.runtimes=runtimes;this.broker=broker;this.connection=connection;this.digest=digest;this.clock=clock;
         this.execution=execution;
         this.runs=runs;
+        this.completions=completions;
     }
-    public Object execution(RunnerPrincipal principal,String body){return execution.execution(principal,body);}
-    public Object complete(RunnerPrincipal principal,String body){return execution.complete(principal,body);}
-    public Object deviceComplete(DeviceStreamPrincipal principal,String body){return execution.deviceComplete(principal,body);}
+    public Object execution(RunnerPrincipal principal,String body){
+        var reply=execution.execution(principal,body);
+        if(finalizing(reply)){completions.forAttempt(principal.attemptId());return execution.execution(principal,body);}
+        return reply;
+    }
+    public Object complete(RunnerPrincipal principal,String body){
+        var reply=execution.complete(principal,body);
+        if(finalizing(reply)){completions.forAttempt(principal.attemptId());return execution.complete(principal,body);}
+        return reply;
+    }
+    public Object deviceComplete(DeviceStreamPrincipal principal,String body){
+        var reply=execution.deviceComplete(principal,body);
+        if(finalizing(reply)){
+            completions.forGeneration(UUID.fromString((String)((Map<?,?>)reply).get("generationId")));
+            return execution.deviceComplete(principal,body);
+        }
+        return reply;
+    }
+    private static boolean finalizing(Object reply){return reply instanceof Map<?,?> map && "FINALIZE".equals(map.get("state"));}
     public Object deviceRoutes(DeviceStreamPrincipal principal,String body){return runs.deviceRoutes(principal,body);}
     @Transactional
     public Object deviceToken(UUID deviceId,UUID sessionId,String body){

@@ -19,8 +19,10 @@ public final class RunnerApiService {
     private final RuntimeStartJournal starts;
     private final RuntimeResultPublisher results;
     private final VDTaskStartJournal vdStarts;
-    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results,VDTaskStartJournal vdStarts) {
+    private final StreamCompletionPublisher completions;
+    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results,VDTaskStartJournal vdStarts,StreamCompletionPublisher completions) {
         this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;this.vdStarts=vdStarts;
+        this.completions=completions;
     }
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
@@ -59,6 +61,7 @@ public final class RunnerApiService {
     public Object uploads(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");var outputs=RunnerInput.outputs(root.get("outputs"),false);
         var assignment=lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
+        completions.forAttempt(principal.attemptId());
         var contents=new ArrayList<ArtifactContent>();
         for(var output:outputs) {
             var content=new ArtifactContent(assignment.runtime().taskId(),principal.attemptId(),text(output.get("port"),100),text(output.get("sha256"),64),
@@ -73,6 +76,7 @@ public final class RunnerApiService {
     }
     public Creation<TaskResult> commit(RunnerPrincipal principal,String body) {
         var root=RunnerInput.parse(body,principal,"outputs");
+        completions.forAttempt(principal.attemptId());
         var committed=commits.commit(principal.attemptId(),principal.epoch(),principal.podUid(),RunnerInput.manifest(root.get("outputs")));
         return new Creation<>(results.publish(committed.value().runtimeId()),committed.created());
     }

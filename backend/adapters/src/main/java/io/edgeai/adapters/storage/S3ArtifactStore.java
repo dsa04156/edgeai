@@ -15,7 +15,7 @@ import java.util.*;
 import okhttp3.OkHttpClient;
 
 /** Fixed-bucket, version-bound artifact verification; never trusts ETag or user SHA metadata. */
-public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, VDTaskStartJournal, VDTaskResultJournal, AutoCloseable {
+public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, VDTaskStartJournal, VDTaskResultJournal, StreamCompletionJournal, AutoCloseable {
     private static final int EXPIRY_SECONDS = 600;
     private final MinioClient client, signer;
     private final String bucket;
@@ -23,6 +23,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
     private final S3RuntimeStartJournal starts;
     private final S3RuntimeResultJournal results;
     private final S3VDTaskStartJournal vdStarts;
+    private final S3StreamCompletionJournal completions;
     public S3ArtifactStore(String endpoint, String runnerEndpoint, String accessKey, String secretKey, String bucket, Clock clock) {
         validateEndpoint(endpoint); validateEndpoint(runnerEndpoint);
         if (bucket == null || !bucket.matches("[a-z0-9][a-z0-9-]{1,61}[a-z0-9]")) throw new IllegalArgumentException("Invalid artifact bucket");
@@ -35,6 +36,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
         starts=new S3RuntimeStartJournal(client,bucket);
         results=new S3RuntimeResultJournal(client,bucket);
         vdStarts=new S3VDTaskStartJournal(client,bucket);
+        completions=new S3StreamCompletionJournal(client,bucket);
     }
     private static void validateEndpoint(String value) {
         URI uri = URI.create(value);
@@ -46,6 +48,7 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
     @Override public void retainResult(io.edgeai.domain.runtime.RuntimeResultAuthority authority){results.retainResult(authority);}
     @Override public void retainVDStart(io.edgeai.domain.vd.VDTaskStartAuthority authority){vdStarts.retainVDStart(authority);}
     @Override public void retainVDResult(io.edgeai.domain.vd.VDTaskResultAuthority authority){results.retainVDResult(authority);}
+    @Override public void retainCompletion(io.edgeai.domain.stream.StreamCompletionAuthority authority){completions.retainCompletion(authority);}
     @Override public ArtifactGrant upload(ArtifactContent expected) {
         try {
             if (client.getBucketVersioning(GetBucketVersioningArgs.builder().bucket(bucket).build()).status() != VersioningConfiguration.Status.ENABLED)

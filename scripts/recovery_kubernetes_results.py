@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import traceback
 from types import SimpleNamespace
 
 from postgres_backup import Blocked, Postgres, literal, private_file
@@ -34,6 +35,13 @@ TABLES=(*workflows.TABLES,*EXTRA_TABLES)
 GUARD_QUERY=workflows.GUARD_QUERY[:-1]+''.join(", '"+name+"',(SELECT encode(sha256(convert_to(" \
     "coalesce(string_agg(encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text),'')," \
     "'UTF8')),'hex') FROM edgeai."+name+' t)' for name in EXTRA_TABLES)+')'
+
+
+def completion_guard(enabled=False):
+    if not enabled:return GUARD_QUERY
+    return GUARD_QUERY[:-1]+", 'stream_completion_publication',(SELECT encode(sha256(convert_to(" \
+        "coalesce(string_agg(encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text),'')," \
+        "'UTF8')),'hex') FROM edgeai.stream_completion_publication t))"
 def context_query(vd=False):
     return """
 SELECT coalesce(jsonb_agg(jsonb_build_object(
@@ -61,7 +69,7 @@ WHERE r.runtime_kind='{kind}'
 CONTEXT_QUERY=context_query()
 
 
-def catalog_sql(vd=False,stream=False):
+def catalog_sql(vd=False,stream=False,completion_publications=False):
     broker_guard='NULL::jsonb'
     if stream:
         from recovery_stream_retire import GUARD
@@ -71,7 +79,7 @@ def catalog_sql(vd=False,stream=False):
     "'marker',(SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()),"
     "'readOnly',current_setting('transaction_read_only'),'migrations',(SELECT json_agg(json_build_object("
     "'version',version,'success',success)) FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),"
-    "'guard',(" + GUARD_QUERY + "),'contexts',(" + context_query(vd) + "),'runtimeStartContexts',(" + starts.context_query(vd) +
+    "'guard',(" + completion_guard(completion_publications) + "),'contexts',(" + context_query(vd) + "),'runtimeStartContexts',(" + starts.context_query(vd) +
     "),'brokerGuard',"+broker_guard+",'stream',("+stream_results.catalog_query()+
     "),'attemptIds',(SELECT coalesce(json_agg(id),'[]'::json) FROM edgeai.task_attempt)); COMMIT;")
 
@@ -180,13 +188,15 @@ def prepare(pg,args):
     if not args.runtime_id or len(set(args.runtime_id))!=len(args.runtime_id):raise Blocked('Select distinct restored runtime IDs explicitly')
     for rid in args.runtime_id:uid(rid)
     schema=database_inventory(pg,args.database,args.restore_report,retirement.CATALOG_SQL)
-    if {m['version'] for m in schema['migrations']} not in ({str(v) for v in range(1,36)},{str(v) for v in range(1,37)}):
-        raise Blocked('Kubernetes Result recovery requires the reviewed V35/V36 publication schema')
+    if {m['version'] for m in schema['migrations']} not in tuple({str(v) for v in range(1,last+1)} for last in (35,36,37)):
+        raise Blocked('Kubernetes Result recovery requires the reviewed V35–V37 publication schema')
     if vd and '36' not in {m['version'] for m in schema['migrations']}:
         raise Blocked('VD Result recovery requires the reviewed V36 publication schema')
     retired=retirement.prepare(pg,args)
     if not set(args.runtime_id)<=set(retired['selected']['vdTasks' if vd else 'runtimes']):raise Blocked('Every selected producer needs retained termination proof')
-    catalog=database_inventory(pg,args.database,args.restore_report,catalog_sql(vd,stream))
+    completions=any(m['version']=='37' for m in schema['migrations'])
+    catalog=database_inventory(pg,args.database,args.restore_report,catalog_sql(vd,stream,completions))
+    if completions != any(m['version']=='37' for m in catalog['migrations']):raise Blocked('Publication schema changed during Result snapshot')
     if (any(retired[k]!=catalog[v] for k,v in [('databaseOid','oid'),('marker','marker'),('restoreReportSha256','restoreReportSha256')]) or
             any(retired['beforeGuard'][t]!=catalog['guard'][t] for t in retirement.TABLES)):
         raise Blocked('Database changed during Result snapshot')
@@ -242,8 +252,10 @@ def apply(pg,args,plan):
     if {k:v for k,v in fresh.items() if k!='preparedAt'}!={k:v for k,v in plan.items() if k!='preparedAt'}:
         raise Blocked('Recovery inputs changed before commit')
     path=args.output/'transaction.sql'
+    completions='stream_completion_publication' in plan['beforeGuard']
     with private_file(path,'w') as target:
-        target.write(transaction_sql(plan,tables=TABLES,guard_query=GUARD_QUERY,kubernetes=not vd,vd=vd));target.flush();os.fsync(target.fileno())
+        target.write(transaction_sql(plan,tables=(*TABLES,'stream_completion_publication') if completions else TABLES,
+            guard_query=completion_guard(completions),kubernetes=not vd,vd=vd));target.flush();os.fsync(target.fileno())
     with path.open('rb') as source:
         result=json.loads(pg.call('psql',['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-f','-'],args.database,
             source=source,timeout=45,reject_stderr=True))
@@ -283,6 +295,10 @@ def main():
         print(report['status']+': '+str(report['resultsVerified'])+' results; database remains quarantined');return 0
     except Exception as error:
         blocked=isinstance(error,(Blocked,OSError,http.client.HTTPException));status='BLOCKED' if blocked else 'FAIL'
+        # Preserve the failing boundary without exception text, request bodies, URLs or credentials.
+        durable_json(args.output/'failure-location.json',{'failureType':type(error).__name__,
+            'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name}
+                for f in traceback.extract_tb(error.__traceback__)[-12:]]})
         durable_json(args.output/'failure.json',{'status':status,'failureType':type(error).__name__,
             'activated':False,'databaseModified':None if submitted else False,
             'instruction':'Keep quarantine and original evidence; rerun identical inputs in a new output directory'})

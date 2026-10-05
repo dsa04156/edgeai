@@ -13,7 +13,8 @@ paths:
       summary: 현재 Runner의 스트림 실행 포트와 복원 방식 조회
       description: Run의 전체 입출력 경로가 준비되면 경로 구성을 고정한다. 현재 작업의 모든 세대와 실행 주체가 유효할 때 READY와 SERVICE 포트별 generationId를
         반환하고, 아직 준비 중이면 WAITING을 반환한다. 이미 공동 완료 허가가 있으면 경로 회수 후에도 FINALIZE와 확정 checkpointId·논리 route 포트를 반환한다. 이 경우 MQTT·계산을 다시 시작하지 않고 finalized 체크포인트 API로 최종 상태만 복구한다. READY의 recovery는 NEW·RESTORE·HANDOVER이며 실제 배정 자격은 streams API에서 조회한다. 이 요청은 lease를
-        연장하지 않는다. 명시적인 최종 처리 재시도는 이전 실행의 물리 종료와 경로 회수 후에만 배정되며 checkpointActor로 원본 체크포인트 실행 주체를 표시한다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이다. 공개 retry 및 자동 offload의 그룹 복구 조건은 관리 API의 Run 정책을 따른다.
+        연장하지 않는다. FINALIZE 응답 전에는 연결 그룹 전체의 원래 완료 허가와 고정 체크포인트 참조를 버전 관리 S3에 보존한다. 저장 실패는503이며 동일 요청을 재전송한다. 이미 보존된 내용이 원래 허가와 다르면400/ARTIFACT_INVALID다.
+        명시적인 최종 처리 재시도는 이전 실행의 물리 종료와 경로 회수 후에만 배정되며 checkpointActor로 원본 체크포인트 실행 주체를 표시한다. 공개 STREAM Run 생성은 별도 opt-in이며 기본 비활성이다. 공개 retry 및 자동 offload의 그룹 복구 조건은 관리 API의 Run 정책을 따른다.
       security:
       - runnerClaim: []
         podIdentity: []
@@ -48,7 +49,7 @@ paths:
         '501':
           description: 스트림 내부 실행 기능 비활성
         '503':
-          description: DB 또는 Kubernetes 인증 일시 장애
+          description: DB·Kubernetes 인증 또는 완료 허가 S3 보존 일시 장애. 원래 요청으로 재시도
   /internal/v1/attempts/{attemptId}/streams/complete:
     post:
       operationId: completeRunnerStream
@@ -56,6 +57,7 @@ paths:
       description: 모든 입력·출력의 END와 마지막 처리 확인이 확정된 최신 체크포인트를 보고한다. 연결된 모든 Task와 Device가 종료를 확인하고 경로별 순번이 일치하면 같은 트랜잭션에서
         FINALIZE를 기록한다. WAITING 동안 heartbeat와 세션을 유지한다. FINALIZE 뒤에만 최종 파일 결과를 확정할 수 있다. 같은 checkpointId 재요청은 멱등이고,
         다른 작업이 이미 결과를 확정해 경로가 닫혀도 현재 실행 주체는 허가를 다시 읽을 수 있다. 취소·교체·기한 만료는 성공으로 바뀌지 않는다.
+        FINALIZE 성공 응답 전에는 그룹 전체의 원래 허가를 S3에 보존한다. 저장 장애로503을 받더라도 DB 허가는 이미 확정될 수 있으므로 같은 요청으로 재조회하며 계산을 다시 시작하지 않는다. 보존 기록 충돌은400/ARTIFACT_INVALID다.
       security:
       - runnerClaim: []
         podIdentity: []
@@ -90,7 +92,7 @@ paths:
         '501':
           description: 스트림 내부 실행 기능 비활성
         '503':
-          description: DB 또는 Kubernetes 인증 일시 장애
+          description: DB·Kubernetes 인증 또는 완료 허가 S3 보존 일시 장애. 원래 요청으로 재시도
   /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams/complete:
     post:
       operationId: completeDeviceStream
@@ -98,6 +100,7 @@ paths:
       description: Device가 END에 대한 마지막 처리 확인을 받은 뒤 해당 generationId와 순번을 보고한다. 서버는 소비 작업의 확정 체크포인트와 순번을 대조한다. 연결된
         모든 참여자가 준비될 때까지 WAITING이며 heartbeat를 유지해야 한다. FINALIZE는 해당 세대·순번에 영속 저장된다. 동일 현재 Device 세션은 경로가 닫히거나 Run이
         성공한 뒤에도 같은 허가를 재조회할 수 있다. 세션 교체·Run 취소 또는 다른 순번은 거절한다.
+        FINALIZE 응답은 연결 그룹의 원래 완료 허가가 S3에 보존된 뒤 반환한다. DB 허가 확정 뒤에도 저장 장애로503이 반환될 수 있으며 같은 generationId·순번으로 재요청한다. 기록 충돌은400/ARTIFACT_INVALID다.
       security:
       - deviceSession: []
       parameters:
@@ -137,7 +140,7 @@ paths:
         '501':
           description: 스트림 내부 실행 기능 비활성
         '503':
-          description: DB 또는 Kubernetes 인증 일시 장애
+          description: DB·Kubernetes 인증 또는 완료 허가 S3 보존 일시 장애. 원래 요청으로 재시도
   /internal/v1/devices/{deviceId}/sessions/{sessionId}/streams:
     post:
       operationId: bindDeviceStream
@@ -468,7 +471,7 @@ paths:
     post:
       operationId: finalizedStreamCheckpoint
       summary: 완료 허가된 현재 Runner의 최종 상태 다운로드 권한 조회
-      description: 현재 Attempt·epoch·Pod와 영속 공동 완료 허가를 확인하고 정확한 checkpointId의 고정 S3 version을 반환한다. 경로 회수 뒤에도 조회할 수 있지만 MQTT
+      description: 현재 Attempt·epoch·Pod와 영속 공동 완료 허가를 확인하고 그룹 허가의 독립 S3 보존을 검증한 뒤 정확한 checkpointId의 고정 S3 version을 반환한다. 저장 장애는503, 보존 기록 충돌은400/ARTIFACT_INVALID이며 같은 요청으로 재조회한다. 경로 회수 뒤에도 조회할 수 있지만 MQTT
         배정이나 lease를 갱신하지 않는다. Runner는 크기·SHA-256·실행 설정·종료 커서를 검증하고 다운로드 뒤 이 API를 다시 호출하여 취소·만료를 확인한 후 최종 파일만 생성한다. 새로운
         Attempt는 서버가 기록한 최종 처리 재시도 이력이 있을 때만 원래 허가된 체크포인트를 읽는다. 응답의 checkpoint.attemptId와 epoch는 원본 실행 주체이며 현재 요청의 인증 정보는 새 실행 주체다. 허가 전·취소·만료·다른 체크포인트는 거절한다.
       security:

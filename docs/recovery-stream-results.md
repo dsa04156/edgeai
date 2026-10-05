@@ -27,6 +27,13 @@ namespace 종료 작업의 복구 ID는 같아야 한다. 결과 output은 새 �
 시각을 검증하고 원래 broker 차단을 다시 관측한다. 오래된 백업에 허가가 없으면 exit2다.
 Result만으로 빠진 허가를 추정하거나 계산을 다시 실행하지 않는다.
 
+V37부터 정상 실행 API는 원래 그룹 허가도 `authority/stream-completion/<id>.json`에
+독립 보존한다. 현재 복원 CLI는 이 기록에서 누락된 DB 허가를 생성하는 단계까지는
+연결되지 않았다. 따라서 오래된 백업의 누락 허가 거절은 유지된다. V37의 outbox에
+복사된 checkpoint 참조는 [저장소 참조 검증](recovery-references.md)에 포함되며,
+결과 반영 transaction은 이 새 테이블도 잠금·변경 대조 대상으로 보호한다.
+보존 형식과 장애 시 재발행은 [ADR0110](adr/0110-stream-completion-journal.md)을 따른다.
+
 최종 저장 재시도의 결과라면 `--runtime-id`에는 실제 결과를 확정한 후속 runtime을
 지정한다. 원래 grant까지 이어지는 모든 `stream_finalization_recovery` 기록과 실패
 사유·재시도 정책이 필요하다. 선행 실패 runtime의 Pod도 종료 증거를 위해 보존한다.

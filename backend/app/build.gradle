@@ -30,6 +30,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/RuntimeStartStorageIntegrationTest.class'
     exclude '**/RuntimeStartJournalIntegrationTest.class'
     exclude '**/RuntimeResultJournalIntegrationTest.class'
+    exclude '**/StreamCompletionJournalIntegrationTest.class'
     exclude '**/VDTaskStartJournalIntegrationTest.class'
     exclude '**/VDTaskResultJournalIntegrationTest.class'
     exclude '**/RuntimeArtifactIntegrationTest.class'
@@ -65,6 +66,7 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     include '**/StreamSourceCompletionIntegrationTest.class'
     include '**/RuntimeStartJournalIntegrationTest.class'
     include '**/RuntimeResultJournalIntegrationTest.class'
+    include '**/StreamCompletionJournalIntegrationTest.class'
     include '**/VDTaskStartJournalIntegrationTest.class'
     include '**/VDTaskResultJournalIntegrationTest.class'
     shouldRunAfter tasks.named('test')

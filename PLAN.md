@@ -2,6 +2,22 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0110/V37의 STREAM 그룹 완료 허가 독립 보존을 구현·검증 중이다. 실제 HTTP/PG/S3
+대상13개035042Z-03a9ad5e·기존44테이블/완료그룹97개 upgrade034533Z-98648de1·
+백업 참조9개035140Z-9266845a·완료 백업 metadata5개040316Z-c8778e10·OpenAPI
+040329Z-099f2b9a PASS. [근거](docs/evidence/m9-stream-completion-journal.md).
+전체 회귀의 단위122/PG232는 통과했지만 STREAM DB 연결 대기/실행 응답 실패가 남는다.
+V37 혼합 복구는16개 뒤 FAIL이며 실패 정리 잔여는040247Z-36992bb8에서 제거 확인했다.
+STREAM 분리15개041016Z-73b99690와 저장소11개/최종 패키징041327Z-5f6ab6f7은 PASS다.
+독립 보존5개를 포함한 혼합 복구041417Z-c286beeb는 기능24개를 통과했으나 namespace
+정리 관측의 Kubernetes 조회 실패로 전체 FAIL이다. 후속042012Z-b6965e30에서 복원DB6개와
+소유 namespace 부재를 확인했다. 앞선 간헐 실패의 원인 해결·전체 회귀 통과로 판정하지 않는다.
+V37 PostgreSQL 백업/격리 복원13개042201Z-6cea6f03도45테이블/소유 정리까지 PASS다.
+새 원격 CI/배포·누락 허가/선행 checkpoint/실행의 복원 CLI·전역 writer/API 차단·
+종합 활성화·실모델/외부 계약 및 M0–M10 전체 목표를 유지한다. 선행 CI 종료 전 새 push는 하지 않는다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 혼합 NODE/VD STREAM 그룹의 전체 결과 복원 CLI를 검증했다. 공개 Device→NODE→VD와
 두 결과를 기다리는 BATCH 자식, 실제 claim/checkpoint5/공통 grant/Result2와 원본 제거·
 독립 복원DB6·종료Pod2·broker principal3을 연결한다. 최종19개031714Z-75dce089 PASS:

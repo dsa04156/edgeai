@@ -53,6 +53,7 @@ class StreamCheckpointIntegrationTest {
     @Autowired RuntimeRepository runtimes;@Autowired RuntimeLifecycleService lifecycle;@Autowired RunnerTokenService tokens;
     @Autowired StreamExecutionRepository streamExecutions;
     @Autowired StreamExecutionService streamExecution;
+    @Autowired StreamCompletionPublisher completionPublisher;
     @Autowired DataRouteService routes;@Autowired DataRouteRepository routeStore;@Autowired StreamCheckpointRepository checkpoints;
     @Autowired ExecutionRepository executions;@Autowired WorkflowRepository definitions;@Autowired PlatformTransactionManager transactions;
     @Autowired S3ArtifactStore storage;@Autowired StreamCheckpointService service;@Autowired JdbcTemplate jdbc;
@@ -303,7 +304,7 @@ class StreamCheckpointIntegrationTest {
             }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}}
             public String uploadFile(ArtifactContent c,Path p){return storage.uploadFile(c,p);}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,boundary,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution,completionPublisher);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.handover(principal(next),json.canonical(handoverBody(next))));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(next.run(),"{}");}finally{release.countDown();}
@@ -323,7 +324,7 @@ class StreamCheckpointIntegrationTest {
             var downloaded=client.send(HttpRequest.newBuilder(URI.create((String)grant.get("url"))).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             assertThat(downloaded.statusCode()).isEqualTo(200);assertThat(downloaded.body()).isEqualTo(bytes);
         }
-        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
+        var recreated=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,storage,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution,completionPublisher);
         assertThat(recreated.commit(principal(e),commitBody(e,q,version)).value().id()).isEqualTo(stored.id());
         assertThat(checkpoints.latest(e.task()).orElseThrow().summaryJson()).doesNotContain("\"stateBase64\"","\"frames\"");
     }
@@ -409,7 +410,7 @@ class StreamCheckpointIntegrationTest {
             public VerifiedArtifact verify(ArtifactContent c,String v){var verified=storage.verify(c,v);read.countDown();
                 try{if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("Fixture wait timed out");}catch(InterruptedException x){Thread.currentThread().interrupt();throw new IllegalStateException("Fixture interrupted");}return verified;}
         };
-        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution);
+        var wrapped=new StreamCheckpointService(checkpoints,runtimes,executions,definitions,routes,lifecycle,boundary,storage,Clock.systemUTC(),transactions,routeStore,streamExecutions,streamExecution,completionPublisher);
         try(var pool=Executors.newSingleThreadExecutor()){
             var pending=pool.submit(()->wrapped.commit(principal(e),commitBody(e,q,version)));
             try{assertThat(read.await(5,TimeUnit.SECONDS)).isTrue();runs.cancelRun(e.run(),"{}");}finally{release.countDown();}

@@ -12,13 +12,15 @@ from storage_backup import Client, validate_manifest
 
 
 # A migration that adds another durable S3 reference must extend this inventory before acceptance.
-SUPPORTED_VERSIONS = {str(version) for version in range(1, 37)}
+SUPPORTED_VERSIONS = {str(version) for version in range(1, 38)}
 # V35 adds an outbox referring to existing immutable Results, without new fixed S3 references.
 # Start/Result authority journals are separate post-snapshot recovery evidence.
 # V36 extends the same outbox to VD Results; it adds no table or fixed S3 reference.
+# V37 snapshots completion checkpoints; inventory their fixed references independently,
+# including copies that might contradict the original checkpoint table after a bad restore.
 def supported_schema(migrations):
     versions={row['version'] for row in migrations}
-    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35,36))
+    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35,36,37))
             and all(row['success'] is True for row in migrations))
 INVENTORY_SQL = """
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
@@ -46,6 +48,35 @@ COMMIT;
 """
 
 
+def inventory_sql(completions=False):
+    if not completions:
+        return INVENTORY_SQL
+    return INVENTORY_SQL.replace(" 'references',", """
+ 'completionDocumentsValid', (SELECT coalesce(bool_and(coalesce(
+   jsonb_typeof(document->'checkpoints')='array' AND jsonb_array_length(document->'checkpoints') BETWEEN 1 AND 128,false)),true)
+   FROM edgeai.stream_completion_publication),
+ 'completionReferences', (SELECT coalesce(json_agg(json_build_object(
+   'kind','stream_completion_checkpoint','id',p.id::text||'/'||(c->>'id'),
+   'bucket',c->>'bucket','key',c->>'object_key','versionId',c->>'object_version',
+   'bytes',c->'bytes','sha256',c->>'sha256') ORDER BY p.id,c->>'id'),'[]'::json)
+   FROM edgeai.stream_completion_publication p CROSS JOIN LATERAL jsonb_array_elements(p.document->'checkpoints') c),
+ 'references',""")
+
+
+def reference_inventory(pg, database):
+    # Select an optional table before the snapshot, then reject any schema change
+    # observed inside it. Older supported backups have no completion outbox.
+    completions=pg.sql("SELECT EXISTS(SELECT FROM edgeai.flyway_schema_history WHERE version='37' AND success)",database)=='t'
+    value=json.loads(pg.call('psql',['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-c',inventory_sql(completions)],database,
+        timeout=60,reject_stderr=True))
+    if completions != any(m['version']=='37' for m in value['migrations'] or []):
+        raise Blocked('Database schema changed while selecting the reference inventory')
+    if not value.pop('completionDocumentsValid',True):
+        raise Blocked('Completion publication has no complete checkpoint reference inventory')
+    value['references'].extend(value.pop('completionReferences',[]))
+    return value
+
+
 def read_json(path):
     with read_private(path) as source:
         raw = source.read()
@@ -67,21 +98,20 @@ def verify(pg, client, database, restore_report_path, storage_bundle):
     validate_manifest(manifest)
     if client.deployment('replica') != manifest['targetDeploymentId']:
         raise ValueError('Storage backup deployment identity differs')
-    inventory = json.loads(pg.call('psql', ['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-c',INVENTORY_SQL], database,
-        timeout=60, reject_stderr=True))
+    inventory = reference_inventory(pg,database)
     if (inventory['database'] != database or inventory['databaseOid'] != str(restored.get('databaseOid'))
             or inventory['restoreIdentity'] != 'edgeai-restore:'+restored['restoreIdentity']
             or inventory['readOnly'] != 'on'):
         raise ValueError('Restored database identity or read-only snapshot differs')
     migrations = inventory['migrations'] or []
     if not supported_schema(migrations):
-        raise Blocked('This verifier inventories the complete V33/V34/V35/V36 artifact reference schema; review other migration versions first')
+        raise Blocked('This verifier inventories the complete V33–V37 artifact reference schema; review other migration versions first')
     references = inventory['references']
     versions = {(item['bucket'],item['key'],item['versionId']):item for item in manifest['versions']}
     required = {}
     counts = {'result_artifact':0,'stream_checkpoint':0}
     for reference in references:
-        counts[reference['kind']] += 1
+        counts[reference['kind']] = counts.get(reference['kind'],0)+1
         identity = reference['bucket'],reference['key'],reference['versionId']
         actual = versions.get(identity)
         if actual is None:
