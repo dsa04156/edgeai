@@ -2,6 +2,16 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+Device 시험 driver가 미저장 DATA/END만 재시도하고 기존 peer heartbeat를 유지하도록
+수정했다. 실제 HTTPS/MQTT/SQLite10개062606Z-4fb0d151·Spring15개062215Z-326c6a54
+PASS/소유DB·MinIO 정리다. [근거](docs/evidence/m7-device-driver-retries.md).
+DB I/O 대기 최대1.364초로 앞선17.874초와 환경이 달라 근본 원인 해결로 판정하지 않는다.
+선행3afc0f0의 양쪽native111+107/실제GHCR index 감사PASS, CI37270925730은 아직 진행 중이다.
+새driver CI/배포·다른DAG/acceptance 호출 경계·전체회귀와 M9 누락상태DB복원·전역차단/
+종합활성화·실모델/외부계약 및 전체 M0–M10 목표를 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0113: 실제 Session 최초 조회의 일시 실패를 재현하고 원래 기한·기존 경로 lease·
 취소·거절을 지키는 재시도를 구현했다. 최종 HTTPS/MQTT107개055354Z-14405a56,
 기본Runner111개055758Z-47de3f0d, native발행gate8개060011Z-88dd5ef2 PASS.

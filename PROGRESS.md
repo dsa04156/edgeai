@@ -1,6 +1,15 @@
 # 진행 상태
 
 [STATUS]
+Device driver의 초기조회·미저장 DATA/END 재시도10개062606Z-4fb0d151와 실제Spring15개
+062215Z-326c6a54 PASS/소유DB·MinIO 정리다. [근거](docs/evidence/m7-device-driver-retries.md).
+성공한 peer 샘플을 다시 보내지 않으며 SQLite COMMIT 직전 만료/rollback도 확인했다.
+DB지연 근본원인·다른DAG/acceptance driver·전체회귀는 남는다. 선행3afc0f0 양쪽native111+107/
+GHCR index 감사PASS, CI37270925730 진행 중으로 새driver 원격CI/배포는 아직 검증 전이다.
+M9 누락grant/checkpoint/실행DB반영·전역차단/종합활성화와 전체M0–M10 목표는 미완료다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0113 Session 초기조회 재시도: 실제HTTPS/MQTT107개·기본Runner111개·native발행gate8개
 PASS. 실제Spring15개는5개FAIL로 DeviceSource/driver 조회·DB대기 경계가 남으며
 전체회귀는 미완료다. [근거](docs/evidence/m7-stream-initial-discovery.md). 소유DB/MinIO 정리 확인.

@@ -212,6 +212,10 @@ create=True)`로 선택한다. generation ID 대신 고정 논리 route ID를 �
 재연결 대기 중 emit/checkpoint의 `SourceReconnecting`은 Backpressure 하위 타입이다.
 샘플을 보관한 채 step을 계속 호출하고 준비 후 재시도한다. 다른 세션이나 없는 볼륨을 자동
 승계하지 않으며, 취소·신원·TLS·잘못된 계약은 종료한다.
+`ready` 확인과 `emit` 사이에도 lease가 만료될 수 있으므로 실제 `emit`의 Backpressure를
+처리해야 한다. 여러 장치를 한 루프에서 다룰 때는 성공한 샘플을 대기 목록에서 제거하고,
+아직 저장되지 않은 샘플만 원래 제한 시간 안에서 재시도한다. END도 같은 규칙을 따른다.
+대기 중에는 모든 장치의 `step()`을 호출해 다른 장치의 heartbeat를 막지 않는다.
 [자동 재연결 설계·실제 시험](../docs/evidence/m7-device-reconnect.md).
 
 기본값은 서버 공동 완료 대기다. END를 보낸 뒤 `while not source.completed: source.step()`으로

@@ -16,19 +16,12 @@ import urllib.request
 
 repo=Path(__file__).resolve().parents[5]
 sys.path.insert(0,str(repo/'runner'))
-from edgeai_runner.stream_assignment import AssignmentError,BindingClient
+from edgeai_runner.stream_assignment import AssignmentError,AssignmentUnavailable,BindingClient
 from edgeai_runner.stream_checkpoint_client import CheckpointClient
 from edgeai_runner.stream_journal import Emission,Limits
 from edgeai_runner.stream_protocol import Producer
 from edgeai_runner.stream_session import Session
 from edgeai_runner.stream_source import DeviceSource
-
-folder=Path(sys.argv[1]);config=json.loads((folder/'request.json').read_bytes())
-identity={'epoch':1,'podUid':config['podUid']}
-runner=BindingClient(config['origin'],Producer('TASK_ATTEMPT',config['attemptId'],1),folder/'claim',
-                     pod_uid=config['podUid'],pod_token_file=folder/'pod')
-base=config['origin']+'/internal/v1/attempts/'+config['attemptId']+'/'
-
 
 def post(operation,body,expected=200):
     request=urllib.request.Request(base+operation,data=json.dumps(body).encode(),method='POST',headers={
@@ -58,17 +51,40 @@ def wait(predicate,tick=lambda:None):
         tick();time.sleep(.005)
 
 
-def main():
+def open_source(client,run_id,generations,directory,tick,*,timeout=90,cancel=None):
+    # Only bootstrap fetch failures are retried. DeviceSource validates every
+    # assignment before creating a journal, and closes a failed constructor.
+    end=time.monotonic()+timeout
+    while True:
+        remaining=end-time.monotonic()
+        assert remaining>0,'Completion source bootstrap deadline exceeded'
+        try:
+            return DeviceSource(client,run_id,generations,directory,create=True,timeout=remaining,cancel=cancel)
+        except AssignmentUnavailable:
+            assert not (directory/'journal').exists(),'Bootstrap changed the source journal'
+            tick()  # Keep existing peers alive while this source is unavailable.
+            time.sleep(min(.05,max(0,end-time.monotonic())))
+
+
+def main(path):
+    global folder,runner,base
+    folder=path;config=json.loads((folder/'request.json').read_bytes())
+    identity={'epoch':1,'podUid':config['podUid']}
+    runner=BindingClient(config['origin'],Producer('TASK_ATTEMPT',config['attemptId'],1),folder/'claim',
+                         pod_uid=config['podUid'],pod_token_file=folder/'pod')
+    base=config['origin']+'/internal/v1/attempts/'+config['attemptId']+'/'
     with ExitStack() as stack:
         assigned=post('streams/execution',identity)
         assert assigned['state']=='READY' and assigned['recovery']=='NEW' and not assigned['outputs']
         clients={};sources={};directories={}
+        def tick_sources():
+            for source in sources.values():source.step()
         for name,value in config['sources'].items():
             client=BindingClient(config['origin'],Producer('DEVICE_SESSION',value['sessionId'],value['epoch'],value['deviceId']),
                                  folder/(name+'.token'))
             clients[name]=client
             directory=folder/('source-'+name);directory.mkdir(mode=0o700);directories[name]=directory
-            sources[name]=stack.enter_context(DeviceSource(client,config['runId'],[value['generationId']],directory,create=True,timeout=90))
+            sources[name]=stack.enter_context(open_source(client,config['runId'],[value['generationId']],directory,tick_sources))
         generations=list(assigned['inputs'].values())
         checkpoint=CheckpointClient(runner,config['runId'],generations)
         spec=config['stream'];limits=spec['limits']
@@ -155,7 +171,7 @@ def main():
 
 if __name__=="__main__":
     try:
-        main()
+        main(Path(sys.argv[1]))
     except Exception as error:
         import traceback
         frames=traceback.extract_tb(error.__traceback__)

@@ -138,6 +138,8 @@ jobs:
           sudo apt-get install -y mosquitto mosquitto-clients
           python3 -m venv .tools/stream-venv
           .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
+      - name: Verify Device drivers retain pending samples across bootstrap and reconnect
+        run: bash scripts/collect-evidence.sh stream-drivers .tools/stream-venv/bin/python -W error::ResourceWarning scripts/test-stream-drivers.py
       - name: Verify real S3 content and atomic PostgreSQL Result commit
         env:
           EDGEAI_STREAM_PYTHON: ${{ github.workspace }}/.tools/stream-venv/bin/python
