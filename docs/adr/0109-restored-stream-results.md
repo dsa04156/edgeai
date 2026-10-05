@@ -39,7 +39,11 @@ Kubernetes30개/VD34개와 기존 BATCH20/24·Remote15개, 최종123개 감사�
 범위를 구분한다. 후속 [상속 finalizer 검증](../evidence/m9-recovery-stream-finalizer-results.md)은
 실제 두 번의 실패·세 번의 시작 기록과 원래 완료 허가를 연결해 Kubernetes35개/VD39개
 전체 복원 CLI 시험을 통과했다. 재시도 배정과 VD readiness는 명시적 fixture다.
-혼합 다중 member의 전체 CLI 수용 검증은 후속이다.
+[혼합 그룹 검증](../evidence/m9-recovery-stream-group-results.md)은 Device→NODE→VD의
+실제 checkpoint/완료/Result API와 원본 제거·독립 복원 CLI를 연결한다. 어느 순서로
+Result를 복원해도 두 번째 결과 전에는 후속 Attempt를 만들지 않으며, peer 권한/객체
+모순·경쟁·원복·응답 유실·기존 후속 실패 보존을 검사한다. 경로/Device END·배정/readiness는
+fixture이며 자동 실행 수용과 구분한다.
 
 백업 이후 누락된 완료 허가/실행의 독립 복원, 전역 writer/API 차단과 전체 서비스 재개,
 실제 모델·외부 계약 및 M0–M10 전체 수용은 별도 잔여 작업이다.

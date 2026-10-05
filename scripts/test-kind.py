@@ -297,6 +297,14 @@ def main():
                     env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
                 if result.returncode:
                     raise RuntimeError('kind restored STREAM ' + producer + ' Result acceptance failed')
+            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-group-results',
+                'bash', 'scripts/test-recovery-stream-group-results.sh', '--context', context, '--transport', 'compose',
+                '--minio-binary', '.tools/minio-recovery-tested',
+                '--runner-image', images['runner'], '--runner-source', source_revision,
+                '--report', '.tools/kind-recovery-stream-group-results.json'],
+                env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
+            if result.returncode:
+                raise RuntimeError('kind restored mixed STREAM group Result acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-workflows',
                 'bash', 'scripts/test-recovery-stream-workflows.sh', '--context', context, '--transport', 'compose',
                 '--offloads', '--finalizers', '--runtime-start-journals', '--vd-peer', '--minio-binary', '.tools/minio-recovery-tested',

@@ -197,5 +197,9 @@ Kubernetes30개/VD34개에서 각각 복원DB6·원래 Result ID/시각·타38�
 원래 시작 기록3개·완료 허가1개·종료 Pod3개를 연결했다. Kubernetes35개/VD39개에서
 원래 결과/실패 이력 보존·재시도 정책 모순 거절·응답 유실 후 무변경 재검사를 확인했다.
 재시도 배정/VD readiness는 명시적 fixture이며 자동 스케줄러 수용과 구분한다.
-혼합 다중 member의 전체 CLI 수용, 백업에 없는 완료 허가·실행,
+[혼합 NODE/VD 그룹](evidence/m9-recovery-stream-group-results.md)의 전체 CLI는 실제
+checkpoint API·그룹 완료 허가·각 Result와 독립 백업/복원을 연결한다. 서로 다른 복원
+순서에서 후속 작업 대기·한 번만 준비, peer 증거 누락/경쟁·원복/응답 유실과 원래 이력을
+검증한다. Device END·경로·배정/readiness는 fixture이며 상속 finalizer와의 결합은 별도다.
+백업에 없는 완료 허가·실행,
 전역 writer/API 차단·종합 활성화와 새 CI/배포는 잔여이며 전체 M9 완료가 아니다.

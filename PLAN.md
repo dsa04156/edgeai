@@ -2,6 +2,20 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+혼합 NODE/VD STREAM 그룹의 전체 결과 복원 CLI를 검증했다. 공개 Device→NODE→VD와
+두 결과를 기다리는 BATCH 자식, 실제 claim/checkpoint5/공통 grant/Result2와 원본 제거·
+독립 복원DB6·종료Pod2·broker principal3을 연결한다. 최종19개031714Z-75dce089 PASS:
+두 복원 순서·peer 모순14종·대기/한 번만 준비·경쟁/원복/응답 유실·타39테이블/소유 정리.
+[근거](docs/evidence/m9-recovery-stream-group-results.md). 최종 소스/증거와 DB16·namespace4
+부재 감사032104Z-1a7740c8 PASS. 공유 코드 불변으로 기존182개 근거를 재사용했다.
+최초 checkpoint fixture 오류를 수정했고 별도 최초claim503 원인은 미확정이다.
+새 kind gate를 연결했다. 선행931922a CI37256444752 완료5jobs/원시35개·native registry
+감사031032Z-e2a8b391/930384ac PASS; images 진행 중이므로 새 push는 종료 뒤 진행한다.
+새 혼합 코드의 원격 CI/배포, 상속 finalizer와 혼합 그룹 결합, 백업에 없는 완료 허가·실행,
+전역 writer/API 차단과 종합 활성화 및 M0–M10 전체 목표를 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 상속 finalizer 결과 복원을 실제 실패2회·시작 기록3개·종료 Pod3개에서 독립 백업·복원 CLI까지
 검증했다. Kubernetes35개021900Z-a9a73602/VD39개021504Z-64750523 PASS, 원래 grant와
 checkpoint·두 실패 이력·결과 ID/시각을 유지하며 상속12종/원래 정책4종 모순을 거절한다.

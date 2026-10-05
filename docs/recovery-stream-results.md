@@ -58,5 +58,12 @@ EDGEAI_STREAM_PYTHON=<고정 Paho 환경>/bin/python \
 `--stream-results`가 필요하다. 자동 재시도 배정의 fixture 범위와 실제 API/복원 검증은
 [상속 finalizer 시험](evidence/m9-recovery-stream-finalizer-results.md)에 구분한다.
 
+혼합 그룹은 `bash scripts/test-recovery-stream-group-results.sh --context '<시험 context>'`
+명령으로 검사한다. 위와 같은 SDK 환경과 `--minio-binary`를 사용한다. 이 시험은
+Device → Kubernetes → VD와 두 BATCH 결과를 기다리는 후속 작업을 만든다. 각 결과를
+어느 순서로 복원해도 두 번째 결과가 확인되기 전에는 후속 Attempt를 생성하지 않아야 한다.
+공통 grant와 양쪽 checkpoint는 선택하지 않은 peer까지 모두 검증한다.
+[혼합 그룹 시험](evidence/m9-recovery-stream-group-results.md)에 실제 경계와 fixture를 구분한다.
+
 현재 수용 범위와 미검증 항목은
 [시험 근거](evidence/m9-recovery-stream-results.md)와 [ADR0109](adr/0109-restored-stream-results.md)를 따른다.

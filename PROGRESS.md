@@ -1,6 +1,19 @@
 # 진행 상태
 
 [STATUS]
+혼합 NODE/VD STREAM 그룹 결과 복원 최종19개031714Z-75dce089 PASS다.
+실제 checkpoint API5개·시작/결과 기록 각2·공통 완료 허가·독립 복원DB6·종료Pod2·broker
+principal3과 원본 제거를 연결했다. 어느 순서로 복원해도 두 번째 결과 전에는 자식이 대기하고
+이후 한 번만 준비된다. peer 모순14종·실제경쟁/원복/응답 유실·타39테이블·소유 정리 PASS.
+[근거](docs/evidence/m9-recovery-stream-group-results.md). 감사032104Z-1a7740c8에서 소스/JAR/V36·
+CI 연결·실패 포함 DB16/namespace4 부재를 확인했다. 공유 코드 불변으로 기존182개 근거 재사용.
+최초 fixture 오류와 별도 초기claim503/원인 미확정·후속 PASS를 구분해 보존한다.
+선행931922a CI37256444752 완료5jobs/원시35개·실제 native index 감사031032Z-e2a8b391/930384ac
+PASS, images 진행 중이다. 새 코드 push는 선행 CI 종료 뒤다. 새 원격 CI/배포·혼합 finalizer
+결합·누락 완료 허가/실행·전역 writer/API 차단·종합 활성화와 M0–M10 전체 목표는 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 상속 finalizer 결과 복원을 Kubernetes35개021900Z-a9a73602/VD39개021504Z-64750523에서
 검증했다. 실제 실패2회·시작 기록3개·종료 Pod3개와 원래 grant/checkpoint1개를 연결하고,
 상속12종/원래 정책4종 모순 거절·원래 결과/실패 이력·원복/응답 유실·소유 정리를 확인했다.
