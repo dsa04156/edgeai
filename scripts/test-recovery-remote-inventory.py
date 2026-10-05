@@ -122,7 +122,7 @@ def main():
         api.close(); drop(source)
         binding = fixture.binding(); fixture.cli(binding)
         before = fingerprints(target)
-        assert len(before) == 44
+        assert len(before) == 45 and 'stream_completion_publication' in before
         before_provider = fixture.rows()
         pin = hashlib.sha256(__import__('ssl').PEM_cert_to_DER_cert((fixture.root / 'cert.pem').read_text())).hexdigest()
 
@@ -172,19 +172,21 @@ def main():
             assert again['providerInventorySha256'] == observed['providerInventorySha256'] and again['counts'] == observed['counts']
             passed('frozen inventory survives actual provider SIGKILL restart')
         assert fixture.rows() == before_provider and fingerprints(target) == before
-        passed('all 44 restored tables and provider rows preserved by observation')
+        passed('all 45 restored tables and provider rows preserved by observation')
         assert fixture.doCleanups(), 'Owned TLS fixture cleanup failed'
         drop(target)
 
     code = 1
     try:
         scenario(False); scenario(True)
-        report.update(status='PASS', restoredTables=44, pageSize=2, restoredDatabases=2, providerInstallations=2,
+        report.update(status='PASS', restoredTables=45, pageSize=2, restoredDatabases=2, providerInstallations=2,
                       serverMajor=int(pg.sql('SHOW server_version_num', 'postgres')) // 10000,
                       jarSha256=hashlib.sha256((ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code = 0
     except Exception as error:
-        report.update(status='FAIL', failureType=type(error).__name__)
+        report.update(status='FAIL', failureType=type(error).__name__,
+                      failureLocation=[{'file':Path(f.filename).name,'function':f.name,'line':f.lineno}
+                                       for f in traceback.extract_tb(error.__traceback__)[-5:]])
         with private_file(work / 'failure.log', 'w') as log: traceback.print_exc(file=log)
         print('FAIL: actual Remote recovery inventory; private diagnostics: ' + str(work), flush=True)
     finally:

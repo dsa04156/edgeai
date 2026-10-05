@@ -178,7 +178,7 @@ def main():
             targets.append((target, restoring.directory / 'restore-report.json'))
         drop(source)
         target, receipt = targets[0]; before = fingerprints(target)
-        assert len(before) == 44
+        assert len(before) == 45 and 'stream_completion_publication' in before
         assert cli(options(target, receipt), expected=2)['databaseModified'] is False
         assert fingerprints(target) == before
         passed('live unfenced provider blocks all restored database writes')
@@ -257,7 +257,7 @@ def main():
         assert pg.sql("SELECT count(*) FROM edgeai.runtime_instance WHERE desired_state<>'STOPPED' OR observed_state<>'TERMINATED'", target) == '0'
         assert pg.sql('SELECT count(*) FROM edgeai.runtime_command WHERE NOT completed OR lease_owner IS NOT NULL OR lease_until IS NOT NULL', target) == '0'
         passed('actual TLS evidence atomically imports three observations, retires three runtimes and completes four commands')
-        passed('committed result and artifact, 40 other tables, runtime identities, command history and another restored DB survive')
+        passed('committed result and artifact, all 42 unchanged tables, runtime identities, command history and another restored DB survive')
 
         repeated = cli(options(target, receipt))
         assert not repeated['databaseModified'] and fingerprints(target) == after
@@ -363,7 +363,7 @@ def main():
             if not destination.is_relative_to(ROOT / '.tools'): raise ValueError('Test bundle must remain under private .tools')
             shutil.copytree(recovered.output, destination)
             assert output_recovery.verify(destination)['uniqueFiles'] == 1
-        report.update(status='PASS', restoredTables=44, restoredDatabases=2, providerInstallations=1, allocations=4,
+        report.update(status='PASS', restoredTables=len(before), restoredDatabases=2, providerInstallations=1, allocations=4,
                       observationsUpdated=3, runtimesRetired=3, commandsCompleted=4,
                       retainedResults=1, retainedArtifactReferences=1,
                       recoveredFiles=1, recoveredOutputBytes=len(original_bytes), offlineBundleVerified=True,
@@ -371,7 +371,9 @@ def main():
                       jarSha256=hashlib.sha256((ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code = 0
     except Exception as error:
-        report.update(status='FAIL', failureType=type(error).__name__)
+        report.update(status='FAIL', failureType=type(error).__name__,
+                      failureLocation=[{'file':Path(f.filename).name,'function':f.name,'line':f.lineno}
+                                       for f in traceback.extract_tb(error.__traceback__)[-5:]])
         with private_file(work / 'failure.log', 'w') as log: traceback.print_exc(file=log)
         print('FAIL: actual Remote retirement; private diagnostics: ' + str(work), flush=True)
     finally:

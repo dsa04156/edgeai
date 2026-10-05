@@ -113,7 +113,7 @@ def exercise(fixtures,pg,restored,fingerprint,passed,transport):
     closed=json.loads(pg.sql('SELECT to_jsonb(g) FROM edgeai.route_generation g WHERE id='+literal(first)+'::uuid',database))
     assert all(closed[k]==v for k,v in fenced.items() if k not in ('state','closed_at','updated_at'))
     assert all(result[k] is False for k in ('brokerModified','activated','globalQuiescenceProven','producerProcessQuiescenceProven'))
-    passed('actual-stream-cli-closes-active-and-fenced-generations-preserving-cancellation-and-other-forty-two-tables')
+    passed('actual-stream-cli-closes-active-and-fenced-generations-preserving-cancellation-and-all-other-tables')
     result=cli();assert result['generationsFenced']==result['generationsClosed']==0 and not result['databaseModified']
     assert fingerprint(database)==current
     passed('same-stream-retirement-is-a-zero-change-repeat-and-preserves-terminal-history')
@@ -140,6 +140,7 @@ def exercise(fixtures,pg,restored,fingerprint,passed,transport):
     assert not result['databaseModified'] and fingerprint(database)==other_before
     passed('another-broker-open-generation-remains-unresolved-and-unchanged')
     final=fingerprint(database)
-    assert len(final)==44 and {k:v for k,v in final.items() if k!='route_generation'}==expected_other
+    assert len(final)==45 and 'stream_completion_publication' in final
+    assert {k:v for k,v in final.items() if k!='route_generation'}==expected_other
     return {'streamRetirementCases':14,'streamGenerationsClosed':4,'streamOtherBrokerGenerationsPreserved':1,
-        'streamOtherTablesPreserved':43,'streamLockProcessStopped':locker.poll() is not None}
+        'streamOtherTablesPreserved':len(expected_other),'streamLockProcessStopped':locker.poll() is not None}
