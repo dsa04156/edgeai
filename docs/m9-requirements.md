@@ -186,3 +186,12 @@ Pod-bound TokenReview·원본 제거·복원DB21개를 포함한55개에서 전�
 기록 누락은 미해결이며 기한 만료 실패로 추론하지 않는다. 공유 fixture 회귀20/24/91개도
 PASS다. STREAM Result/finalization 권한, 백업 후 새 실행 발견/회수, 전역 writer/API 차단과
 종합 활성화·신규 원격 CI/배포는 남는다. BATCH 옵션 생략 시 기존 처리는 이 변경과 별도다.
+
+ADR0109의 [STREAM 결과 복원](recovery-stream-results.md)은 원래 연결 그룹의 완료 허가·
+checkpoint 실제 bytes·실행 계약·경로/END와 현재 producer/broker 차단을 대조한다.
+Kubernetes30개/VD34개에서 각각 복원DB6·원래 Result ID/시각·타38테이블·경쟁/원복/응답
+유실·소유 정리를 확인했다. [근거](evidence/m9-recovery-stream-results.md).
+그룹 전체의 BATCH 부모가 확정됐을 때만 후속 member를 함께 준비시킨다. 같은 Run의
+별도 후속 runtime은 부모 완료 장벽에 포함하지 않고 기존 이력을 유지한다.
+상속 finalizer/혼합 다중 member의 전체 CLI 수용, 백업에 없는 완료 허가·실행,
+전역 writer/API 차단·종합 활성화와 새 CI/배포는 잔여이며 전체 M9 완료가 아니다.

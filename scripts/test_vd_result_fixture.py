@@ -11,7 +11,7 @@ from postgres_backup import literal, private_file
 from test_recovery_runtime_starts import q
 
 
-def seed(api,Api,pg,database,work,namespace,service,workflow_version,create,kube,image,program):
+def seed(api,Api,pg,database,work,namespace,service,workflow_version,create,kube,image,program,run_fields=None,api_env=None):
     from test_vd_supervisor_fixture import supervisor
     vd,vr,pod=supervisor(api,pg,database,namespace,service,create,kube,image,program)
     session=pg.sql('SELECT session_id::text FROM edgeai.vd_runtime WHERE id='+q(vr),database)
@@ -19,10 +19,10 @@ def seed(api,Api,pg,database,work,namespace,service,workflow_version,create,kube
     with private_file(key,'w') as target:target.write(secrets.token_hex(32))
     enabled=None
     try:
-        enabled=Api(database,work,extra_env={'EDGEAI_RUNTIME_ENABLED':'true','EDGEAI_VD_ENABLED':'true',
+        enabled=Api(database,work,extra_env={**(api_env or {}),'EDGEAI_RUNTIME_ENABLED':'true','EDGEAI_VD_ENABLED':'true',
             'EDGEAI_RUNTIME_WORKER_ENABLED':'false','EDGEAI_RUNTIME_NAMESPACE':namespace,'EDGEAI_RUNNER_KEY_FILE':str(key)})
         run=enabled.request('POST','workflow-runs',{'workflowVersionId':workflow_version,
-            'execution':{'mode':'VD','vdId':vd['id']},'parameters':{}},201,str(uuid.uuid4()))
+            'execution':{'mode':'VD','vdId':vd['id']},'parameters':{},**(run_fields or {})},201,str(uuid.uuid4()))
     finally:
         if enabled is not None:enabled.close()
         key.unlink(missing_ok=True)

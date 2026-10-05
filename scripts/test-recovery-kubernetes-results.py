@@ -43,6 +43,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--context',required=True)
     parser.add_argument('--vd-tasks',action='store_true')
+    parser.add_argument('--stream-results',action='store_true')
     parser.add_argument('--transport',choices=('native','compose'),default='native')
     parser.add_argument('--runner-image');parser.add_argument('--runner-source')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
@@ -56,10 +57,11 @@ def main():
     namespace='edgeai-result-test-'+token[:16];namespace_uid=None;operation=str(uuid.uuid4())
     kube=Kubernetes(args.context);pg=Postgres(args.transport,diagnostics=work/'postgres')
     fixture=Fixture('test_separate_credentials_identity_tls_pin_and_inspection')
-    owned={};apis=[];old_env=os.environ.copy();targets=[]
+    owned={};apis=[];old_env=os.environ.copy();targets=[];stream=None
     report={'status':'RUNNING','scope':'restored-vd-result-commit-tests' if args.vd_tasks else 'restored-kubernetes-result-commit-tests','sourceMode':'SYNTHETIC',
         'runtimeBoundary':'ACTUAL_POD_TOKENREVIEW_AND_RUNNER_API_WITH_EXPLICIT_DATABASE_BINDING',
         'cases':[],'activated':False,'ownedNamespaceRemoved':False,'ownedDatabasesRemoved':False}
+    if args.stream_results:report['scope']='restored-'+('vd' if args.vd_tasks else 'kubernetes')+'-stream-result-commit-tests'
     def passed(name):report['cases'].append(name);print('PASS: '+name,flush=True)
     def call(arguments,document=None):
         response=subprocess.run(kube.command+arguments,input=None if document is None else json.dumps(document).encode(),
@@ -84,6 +86,7 @@ def main():
             pg_bin=None,timeout=120,output=work/('result-'+uuid.uuid4().hex),unclaimed_jobs=True,
             vd_tasks=args.vd_tasks,runtime_id=[runtime],runtime_start_backup=work/'storage-backup',runtime_start_bucket=fixture.bucket,
             runtime_start_certificate_sha256=fixture.pin)
+        if stream is not None:vars(value).update(stream.options())
         vars(value).update(overrides);return value
     def cli(a,expected=0):
         command=[sys.executable,'scripts/recovery_kubernetes_results.py']
@@ -126,28 +129,43 @@ def main():
             'labels':{PART:'edgeai',MANAGER:'edgeai-bootstrap','edgeai.io/recovery-test':token}}})
         namespace_uid=ns['metadata']['uid']
         source='edgeai_backup_kresult_'+token;pg.sql('CREATE DATABASE '+identifier(source),'postgres');remember(source)
-        api=Api(source,work);apis.append(api)
+        if args.stream_results:
+            from test_stream_result_fixture import StreamFixture
+            stream=StreamFixture(work,args.minio_binary,namespace,operation)
+        api=Api(source,work,extra_env=stream.env if stream else None);apis.append(api)
         spec=json.loads((ROOT/'contracts/profiles/service-execution.example.json').read_text())
         if args.vd_tasks:spec['inputs']={'input':{'mediaType':'application/json','maxBytes':1048576,'required':False}}
-        parent=api.request('POST','profiles/SERVICE',{'key':'result-root','version':'1.0.0','spec':spec},201)
         child_spec={**spec,'inputs':{'input':{'mediaType':'application/json','maxBytes':1048576,'required':True}}}
-        child_profile=parent if args.vd_tasks else api.request('POST','profiles/SERVICE',{'key':'result-child','version':'1.0.0','spec':child_spec},201)
+        if stream:
+            live=json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
+            spec={**spec,'recovery':live['recovery'],'stream':{**live['stream'],
+                'inputs':{'sample':{'mediaType':'application/json','maxPayloadBytes':4096}},'outputs':{}}}
+        parent=api.request('POST','profiles/SERVICE',{'key':'result-root','version':'1.0.0','spec':spec},201)
+        child_profile=parent if args.vd_tasks and not stream else api.request('POST','profiles/SERVICE',{'key':'result-child','version':'1.0.0','spec':child_spec},201)
         workflow=api.request('POST','workflows',{'key':'result-recovery','displayName':'Result recovery'},201)
         v=api.request('POST','workflows/'+workflow['id']+'/versions',{'version':'1.0.0','tasks':[
             {'key':'root','serviceProfileVersionId':parent['id'],'parameters':{'features':[2],'weights':[3]}},
             {'key':'child','serviceProfileVersionId':child_profile['id'],'parameters':{}}],
             'dependencies':[{'fromTask':'root','toTask':'child','fromPort':'output','toPort':'input','mode':'BATCH'}]},201)
+        run_fields=stream.public_input(api) if stream else {}
         if args.vd_tasks:
             from test_vd_result_fixture import seed
-            run,attempt,child,runtime,pod=seed(api,Api,pg,source,work,namespace,parent['id'],v['id'],create,kube,image,PROGRAM)
+            run,attempt,child,runtime,pod=seed(api,Api,pg,source,work,namespace,parent['id'],v['id'],create,kube,image,PROGRAM,
+                run_fields=run_fields,api_env=stream.env if stream else None)
         else:
-            run=api.request('POST','workflow-runs',{'workflowVersionId':v['id'],'execution':{'mode':'AUTO'},'parameters':{}},201,str(uuid.uuid4()))
+            run=api.request('POST','workflow-runs',{'workflowVersionId':v['id'],'execution':{'mode':'AUTO'},'parameters':{},**run_fields},201,str(uuid.uuid4()))
             attempt=json.loads(pg.sql('SELECT to_jsonb(a) FROM edgeai.task_attempt a JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id='+q(run['id']),source))
             child=pg.sql('SELECT id::text FROM edgeai.task WHERE run_id='+q(run['id'])+' AND id<>'+q(attempt['task_id']),source)
-            runtime=str(uuid.uuid4());job_name='edgeai-'+attempt['id']
-            pg.sql('INSERT INTO edgeai.runtime_instance(id,attempt_id,task_id,run_id,epoch,namespace,job_name,claim_nonce,desired_state,observed_state,expires_at,created_at,updated_at) VALUES ('+
-                ','.join(q(x) for x in (runtime,attempt['id'],attempt['task_id'],run['id']))+',1,'+literal(namespace)+','+literal(job_name)+','+q(str(uuid.uuid4()))+
-                ",'RUNNING','PENDING',now()+interval '1 hour',now(),now()); UPDATE edgeai.task SET state='RUNNING' WHERE id="+q(attempt['task_id'])+
+            job_name='edgeai-'+attempt['id']
+            if stream:
+                runtime=pg.sql('SELECT id::text FROM edgeai.runtime_instance WHERE attempt_id='+q(attempt['id']),source)
+                pg.sql("UPDATE edgeai.runtime_instance SET expires_at=now()+interval '1 hour' WHERE id="+q(runtime),source)
+            else:
+                runtime=str(uuid.uuid4())
+                pg.sql('INSERT INTO edgeai.runtime_instance(id,attempt_id,task_id,run_id,epoch,namespace,job_name,claim_nonce,desired_state,observed_state,expires_at,created_at,updated_at) VALUES ('+
+                    ','.join(q(x) for x in (runtime,attempt['id'],attempt['task_id'],run['id']))+',1,'+literal(namespace)+','+literal(job_name)+','+q(str(uuid.uuid4()))+
+                    ",'RUNNING','PENDING',now()+interval '1 hour',now(),now())",source)
+            pg.sql("UPDATE edgeai.task SET state='RUNNING' WHERE id="+q(attempt['task_id'])+
                 "; UPDATE edgeai.task_attempt SET state='DISPATCHING' WHERE id="+q(attempt['id'])+
                 "; UPDATE edgeai.workflow_run SET state='RUNNING' WHERE id="+q(run['id']),source)
             labels={PART:'edgeai',MANAGER:RUNTIME,'edgeai.io/run-id':run['id'],'edgeai.io/task-id':attempt['task_id'],
@@ -174,6 +192,7 @@ def main():
         context=json.loads(pg.sql(starts.context_query(args.vd_tasks),source))[0]
         observed={}
         def commit(request,authority,store):
+            if stream:stream.seal(pg,source,runtime,parent['id'],fixture.bucket,store,request,authority)
             backup(pg,source,work/'after-claim')
             raw=b'{"value":6,"sourceMode":"SYNTHETIC"}'
             content={'port':'output','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'mediaType':'application/json'}
@@ -190,11 +209,12 @@ def main():
             assert status==200 and repeated==value and header(again,'x-amz-version-id')==header(headers,'x-amz-version-id')
             observed.update(journal=journal,start=authority,raw=value,objectVersion=header(headers,'x-amz-version-id'))
             backup(pg,source,work/'after-commit')
-        admit(fixture,pg,source,context,pod,kube,create,namespace,on_admitted=commit)
+        admit(fixture,pg,source,context,pod,kube,create,namespace,on_admitted=commit,api_env=stream.env if stream else None)
         storage_backup(client,[fixture.bucket],120)
         origin.terminate();origin.wait(15);shutil.rmtree(fixture.work/'origin-data');drop(source)
         report['sourceDatabaseRemoved']=True;report['sourceStorageRemoved']=True
-        for snapshot in ('before-claim','before-claim','after-claim','after-commit','before-claim'):
+        snapshots=('after-claim','after-claim','after-claim','after-commit','after-claim','before-claim') if stream else ('before-claim','before-claim','after-claim','after-commit','before-claim')
+        for snapshot in snapshots:
             db='edgeai_restore_kresult_'+uuid.uuid4().hex
             restoring=Postgres(args.transport,diagnostics=work/('restore-'+uuid.uuid4().hex));restore(restoring,work/snapshot,db);remember(db)
             targets.append((db,restoring.directory/'restore-report.json'))
@@ -204,9 +224,13 @@ def main():
         proof=stopped['terminatedPods'][0]
         assert proof['kind']=='ALL_CONTAINERS_TERMINATED'
         assert kube.items(namespace,'Pod')[0][0]['status']['containerStatuses'][0]['state']['terminated']['message']=='CHILD_REAPED'
+        if stream:stream.fence(attempt['id'])
         for index in range(len(targets)):
             a=options(index);a.output.mkdir(mode=0o700);retirement.apply(pg,a,retirement.prepare(pg,a))
-        passed('actual TLS claim/TokenReview, signed upload and commit journals; distinct backup, sources removed, five DB restores and retained process termination')
+            if stream:
+                import recovery_stream_retire as broker
+                a=options(index);a.output.mkdir(mode=0o700);broker.apply(pg,a,broker.prepare(pg,a))
+        passed('actual TLS claim/TokenReview, signed upload and commit journals; distinct backup, sources removed, restored databases and retained process termination')
         # Each independent fixture operation owns a bounded storage client. A
         # suite-wide deadline can expire before the final mutation and falsely
         # masquerade as rejection of a replacement that was never written.
@@ -257,9 +281,13 @@ def main():
                 else:raise AssertionError('Non-executed VD allocation admitted as a result producer')
             passed('supervisor termination does not authorize an unstarted or unclosed child allocation')
         a=options();db=a.database;pristine=fingerprints(db)
+        if stream:
+            from test_stream_result_checks import check
+            check(pg,stream,options,results,refuse_cli,fingerprints,passed,report)
         # Restore each explicit state mutation and verify every original row hash.
-        for table,column,value,row_id,old in [('task','state','CANCELLING',attempt['task_id'],'RUNNING'),
-            ('task_attempt','state','FAILED',attempt['id'],'DISPATCHING'),('workflow_run','state','CANCELLING',run['id'],'RUNNING')]:
+        for table,column,value,row_id in [('task','state','CANCELLING',attempt['task_id']),
+            ('task_attempt','state','FAILED',attempt['id']),('workflow_run','state','CANCELLING',run['id'])]:
+            old=pg.sql('SELECT '+column+' FROM edgeai.'+table+' WHERE id='+q(row_id),db)
             pg.sql('UPDATE edgeai.'+table+' SET '+column+'='+literal(value)+' WHERE id='+q(row_id),db)
             refuse(options(),lambda:results.prepare(pg,options()))
             pg.sql('UPDATE edgeai.'+table+' SET '+column+'='+literal(old)+' WHERE id='+q(row_id),db)
@@ -355,7 +383,7 @@ def main():
         passed('actual late child failure rolls back binding, Result, artifacts, outbox and Task changes together')
         before_runtime=json.loads(pg.sql('SELECT to_jsonb(r) FROM edgeai.runtime_instance r WHERE id='+q(runtime),db))
         restored=cli(options())
-        assert (restored['resultsCreated'],restored['bindingsRestored'],restored['childrenReadied'],restored['publicationsCompleted'])==(1,1,1,1)
+        assert (restored['resultsCreated'],restored['bindingsRestored'],restored['childrenReadied'],restored['publicationsCompleted'])==(1,0 if stream else 1,1,1)
         final_runtime=json.loads(pg.sql('SELECT to_jsonb(r) FROM edgeai.runtime_instance r WHERE id='+q(runtime),db))
         for column,field in [('producer_pod_uid','podUid'),('node_uid','nodeUid'),('node_name','nodeName')]:before_runtime[column]=authority[field]
         assert final_runtime==before_runtime
@@ -371,7 +399,7 @@ def main():
         after=fingerprints(db);assert all(after[k]==v for k,v in pristine.items() if k not in allowed)
         report['preservedOtherTables']=len(after)-len(allowed)
         report['restoredResults']=restored['resultsCreated'];report['childrenReadied']=restored['childrenReadied']
-        passed('original Result ID/time/fixed output restored once; missing claim history restored while termination/nonce stay intact; child queued without runtime')
+        passed('original Result ID/time/fixed output restored once; termination and producer history preserved; child queued without runtime')
         replay=cli(options());assert not replay['databaseModified'] and fingerprints(db)==after
         passed('identical CLI replay writes nothing, preserves timestamps and creates no duplicate Attempt or Result')
         claimed=cli(options(2));assert claimed['resultsCreated']==1 and claimed['bindingsRestored']==0 and claimed['childrenReadied']==1
@@ -430,6 +458,9 @@ def main():
         assert storage().request('DELETE',artifact_path,{'versionId':output['versionId']})[0]==204
         refuse_cli(options())
         passed('missing fixed output version blocks even immutable-result replay; no latest-object fallback')
+        if stream:
+            from test_stream_result_readiness import check as readiness_check
+            readiness_check(pg,options(5),results,work,passed,report)
         report.update(originalResultIdPreserved=True,originalCommitTimePreserved=True,restoredDatabases=len(targets),
             actualStartApiVerified=fixture.api_claim_verified,actualResultApiVerified=True,newRuntimeCreated=False,
             vdAllocationVerified=args.vd_tasks,originalVDAllocationAndSupervisorPreserved=args.vd_tasks)
@@ -442,6 +473,7 @@ def main():
             report['cleanupStep']='owned-processes'
             for api in apis:api.close()
             fixture.doCleanups()
+            if stream is not None:report['ownedStreamAuthorityStopped']=stream.close()
             report['ownedApisStopped']=all(api.process is None or api.process.poll() is not None for api in apis) and getattr(fixture,'api_claim_source_stopped',True)
             report['ownedStorageStopped']=all(p.poll() is not None for p in getattr(fixture,'processes',[]))
             for db in list(owned):drop(db)

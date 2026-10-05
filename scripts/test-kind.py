@@ -286,6 +286,15 @@ def main():
                 '--report', '.tools/kind-recovery-vd-results.json'], env=env, timeout=600)
             if result.returncode:
                 raise RuntimeError('kind restored VD Result acceptance failed')
+            for producer, flags in [('kubernetes', []), ('vd', ['--vd-tasks'])]:
+                result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-' + producer + '-results',
+                    'bash', 'scripts/test-recovery-kubernetes-results.sh', '--context', context, '--transport', 'compose',
+                    '--stream-results', *flags, '--minio-binary', '.tools/minio-recovery-tested',
+                    '--runner-image', images['runner'], '--runner-source', source_revision,
+                    '--report', '.tools/kind-recovery-stream-' + producer + '-results.json'],
+                    env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
+                if result.returncode:
+                    raise RuntimeError('kind restored STREAM ' + producer + ' Result acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-workflows',
                 'bash', 'scripts/test-recovery-stream-workflows.sh', '--context', context, '--transport', 'compose',
                 '--offloads', '--finalizers', '--runtime-start-journals', '--vd-peer', '--minio-binary', '.tools/minio-recovery-tested',

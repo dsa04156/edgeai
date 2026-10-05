@@ -1,4 +1,4 @@
-"""Restore original committed Kubernetes/VD BATCH Results; keep the database quarantined."""
+"""Restore original committed Kubernetes/VD Results; keep the database quarantined."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -15,6 +15,7 @@ import recovery_kubernetes_retire as retirement
 import recovery_kubernetes_workflows as workflows
 import recovery_runtime_starts as starts
 import recovery_vd_starts as vd_starts
+import recovery_stream_results as stream_results
 from recovery_remote_fence import unique
 from recovery_remote_inventory import uid
 from recovery_remote_retire import durable_json
@@ -28,10 +29,11 @@ VD_MEDIA_TYPE = 'application/vnd.edgeai.vd-task-result+json'
 FIELDS = {'apiVersion','resultId','runtimeId','runId','taskId','attemptId','epoch','namespace',
           'jobName','jobUid','podUid','nodeUid','nodeName','startKey','manifestDigest','committedAt','outputs'}
 OUTPUT_FIELDS = {'port','bucket','objectKey','versionId','bytes','sha256','mediaType'}
-TABLES = (*workflows.TABLES, 'runtime_result_publication')
-GUARD_QUERY = workflows.GUARD_QUERY[:-1] + ", 'runtime_result_publication',(SELECT encode(sha256(convert_to(" \
+EXTRA_TABLES=tuple(t for t in ('runtime_result_publication',*stream_results.TABLES) if t not in workflows.TABLES)
+TABLES=(*workflows.TABLES,*EXTRA_TABLES)
+GUARD_QUERY=workflows.GUARD_QUERY[:-1]+''.join(", '"+name+"',(SELECT encode(sha256(convert_to(" \
     "coalesce(string_agg(encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex'),'' ORDER BY to_jsonb(t)::text),'')," \
-    "'UTF8')),'hex') FROM edgeai.runtime_result_publication t))"
+    "'UTF8')),'hex') FROM edgeai."+name+' t)' for name in EXTRA_TABLES)+')'
 def context_query(vd=False):
     return """
 SELECT coalesce(jsonb_agg(jsonb_build_object(
@@ -59,13 +61,18 @@ WHERE r.runtime_kind='{kind}'
 CONTEXT_QUERY=context_query()
 
 
-def catalog_sql(vd=False):
+def catalog_sql(vd=False,stream=False):
+    broker_guard='NULL::jsonb'
+    if stream:
+        from recovery_stream_retire import GUARD
+        broker_guard='('+GUARD+')'
     return ("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SELECT jsonb_build_object("
     "'database',current_database(),'oid',(SELECT oid::text FROM pg_database WHERE datname=current_database()),"
     "'marker',(SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()),"
     "'readOnly',current_setting('transaction_read_only'),'migrations',(SELECT json_agg(json_build_object("
     "'version',version,'success',success)) FROM edgeai.flyway_schema_history WHERE version IS NOT NULL),"
     "'guard',(" + GUARD_QUERY + "),'contexts',(" + context_query(vd) + "),'runtimeStartContexts',(" + starts.context_query(vd) +
+    "),'brokerGuard',"+broker_guard+",'stream',("+stream_results.catalog_query()+
     "),'attemptIds',(SELECT coalesce(json_agg(id),'[]'::json) FROM edgeai.task_attempt)); COMMIT;")
 
 
@@ -169,6 +176,7 @@ def observe(args, retired, catalog):
 
 def prepare(pg,args):
     vd=getattr(args,'vd_tasks',False)
+    stream=getattr(args,'stream_results',False)
     if not args.runtime_id or len(set(args.runtime_id))!=len(args.runtime_id):raise Blocked('Select distinct restored runtime IDs explicitly')
     for rid in args.runtime_id:uid(rid)
     schema=database_inventory(pg,args.database,args.restore_report,retirement.CATALOG_SQL)
@@ -178,7 +186,7 @@ def prepare(pg,args):
         raise Blocked('VD Result recovery requires the reviewed V36 publication schema')
     retired=retirement.prepare(pg,args)
     if not set(args.runtime_id)<=set(retired['selected']['vdTasks' if vd else 'runtimes']):raise Blocked('Every selected producer needs retained termination proof')
-    catalog=database_inventory(pg,args.database,args.restore_report,catalog_sql(vd))
+    catalog=database_inventory(pg,args.database,args.restore_report,catalog_sql(vd,stream))
     if (any(retired[k]!=catalog[v] for k,v in [('databaseOid','oid'),('marker','marker'),('restoreReportSha256','restoreReportSha256')]) or
             any(retired['beforeGuard'][t]!=catalog['guard'][t] for t in retirement.TABLES)):
         raise Blocked('Database changed during Result snapshot')
@@ -190,7 +198,7 @@ def prepare(pg,args):
         authority=evidence['resultRecords'][rid]['authority'];outputs=evidence['resultRecords'][rid]['outputs']
         attempt,task,result,publication=(context[k] for k in ('attempt','task','result','publication'))
         if (runtime['desired_state']!='STOPPED' or runtime['observed_state']!='TERMINATED' or context['pendingCommands'] or
-                context['hasStream'] or context['activeOffload'] or context['retryPending'] or runtime['failure_reason'] is not None or
+                context['hasStream'] and not stream or context['activeOffload'] or context['retryPending'] or runtime['failure_reason'] is not None or
                 context['latestEpoch']!=runtime['epoch'] or task['cancellation_reason'] is not None or
                 any(o['state']!='SUCCEEDED' or o['failure_reason'] is not None for o in start_contexts[rid]['offloads'])):
             raise Blocked('Result cannot bypass retirement, STREAM, offload, retry, cancellation or newer history')
@@ -218,10 +226,12 @@ def prepare(pg,args):
             'restoreBinding':restore_binding,'publicationPending':publication is not None and not publication['completed']} |
             ({k:authority[k] for k in ('vdId','allocationId','vdRuntimeId','generation','sessionId','slot','assignedSequence')} if vd else {}))
     if len(entries)!=len(args.runtime_id):raise Blocked('Selected producer is absent from the fixed result catalog')
-    return {'formatVersion':1,'scope':'restored-vd-result-commit' if vd else 'restored-kubernetes-result-commit','targetDatabase':args.database,
+    stream_evidence=stream_results.observe(pg,args,catalog,retired,evidence,entries) if stream else None
+    scope='restored-'+('vd' if vd else 'kubernetes')+('-stream' if stream else '')+'-result-commit'
+    return {'formatVersion':1,'scope':scope,'targetDatabase':args.database,
         'databaseOid':catalog['oid'],'marker':catalog['marker'],'restoreReportSha256':catalog['restoreReportSha256'],
         'namespace':args.namespace,'namespaceUid':args.namespace_uid,'recoveryId':args.recovery_id,
-        'physicalEvidence':retired['evidence'],**evidence,'beforeGuard':catalog['guard'],'entries':entries,
+        'physicalEvidence':retired['evidence'],**evidence,'streamEvidence':stream_evidence,'beforeGuard':catalog['guard'],'entries':entries,
         'preparedAt':datetime.now(timezone.utc).isoformat()}
 
 
@@ -245,7 +255,8 @@ def apply(pg,args,plan):
     report={k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid','namespace','namespaceUid','recoveryId')}
     report.update(result,status='VD_RESULTS_COMMITTED' if vd else 'KUBERNETES_RESULTS_COMMITTED',activated=False,databaseModified=any(result[k] for k in counters),
         resultsVerified=len(plan['entries']),intentSha256=hashlib.sha256((args.output/'intent.json').read_bytes()).hexdigest(),
-        verifiedAt=datetime.now(timezone.utc).isoformat(),excluded=['new-execution-authority','stream-results',
+        verifiedAt=datetime.now(timezone.utc).isoformat(),excluded=['new-execution-authority',
+        'missing-stream-completion-grants' if getattr(args,'stream_results',False) else 'stream-results',
         'unknown-post-snapshot-executions','global-producer-retirement','service-activation'])
     durable_json(args.output/'results.json',report)
     return report
@@ -260,6 +271,9 @@ def main():
     parser.add_argument('--runtime-id',action='append',required=True)
     parser.add_argument('--unclaimed-jobs',action='store_true')
     parser.add_argument('--vd-tasks',action='store_true',help='Restore VD child Results using original allocation/session journals')
+    parser.add_argument('--stream-results',action='store_true',help='Verify original sealed group grants/checkpoints and current broker revocation')
+    parser.add_argument('--broker-digest')
+    for name in ('mqtt-state-directory','mqtt-ca-file','mqtt-original-password-file'):parser.add_argument('--'+name,type=Path)
     parser.add_argument('--transport',choices=('native','compose'),default='native')
     parser.add_argument('--pg-bin',type=Path);parser.add_argument('--timeout',type=int,default=120)
     args=parser.parse_args();args.output.mkdir(mode=0o700,parents=True,exist_ok=False);submitted=False

@@ -2,6 +2,21 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0109의 STREAM 결과 복원을 추가했다. 원래 연결 그룹의 완료 허가·고정 checkpoint
+bytes/실행 계약·경로/END와 현재 producer/broker 차단을 검증해 원래 Result를 반영한다.
+Kubernetes30개014427Z-a9a2630f/VD34개014427Z-4b52b8e4 PASS: 각각 복원DB6·타38테이블·
+원래 ID/시각·후속 이력·경쟁/원복/응답 유실·소유 정리. 실제 두 번째 member 오류에서
+첫 member와 Attempt까지 원복했다. [근거](docs/evidence/m9-recovery-stream-results.md).
+Run 전체 종료를 요구해 BATCH 후속 이력이 부모 결과 확인을 막는 오류를 재현하고
+기존 설계의 연결 그룹 범위로 수정했다. 기존 BATCH20개014718Z-70cf4f72/VD24개
+015106Z-5be66d33/Remote15개015249Z-26341551도 PASS다. 최종123개·소스/JAR/V36/CI연결
+감사015347Z-967e0db4 PASS. 최초 Remote DROP DATABASE 지연 원인은 미확정으로 보존한다.
+선행d764480 CI37250820250 완료5jobs/원시35개·native index 감사 PASS, 전체 CI/배포는
+후속 확인한다. 새 push는 선행 CI 종료 후 진행한다. 상속 finalizer/혼합 다중 member 전체 CLI 수용·
+백업에 없는 완료 허가/실행·전역 writer/API 차단·종합 활성화와 M0–M10 전체 목표를 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0108의 STREAM 원래 그룹 시작 허가 복원을 구현했다. NODE/VD 모든 member의 실제
 API 기록·원래 배정/작업/기한·물리 종료와 broker 차단을 대조하여 전환만 성공으로 복원한다.
 기록 누락을 STARTING timeout으로 추론하지 않는다. 최종55개010404Z-5743138b PASS:

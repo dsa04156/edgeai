@@ -2,6 +2,7 @@
 
 [물리 실행 종료 조정](recovery-kubernetes-retirement.md)을 마친 V36 격리 DB에서
 [기존 결과 복원 명령](recovery-kubernetes-results.md)에 `--vd-tasks`를 추가한다.
+STREAM 완료 허가가 기록된 결과는 [STREAM 추가 옵션](recovery-stream-results.md)도 지정한다.
 `--runtime-id`는 VD supervisor ID가 아니라 자식 Task의 runtime ID다.
 
 ```bash

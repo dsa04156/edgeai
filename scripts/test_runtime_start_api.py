@@ -19,7 +19,7 @@ from recovery_remote_storage import Storage, header
 Api=runpy.run_path(str(ROOT/'scripts/test-postgres-backup.py'))['Api']
 
 
-def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None,offload_state='SUCCEEDED'):
+def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None,offload_state='SUCCEEDED',api_env=None):
     runtime=context['runtime'];work=fixture.work/('api-'+runtime['id']);work.mkdir(mode=0o700)
     role='start-claim-'+runtime['id']
     vd=runtime['runtime_kind']=='VD'
@@ -64,7 +64,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
         '-storetype','PKCS12','-storepass','changeit'],capture_output=True,timeout=30)
     assert result.returncode==0,'Owned Java TLS trust preparation failed'
     with socket.socket() as probe:probe.bind(('127.0.0.1',0));tls_port=probe.getsockname()[1]
-    api=Api(database,work,extra_env={
+    api=Api(database,work,extra_env={**(api_env or {}),
         'EDGEAI_RUNTIME_ENABLED':'true','EDGEAI_RUNTIME_WORKER_ENABLED':'false','EDGEAI_RUNTIME_NAMESPACE':namespace,
         'EDGEAI_VD_ENABLED':str(vd).lower(),
         'EDGEAI_RUNTIME_SERVICE_ACCOUNT':account,'EDGEAI_RUNNER_KEY_FILE':key_file,

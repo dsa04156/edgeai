@@ -143,6 +143,25 @@ def transaction_sql(plan, *, tables=TABLES, guard_query=GUARD_QUERY, kubernetes=
     # journals retain original Result ID/time and producer/allocation identity.
     if kubernetes and vd:raise ValueError('Select exactly one producer kind')
     pod_bound=kubernetes or vd
+    stream=plan.get('streamEvidence')
+    if stream:
+        # Match StreamRunService.releaseReady: all members must be waiting and
+        # every BATCH predecessor of the entire component must be sealed. The
+        # transaction creates only queued Attempts, never runtimes or grants.
+        ready_condition="""
+ AND EXISTS (SELECT FROM jsonb_array_elements({groups}::jsonb) g
+  WHERE g->>'runId'=t.run_id::text AND (g->'taskIds') ? t.id::text
+  AND NOT EXISTS(SELECT FROM edgeai.task peer WHERE (g->'taskIds') ? peer.id::text AND peer.state<>'WAITING')
+  AND NOT EXISTS(SELECT FROM edgeai.task member JOIN edgeai.task_dependency d ON d.to_task_id=member.definition_id
+    JOIN edgeai.task parent ON parent.definition_id=d.from_task_id AND parent.run_id=member.run_id
+    WHERE (g->'taskIds') ? member.id::text AND d.mode='BATCH' AND (parent.state<>'SUCCEEDED' OR NOT EXISTS(
+      SELECT FROM edgeai.task_result r WHERE r.task_id=parent.id AND r.committed))))
+""".format(groups=literal(canonical(stream['readyGroups']).decode()))
+    else:
+        ready_condition=""" AND NOT EXISTS (
+   SELECT FROM edgeai.task_dependency d JOIN edgeai.task parent ON parent.definition_id=d.from_task_id AND parent.run_id=t.run_id
+   WHERE d.to_task_id=t.definition_id AND (parent.state<>'SUCCEEDED' OR NOT EXISTS (
+    SELECT FROM edgeai.task_result result WHERE result.task_id=parent.id AND result.committed)))"""
     binding = """
  IF (entry->>'restoreBinding')::boolean THEN
   UPDATE edgeai.runtime_instance SET producer_pod_uid=(entry->>'podUid')::uuid,
@@ -195,10 +214,7 @@ FOR entry IN SELECT * FROM jsonb_array_elements({entries}::jsonb) LOOP
 END LOOP;
 FOR recovered_run_id IN SELECT DISTINCT (value->>'runId')::uuid FROM jsonb_array_elements({entries}::jsonb) LOOP
  IF EXISTS(SELECT FROM edgeai.workflow_run WHERE id=recovered_run_id AND state='RUNNING') THEN
-  FOR child IN SELECT t.* FROM edgeai.task t WHERE t.run_id=recovered_run_id AND t.state='WAITING' AND NOT EXISTS (
-   SELECT FROM edgeai.task_dependency d JOIN edgeai.task parent ON parent.definition_id=d.from_task_id AND parent.run_id=t.run_id
-   WHERE d.to_task_id=t.definition_id AND (parent.state<>'SUCCEEDED' OR NOT EXISTS (
-    SELECT FROM edgeai.task_result result WHERE result.task_id=parent.id AND result.committed))) LOOP
+  FOR child IN SELECT t.* FROM edgeai.task t WHERE t.run_id=recovered_run_id AND t.state='WAITING'{ready_condition} LOOP
    IF child.cancellation_reason IS NOT NULL OR EXISTS(SELECT FROM edgeai.task_attempt WHERE task_id=child.id) THEN
     RAISE EXCEPTION 'Waiting child has contradictory execution history';
    END IF;
@@ -224,7 +240,7 @@ INSERT INTO recovery_result VALUES (jsonb_build_object('resultsCreated',results,
  'runsReconciled',runs,'afterGuard',({guard}){counters}));
 END
 """.format(identity=identity, guard=guard_query, before=literal(canonical(plan['beforeGuard']).decode()),
-           entries=literal(canonical(plan['entries']).decode()), binding=binding, publication=publication,
+           entries=literal(canonical(plan['entries']).decode()), binding=binding, publication=publication,ready_condition=ready_condition,
            producer_column='producer_pod_uid' if pod_bound else 'remote_allocation_id',
            producer_field='podUid' if pod_bound else 'allocationId',
            vd_column=',vd_runtime_id' if vd else '', vd_value=",(entry->>'vdRuntimeId')::uuid" if vd else '',

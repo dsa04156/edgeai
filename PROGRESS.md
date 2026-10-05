@@ -1,6 +1,20 @@
 # 진행 상태
 
 [STATUS]
+ADR0109 STREAM 결과 복원 Kubernetes30개014427Z-a9a2630f/VD34개014427Z-4b52b8e4 PASS.
+원래 완료 허가·고정 checkpoint bytes/실행 계약·broker/producer 차단·복원DB6/타38테이블·
+원래 결과 ID/시각·후속 이력·경쟁/원복/COMMIT 응답 유실과 소유 정리를 확인했다.
+실제 두 번째 member 오류에서 먼저 생성된 Attempt도 원복됐다.
+[근거](docs/evidence/m9-recovery-stream-results.md). 초기 fixture 오류와 실제 Run/그룹 경계
+오류를 구분해 수정했으며 Remote DROP DATABASE 지연 원인은 미확정으로 보존한다.
+기존 BATCH20개014718Z-70cf4f72/VD24개015106Z-5be66d33/Remote15개015249Z-26341551도
+PASS/소유 정리다. 최종123개 감사015347Z-967e0db4 PASS. 새 CI gate를 연결했으며
+push는 진행 중인 선행 CI37250820250 종료 뒤 진행한다. 새 원격 CI/배포는 미검증이다.
+상속 finalizer/혼합그룹 전체 CLI 수용·누락 완료 권한/실행·전역 writer/API 차단·종합 활성화와
+전체 M0–M10 목표는 미완료다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0108 NODE/VD STREAM 그룹 시작 복원55개010404Z-5743138b PASS.
 원래 API 시작 기록2·복원DB21·기존43테이블·원복/경쟁/COMMIT응답 유실·소유 정리를 확인했다.
 모든 member의 원래 허가가 있을 때만 전환 성공을 복원하고, 누락된 허가는 실패로 추론하지 않는다.

@@ -3,6 +3,8 @@
 [실행 종료 조정](recovery-kubernetes-retirement.md) 후 V35 또는 V36 격리 DB에서 실행한다.
 기본 대상은 Kubernetes BATCH Result다. V36 VD 자식은 [VD 복원 절차](recovery-vd-results.md)의
 `--vd-tasks` 옵션으로 명시적으로 선택한다.
+봉인된 STREAM 결과는 [STREAM 복원 절차](recovery-stream-results.md)의
+`--stream-results`와 원래 broker 증거를 함께 지정한다.
 원래 시작 허가·확정 Result 기록과 출력 파일이 같은 독립 S3 백업에 있어야 한다.
 실행이 전환 target이면 먼저 원래 시작 기록으로 전환 성공을 조정한다.
 
@@ -44,6 +46,6 @@ transaction을 보존한다. `databaseModified:null`이면 COMMIT이 반영됐�
 같은 입력을 새 출력 경로로 다시 검증한다. 고정 파일이나 보존 Pod를 지우지 않는다.
 
 현재 head가 다른 시작/결과 기록, 고정 파일 유실, 기존 결과의 ID/시각/내용 불일치,
-취소·실패·재시도·더 새로운 Attempt·STREAM·활성 전환·복원본에 없는 관측 실행은 거절한다.
+취소·실패·재시도·더 새로운 Attempt·옵션 없는 STREAM·활성 전환·복원본에 없는 관측 실행은 거절한다.
 이 명령은 일부 선택 결과의 복원이다. 전체 참조, 다른 producer, API/장치 권한과 종합
 재가동 검증은 [M9 수용 범위](m9-requirements.md)에 남는다. 설계는 [ADR0104](adr/0104-recovery-kubernetes-results.md)를 따른다.
