@@ -19,7 +19,7 @@ import uuid
 from test_stream_mqtt import Broker, eventually
 from test_stream_journal import A, B, OUT
 from test_stream_assignment import POD, document
-from edgeai_runner.stream_assignment import AssignmentError, BindingClient
+from edgeai_runner.stream_assignment import AssignmentError, AssignmentExpired, AssignmentFenced, BindingClient
 from edgeai_runner.stream_journal import Emission, Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_session import Session, SessionError
@@ -40,6 +40,8 @@ class SessionApi:
         self.leases = {identity:time.monotonic()+duration for identity in GENERATIONS.values()}
         self.calls = []
         self.status = None
+        self.discovery_failures = {}
+        self.on_discovery = lambda identity: None
         self.drop_after_apply = False
         self.peer_alive = True
         self.foreign_run = False
@@ -111,6 +113,12 @@ class SessionApi:
                          and self.path==f'/internal/v1/attempts/{OUT.producer.id}/streams'+('/heartbeat' if sequence is not None else ''))
                 status = 401 if not valid else owner.status
                 previous = owner.sequence[identity]
+                if sequence is None:
+                    owner.on_discovery(identity)
+                    status = 401 if not valid else owner.status
+                    if valid and not status and owner.discovery_failures.get(identity, 0):
+                        owner.discovery_failures[identity] -= 1
+                        status = 503
                 if time.monotonic() >= owner.leases[identity]:
                     status = 409
                 if sequence is not None and sequence not in (0,previous,previous+1):
@@ -167,11 +175,11 @@ class StreamSessionTest(unittest.TestCase):
         for link in self.links.values():link.close(force=True)
         for journal in self.journals.values():journal.close()
 
-    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False, restore_latest=False, handover_latest=False):
+    def open_session(self, *, create=True, command=COMMAND, timeout=20, durability='LOCAL', automatic_checkpoint=False, restore_latest=False, handover_latest=False, cancel=None):
         checkpoint=CheckpointClient(self.client,POD,list(GENERATIONS.values()),storage_ca_file=self.broker.ca) if automatic_checkpoint else None
         self.session=Session(self.client,POD,INPUTS,OUTPUTS,command,self.directory,{'mode':'zip'},
                              limits=Limits(max_frames=6),create=create,timeout=timeout,durability=durability,
-                             checkpoint_client=checkpoint,restore_latest=restore_latest,handover_latest=handover_latest)
+                             checkpoint_client=checkpoint,restore_latest=restore_latest,handover_latest=handover_latest,cancel=cancel)
         return self.session
 
     def setup_flow(self, **options):
@@ -223,6 +231,56 @@ class StreamSessionTest(unittest.TestCase):
         self.assertFalse(session.link.closed)
         for p in (self.directory/'journal').iterdir():
             self.assertTrue(self.broker.credentials['processor'].read_bytes() not in p.read_bytes())
+
+    def test_initial_discovery_retries_transient_response_before_starting_calculation(self):
+        identity=GENERATIONS[B.route_id]
+        self.api.discovery_failures[identity]=2
+        lease=dict(self.api.leases); premature=[]
+        self.api.on_discovery=lambda _:premature.append((self.directory/'journal').exists())
+        session=self.open_session()
+        self.assertEqual(3,self.api.calls.count((identity,None)))
+        self.assertEqual(lease,self.api.leases)
+        self.assertEqual({None},{sequence for _,sequence in self.api.calls})
+        self.assertFalse(any(premature))
+        self.assertFalse(session.closed)
+        self.assertEqual(0,session.journal.checkpoint().revision)
+
+    def test_initial_discovery_unavailability_keeps_original_session_deadline(self):
+        identity=GENERATIONS[A.route_id];self.api.discovery_failures[identity]=1000
+        started=time.monotonic()
+        with self.assertRaisesRegex(SessionError,'STREAM_SESSION_TIMEOUT'):
+            self.open_session(timeout=.2)
+        self.assertLess(time.monotonic()-started,1.5)
+        self.assertGreater(self.api.calls.count((identity,None)),1)
+        self.assertFalse((self.directory/'journal').exists())
+
+    def test_initial_discovery_retry_stops_when_an_already_read_lease_expires(self):
+        identity=GENERATIONS[B.route_id];self.api.discovery_failures[identity]=1000
+        self.api.leases[GENERATIONS[A.route_id]]=time.monotonic()+.25
+        original=dict(self.api.leases);started=time.monotonic()
+        with self.assertRaises(AssignmentExpired):self.open_session()
+        self.assertLess(time.monotonic()-started,1.5)
+        self.assertEqual(original,self.api.leases)
+        self.assertGreater(self.api.calls.count((identity,None)),1)
+        self.assertFalse((self.directory/'journal').exists())
+
+    def test_initial_discovery_retry_cancellation_starts_no_journal_or_model(self):
+        cancel=threading.Event();identity=GENERATIONS[B.route_id]
+        self.api.discovery_failures[identity]=1000
+        self.api.on_discovery=lambda current:cancel.set() if current==identity else None
+        with self.assertRaisesRegex(SessionError,'STREAM_CANCELLED'):self.open_session(cancel=cancel)
+        self.assertEqual(1,self.api.calls.count((identity,None)))
+        self.assertFalse((self.directory/'journal').exists())
+
+    def test_initial_discovery_fencing_after_transient_failure_is_not_retried(self):
+        identity=GENERATIONS[B.route_id];self.api.discovery_failures[identity]=1
+        def fence(current):
+            if current==identity and self.api.calls.count((identity,None))==2:self.api.status=409
+        self.api.on_discovery=fence
+        with self.assertRaises(AssignmentFenced) as failure:self.open_session()
+        self.assertEqual(409,failure.exception.status)
+        self.assertEqual(2,self.api.calls.count((identity,None)))
+        self.assertFalse((self.directory/'journal').exists())
 
     def test_transient_service_failure_retries_same_sequence_without_resetting_state(self):
         session=self.setup_flow();self.api.status=503

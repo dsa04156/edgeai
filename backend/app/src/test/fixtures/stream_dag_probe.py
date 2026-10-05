@@ -53,7 +53,8 @@ def launch():
         for filename in ('runner.log', 'runner-error.log'):
             (target / filename).touch(mode=0o600)
         with (target / 'runner.log').open('wb') as out, (target / 'runner-error.log').open('wb') as err:
-            children[name] = subprocess.Popen([sys.executable, '-W', 'error::ResourceWarning', str(repo / 'runner' / 'runner.py')],
+            children[name] = subprocess.Popen([sys.executable, '-W', 'error::ResourceWarning',
+                                               str(Path(__file__).with_name('vd_stream_supervisor_probe.py')), '--runner'],
                                                env=env, stdout=out, stderr=err)
 
 
@@ -187,7 +188,8 @@ def main():
             assert set(children) == {'root', 'sink'}
             for name, child in children.items():
                 assert child.returncode == 1
-                lines = (directory(name) / 'runner.log').read_text().splitlines()
+                lines = [line for line in (directory(name) / 'runner.log').read_text().splitlines()
+                         if not line.startswith('VD_RUNNER_DIAGNOSTIC ')]
                 assert len(lines) == 2 and lines[0] == 'RUNNER_WORKLOAD_START' and re.fullmatch('RUNNER_FAILED [A-Z_]+', lines[1])
                 assert not (directory(name) / 'work' / 'outputs' / 'result').exists()
             print('STREAM_DAG_CANCELLED')
@@ -225,7 +227,7 @@ if __name__ == '__main__':
         print('STREAM_DAG_FAILED ' + phase + ' ' + type(error).__name__ + ' ' + locations, flush=True)
         for name in children:
             for line in (directory(name) / 'runner.log').read_text().splitlines():
-                if re.fullmatch('RUNNER_FAILED [A-Z_]+', line):
+                if re.fullmatch('RUNNER_FAILED [A-Z_]+', line) or line.startswith('VD_RUNNER_DIAGNOSTIC '):
                     print(name + ' ' + line, flush=True)
         sys.exit(1)
     finally:

@@ -2,6 +2,19 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0113: 실제 Session 최초 조회의 일시 실패를 재현하고 원래 기한·기존 경로 lease·
+취소·거절을 지키는 재시도를 구현했다. 최종 HTTPS/MQTT107개055354Z-14405a56,
+기본Runner111개055758Z-47de3f0d, native발행gate8개060011Z-88dd5ef2 PASS.
+실제Spring15개060012Z-29c1ea1d는5개FAIL이며 DeviceSource/driver 초기조회와 DB대기가
+남는다. [근거](docs/evidence/m7-stream-initial-discovery.md). 소유DB/MinIO 정리 확인.
+V38복구fixture의44→45테이블 불일치를 재현·수정했고 Remote/Kube/Device/STREAM
+5묶음103개가 PASS/소유정리다. [근거](docs/evidence/m9-v38-recovery-fixtures.md).
+선행fa1c6c3 CI37267774293은 해당Remote검사에서FAIL/images·GitOps생략;
+양쪽native111+102개 및 GHCRindex만 통과했다. 새코드의 원격CI/배포, 누락상태DB복원,
+전역writer/API차단·종합활성화·실모델/외부계약과 전체 M0–M10 목표를 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0112: 그룹 완료로 route가 종료된 뒤 FINALIZE 응답이 지연돼도 봉인 상태를 유지하며
 현재 신원·취소·원래 기한 아래에서 정확한 허가를 다시 조회한다. 수정 전050405Z 재현FAIL,
 새5개 실제HTTPS/MQTT 경계/Runner111개/이미지 provenance8개 PASS다.

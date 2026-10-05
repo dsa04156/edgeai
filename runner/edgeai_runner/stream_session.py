@@ -73,8 +73,21 @@ class Session:
         self.heartbeats = 0
         try:
             for identity in identities:
-                self._check()
-                a = client.fetch(identity, timeout=self._request_timeout())
+                retries = 0
+                while True:
+                    self._check()
+                    try:
+                        a = client.fetch(identity, timeout=self._request_timeout())
+                        break
+                    except AssignmentUnavailable:
+                        # Bootstrap can encounter the same transient HTTP failure
+                        # as a heartbeat. No journal/model exists yet. Retrying
+                        # cannot extend the session or any already read lease;
+                        # cancellation, rejection and invalid assignments still stop.
+                        self._check()
+                        backoff = min(1., .05 * 2 ** min(retries, 5))
+                        retries += 1
+                        self.cancel.wait(min(backoff, self._request_timeout()))
                 require(a.run_id == run_id, 'STREAM_FOREIGN_RUN')
                 direction = 'CONSUMER' if identity in input_generations.values() else 'PRODUCER'
                 require(a.direction == direction, 'STREAM_DIRECTION_MISMATCH')

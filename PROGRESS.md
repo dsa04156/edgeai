@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0113 Session 초기조회 재시도: 실제HTTPS/MQTT107개·기본Runner111개·native발행gate8개
+PASS. 실제Spring15개는5개FAIL로 DeviceSource/driver 조회·DB대기 경계가 남으며
+전체회귀는 미완료다. [근거](docs/evidence/m7-stream-initial-discovery.md). 소유DB/MinIO 정리 확인.
+V38복구시험의 오래된44테이블 기대값은6801416에서 수정했고 실제5묶음103개가
+45테이블 보존·소유자원정리까지 PASS다. [근거](docs/evidence/m9-v38-recovery-fixtures.md).
+선행fa1c6c3 CI37267774293은Remote시험2곳FAIL/새배포생략. 양쪽native111+102개와
+GHCRindex 검증은PASS. 신규코드의 원격CI/배포·누락상태복원·종합활성화 및 전체M0–M10은 남는다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0112 Runner 완료응답 지연 경합을 실제HTTPS/MQTT에서 재현하고 수정했다.
 정확한봉인허가를 받기 전에는finalizer를 실행하지 않으며 취소/신원거절/기한/외래checkpoint
 거절을 포함한 새5개 PASS다. 기본Runner111개·native발행gate8개도 PASS다.
