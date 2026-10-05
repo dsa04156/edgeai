@@ -116,10 +116,13 @@ def main():
 
     def refuse_prepared(a, plan):
         before = fingerprints(a.database)
+        started = time.monotonic()
         try: results.apply(pg, storage.Storage(a), a, plan)
         except (RuntimeError, Blocked, OSError): pass
         else: raise AssertionError('Conflicting recovery transaction was accepted')
+        elapsed = time.monotonic() - started
         assert fingerprints(a.database) == before and not (a.output / 'results.json').exists()
+        return elapsed
 
     code = 1
     try:
@@ -257,8 +260,12 @@ def main():
                     literal(locker_name) + " AND l.relation='edgeai.task_result'::regclass AND l.granted", db) != '1':
                 assert time.monotonic() < deadline; time.sleep(.05)
             a = options(); a.output.mkdir(mode=0o700); plan = results.prepare(pg, storage.Storage(a), a)
-            started = time.monotonic(); refuse_prepared(a, plan)
-            assert 4 <= time.monotonic() - started < 15
+            started = time.monotonic(); elapsed = refuse_prepared(a, plan)
+            # Full-table before/after checks make independent client connections. Their
+            # transport cost is not time spent waiting for the recovery transaction.
+            report.update(lockRejectionSeconds=round(elapsed, 3),
+                          lockCheckSeconds=round(time.monotonic() - started, 3))
+            assert 4 <= elapsed < 15
         finally:
             pg.sql('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name=' + literal(locker_name), db)
             if locker is not None: locker.wait(timeout=10)
@@ -368,7 +375,9 @@ def main():
                       jarSha256=hashlib.sha256((ROOT / 'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         code = 0
     except Exception as error:
-        report.update(status='FAIL', failureType=type(error).__name__)
+        report.update(status='FAIL', failureType=type(error).__name__,
+                      failureLocations=[Path(frame.filename).name + ':' + str(frame.lineno)
+                          for frame in traceback.extract_tb(error.__traceback__)[-5:]])
         with private_file(work / 'failure.log', 'w') as log: traceback.print_exc(file=log)
         print('FAIL: real Remote result recovery; private diagnostics: ' + str(work), flush=True)
     finally:

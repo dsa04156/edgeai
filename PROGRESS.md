@@ -1,6 +1,13 @@
 # 진행 상태
 
 [STATUS]
+Remote Result 복구 시험의 잠금 시간에 전후 DB 검증 시간이 포함되는 오류를 재현했다.
+수정 전 실제5.043초 거절/전체20.855초로 FAIL(080049Z-1fb43882), 동일한 실제 DB와
+조회 지연 조건에서 수정 후15개 PASS(080254Z-e1553fb3)다.
+[근거](docs/evidence/m9-recovery-lock-measurement.md). 기존잠금제한/DB비교는 유지한다.
+e15e705 CI37279044604는 storage 복구시험FAIL/images·GitOps생략이며 원격 원인은 미확정이다.
+새수정 CI와 VD STREAM RUNNER_FAILED·DB지연·M5잔여/M7–M10 전체 수용은 남는다.
+
 ADR0114/V39–V40 완료 이력 DB복원: 실제 혼합39개071615Z-bc6e1d21·기존45테이블/97그룹
 업그레이드072406Z-9a812199 PASS/소유정리다. 원래checkpoint5·공동grant3을 보존하고
 새heartbeat/활성경로를 만들지 않으며 두Result 뒤에만 후속작업을 한 번 준비한다.

@@ -2,6 +2,12 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+Remote Result 복구 시험의 잠금 측정에서 전후45테이블 검증 시간을 분리했다.
+수정 전080049Z-1fb43882 재현FAIL, 동일 실제DB·조회지연 조건의15개080254Z-e1553fb3 PASS다.
+[근거](docs/evidence/m9-recovery-lock-measurement.md). 선행e15e705 CI37279044604는
+storage복구시험FAIL/새배포생략이며 실제 원격 실패원인 해결은 아직 판정하지 않는다.
+후속CI와 VD STREAM RUNNER_FAILED·DB지연·M5잔여/M7–M10 전체 수용을 계속 진행한다.
+
 ADR0114/V39–V40: 독립 STREAM 완료 문서와 모든 checkpoint receipt를 격리 DB에
 반영한다. 실제 혼합39개071615Z-bc6e1d21·기존45테이블/97그룹 업그레이드 보존
 072406Z-9a812199 PASS/소유정리다. [근거](docs/evidence/m9-stream-completion-recovery.md).
