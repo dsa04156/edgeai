@@ -58,6 +58,9 @@ def main():
     def passed(name):report['cases'].append(name);print('PASS: '+name,flush=True)
     def call(arguments,document=None):
         response=subprocess.run(kube.command+arguments,input=None if document is None else json.dumps(document).encode(),capture_output=True,timeout=30)
+        if response.returncode:
+            with private_file(work/('kubernetes-failure-'+uuid.uuid4().hex+'.log')) as log:
+                log.write(response.stdout+response.stderr)
         assert response.returncode==0,'Owned Kubernetes operation failed; credentials suppressed'
         return json.loads(response.stdout) if response.stdout.strip() else None
     def create(document):return call(['create','-f','-','-o','json'],document)

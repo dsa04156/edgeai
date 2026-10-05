@@ -33,7 +33,7 @@ def catalog_query():
         for key,table in names.items())+')'
 
 
-def checkpoint_object(store,manifest,cp):
+def checkpoint_object(store,manifest,cp,terminal=True):
     from edgeai_runner import stream_checkpoint as codec
     if (not 0<cp['bytes']<=codec.MAX_BYTES or cp['object_key']!='tasks/'+cp['task_id']+'/attempts/'+cp['attempt_id']+'/stream-checkpoint/'+cp['sha256']):
         raise Blocked('Sealed checkpoint size or key is outside the original task scope')
@@ -56,7 +56,7 @@ def checkpoint_object(store,manifest,cp):
         'stateSha256':hashlib.sha256(state).hexdigest(),'stateBytes':len(state)}
     if (summary!=cp['summary_json'] or value['serial']!=cp['serial'] or value['revision']!=cp['state_revision'] or
             value['executionSha256']!=cp['execution_sha256'] or
-            any(not row['ended'] or row['received']<1 or row['received']!=row['committed'] for row in value['routes'])):
+            terminal and any(not row['ended'] or row['received']<1 or row['received']!=row['committed'] for row in value['routes'])):
         raise Blocked('Checkpoint does not preserve the recorded terminal computation')
     return {'checkpointId':cp['id'],**item}
 

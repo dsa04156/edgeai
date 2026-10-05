@@ -209,3 +209,11 @@ checkpoint API·그룹 완료 허가·각 Result와 독립 백업/복원을 연�
 검증한다. Device END·경로·배정/readiness는 fixture이며 상속 finalizer와의 결합은 별도다.
 백업에 없는 완료 허가·실행,
 전역 writer/API 차단·종합 활성화와 새 CI/배포는 잔여이며 전체 M9 완료가 아니다.
+
+## 완료 그룹 체크포인트 선행 이력
+
+[ADR0111](adr/0111-stream-completion-checkpoint-history.md)은 완료 객체를 발행하기 전에
+원래 terminal checkpoint와 그 선행 행의 ID/시각/previous/handover 참조를 별도 S3 receipt로
+보존한다. V38은 기존 발행 완료 그룹도 보완 대상으로 잡는다. 독립 백업 reader의 성공은
+누락 상태의 DB 복원이나 실행 재개 권한을 뜻하지 않는다. 시작 허가/실행 계약·producer/broker
+차단 대조와 원자적 DB 반영·종합 활성화는 후속 수용 범위다.

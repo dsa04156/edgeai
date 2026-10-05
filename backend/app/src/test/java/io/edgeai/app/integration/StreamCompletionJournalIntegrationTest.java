@@ -54,7 +54,7 @@ class StreamCompletionJournalIntegrationTest {
         admin=MinioClient.builder().endpoint(required("EDGEAI_STORAGE_URL")).credentials(required("EDGEAI_MINIO_USER"),required("EDGEAI_MINIO_PASSWORD")).region("us-east-1").build();
         admin.makeBucket(MakeBucketArgs.builder().bucket(BUCKET).build());
         admin.setBucketVersioning(SetBucketVersioningArgs.builder().bucket(BUCKET).config(new VersioningConfiguration(VersioningConfiguration.Status.ENABLED,null,null,null)).build());
-        jdbc.update("UPDATE edgeai.stream_completion_publication SET completed=true,lease_owner=NULL,lease_until=NULL WHERE namespace=?",BUCKET);
+        jdbc.update("UPDATE edgeai.stream_completion_publication SET completed=true,checkpoint_history_completed=true,lease_owner=NULL,lease_until=NULL WHERE namespace=?",BUCKET);
     }
     @AfterEach void cleanupStorage()throws Exception{
         try{for(var v:versions(""))admin.removeObject(RemoveObjectArgs.builder().bucket(BUCKET).object(v.getKey()).versionId(v.getValue()).build());
@@ -167,6 +167,61 @@ class StreamCompletionJournalIntegrationTest {
             for(var future:futures)future.get(30,TimeUnit.SECONDS);
         }assertThat(versions(a.objectKey())).hasSize(1);assertThat(journal(a)).isEqualTo(json.decode(a.documentJson()));
     }
+    @Test void completeAncestryRetainsOriginalReceiptsAndCanonicalTimesAcrossConnectionTimezones()throws Exception{
+        var f=fixture();assigned(f);var previous=checkpoint(f,"source",3,true);
+        var terminal=checkpoint(f,"source",3,false);complete(f,"source",terminal);
+        complete(f,"sink",checkpoint(f,"sink",3,false));deviceComplete(f,0,3);var a=authority(f);
+        var history=publications.checkpointHistory(a.id());assertThat(history).hasSize(3);
+        assertThat(history.stream().map(StreamCheckpointAuthority::id)).contains(previous.id(),terminal.id());
+        for(var zone:List.of("UTC","Asia/Seoul","America/New_York"))tx(()->{
+            jdbc.execute("SET LOCAL TIME ZONE '"+zone+"'");assertThat(publications.checkpointHistory(a.id())).isEqualTo(history);return null;
+        });
+        publisher.publish(a.id());
+        for(var cp:history){
+            assertThat(versions(cp.objectKey())).hasSize(1);
+            try(var in=admin.getObject(GetObjectArgs.builder().bucket(BUCKET).object(cp.objectKey()).build())){
+                assertThat(json.decode(new String(in.readAllBytes(),StandardCharsets.UTF_8))).isEqualTo(json.decode(cp.documentJson()));
+            }
+            var row=(Map<?,?>)((Map<?,?>)json.decode(cp.documentJson())).get("checkpoint");
+            assertThat(row.get("created_at").toString()).endsWith("Z");
+            assertThat(cp.documentJson()).doesNotContain("claim_nonce","password","stateBase64","X-Amz");
+        }
+        assertThat(journal(a)).isEqualTo(json.decode(a.documentJson()));
+    }
+    @Test void partialAncestryWriteFailureCannotPublishCompletionAndRetryPreservesEarlierVersions()throws Exception{
+        var a=authority(sealed());var history=publications.checkpointHistory(a.id());
+        var count=new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(call->{if(count.incrementAndGet()==2)throw new ArtifactStoreUnavailableException();return call.callRealMethod();}).when(storage).retainCheckpoint(any());
+        assertThatThrownBy(()->publisher.publish(a.id())).isInstanceOf(ArtifactStoreUnavailableException.class);
+        var before=versions(history.getFirst().objectKey());assertThat(before).hasSize(1);
+        assertThat(versions(a.objectKey())).isEmpty();assertThat(published(a)).isFalse();
+        doCallRealMethod().when(storage).retainCheckpoint(any());publisher.publish(a.id());
+        assertThat(versions(history.getFirst().objectKey())).isEqualTo(before);
+        for(var cp:history)assertThat(versions(cp.objectKey())).hasSize(1);
+        assertThat(versions(a.objectKey())).hasSize(1);
+    }
+    @Test void conflictingCheckpointReceiptCannotBeOverwrittenOrAuthorizeCompletion()throws Exception{
+        var a=authority(sealed());var cp=publications.checkpointHistory(a.id()).getFirst();
+        for(var invalid:List.of(cp.documentJson()+" {}",cp.documentJson().replaceFirst("\\{","{\"id\":\""+cp.id()+"\","),
+                cp.documentJson().replace("\"sha256\":", "\"unexpected\":true,\"sha256\":"))){
+            byte[] bytes=invalid.getBytes(StandardCharsets.UTF_8);
+            try(var input=new java.io.ByteArrayInputStream(bytes)){admin.putObject(PutObjectArgs.builder().bucket(BUCKET).object(cp.objectKey())
+                .stream(input,(long)bytes.length,-1L).contentType("application/vnd.edgeai.stream-checkpoint-authority+json").build());}
+            var before=versions(cp.objectKey());assertThatThrownBy(()->publisher.publish(a.id())).isInstanceOf(ArtifactVerificationException.class);
+            assertThat(versions(cp.objectKey())).isEqualTo(before);assertThat(versions(a.objectKey())).isEmpty();
+        }
+    }
+    @Test void previouslyCompletedGroupsAreLeasedForAncestryWithoutChangingOriginalGrant()throws Exception{
+        var a=authority(sealed());storage.retainCompletion(a);
+        var original=versions(a.objectKey());jdbc.update("UPDATE edgeai.stream_completion_publication SET completed=true WHERE id=?",a.id());
+        assertThat(publicationWorker(publisher,Instant.now()).publishOne()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT checkpoint_history_completed FROM edgeai.stream_completion_publication WHERE id=?",Boolean.class,a.id())).isTrue();
+        assertThat(versions(a.objectKey())).isEqualTo(original);assertThat(authorityById(a.id())).isEqualTo(a);
+        for(var cp:publications.checkpointHistory(a.id()))assertThat(versions(cp.objectKey())).hasSize(1);
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.stream_completion_publication SET checkpoint_history_completed=false WHERE id=?",a.id()))
+            .isInstanceOf(DataIntegrityViolationException.class);
+    }
+    private StreamCompletionAuthority authorityById(UUID id){return publications.find(id).orElseThrow();}
     @Test void cancellationDuringPublicationCannotIssueFinalizationResponse()throws Exception{
         var f=sealed();authenticate(f);var a=authority(f);var p=f.principals().get("source");
         doAnswer(call->{call.callRealMethod();runs.cancelRun(f.run(),"{}");return null;}).when(storage).retainCompletion(any());
@@ -229,7 +284,9 @@ class StreamCompletionJournalIntegrationTest {
             post(client,base+"/commit",body(p,"outputs",List.of(committed)),headers(p),503);
         }
         verify(storage,never()).download(any());verify(storage,never()).upload(any());verify(storage,never()).verify(any(),any());
-        assertThat(versions("")).isEmpty();assertThat(runtimes.result(f.tasks().get("source").id())).isEmpty();
+        assertThat(versions("").stream().map(Map.Entry::getKey)).containsExactlyInAnyOrderElementsOf(
+            publications.checkpointHistory(authority(f).id()).stream().map(StreamCheckpointAuthority::objectKey).toList());
+        assertThat(versions(authority(f).objectKey())).isEmpty();assertThat(runtimes.result(f.tasks().get("source").id())).isEmpty();
     }
     @Test void suspendedVersioningRefusesPublicationUntilStorageIsRestored()throws Exception{
         var a=authority(sealed());

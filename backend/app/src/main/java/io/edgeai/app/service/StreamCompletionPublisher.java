@@ -16,15 +16,24 @@ public final class StreamCompletionPublisher {
     private static void outsideTransaction(){
         if(TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("Stream completion publication requires a completed database transaction");
     }
-    public void publish(UUID id){outsideTransaction();journal.retainCompletion(publications.find(id).orElseThrow());}
+    public void publish(UUID id){outsideTransaction();retain(publications.find(id).orElseThrow());}
+    private void retain(io.edgeai.domain.stream.StreamCompletionAuthority authority){
+        var history=publications.checkpointHistory(authority.id());
+        if(history.isEmpty())throw new ArtifactVerificationException("Original completion checkpoint history is missing");
+        for(var checkpoint:history){
+            if(!checkpoint.runId().equals(authority.runId()))throw new ArtifactVerificationException("Original checkpoint history belongs to another Run");
+            journal.retainCheckpoint(checkpoint);
+        }
+        journal.retainCompletion(authority);
+    }
     public void forAttempt(UUID attempt){
         outsideTransaction();
-        if(executions.granted(attempt).isPresent())journal.retainCompletion(publications.forAttempt(attempt)
+        if(executions.granted(attempt).isPresent())retain(publications.forAttempt(attempt)
             .orElseThrow(()->new ArtifactVerificationException("Original complete stream barrier is not publishable")));
     }
     public void forGeneration(UUID generation){
         outsideTransaction();
-        if(executions.device(generation).filter(c->c.grantedAt()!=null).isPresent())journal.retainCompletion(publications.forGeneration(generation)
+        if(executions.device(generation).filter(c->c.grantedAt()!=null).isPresent())retain(publications.forGeneration(generation)
             .orElseThrow(()->new ArtifactVerificationException("Original complete stream barrier is not publishable")));
     }
 }

@@ -1,6 +1,20 @@
 # 진행 상태
 
 [STATUS]
+ADR0111/V38 완료 그룹의 모든 선행 checkpoint receipt를 원래 ID/시각/고정 payload 참조와
+함께 독립 보존한다. 대상17개043141Z-613f4059·기존45테이블/완료그룹97개 upgrade
+043212Z-981c466a·실제 혼합 복구27개043302Z-4f2452a7 PASS/소유 정리다.
+[근거](docs/evidence/m9-stream-completion-checkpoint-history.md). 이전의 완료13개는
+3dc3b55에 로컬 커밋했고 V38 변경과 함께 아직 원격 push 전이다. 단위122개는 통과했으나
+STREAM15개는 기존 PG에서4개, 독립 PG에서2개 실패해 회귀 원인을 확인 중이다.
+V38 백업/격리 복원13개044956Z-6fce3102는 PASS/소유 정리다.
+선행931922a CI37256444752는 원시45개/전체kind/정리 PASS 뒤 이미지 발행 중90분 제한으로
+취소됐고 GitOps는 생략됐다. 전체 job120분 조정/개별 검사 제한 유지이며 새CI/배포는 후속이다.
+누락 grant·checkpoint·실행의 실제 DB 복원 CLI, 전역 writer/API 차단·종합 활성화·
+실모델/외부 계약 및 M0–M10 전체 수용은 아직 완료하지 않았다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0110/V37 STREAM 그룹 완료 허가의 독립 S3 보존을 구현했다. 대상13개·V36→V37
 기존44테이블 보존/그룹97개 backfill·독립 백업 참조9개·혼합 완료 백업 metadata5개·
 OpenAPI 계약을 통과했다. [근거](docs/evidence/m9-stream-completion-journal.md).

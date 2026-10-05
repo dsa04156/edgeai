@@ -481,7 +481,7 @@ class StreamSourceCompletionIntegrationTest {
         var runtime=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());
         var folder=Files.createDirectory(parent.resolve(name),PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
         Files.createDirectory(folder.resolve("work"));secret(folder,"claim",vdTokens.issue(runtime));secret(folder,"pod","source-vd-pod-proof");secret(folder,"supervisor.log","");
-        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("../../runner/vd.py").toAbsolutePath().normalize().toString());
+        var builder=new ProcessBuilder(System.getenv().getOrDefault("EDGEAI_STREAM_PYTHON","python3"),Path.of("src/test/fixtures/vd_stream_supervisor_probe.py").toAbsolutePath().normalize().toString());
         var env=builder.environment();env.keySet().removeIf(k->k.startsWith("EDGEAI_"));
         env.putAll(Map.of("EDGEAI_VD_ID",vd.id().toString(),"EDGEAI_VD_RUNTIME_ID",runtime.id().toString(),"EDGEAI_VD_GENERATION",Long.toString(runtime.generation()),
             "EDGEAI_POD_UID",runtime.podUid().toString(),"EDGEAI_CONTROL_PLANE_URL",apiTls.origin,"EDGEAI_VD_CLAIM_FILE",folder.resolve("claim").toString(),
@@ -650,8 +650,23 @@ class StreamSourceCompletionIntegrationTest {
             var runnerLog=folder.resolve("transferred-runner/runner.log");
             var runnerLines=Files.exists(runnerLog)?Files.readAllLines(runnerLog).stream()
                 .filter(s->s.matches("RUNNER_(WORKLOAD_START|RESULT_COMMITTED|FAILED [A-Z_]{1,80})")).toList():List.of();
-            System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,"offload",offload,
-                "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines,"transferredRunner",runnerLines)));
+            var diagnostic=new TreeMap<String,Object>(Map.of("phase",phase,"shared",shared,"recovery",recovery,"cancel",cancel,"offload",offload,
+                "runState",executions.run(run,false).orElseThrow().state(),"tasks",states,"driverAlive",driver.isAlive(),"driver",lines,"transferredRunner",runnerLines));
+            var childLogs=new TreeMap<String,Object>();
+            for(var supervisor:supervisors.values()){
+                var logs=supervisor.folder().resolve("runner-diagnostics");
+                if(!Files.isDirectory(logs))continue;
+                try(var paths=Files.list(logs)){
+                    for(var path:paths.sorted().limit(32).toList()){
+                        if(Files.size(path)>65536)continue;
+                        childLogs.put(supervisor.folder().getFileName()+"/"+path.getFileName(),Files.readAllLines(path).stream()
+                            .filter(s->s.length()<2000 && (s.matches("RUNNER_(WORKLOAD_START|RESULT_COMMITTED|FAILED [A-Z_]{1,80})")
+                                || s.matches("VD_RUNNER_DIAGNOSTIC [A-Za-z0-9_ .,:/\\\"{}\\[\\]<>-]+"))).limit(32).toList());
+                    }
+                }
+            }
+            diagnostic.put("supervisedRunners",childLogs);
+            System.out.println("VD_STREAM_DIAGNOSTIC "+json.canonical(diagnostic));
             throw error;
         }finally{
             if(transferredRunner!=null && transferredRunner.isAlive()){

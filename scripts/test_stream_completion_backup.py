@@ -58,3 +58,24 @@ def check(pg,database,receipt,bundle,client,pin,passed,report):
     assert pg.sql('SELECT to_jsonb(p)::text FROM edgeai.stream_completion_publication p',database)==before
     passed('a contradictory copied checkpoint version is refused even when the original checkpoint table remains valid')
     report.update(actualCompletionJournals=1,completionCheckpointReferences=2,independentCompletionBytesVerified=True)
+    from recovery_stream_completion_history import read_history,same_receipt
+    history=read_history(storage,manifest,doc,item['bucket'])
+    expected=json.loads(pg.sql('SELECT json_agg(to_jsonb(c) ORDER BY task_id,serial) FROM edgeai.stream_checkpoint c',database))
+    assert len(history['receipts'])==len(history['objects'])==len(history['payloads'])==len(expected)==5
+    assert all(same_receipt(a,b) for a,b in zip(history['receipts'],expected))
+    assert pg.sql('SELECT to_jsonb(p)::text FROM edgeai.stream_completion_publication p',database)==before
+    passed('independent receipt journals recover all five original checkpoint identities, times and ancestry after source removal')
+    ancestor=next(c for c in history['receipts'] if c['id'] not in {t['id'] for t in doc['checkpoints']})
+    missing_key='authority/stream-checkpoint/'+ancestor['id']+'.json'
+    missing=json.loads(json.dumps(manifest));missing['versions']=[v for v in missing['versions'] if v['key']!=missing_key]
+    try:read_history(storage,missing,doc,item['bucket'])
+    except Blocked as error:assert 'receipt is absent or ambiguous' in str(error)
+    else:raise AssertionError('Missing original checkpoint receipt was inferred from payload bytes')
+    assert pg.sql('SELECT to_jsonb(p)::text FROM edgeai.stream_completion_publication p',database)==before
+    passed('an absent original receipt blocks ancestry recovery even when every checkpoint payload exists')
+    changed=json.loads(json.dumps(doc));changed['checkpoints'][0]['created_at']='2000-01-01T00:00:00Z'
+    try:read_history(storage,manifest,changed,item['bucket'])
+    except Blocked as error:assert 'conflicts with the completion grant' in str(error)
+    else:raise AssertionError('Altered original checkpoint time was accepted')
+    passed('a changed terminal receipt time cannot replace the original independently preserved timestamp')
+    report.update(actualCheckpointAuthorityJournals=5,originalCheckpointAncestryVerified=True)

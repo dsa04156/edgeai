@@ -1,5 +1,6 @@
 package io.edgeai.domain.repository;
 import io.edgeai.domain.stream.StreamCompletionAuthority;
+import io.edgeai.domain.stream.StreamCheckpointAuthority;
 import java.time.*;
 import java.util.*;
 public interface StreamCompletionPublicationRepository {
@@ -7,6 +8,7 @@ public interface StreamCompletionPublicationRepository {
     Optional<StreamCompletionAuthority> find(UUID id);
     Optional<StreamCompletionAuthority> forAttempt(UUID attempt);
     Optional<StreamCompletionAuthority> forGeneration(UUID generation);
+    List<StreamCheckpointAuthority> checkpointHistory(UUID completion);
     Optional<Lease> lease(String namespace,UUID owner,Instant now,Duration duration);
     boolean finish(UUID id,UUID owner,Instant now);
     boolean defer(UUID id,UUID owner,Instant availableAt,Instant now);

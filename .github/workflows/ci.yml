@@ -273,9 +273,10 @@ jobs:
     needs: [scaffold, storage, runner]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    # Run 37234177387 reached the former 55m job cap at STREAM recovery case 42/44.
-    # Keep each acceptance command bounded; allow the full suite and cleanup to finish.
-    timeout-minutes: 90
+    # Run 37256444752 passed all 45 evidence reports and kind cleanup, then hit
+    # the 90m job cap during image publication. Include the added group recovery
+    # gate and publication margin; individual acceptance timeouts stay bounded.
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: write
