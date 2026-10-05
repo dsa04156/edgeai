@@ -19,8 +19,9 @@ from recovery_remote_storage import Storage, header
 Api=runpy.run_path(str(ROOT/'scripts/test-postgres-backup.py'))['Api']
 
 
-def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None):
-    runtime=context['runtime'];work=fixture.work
+def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None,offload_state='SUCCEEDED'):
+    runtime=context['runtime'];work=fixture.work/('api-'+runtime['id']);work.mkdir(mode=0o700)
+    role='start-claim-'+runtime['id']
     vd=runtime['runtime_kind']=='VD'
     def capture(arguments,document=None):
         result=subprocess.run(kube.command+arguments,input=None if document is None else json.dumps(document).encode(),
@@ -35,12 +36,12 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
     # node/TokenReview permissions of the bootstrapped control-plane account.
     labels={'app.kubernetes.io/part-of':'edgeai','app.kubernetes.io/managed-by':'edgeai-bootstrap'}
     create({'apiVersion':'rbac.authorization.k8s.io/v1','kind':'Role',
-        'metadata':{'namespace':namespace,'name':'start-claim-read','labels':labels},
+        'metadata':{'namespace':namespace,'name':role,'labels':labels},
         'rules':[{'apiGroups':[''],'resources':['pods','secrets'] if vd else ['pods'],'verbs':['get']},
                  {'apiGroups':['batch'],'resources':['jobs'],'verbs':['get']}]})
     create({'apiVersion':'rbac.authorization.k8s.io/v1','kind':'RoleBinding',
-        'metadata':{'namespace':namespace,'name':'start-claim-read','labels':labels},
-        'roleRef':{'apiGroup':'rbac.authorization.k8s.io','kind':'Role','name':'start-claim-read'},
+        'metadata':{'namespace':namespace,'name':role,'labels':labels},
+        'roleRef':{'apiGroup':'rbac.authorization.k8s.io','kind':'Role','name':role},
         'subjects':[{'kind':'ServiceAccount','namespace':'edgeai','name':'edgeai-control-plane'}]})
     server=capture(['config','view','--minify','-o','jsonpath={.clusters[0].cluster.server}']).decode().strip()
     ca=base64.b64decode(capture(['config','view','--minify','--raw','-o',
@@ -113,7 +114,7 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
             actual=json.loads(pg.sql('SELECT to_jsonb(r)-\'claim_nonce\' FROM edgeai.runtime_instance r WHERE id='+literal(runtime['id'])+'::uuid',database))
             assert actual['producer_pod_uid']==authority['podUid'] and actual['node_uid']==authority['nodeUid']
             if authority['offloadId'] is not None:
-                assert pg.sql('SELECT state FROM edgeai.task_offload WHERE id='+literal(authority['offloadId'])+'::uuid',database)=='SUCCEEDED'
+                assert pg.sql('SELECT state FROM edgeai.task_offload WHERE id='+literal(authority['offloadId'])+'::uuid',database)==offload_state
             fixture.api_claim_verified=True
             if on_admitted is not None:on_admitted(request,authority,store)
             return authority

@@ -38,17 +38,21 @@ def main():
     parser.add_argument('--runner-image');parser.add_argument('--runner-source')
     parser.add_argument('--offloads',action='store_true')
     parser.add_argument('--finalizers',action='store_true')
+    parser.add_argument('--runtime-start-journals',action='store_true')
+    parser.add_argument('--vd-peer',action='store_true')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-stream-workflows-test.json');args=parser.parse_args()
     token=uuid.uuid4().hex;operation=str(uuid.uuid4());namespace='edgeai-stream-recovery-'+token[:12]
     work=ROOT/'.tools'/('recovery-stream-workflows-'+token);work.mkdir(mode=0o700)
     pg=Postgres(args.transport,diagnostics=work/'postgres');kube=Kubernetes(args.context)
-    owned={};apis=[];fixtures=None;namespace_uid=None;source='edgeai_backup_stream_'+token
+    owned={};apis=[];fixtures=None;start_fixture=None;namespace_uid=None;source='edgeai_backup_stream_'+token
     report={'status':'RUNNING','scope':'restored-stream-workflow-tests','sourceMode':'SYNTHETIC',
         'runtimeBoundary':'ACTUAL_CONTAINERS_WITH_EXPLICIT_DATABASE_BINDING_FIXTURES','cases':[],'activated':False}
     def passed(name):report['cases'].append(name);print('PASS: '+name,flush=True)
     def call(command,document=None):
         result=subprocess.run(kube.command+command,input=None if document is None else json.dumps(document).encode(),capture_output=True,timeout=30)
+        if result.returncode:
+            with private_file(work/('kubernetes-failure-'+uuid.uuid4().hex+'.log')) as out:out.write(result.stderr)
         assert result.returncode==0,'Owned Kubernetes operation failed; response suppressed'
         return json.loads(result.stdout) if result.stdout.strip() else None
     def create(document):return call(['create','-f','-','-o','json'],document)
@@ -86,6 +90,8 @@ def main():
         fixtures.run(command);return json.loads((values.output/'workflows.json').read_text())
     code=1
     try:
+        assert not args.runtime_start_journals or args.offloads,'Group admission tests require --offloads'
+        assert not args.vd_peer or args.runtime_start_journals,'Mixed VD group tests require --runtime-start-journals'
         pin=json.loads((ROOT/'deploy/kubernetes/overlays/dev/release.json').read_text())
         assert bool(args.runner_image)==bool(args.runner_source)
         image=args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@'+pin['runnerDigest']
@@ -100,6 +106,7 @@ def main():
         pg.sql('CREATE DATABASE '+identifier(source),'postgres');remember(source)
         env={name:'true' for name in ('EDGEAI_RUNTIME_ENABLED','EDGEAI_STREAM_ENABLED','EDGEAI_STREAM_BINDINGS_ENABLED','EDGEAI_STREAM_RUNS_ENABLED')}
         env.update(EDGEAI_RUNTIME_WORKER_ENABLED='false',EDGEAI_RUNTIME_NAMESPACE=namespace,EDGEAI_STREAM_RECONCILE_MS='3600000',
+            EDGEAI_VD_ENABLED=str(args.vd_peer).lower(),
             EDGEAI_STREAM_BROKER_URL='tcp://127.0.0.1:1',EDGEAI_STREAM_BROKER_DIGEST=fixtures.digest,EDGEAI_STREAM_LEASE_SECONDS='120',
             EDGEAI_STREAM_PRINCIPAL_KEY_FILE=str(signing),EDGEAI_STREAM_DEVICE_KEY_FILE=str(signing),EDGEAI_RUNNER_KEY_FILE=str(signing),
             EDGEAI_STREAM_ADMIN_PASSWORD_FILE=str(signing),EDGEAI_STREAM_CA_FILE='',EDGEAI_KUBE_API_URL='http://127.0.0.1:1',
@@ -118,13 +125,22 @@ def main():
         version=api.request('POST','workflows/'+workflow['id']+'/versions',{'version':'1.0.0','tasks':[
             {'key':name,'serviceProfileVersionId':service['id'] if name!='child' else child['id'],'parameters':{}} for name in ('a','b','child')],
             'dependencies':[{'fromTask':name,'toTask':'child','fromPort':'result','toPort':name,'mode':'BATCH'} for name in ('a','b')]},201)
-        run=api.request('POST','workflow-runs',{'workflowVersionId':version['id'],'execution':{'mode':'AUTO'},'parameters':{},
+        placements={};vd_source=None
+        if args.vd_peer:
+            from test_vd_supervisor_fixture import supervisor,allocate
+            vd,vr,vd_pod=supervisor(api,pg,source,namespace,service['id'],create,kube,image,PROGRAM)
+            vd_source={'vd':vd['id'],'vd_runtime':vr,'pod':vd_pod['metadata']['uid'],'service':service['id']}
+            placements={'taskExecutions':{'b':{'mode':'VD','vdId':vd['id']}}}
+        run=api.request('POST','workflow-runs',{'workflowVersionId':version['id'],'execution':{'mode':'AUTO'},'parameters':{},**placements,
             'retry':{'maxAttempts':3,'backoffSeconds':1,'maxElapsedSeconds':3600,'retryOn':['WORKLOAD_FAILED']},
             'streamInputs':[{'deviceId':device['id'],'sourcePort':'samples','toTask':name,'toPort':'sample','maxPayloadBytes':4096} for name in ('a','b')]},201,str(uuid.uuid4()))
         run_id=run['id'];api.close()
         members=json.loads(pg.sql("SELECT jsonb_agg(jsonb_build_object('key',d.task_key,'task',t.id,'attempt',a.id,'runtime',r.id) ORDER BY d.task_key) "
             "FROM edgeai.task t JOIN edgeai.task_definition d ON d.id=t.definition_id JOIN edgeai.task_attempt a ON a.task_id=t.id "
             "JOIN edgeai.runtime_instance r ON r.attempt_id=a.id WHERE t.run_id="+literal(run_id)+'::uuid',source));assert len(members)==2
+        if vd_source is not None:
+            peer=next(m for m in members if m['key']=='b');peer.update(vd_source)
+            allocate(pg,source,peer['runtime'],peer['vd'],peer['vd_runtime'],vd_pod)
         child_id=pg.sql("SELECT t.id FROM edgeai.task t JOIN edgeai.task_definition d ON d.id=t.definition_id WHERE t.run_id="+literal(run_id)+"::uuid AND d.task_key='child'",source)
         pod_spec={'restartPolicy':'Never','terminationGracePeriodSeconds':30,'automountServiceAccountToken':False,
             'nodeSelector':{'kubernetes.io/arch':'amd64'},'securityContext':{'runAsNonRoot':True,'runAsUser':10001,'runAsGroup':10001},
@@ -132,6 +148,7 @@ def main():
                 'resources':{'requests':{'cpu':'10m','memory':'32Mi'},'limits':{'cpu':'100m','memory':'96Mi'}},
                 'securityContext':{'allowPrivilegeEscalation':False,'capabilities':{'drop':['ALL']}}}]}
         for member in members:
+            if member.get('vd'):continue
             labels={PART:'edgeai',MANAGER:RUNTIME,'edgeai.io/run-id':run_id,'edgeai.io/task-id':member['task'],
                 'edgeai.io/attempt-id':member['attempt'],'edgeai.io/epoch':'1'}
             member['job']=create({'apiVersion':'batch/v1','kind':'Job','metadata':{'namespace':namespace,'name':'edgeai-'+member['attempt'],'labels':labels},
@@ -145,9 +162,9 @@ def main():
             time.sleep(.3)
         else:raise AssertionError('Owned STREAM fixture children did not start')
         for member in members:
-            pod=next(p for p in pods if p['metadata']['labels']['edgeai.io/attempt-id']==member['attempt'])
+            pod=next(p for p in pods if (p['metadata']['uid']==member.get('pod') if member.get('vd') else p['metadata']['labels'].get('edgeai.io/attempt-id')==member['attempt']))
             node=kube.read('/api/v1/nodes/'+pod['spec']['nodeName']);member['pod']=pod['metadata']['uid']
-            pg.sql("UPDATE edgeai.runtime_instance SET observed_state='RUNNING',job_uid="+literal(member['job'])+'::uuid,producer_pod_uid='+literal(member['pod'])+
+            pg.sql("UPDATE edgeai.runtime_instance SET observed_state='RUNNING',job_uid="+('NULL' if member.get('vd') else literal(member['job'])+'::uuid')+',producer_pod_uid='+literal(member['pod'])+
                 '::uuid,node_uid='+literal(node['metadata']['uid'])+'::uuid,node_name='+literal(pod['spec']['nodeName'])+
                 ",expires_at=now()+interval '1 hour' WHERE id="+literal(member['runtime'])+'::uuid; '
                 "UPDATE edgeai.task_attempt SET state='RUNNING' WHERE id="+literal(member['attempt'])+'::uuid',source)
@@ -193,7 +210,14 @@ def main():
         offload_fixture=None
         if args.offloads:
             from test_recovery_stream_offloads import seed
-            offload_fixture=seed(pg,args.transport,work,running_backup,remember,drop,kube,create,namespace,pod_spec,members,run_id)
+            on_targets=None
+            if args.runtime_start_journals:
+                from test_recovery_runtime_starts import Fixture
+                from test_recovery_stream_starts import seed as seed_starts
+                start_fixture=Fixture('test_separate_credentials_identity_tls_pin_and_inspection')
+                start_fixture.setUp();start_fixture.configure(work,args.minio_binary)
+                on_targets=lambda db,targets,operation:seed_starts(start_fixture,pg,db,targets,operation,args.transport,kube,create,namespace,remember,drop)
+            offload_fixture=seed(pg,args.transport,work,running_backup,remember,drop,kube,create,namespace,pod_spec,members,run_id,on_targets)
         fixtures.seal_storage()
         drop(source);report['sourceDatabaseRemoved']=True
         stopped={'formatVersion':1,'scope':'observed-kubernetes-producer-termination','status':'RUNNING','namespace':namespace,
@@ -354,6 +378,9 @@ def main():
         if args.finalizers:
             from test_recovery_stream_finalizers import check as check_finalizers
             check_finalizers(pg,targets[-2:],members,options,apply,cli,fingerprints,refused,passed,report)
+        if start_fixture is not None:
+            from test_recovery_stream_starts import check as check_starts
+            check_starts(pg,start_fixture,options,fingerprints,refused,passed,report,args.transport)
         manifest=json.loads((fixtures.bundle/'manifest.json').read_text())
         assert len(manifest['versions'])==2
         for item in manifest['versions']:assert fixtures.client.digest('replica',item)==item['sha256']
@@ -369,6 +396,18 @@ def main():
     except Exception as error:
         report.update(failureType=type(error).__name__,failureFrames=[{'file':Path(f.filename).name,'line':f.lineno} for f in traceback.extract_tb(error.__traceback__)])
         with private_file(work/'failure.log','w') as out:traceback.print_exc(file=out)
+        if isinstance(error,TimeoutError):
+            # Capture waits while the owned API is still alive, before cleanup
+            # destroys the evidence. Do not log SQL text, credentials or headers.
+            for api in apis:
+                if api.process.poll() is None:
+                    with private_file(work/('timeout-threads-'+str(api.process.pid)+'.log')) as out:
+                        try:subprocess.run([str(ROOT/'.tools/jdk/bin/jcmd'),str(api.process.pid),'Thread.print'],stdout=out,stderr=out,timeout=10)
+                        except (OSError,subprocess.TimeoutExpired):pass
+            try:
+                waits=pg.sql("SELECT coalesce(jsonb_agg(jsonb_build_object('pid',pid,'state',state,'waitType',wait_event_type,'wait',wait_event,'blockedBy',pg_blocking_pids(pid))),'[]'::jsonb) FROM pg_stat_activity WHERE datname="+literal(source),'postgres')
+                durable_json(work/'timeout-database-waits.json',json.loads(waits))
+            except Exception:report['timeoutWaitCaptureFailed']=True
         print('FAIL: STREAM workflow recovery; private diagnostics retained',flush=True)
     finally:
         try:
@@ -377,6 +416,9 @@ def main():
             if fixtures:
                 report['ownedAuthorityProcessesStopped']=fixtures.close()
                 report['ownedAuthorityClientsStopped']=all(p.client._thread is None for p in fixtures.peers)
+            if start_fixture is not None:
+                start_fixture.doCleanups()
+                report['ownedStartAuthorityProcessesStopped']=all(p.poll() is not None for p in start_fixture.processes)
             for db in list(owned):drop(db)
             report['ownedDatabasesRemoved']=not owned
             if namespace_uid:

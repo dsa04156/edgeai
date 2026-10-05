@@ -15,6 +15,7 @@ import recovery_kubernetes_retire as producers
 import recovery_stream_retire as broker
 import recovery_stream_offloads as offloads
 import recovery_stream_finalizers as finalizers
+import recovery_runtime_starts as starts
 
 TABLES=tuple(dict.fromkeys((*producers.TABLES,*broker.TABLES,'workflow_version','task_dependency',
     'stream_finalization_recovery','remote_allocation')))
@@ -39,6 +40,8 @@ def query(run):
         "'offloads',(SELECT coalesce(jsonb_agg(to_jsonb(o)||jsonb_build_object('members',"
         "(SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY m.task_id),'[]'::jsonb) FROM edgeai.task_offload_member m WHERE m.operation_id=o.id)) ORDER BY o.id),'[]'::jsonb)"
         " FROM edgeai.task_offload o WHERE o.run_id="+rid+"),"
+        "'runtimeStartContexts',("+starts.context_query()+"),"
+        "'vdStartContexts',("+starts.context_query(vd=True)+"),"
         "'checkpoints',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.id),'[]'::jsonb) FROM edgeai.stream_checkpoint c WHERE c.run_id="+rid+"),"
         "'completions',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.attempt_id),'[]'::jsonb) FROM edgeai.stream_task_completion c JOIN edgeai.task_attempt a ON a.id=c.attempt_id JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id="+rid+"),"
         "'finalizationRecoveries',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.attempt_id),'[]'::jsonb) FROM edgeai.stream_finalization_recovery c JOIN edgeai.task_attempt a ON a.id=c.attempt_id JOIN edgeai.task t ON t.id=a.task_id WHERE t.run_id="+rid+"),"
@@ -88,6 +91,18 @@ def prepare(pg,args):
             catalog['configuration']['namespace']!=args.namespace):
         raise Blocked('Exact frozen STREAM Run configuration required')
     proven=set(retired['selected']['runtimes']+retired['selected']['vdTasks'])
+    # Keep the same original admissions observable after the operation is completed.
+    # Source admissions and unrelated Runs cannot authorize this group's successors.
+    targets={m['target_attempt_id'] for o in catalog['offloads'] for m in o['members'] if m['target_attempt_id']}
+    start_evidence={}
+    for kind,key in (('kubernetes','runtimeStartContexts'),('vd','vdStartContexts')):
+        contexts=[c for c in catalog[key] if c['runtime']['attempt_id'] in targets]
+        start_evidence[kind]=starts.observe({'runtimeStartContexts':contexts},args,retired,vd=kind=='vd')
+    if any(start_evidence.values()):
+        first,second=start_evidence.values()
+        if any(first[k]!=second[k] for k in ('storageBackupSha256','targetDeploymentId','bucket','namespaceUid','recoveryId')):
+            raise Blocked('STREAM member admissions must use the same fixed storage backup')
+    catalog['startEvidence']=start_evidence
     tasks={row['task']['id']:row for row in catalog['tasks']};groups=[];unresolved=[]
     for ids in components(catalog['routes']):
         members=[tasks[identity] for identity in ids];reason=None
@@ -140,6 +155,7 @@ def prepare(pg,args):
         'runId':args.run_id,'beforeGuard':catalog['guard'],'groups':groups,'unresolvedGroups':unresolved,
         'reconcileOffloads':getattr(args,'offloads',False),
         'reconcileFinalizers':getattr(args,'finalizers',False),
+        'runtimeStartEvidence':start_evidence,
         'producerEvidence':retired['evidence'],'provenRuntimes':sorted(proven),'brokerEvidence':authority['broker'],
         'recoveryId':args.recovery_id,'preparedAt':datetime.now(timezone.utc).isoformat()}
 
@@ -152,14 +168,22 @@ def transaction_sql(plan):
 DECLARE component jsonb; ids uuid[]; affected uuid[]:='{}'; victim edgeai.task;
  policy edgeai.workflow_run; group_cutoff timestamptz; terminal text; changed integer;
  expired integer:=0; cancelled integer:=0; skipped integer:=0; runs integer:=0; finalizer_expired integer:=0;
- operation edgeai.task_offload; offload_failures integer:=0; offload_cancellations integer:=0; attempt_failures integer:=0;
+ operation edgeai.task_offload; offload_failures integer:=0; offload_cancellations integer:=0; offload_completed integer:=0; attempt_failures integer:=0;
 BEGIN
 __IDENTITY__
 IF (__GUARD__) IS DISTINCT FROM __BEFORE__::jsonb THEN RAISE EXCEPTION 'STREAM component snapshot changed'; END IF;
 SELECT * INTO STRICT policy FROM edgeai.workflow_run WHERE id=__RUN__::uuid;
 FOR component IN SELECT * FROM jsonb_array_elements(__GROUPS__::jsonb) LOOP
  SELECT array_agg(value::uuid) INTO ids FROM jsonb_array_elements_text(component->'taskIds');
- IF component->>'action' IN ('CHECK_OFFLOAD_DRAIN','CHECK_OFFLOAD_START') THEN
+ IF component->>'action'='COMPLETE_STREAM_OFFLOAD' THEN
+  -- The complete group was admitted within its original deadline. Restore only
+  -- that fact; no producer claim, Attempt, Result or new execution is invented.
+  UPDATE edgeai.task_offload SET state='SUCCEEDED',updated_at=transaction_timestamp()
+   WHERE id=(component->>'operationId')::uuid AND state='STARTING';
+  GET DIAGNOSTICS changed=ROW_COUNT;
+  IF changed<>1 THEN RAISE EXCEPTION 'Original STREAM transfer changed'; END IF;
+  offload_completed:=offload_completed+changed;
+ ELSIF component->>'action'='CHECK_OFFLOAD_DRAIN' THEN
   SELECT * INTO STRICT operation FROM edgeai.task_offload WHERE id=(component->>'operationId')::uuid;
   group_cutoff:=CASE component->>'action' WHEN 'CHECK_OFFLOAD_DRAIN' THEN operation.drain_deadline ELSE operation.start_deadline END;
   IF transaction_timestamp()>=group_cutoff THEN
@@ -256,7 +280,7 @@ IF terminal IS NOT NULL AND jsonb_array_length(__GROUPS__::jsonb)>0 AND __UNRESO
 END IF;
 __IDENTITY__
 INSERT INTO stream_workflow_result VALUES(jsonb_build_object('retriesExpired',expired,'tasksCancelled',cancelled,
- 'tasksSkipped',skipped,'runsReconciled',runs,'offloadsFailed',offload_failures,'offloadsCancelled',offload_cancellations,
+ 'tasksSkipped',skipped,'runsReconciled',runs,'offloadsFailed',offload_failures,'offloadsCancelled',offload_cancellations,'offloadsCompleted',offload_completed,
  'attemptsFailed',attempt_failures,'finalizerRetriesExpired',finalizer_expired,'afterGuard',(__GUARD__)));
 END
 """
@@ -279,9 +303,9 @@ def apply(pg,args,plan):
         result=json.loads(pg.call('psql',['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-f','-'],args.database,source=source,timeout=45,reject_stderr=True))
     after=prepare(pg,args)
     if (after['beforeGuard']!=result['afterGuard'] or any(after[k]!=plan[k] for k in
-            ('targetDatabase','databaseOid','marker','restoreReportSha256','runId','producerEvidence','provenRuntimes','brokerEvidence','recoveryId'))):
+            ('targetDatabase','databaseOid','marker','restoreReportSha256','runId','producerEvidence','provenRuntimes','brokerEvidence','runtimeStartEvidence','recoveryId'))):
         raise Blocked('Post-commit STREAM recovery proof changed; retain quarantine')
-    counts=('retriesExpired','tasksCancelled','tasksSkipped','runsReconciled','offloadsFailed','offloadsCancelled','attemptsFailed')
+    counts=('retriesExpired','tasksCancelled','tasksSkipped','runsReconciled','offloadsFailed','offloadsCancelled','offloadsCompleted','attemptsFailed')
     report={k:plan[k] for k in ('formatVersion','scope','targetDatabase','databaseOid','runId','recoveryId')}
     report.update(status='RECORDED_STREAM_WORKFLOWS_RECONCILED',**result,databaseModified=any(result[k] for k in counts),
         unresolvedGroups=after['unresolvedGroups'],groups=after['groups'],activated=False,globalQuiescenceProven=False,
@@ -301,8 +325,11 @@ def main():
         parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--transport',choices=['native','compose'],default='native');parser.add_argument('--pg-bin',type=Path)
     parser.add_argument('--timeout',type=int,default=60);parser.add_argument('--unclaimed-jobs',action='store_true')
-    parser.add_argument('--offloads',action='store_true',help='Reconcile recorded STREAM group transfer cancellations and original deadline expiry')
+    parser.add_argument('--offloads',action='store_true',help='Reconcile recorded STREAM transfer cancellation, drain expiry and proven original group admission')
     parser.add_argument('--finalizers',action='store_true',help='Validate sealed finalizer retry history and reconcile its original task deadline expiry')
+    parser.add_argument('--runtime-start-backup',type=Path,help='Independent fixed-version S3 backup containing every original member admission')
+    parser.add_argument('--runtime-start-bucket',help='Original start-authority bucket; requires backup and TLS certificate pin')
+    parser.add_argument('--runtime-start-certificate-sha256',help='TLS leaf SHA-256 of the independent backup storage')
     args=parser.parse_args();args.output.mkdir(mode=0o700);submitted=False
     try:
         pg=Postgres(args.transport,args.pg_bin,diagnostics=args.output/'postgres');plan=prepare(pg,args);submitted=True

@@ -38,14 +38,32 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 최종 처리 권한을 받은 작업의 재시도는 아래 `--finalizers` 옵션으로 별도 검사한다.
 미기록 성공을 추정하거나 새 실행을 만들지 않는다.
 
-기록된 전환의 취소·기한 만료도 조정하려면 같은 명령에 `--offloads`를 추가한다. claim 전
+기록된 전환의 취소·drain 기한 만료도 조정하려면 같은 명령에 `--offloads`를 추가한다. claim 전
 target은 정확한 Job UID와 보존한 모든 자식의 실제 종료 증거가 있을 때 `--unclaimed-jobs`로
 검사한다. 전체 member/checkpoint/source/target/배치가 고정 계획과 맞아야 한다.
 `offloadsFailed`, `offloadsCancelled`, `attemptsFailed`가 추가 변경 수다. 기한 전 예약은
-그대로이며 종료 대기와 시작 대기의 원래 기한을 연장하지 않는다. 기한 만료는 선택한 Task만
-실패로 만들고 peer와 후속 작업을 건너뛴다. 전환 성공이나 새 시작 권한은 추정하지 않는다.
+그대로이며 원래 기한을 연장하지 않는다. drain 기한 만료는 선택한 Task만 실패로 만들고
+peer와 후속 작업을 건너뛴다. **STARTING은 시작 기록 없이 시간 초과로 확정하지 않는다.**
+백업 이후 실제로 시작했을 수 있으므로 시작 기한이 지나도 그룹 전체가 미해결로 남는다.
 겹친 Operation·부분 target·더 최신 Attempt·미기록 실패/완료는 미해결로 남긴다.
 [ADR0093](adr/0093-restored-stream-offloads.md)에 전환 복구 계약을 기록한다.
+
+원래 전환 시작을 복원하려면 `--offloads`와 다음 세 옵션을 함께 지정한다.
+
+```bash
+--runtime-start-backup /private/fixed-storage-backup \
+--runtime-start-bucket '<원래 authority bucket>' \
+--runtime-start-certificate-sha256 '<복제 저장소 TLS 인증서 SHA-256>'
+```
+
+저장소 접속 환경은 [시작 기록 복구](recovery-kubernetes-workflows.md)의 독립 backup
+설정을 사용한다. 각 target의 고정 S3 시작 기록을 원래 작업/입력·Pod/Node 종료 증거·전환
+신원/기한과 대조한다. VD target은 원래 배정/세대/세션/슬롯·설정·최초 supervisor lease까지
+대조한다. 모든 member가 원래 기한 안에 허가됐을 때만 Operation을 SUCCEEDED로 바꾸며
+`offloadsCompleted`에 반영한다. 원래 claim·Attempt·Result·checkpoint·경로·실행 배정은 보존한다.
+한 member라도 기록이 없으면 `STREAM_GROUP_START_AUTHORITY_NOT_PROVEN`이며, 옵션을 생략해도
+이 검사를 우회할 수 없다. 기록/실제 신원 불일치는 BLOCKED다. 성공 복원 후에도 작업 결과와
+실행 재개는 별도이며 격리를 유지한다. [ADR0108](adr/0108-restored-stream-starts.md)을 따른다.
 
 같은 `--offloads`는 이미 FAILED/TARGET_FAILED인 Operation의 실패한 target Attempt/runtime과
 peer 취소도 대조한다. 원래 실패 사유나 최신 Attempt가 맞지 않거나 retry queue가 남아 있으면

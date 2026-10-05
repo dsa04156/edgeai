@@ -207,7 +207,10 @@ def main():
         for index in range(len(targets)):
             a=options(index);a.output.mkdir(mode=0o700);retirement.apply(pg,a,retirement.prepare(pg,a))
         passed('actual TLS claim/TokenReview, signed upload and commit journals; distinct backup, sources removed, five DB restores and retained process termination')
-        store=Storage(SimpleNamespace(certificate_sha256=fixture.pin,timeout=120))
+        # Each independent fixture operation owns a bounded storage client. A
+        # suite-wide deadline can expire before the final mutation and falsely
+        # masquerade as rejection of a replacement that was never written.
+        def storage():return Storage(SimpleNamespace(certificate_sha256=fixture.pin,timeout=120))
         authority=observed['journal'];start=observed['start'];context=json.loads(pg.sql(results.context_query(args.vd_tasks),targets[0][0]))[0]
         assert results.validate(authority,start,context,proof,fixture.bucket,vd=args.vd_tasks)
         variants=[]
@@ -263,19 +266,19 @@ def main():
         assert fingerprints(db)==pristine
         passed('late cancellation, failed Attempt and cancelling Run cannot be overwritten')
         start_path='/'+fixture.bucket+'/'+start_prefix+runtime+'.json'
-        status,headers,_=store.request('DELETE',start_path);assert status==204
+        status,headers,_=storage().request('DELETE',start_path);assert status==204
         marker=header(headers,'x-amz-version-id')
         try:refuse_cli(options())
-        finally:assert store.request('DELETE',start_path,{'versionId':marker})[0]==204
+        finally:assert storage().request('DELETE',start_path,{'versionId':marker})[0]==204
         passed('committed Result without its readable original start authority is insufficient')
         refuse_cli(options(runtime_start_certificate_sha256='0'*64))
         passed('backup TLS certificate mismatch blocks the full CLI before writes')
         # A new version with identical bytes must never replace original authority.
         path='/'+fixture.bucket+'/'+result_prefix+runtime+'.json'
-        status,headers,_=store.request('PUT',path,body=observed['raw'],extra={'content-type':media_type});assert status==200
+        status,headers,_=storage().request('PUT',path,body=observed['raw'],extra={'content-type':media_type});assert status==200
         replacement=header(headers,'x-amz-version-id')
         try:refuse_cli(options())
-        finally:assert store.request('DELETE',path,{'versionId':replacement})[0]==204
+        finally:assert storage().request('DELETE',path,{'versionId':replacement})[0]==204
         passed('same-byte latest-version replacement blocks full CLI without DB writes')
         if args.vd_tasks:
             manifest_path=bundle/'manifest.json';original_manifest=manifest_path.read_bytes();manifest=json.loads(original_manifest)
@@ -284,26 +287,26 @@ def main():
                 for prefix,document,content_type in ((start_prefix,start,vd_starts.MEDIA_TYPE),(result_prefix,authority,media_type)):
                     altered=json.dumps({**document,'allocationId':wrong_allocation}).encode()
                     key=prefix+runtime+'.json';object_path='/'+fixture.bucket+'/'+key
-                    status,headers,_=store.request('PUT',object_path,body=altered,extra={'content-type':content_type});assert status==200
+                    status,headers,_=storage().request('PUT',object_path,body=altered,extra={'content-type':content_type});assert status==200
                     replacement=header(headers,'x-amz-version-id');replacements.append((object_path,replacement))
                     for item in manifest['versions']:
                         if item['key']==key:item.update(versionId=replacement,bytes=len(altered),sha256=hashlib.sha256(altered).hexdigest())
                 manifest_path.write_text(json.dumps(manifest));refuse_cli(options())
             finally:
                 manifest_path.write_bytes(original_manifest)
-                for object_path,replacement in replacements:assert store.request('DELETE',object_path,{'versionId':replacement})[0]==204
+                for object_path,replacement in replacements:assert storage().request('DELETE',object_path,{'versionId':replacement})[0]==204
             passed('matching start/result for another allocation in the same Pod cannot substitute for recorded child ownership')
         # Captured duplicate JSON is a different invalid authority, even with a matching byte hash.
         manifest_path=bundle/'manifest.json';original_manifest=manifest_path.read_bytes();manifest=json.loads(original_manifest)
         bad=observed['raw'][:-1]+b',"apiVersion":"duplicate"}'
-        status,headers,_=store.request('PUT',path,body=bad,extra={'content-type':media_type});assert status==200
+        status,headers,_=storage().request('PUT',path,body=bad,extra={'content-type':media_type});assert status==200
         bad_version=header(headers,'x-amz-version-id')
         for item in manifest['versions']:
             if item['key']==result_prefix+runtime+'.json':item.update(versionId=bad_version,bytes=len(bad),sha256=hashlib.sha256(bad).hexdigest())
         manifest_path.write_text(json.dumps(manifest))
         try:refuse_cli(options())
         finally:
-            manifest_path.write_bytes(original_manifest);assert store.request('DELETE',path,{'versionId':bad_version})[0]==204
+            manifest_path.write_bytes(original_manifest);assert storage().request('DELETE',path,{'versionId':bad_version})[0]==204
         passed('duplicate-key journal rejected through pinned TLS storage and CLI')
         a=options();a.output.mkdir(mode=0o700);plan=results.prepare(pg,a)
         pg.sql("UPDATE edgeai.task SET updated_at=updated_at+interval '1 second' WHERE id="+q(child),db)
@@ -409,7 +412,7 @@ def main():
         def change_after_commit(tool,arguments,*positional,**kwargs):
             value=original_call(tool,arguments,*positional,**kwargs)
             if tool=='psql' and kwargs.get('source') is not None:
-                status,headers,_=store.request('PUT',path,body=observed['raw'],extra={'content-type':media_type});assert status==200
+                status,headers,_=storage().request('PUT',path,body=observed['raw'],extra={'content-type':media_type});assert status==200
                 new_version.append(header(headers,'x-amz-version-id'))
             return value
         try:
@@ -417,13 +420,14 @@ def main():
                 try:results.apply(pg,a,plan)
                 except Blocked:pass
                 else:raise AssertionError('Post-commit authority replacement accepted')
+            assert len(new_version)==1,'Post-commit test must replace one actual S3 version'
             assert pg.sql('SELECT id::text FROM edgeai.task_result',a.database)==authority['resultId'] and not (a.output/'results.json').exists()
         finally:
-            for version in new_version:assert store.request('DELETE',path,{'versionId':version})[0]==204
+            for version in new_version:assert storage().request('DELETE',path,{'versionId':version})[0]==204
         assert not cli(options(4))['databaseModified']
         passed('post-commit storage change blocks success report while keeping quarantine and committed original history')
         output=authority['outputs'][0];artifact_path='/'+fixture.bucket+'/'+output['objectKey']
-        assert store.request('DELETE',artifact_path,{'versionId':output['versionId']})[0]==204
+        assert storage().request('DELETE',artifact_path,{'versionId':output['versionId']})[0]==204
         refuse_cli(options())
         passed('missing fixed output version blocks even immutable-result replay; no latest-object fallback')
         report.update(originalResultIdPreserved=True,originalCommitTimePreserved=True,restoredDatabases=len(targets),

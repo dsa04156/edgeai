@@ -18,7 +18,7 @@ import recovery_stream_workflows as workflows
 def q(value):return literal(value)+'::uuid'
 
 
-def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,pod_spec,members,run_id):
+def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,pod_spec,members,run_id,on_targets=None):
     seed_db='edgeai_restore_stream_seed_'+uuid.uuid4().hex
     restoring=Postgres(transport,diagnostics=work/'offload-seed-restore');restore(restoring,running_backup,seed_db);remember(seed_db)
     selected=members[0];source_node=pg.sql('SELECT node_uid::text FROM edgeai.runtime_instance WHERE id='+q(selected['runtime']),seed_db)
@@ -32,9 +32,9 @@ def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,po
         ','.join(q(v) for v in (operation,selected['task'],run_id,selected['attempt'],node_id,str(uuid.uuid4())))+','+
         literal('sha256:'+'f'*64)+','+literal(namespace)+",'DRAINING',now()+interval '10 minutes',600,now(),now())",seed_db)
     for member in members:
-        pg.sql('INSERT INTO edgeai.task_offload_member(operation_id,run_id,task_id,source_attempt_id,checkpoint_id,target_node_id,excluded_node_names) VALUES ('+
+        pg.sql('INSERT INTO edgeai.task_offload_member(operation_id,run_id,task_id,source_attempt_id,checkpoint_id,target_node_id,target_vd_id,excluded_node_names) VALUES ('+
             ','.join(q(v) for v in (operation,run_id,member['task'],member['attempt'],member['checkpoint']))+','+
-            (q(node_id) if member is selected else 'NULL')+",'{}')",seed_db)
+            (q(node_id) if member is selected else 'NULL')+','+(q(member['vd']) if member.get('vd') and member is not selected else 'NULL')+",'{}')",seed_db)
     pg.sql("UPDATE edgeai.task_attempt SET state='OFFLOADED'; UPDATE edgeai.task SET state='OFFLOADING' WHERE id IN ("+
         ','.join(q(m['task']) for m in members)+"); UPDATE edgeai.runtime_instance SET desired_state='STOPPED',failure_reason='OFFLOADED'",seed_db)
     drain=work/'offload-drain-backup';backup(pg,seed_db,drain)
@@ -53,21 +53,36 @@ def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,po
         time.sleep(.2)
     else:raise AssertionError('Actual original STREAM transfer children did not terminate')
     pg.sql("UPDATE edgeai.runtime_instance SET observed_state='TERMINATED'; "
+        "UPDATE edgeai.vd_runtime SET desired_state='STOPPED',observed_state='TERMINATED'; "
+        "UPDATE edgeai.vd_runtime_binding SET closed_at=now(),closed_revision=opened_revision WHERE closed_at IS NULL; "
+        "UPDATE edgeai.vd_task_allocation SET closed_at=now(),close_reason='POD_GONE' WHERE closed_at IS NULL; "
         "UPDATE edgeai.runtime_command SET completed=true,lease_owner=NULL,lease_until=NULL; "
         "UPDATE edgeai.route_generation SET fenced_at=now(),fence_reason='REPLACED',updated_at=now(); "
         "UPDATE edgeai.route_generation SET closed_at=now(),updated_at=now()",seed_db)
     target_rows=[];created=pg.sql('SELECT now()::text',seed_db)
     for member in members:
         target={'task':member['task'],'attempt':str(uuid.uuid4()),'runtime':str(uuid.uuid4())};target_rows.append(target)
-        mode='NODE' if member is selected else 'AUTO';placement=q(node_id) if member is selected else 'NULL'
-        pg.sql('INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,created_at,updated_at) VALUES ('+
-            q(target['attempt'])+','+q(member['task'])+",2,2,'QUEUED',"+literal(mode)+','+placement+",'OFFLOAD',"+
+        mode='NODE' if member is selected else 'VD' if member.get('vd') else 'AUTO';placement=q(node_id) if member is selected else 'NULL'
+        if mode=='VD':target.update(vd=member['vd'],service=member['service'])
+        pg.sql('INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,vd_id,cause,created_at,updated_at) VALUES ('+
+            q(target['attempt'])+','+q(member['task'])+",2,2,'QUEUED',"+literal(mode)+','+placement+','+(q(target['vd']) if target.get('vd') else 'NULL')+",'OFFLOAD',"+
             literal(created)+'::timestamptz,'+literal(created)+'::timestamptz); UPDATE edgeai.task_offload_member SET target_attempt_id='+
             q(target['attempt'])+' WHERE operation_id='+q(operation)+' AND task_id='+q(member['task']),seed_db)
     pg.sql('UPDATE edgeai.task_offload SET target_attempt_id='+q(target_rows[0]['attempt'])+",state='STARTING',start_deadline="+
         literal(created)+"::timestamptz+interval '600 seconds',updated_at="+literal(created)+"::timestamptz WHERE id="+q(operation)+
         "; UPDATE edgeai.task SET state='READY' WHERE state='OFFLOADING'",seed_db)
     for i,target in enumerate(target_rows):
+        if target.get('vd'):
+            from test_vd_supervisor_fixture import supervisor,allocate
+            _,vr,pod=supervisor(None,pg,seed_db,namespace,target['service'],create,kube,
+                pod_spec['containers'][0]['image'],pod_spec['containers'][0]['command'][-1],vd={'id':target['vd']},generation=2)
+            target.update(vd_runtime=vr,pod=pod['metadata']['uid'])
+            pg.sql('INSERT INTO edgeai.runtime_instance(id,task_id,attempt_id,run_id,epoch,namespace,vd_id,claim_nonce,desired_state,observed_state,expires_at,created_at,updated_at) VALUES ('+
+                ','.join(q(target[k]) for k in ('runtime','task','attempt'))+','+q(run_id)+',2,'+literal(namespace)+','+q(target['vd'])+','+q(str(uuid.uuid4()))+
+                ",'RUNNING','PENDING',now()+interval '1 hour',now(),now()); UPDATE edgeai.task_attempt SET state='DISPATCHING' WHERE id="+q(target['attempt'])+
+                "; UPDATE edgeai.task SET state='RUNNING' WHERE id="+q(target['task']),seed_db)
+            allocate(pg,seed_db,target['runtime'],target['vd'],vr,pod)
+            continue
         spec=deepcopy(pod_spec)
         if i==0:spec['nodeName']=node_name
         labels={PART:'edgeai',MANAGER:RUNTIME,'edgeai.io/run-id':run_id,'edgeai.io/task-id':target['task'],
@@ -80,19 +95,21 @@ def seed(pg,transport,work,running_backup,remember,drop,kube,create,namespace,po
             q(target['job'])+','+q(str(uuid.uuid4()))+",'RUNNING','SUBMITTED',now(),now()); UPDATE edgeai.task_attempt SET state='DISPATCHING' WHERE id="+q(target['attempt']),seed_db)
     deadline=time.monotonic()+150
     while time.monotonic()<deadline:
-        current=[p for p in kube.items(namespace,'Pod')[0] if p['metadata']['labels'].get('edgeai.io/epoch')=='2']
+        current=[p for p in kube.items(namespace,'Pod')[0] if p['metadata']['labels'].get('edgeai.io/epoch')=='2' or
+            p['metadata']['uid'] in {t.get('pod') for t in target_rows if t.get('vd')}]
         if len(current)==2 and all(p.get('status',{}).get('phase')=='Running' for p in current) and all(subprocess.run(
                 kube.command+['-n',namespace,'exec',p['metadata']['name'],'--','python3','-c',
                 "from pathlib import Path;import os;os.kill(int(Path('/tmp/child-ready').read_text()),0)"],capture_output=True,timeout=15).returncode==0 for p in current):break
         time.sleep(.3)
     else:raise AssertionError('Actual STREAM transfer target parents and children did not start')
     for i,target in enumerate(target_rows):
-        pod=next(p for p in current if p['metadata']['labels']['edgeai.io/attempt-id']==target['attempt']);target['pod']=pod['metadata']['uid']
+        pod=next(p for p in current if (p['metadata']['uid']==target.get('pod') if target.get('vd') else p['metadata']['labels'].get('edgeai.io/attempt-id')==target['attempt']));target['pod']=pod['metadata']['uid']
         if i==0:
             actual_node=kube.read('/api/v1/nodes/'+pod['spec']['nodeName'])
             pg.sql("UPDATE edgeai.runtime_instance SET observed_state='RUNNING',producer_pod_uid="+q(target['pod'])+',node_uid='+
                 q(actual_node['metadata']['uid'])+',node_name='+literal(pod['spec']['nodeName'])+",expires_at=now()+interval '1 hour' WHERE id="+q(target['runtime'])+
                 "; UPDATE edgeai.task_attempt SET state='RUNNING' WHERE id="+q(target['attempt'])+"; UPDATE edgeai.task SET state='RUNNING' WHERE id="+q(target['task']),seed_db)
+    if on_targets is not None:on_targets(seed_db,target_rows,operation)
     starting=work/'offload-start-backup';backup(pg,seed_db,starting)
     targets={}
     for name,bundle in [('drain-pending',drain),('drain-expired',drain),('drain-cancel',drain),
@@ -112,7 +129,8 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
     def run(target,plan=None):return apply(target,plan,offloads=True,unclaimed_jobs=True)
     def command(target):return cli(target,offloads=True,unclaimed_jobs=True)
     missing=targets['start-missing']
-    pg.sql('UPDATE edgeai.runtime_instance SET job_uid=NULL WHERE id='+q(successors[1]['runtime']),missing[0])
+    unproven=successors[0] if successors[1].get('vd') else successors[1]
+    pg.sql("UPDATE edgeai.runtime_instance SET job_uid=NULL,producer_pod_uid=NULL,node_uid=NULL,node_name=NULL,observed_state='SUBMITTED' WHERE id="+q(unproven['runtime']),missing[0])
     for name,target in targets.items():
         values=opts(target);values.output.mkdir(mode=0o700);producers.apply(pg,values,producers.prepare(pg,values))
         values=opts(target);values.output.mkdir(mode=0o700);routes.apply(pg,values,routes.prepare(pg,values))
@@ -128,12 +146,13 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
     passed('stream-transfer-history-pins-two-checkpoints-and-starts-two-real-successors-after-both-original-children-end')
     for name in ('drain-pending','start-pending'):
         target=targets[name];before=fingerprints(target[0]);result=command(target)
-        assert not result['databaseModified'] and not result['unresolvedGroups'] and fingerprints(target[0])==before
-    passed('both-pending-stream-transfer-phases-preserve-original-targets-budgets-and-checkpoints-without-new-attempts')
+        assert not result['databaseModified'] and fingerprints(target[0])==before
+        assert (not result['unresolvedGroups']) if name=='drain-pending' else result['unresolvedGroups'][0]['reason']=='STREAM_GROUP_START_AUTHORITY_NOT_PROVEN'
+    passed('pending-drain-preserves-budget-and-starting-without-original-admissions-stays-unresolved')
     before=fingerprints(missing[0]);result=command(missing)
     assert not result['databaseModified'] and result['unresolvedGroups'] and fingerprints(missing[0])==before
     passed('one-unrecorded-starting-producer-keeps-the-entire-stream-transfer-unresolved')
-    pg.sql('UPDATE edgeai.runtime_instance SET job_uid='+q(successors[1]['job'])+' WHERE id='+q(successors[1]['runtime']),missing[0])
+    pg.sql('UPDATE edgeai.runtime_instance SET job_uid='+q(unproven['job'])+' WHERE id='+q(unproven['runtime']),missing[0])
     values=opts(missing);values.output.mkdir(mode=0o700);producers.apply(pg,values,producers.prepare(pg,values))
     pending=targets['start-pending'];before=fingerprints(pending[0])
     pg.sql("UPDATE edgeai.task_offload SET start_deadline=start_deadline+interval '1 second'",pending[0])
@@ -144,8 +163,8 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
     target=targets['start-missing'];m=successors[1]
     pg.sql("UPDATE edgeai.task_attempt SET state='FAILED' WHERE id="+q(m['attempt'])+
         "; UPDATE edgeai.runtime_instance SET failure_reason='WORKLOAD_FAILED' WHERE id="+q(m['runtime'])+
-        '; INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,cause,created_at,updated_at) VALUES ('+
-        q(str(uuid.uuid4()))+','+q(m['task'])+",3,3,'QUEUED','AUTO','RETRY',now(),now())",target[0])
+        '; INSERT INTO edgeai.task_attempt SELECT (jsonb_populate_record(NULL::edgeai.task_attempt,to_jsonb(a)||'+
+        literal(json.dumps({'id':str(uuid.uuid4()),'number':3,'epoch':3,'cause':'RETRY','state':'QUEUED'}))+'::jsonb)).* FROM edgeai.task_attempt a WHERE id='+q(m['attempt']),target[0])
     before=fingerprints(target[0]);result=command(target);assert not result['databaseModified'] and fingerprints(target[0])==before
     assert result['unresolvedGroups'][0]['reason']=='NEWER_STREAM_TRANSFER_ATTEMPT_RECORDED'
     passed('newer-stream-attempt-remains-untouched-by-old-transfer-recovery')
@@ -167,12 +186,15 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
         pg.sql("UPDATE edgeai.task_offload SET created_at=created_at-interval '20 minutes',drain_deadline=drain_deadline-interval '20 minutes',"
             "start_deadline=start_deadline-interval '20 minutes',updated_at=updated_at-interval '20 minutes'; "
             "UPDATE edgeai.task_attempt SET created_at=created_at-interval '20 minutes',updated_at=updated_at-interval '20 minutes' WHERE cause='OFFLOAD'",target[0])
-    expired=targets['start-expired'];before=fingerprints(expired[0]);transaction=workflows.transaction_sql
+    expired=targets['drain-expired'];before=fingerprints(expired[0]);transaction=workflows.transaction_sql
     with patch.object(workflows,'transaction_sql',side_effect=lambda p:transaction(p).replace('SET CONSTRAINTS ALL IMMEDIATE;','SELECT 1/0; SET CONSTRAINTS ALL IMMEDIATE;')):
         refused(lambda:run(expired),RuntimeError)
     assert fingerprints(expired[0])==before
-    passed('actual-late-sql-error-rolls-back-stream-operation-target-failure-peer-and-batch-descendant-together')
-    for name,reason in [('drain-expired','SOURCE_DRAIN_TIMEOUT'),('start-expired','TARGET_START_TIMEOUT')]:
+    passed('actual-late-sql-error-rolls-back-stream-drain-operation-failure-peer-and-batch-descendant-together')
+    target=targets['start-expired'];before=fingerprints(target[0]);result=command(target)
+    assert not result['databaseModified'] and fingerprints(target[0])==before
+    assert result['unresolvedGroups'][0]['reason']=='STREAM_GROUP_START_AUTHORITY_NOT_PROVEN'
+    for name,reason in [('drain-expired','SOURCE_DRAIN_TIMEOUT')]:
         target=targets[name];before=fingerprints(target[0]);frozen=frozen_operation(target[0]);result=command(target)
         assert result['offloadsFailed']==1 and result['tasksSkipped']==2 and result['runsReconciled']==1
         assert result['attemptsFailed']==int(name.startswith('start')) and result['retriesExpired']==0
@@ -183,7 +205,7 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
         assert pg.sql('SELECT count(*) FROM edgeai.task_retry',target[0])=='0'
         assert frozen_operation(target[0])==frozen
         assert not command(target)['databaseModified'] and fingerprints(target[0])==after
-    passed('original-drain-and-start-timeouts-fail-only-the-selected-task-and-skip-peer-and-child-with-no-retry-or-new-attempt')
+    passed('original-drain-timeout-reconciles-but-expired-start-without-admission-proof-never-invents-failure')
     for name in ('drain-cancel','start-cancel'):
         target=targets[name]
         pg.sql("UPDATE edgeai.task_offload SET state='CANCELLING',updated_at=now(); UPDATE edgeai.workflow_run SET state='CANCELLING'; "
@@ -210,7 +232,7 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
         assert pg.sql('SELECT count(*) FROM edgeai.task_offload_member',target[0])=='2'
         assert pg.sql('SELECT count(*) FROM edgeai.stream_checkpoint',target[0])=='2'
     report.update(streamOffloadCases=True,streamOffloadRestoredDatabases=len(targets),streamOffloadIntermediateRestores=1,
-        streamOffloadsFailed=2,streamOffloadsCancelled=2,streamOffloadSourcesPreserved=2,streamOffloadCheckpointsPreserved=2,
-        streamOffloadMemberPlansPreserved=2,streamOffloadPendingOperations=2,streamOffloadUnprovenOperations=1,
+        streamOffloadsFailed=1,streamOffloadsCancelled=2,streamOffloadSourcesPreserved=2,streamOffloadCheckpointsPreserved=2,
+        streamOffloadMemberPlansPreserved=2,streamOffloadPendingOperations=1,streamOffloadUnprovenOperations=3,
         streamSuccessorContainers=2,streamOffloadFullSourceHistoryPreserved=True,
         sourceProcessesEndedBeforeSuccessors=fixture['sourceProcessesEndedBeforeSuccessors'])

@@ -103,7 +103,8 @@ fanout의 원자성·checkpoint2/고정version2 보존·잠금/원복/응답 유
 우회 처리를 재현·수정했다. 기한 전 예약·최종 처리 중인 그룹·활성 전환은 보존하며 새 실행은
 만들지 않는다. STREAM 전환/최종 처리 복구·외부 시작 권한·종합 재가동 수용은 남는다.
 ADR0093은 같은 명령의 `--offloads`로 기록된 전환 취소와 원래 drain/start 기한 만료를
-조정한다. 실제29개에서 source2→target2 종료·복원DB13개·checkpoint/배치/기한 보존과
+조정했다. STARTING 만료 추론은 아래 ADR0108에서 원래 시작 허가 대조로 대체했다.
+당시29개에서 source2→target2 종료·복원DB13개·checkpoint/배치/기한 보존과
 원복/응답 유실을 확인했다. VD/자동 전환의 복원 종단·기록된 target 실패·전환 성공의 시작
 권한·finalization·새 자격/종합 활성화는 여전히 남는다.
 ADR0094는 [기록된 STREAM target 실패](evidence/m9-recorded-stream-target-failures.md)의
@@ -177,3 +178,11 @@ ADR0107은 [VD BATCH 결과 복원](recovery-vd-results.md)을 연결한다. 실
 복원 DB5개·새24개에서 경쟁/원복/응답 유실·무변경 재실행·타38테이블/소유 정리를 확인했다.
 [근거](evidence/m9-recovery-vd-results.md). STREAM·진행 중 VD 전환의 시작 허가 소비,
 전역 writer/API 차단과 종합 활성화는 남으며 전체 M9 수용 완료가 아니다.
+
+ADR0108의 [STREAM 원래 그룹 시작 복원](evidence/m9-recovery-stream-starts.md)은 NODE/VD
+전체 member의 독립 시작 기록·원래 전환/배정/기한과 실제 종료를 대조한다. 실제 TLS API와
+Pod-bound TokenReview·원본 제거·복원DB21개를 포함한55개에서 전환1개/새claim·Result0,
+타43테이블·취소/더 최신 시도·경쟁/원복/응답 유실·소유 정리를 확인했다.
+기록 누락은 미해결이며 기한 만료 실패로 추론하지 않는다. 공유 fixture 회귀20/24/91개도
+PASS다. STREAM Result/finalization 권한, 백업 후 새 실행 발견/회수, 전역 writer/API 차단과
+종합 활성화·신규 원격 CI/배포는 남는다. BATCH 옵션 생략 시 기존 처리는 이 변경과 별도다.

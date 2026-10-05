@@ -19,7 +19,7 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
             "'checkpoints',(SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id) FROM edgeai.stream_checkpoint c))",db)
     for name,index in [('selected-failed',0),('peer-failed',1),('failure-unproven',0)]:
         db=targets[name][0];failed=successors[index];peer=successors[1-index]
-        reason='WORKLOAD_FAILED' if index==0 else 'JOB_FAILED'
+        reason='WORKLOAD_FAILED' if index==0 or failed.get('vd') else 'JOB_FAILED'
         # RuntimeLifecycleService.recordFailure atomically marks the operation TARGET_FAILED,
         # fails this member, cancels its connected peers/downstream, and never retries a transfer.
         pg.sql("BEGIN; UPDATE edgeai.task_offload SET state='FAILED',failure_reason='TARGET_FAILED',updated_at=now(); "
@@ -88,8 +88,9 @@ def check(pg,fixture,options,apply,cli,fingerprints,refused,passed,report):
         result=command(target);assert not result['databaseModified'] and not result['unresolvedGroups'] and fingerprints(target[0])==after
         passed('selected-target-failure-survives-commit-response-loss-without-retry-or-rewriting-history' if index==0 else
             'peer-target-failure-reconciles-the-selected-member-and-run-with-original-failure-operation-intact')
-    missing=targets['failure-unproven'];pg.sql('UPDATE edgeai.runtime_instance SET job_uid=NULL WHERE id='+q(successors[1]['runtime']),missing[0])
+    missing=targets['failure-unproven'];unproven=successors[0] if successors[1].get('vd') else successors[1]
+    pg.sql("UPDATE edgeai.runtime_instance SET job_uid=NULL,producer_pod_uid=NULL,node_uid=NULL,node_name=NULL,observed_state='SUBMITTED' WHERE id="+q(unproven['runtime']),missing[0])
     unchanged_unresolved(missing)
-    passed('one-unproven-peer-producer-blocks-completion-of-an-already-failed-stream-transfer')
+    passed('one-unproven-member-producer-blocks-completion-of-an-already-failed-stream-transfer')
     report.update(streamRecordedTargetFailureCases=7,streamRecordedTargetFailures=2,
         streamRecordedTargetFailureHistoriesPreserved=True,streamRecordedTargetFailureRetries=0)

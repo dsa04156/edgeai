@@ -2,6 +2,10 @@
 
 상태: 채택. 2026-10-05.
 
+후속 [ADR0108](0108-restored-stream-starts.md)이 아래 STARTING 기한 만료 추론을 대체한다.
+시작 기록이 없으면 실패를 만들지 않고 미해결로 남기며, 모든 member의 원래 허가가
+독립 기록으로 증명되면 전환 성공만 복원한다. 아래는 최초 구현과 당시 검증 기록이다.
+
 ADR0092의 그룹 복구에 `--offloads`를 추가한다. 실행 중이던 전환을 복구할 때 원래
 Operation과 task_offload_member의 전체 그룹·source/target Attempt·checkpoint·배치·기한을
 검사한다. 실제 Kubernetes 종료와 원본 broker 차단은 전후에 다시 관측하며34개 테이블

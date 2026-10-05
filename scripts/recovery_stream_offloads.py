@@ -98,6 +98,17 @@ def classify(catalog,ids,members):
     elif operation['state']=='STARTING' and states<= {'READY','RUNNING'} and all(
             r['attempts'][0]['state'] in ('QUEUED','DISPATCHING','RUNNING') and all(
                 runtime['failure_reason'] is None for runtime in r['runtimes'] if runtime['attempt_id']==r['attempts'][0]['id'])
-            for r in members):action='CHECK_OFFLOAD_START'
+            for r in members):
+        if any(r['task']['cancellation_reason'] is not None for r in members):
+            raise Blocked('STREAM admission conflicts with a recorded cancellation reason')
+        for row in members:
+            runtime=next(r for r in row['runtimes'] if r['attempt_id']==row['attempts'][0]['id'])
+            kind={'KUBERNETES':'kubernetes','VD':'vd'}.get(runtime['runtime_kind'])
+            evidence=catalog['startEvidence'].get(kind)
+            record=None if evidence is None else evidence['records'].get(runtime['id'])
+            if record is None:return None,'STREAM_GROUP_START_AUTHORITY_NOT_PROVEN'
+            if record['authority']['offloadId']!=operation['id']:
+                raise Blocked('STREAM member admission belongs to another transfer')
+        action='COMPLETE_STREAM_OFFLOAD'
     else:return None,'STREAM_TRANSFER_OUTCOME_REQUIRES_SEPARATE_RECOVERY'
     return {'taskIds':ids,'action':action,'operationId':operation['id']},None
