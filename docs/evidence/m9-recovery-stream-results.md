@@ -86,3 +86,7 @@ PASS다. index는 `851e46156fc9232723aa062daae9a2d4840af093fc9c8a7c8bcb646f9f5a3
 기록된 상속 finalizer와 혼합 다중 member의 전체 CLI 수용, 백업 이후 누락된 완료 허가·
 알려지지 않은 실행 복구, 전역 writer/API 차단·종합 활성화·실제 모델/외부 계약과
 M0–M10 전체 완료는 남는다.
+
+후속 [상속 finalizer 결과 복원 시험](m9-recovery-stream-finalizer-results.md)에서 단일 STREAM
+작업의 두 후속 재시도와 원래 grant/checkpoint를 Kubernetes35개/VD39개 전체 CLI로
+검증했다. 혼합 다중 member와 종합 활성화 등 나머지 범위는 계속 남는다.

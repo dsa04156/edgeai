@@ -44,11 +44,13 @@ def main():
     parser.add_argument('--context',required=True)
     parser.add_argument('--vd-tasks',action='store_true')
     parser.add_argument('--stream-results',action='store_true')
+    parser.add_argument('--finalizer-retries',action='store_true',help='Exercise two inherited finalizer successors (requires --stream-results)')
     parser.add_argument('--transport',choices=('native','compose'),default='native')
     parser.add_argument('--runner-image');parser.add_argument('--runner-source')
     parser.add_argument('--minio-binary',type=Path,default=ROOT/'.tools/minio')
     parser.add_argument('--report',type=Path,default=ROOT/'.tools/recovery-kubernetes-results-test.json')
     args=parser.parse_args();token=uuid.uuid4().hex
+    if args.finalizer_retries and not args.stream_results:parser.error('--finalizer-retries requires --stream-results')
     kind='VD' if args.vd_tasks else 'Kubernetes'
     start_prefix='authority/vd-task-start/' if args.vd_tasks else 'authority/runtime-start/'
     result_prefix='authority/vd-task-result/' if args.vd_tasks else 'authority/runtime-result/'
@@ -148,6 +150,8 @@ def main():
             {'key':'child','serviceProfileVersionId':child_profile['id'],'parameters':{}}],
             'dependencies':[{'fromTask':'root','toTask':'child','fromPort':'output','toPort':'input','mode':'BATCH'}]},201)
         run_fields=stream.public_input(api) if stream else {}
+        if args.finalizer_retries:
+            run_fields['retry']={'maxAttempts':3,'backoffSeconds':1,'maxElapsedSeconds':3600,'retryOn':['STORAGE_FAILED']}
         if args.vd_tasks:
             from test_vd_result_fixture import seed
             run,attempt,child,runtime,pod=seed(api,Api,pg,source,work,namespace,parent['id'],v['id'],create,kube,image,PROGRAM,
@@ -168,31 +172,31 @@ def main():
             pg.sql("UPDATE edgeai.task SET state='RUNNING' WHERE id="+q(attempt['task_id'])+
                 "; UPDATE edgeai.task_attempt SET state='DISPATCHING' WHERE id="+q(attempt['id'])+
                 "; UPDATE edgeai.workflow_run SET state='RUNNING' WHERE id="+q(run['id']),source)
-            labels={PART:'edgeai',MANAGER:RUNTIME,'edgeai.io/run-id':run['id'],'edgeai.io/task-id':attempt['task_id'],
-                'edgeai.io/attempt-id':attempt['id'],'edgeai.io/epoch':'1'}
-            job=create({'apiVersion':'batch/v1','kind':'Job','metadata':{'namespace':namespace,'name':job_name,'labels':labels},
-                'spec':{'backoffLimit':0,'parallelism':1,'completions':1,'template':{'metadata':{'labels':labels},'spec':{
-                    'restartPolicy':'Never','terminationGracePeriodSeconds':30,'automountServiceAccountToken':False,
-                    'nodeSelector':{'kubernetes.io/arch':'amd64'},'securityContext':{'runAsNonRoot':True,'runAsUser':10001,'runAsGroup':10001},
-                    'containers':[{'name':'runner','image':image,'command':['python3','-B','-c',PROGRAM],
-                        'resources':{'requests':{'cpu':'10m','memory':'32Mi'},'limits':{'cpu':'100m','memory':'96Mi'}},
-                        'securityContext':{'allowPrivilegeEscalation':False,'capabilities':{'drop':['ALL']}}}]}}}})
-            deadline=time.monotonic()+150
-            while time.monotonic()<deadline:
-                pods=kube.items(namespace,'Pod')[0]
-                if len(pods)==1 and pods[0].get('status',{}).get('phase')=='Running':
-                    response=subprocess.run(kube.command+['-n',namespace,'exec',pods[0]['metadata']['name'],'-c','runner','--','python3','-c',
-                        "from pathlib import Path;import os;os.kill(int(Path('/tmp/child-ready').read_text()),0)"],capture_output=True,timeout=15)
-                    if response.returncode==0:break
-                time.sleep(.3)
-            else:raise AssertionError('Owned real producer did not become ready')
-            pod=pods[0]
-            pg.sql("UPDATE edgeai.runtime_instance SET observed_state='SUBMITTED',job_uid="+q(job['metadata']['uid'])+' WHERE id='+q(runtime),source)
+            from test_stream_finalizer_fixture import job
+            pod=job(pg,source,namespace,run['id'],attempt,runtime,create,kube,image,PROGRAM)
         api.close();backup(pg,source,work/'before-claim')
-        context=json.loads(pg.sql(starts.context_query(args.vd_tasks),source))[0]
+        def current_context(query):return next(c for c in json.loads(pg.sql(query,source)) if c['runtime']['id']==runtime)
+        if args.finalizer_retries:
+            from test_stream_finalizer_fixture import inherited,stop_predecessor,successor
+            for step in range(2):
+                def fail_finalizer(request,authority,store):
+                    if step==0:stream.seal(pg,source,runtime,parent['id'],fixture.bucket,store,request,authority)
+                    else:inherited(request,stream,authority,fixture.tls)
+                    reply=request('fail',{'reason':'STORAGE_FAILED'},200)
+                    assert reply['state']=='FAILED'
+                admit(fixture,pg,source,current_context(starts.context_query(args.vd_tasks)),pod,kube,create,namespace,
+                    on_admitted=fail_finalizer,api_env=stream.env)
+                stop_predecessor(pg,source,kube,namespace,pod,runtime)
+                if step==0:
+                    stream.fence(attempt['id'])
+                    pg.sql('UPDATE edgeai.route_generation SET closed_at=now(),updated_at=now() WHERE id='+q(stream.generation)+' AND fenced_at IS NOT NULL AND closed_at IS NULL',source)
+                attempt,runtime,pod=successor(pg,source,namespace,run['id'],attempt,runtime,stream,create,kube,image,PROGRAM,parent['id'])
+            passed('two actual authenticated storage failures and terminated predecessor children retain one original grant across explicit retry bindings')
+        context=current_context(starts.context_query(args.vd_tasks))
         observed={}
         def commit(request,authority,store):
-            if stream:stream.seal(pg,source,runtime,parent['id'],fixture.bucket,store,request,authority)
+            if args.finalizer_retries:inherited(request,stream,authority,fixture.tls)
+            elif stream:stream.seal(pg,source,runtime,parent['id'],fixture.bucket,store,request,authority)
             backup(pg,source,work/'after-claim')
             raw=b'{"value":6,"sourceMode":"SYNTHETIC"}'
             content={'port':'output','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'mediaType':'application/json'}
@@ -221,10 +225,10 @@ def main():
         stopped={'formatVersion':1,'scope':'observed-kubernetes-producer-termination','status':'RUNNING','namespace':namespace,
             'namespaceUid':namespace_uid,'recoveryId':operation,'activated':False,'globalQuiescenceProven':False,'fenceRetained':False}
         Stop(kube,namespace,namespace_uid,operation,90).execute(stopped);durable_json(work/'termination-report.json',stopped)
-        proof=stopped['terminatedPods'][0]
+        proof=next(p for p in stopped['terminatedPods'] if p['uid']==observed['start']['podUid'])
         assert proof['kind']=='ALL_CONTAINERS_TERMINATED'
-        assert kube.items(namespace,'Pod')[0][0]['status']['containerStatuses'][0]['state']['terminated']['message']=='CHILD_REAPED'
-        if stream:stream.fence(attempt['id'])
+        assert all(p['status']['containerStatuses'][0]['state']['terminated']['message']=='CHILD_REAPED' for p in kube.items(namespace,'Pod')[0])
+        if stream and not args.finalizer_retries:stream.fence(attempt['id'])
         for index in range(len(targets)):
             a=options(index);a.output.mkdir(mode=0o700);retirement.apply(pg,a,retirement.prepare(pg,a))
             if stream:
@@ -235,7 +239,8 @@ def main():
         # suite-wide deadline can expire before the final mutation and falsely
         # masquerade as rejection of a replacement that was never written.
         def storage():return Storage(SimpleNamespace(certificate_sha256=fixture.pin,timeout=120))
-        authority=observed['journal'];start=observed['start'];context=json.loads(pg.sql(results.context_query(args.vd_tasks),targets[0][0]))[0]
+        authority=observed['journal'];start=observed['start']
+        context=next(c for c in json.loads(pg.sql(results.context_query(args.vd_tasks),targets[0][0])) if c['runtime']['id']==runtime)
         assert results.validate(authority,start,context,proof,fixture.bucket,vd=args.vd_tasks)
         variants=[]
         for field in ('resultId','runtimeId','runId','taskId','attemptId','vdRuntimeId' if args.vd_tasks else 'jobUid','podUid','nodeUid'):
@@ -253,8 +258,8 @@ def main():
         passed('original source digest matches; 23 identity, time, manifest and output authority mutations rejected')
         if args.vd_tasks:
             import recovery_vd_starts as vd_starts
-            start_context=json.loads(pg.sql(starts.context_query(True),targets[0][0]))[0]
-            retained_pod=kube.items(namespace,'Pod')[0][0]
+            start_context=next(c for c in json.loads(pg.sql(starts.context_query(True),targets[0][0])) if c['runtime']['id']==runtime)
+            retained_pod=next(p for p in kube.items(namespace,'Pod')[0] if p['metadata']['uid']==start['podUid'])
             node=kube.read('/api/v1/nodes/'+retained_pod['spec']['nodeName'])
             vd_starts.validate(start,start_context,retained_pod,node,proof,namespace)
             changes={'allocationId':str(uuid.uuid4()),'vdRuntimeId':str(uuid.uuid4()),'vdId':str(uuid.uuid4()),
@@ -284,6 +289,9 @@ def main():
         if stream:
             from test_stream_result_checks import check
             check(pg,stream,options,results,refuse_cli,fingerprints,passed,report)
+            if args.finalizer_retries:
+                from test_stream_finalizer_checks import check as inherited_check
+                inherited_check(pg,stream,options,results,refuse_cli,fingerprints,passed,report)
         # Restore each explicit state mutation and verify every original row hash.
         for table,column,value,row_id in [('task','state','CANCELLING',attempt['task_id']),
             ('task_attempt','state','FAILED',attempt['id']),('workflow_run','state','CANCELLING',run['id'])]:
@@ -394,7 +402,7 @@ def main():
         assert result['vd_runtime_id']==(authority['vdRuntimeId'] if args.vd_tasks else None)
         assert pg.sql('SELECT state FROM edgeai.task WHERE id='+q(child),db)=='READY'
         assert pg.sql('SELECT state FROM edgeai.task_attempt WHERE task_id='+q(child),db)=='QUEUED'
-        assert pg.sql('SELECT count(*) FROM edgeai.runtime_instance',db)=='1'
+        assert pg.sql('SELECT count(*) FROM edgeai.runtime_instance',db)==('3' if args.finalizer_retries else '1')
         allowed={'runtime_instance','task_result','result_artifact','task','task_attempt','runtime_result_publication'}
         after=fingerprints(db);assert all(after[k]==v for k,v in pristine.items() if k not in allowed)
         report['preservedOtherTables']=len(after)-len(allowed)
@@ -454,6 +462,9 @@ def main():
             for version in new_version:assert storage().request('DELETE',path,{'versionId':version})[0]==204
         assert not cli(options(4))['databaseModified']
         passed('post-commit storage change blocks success report while keeping quarantine and committed original history')
+        if args.finalizer_retries:
+            from test_stream_finalizer_checks import preserved
+            preserved(pg,stream,options,results,passed,report)
         output=authority['outputs'][0];artifact_path='/'+fixture.bucket+'/'+output['objectKey']
         assert storage().request('DELETE',artifact_path,{'versionId':output['versionId']})[0]==204
         refuse_cli(options())

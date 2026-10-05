@@ -398,6 +398,8 @@ jobs:
             .tools/kind-recovery-vd-results.json
             .tools/kind-recovery-stream-kubernetes-results.json
             .tools/kind-recovery-stream-vd-results.json
+            .tools/kind-recovery-stream-finalizer-kubernetes-results.json
+            .tools/kind-recovery-stream-finalizer-vd-results.json
             .tools/kind-recovery-stream-workflows.json
           include-hidden-files: true
           retention-days: 14

@@ -193,5 +193,9 @@ Kubernetes30개/VD34개에서 각각 복원DB6·원래 Result ID/시각·타38�
 유실·소유 정리를 확인했다. [근거](evidence/m9-recovery-stream-results.md).
 그룹 전체의 BATCH 부모가 확정됐을 때만 후속 member를 함께 준비시킨다. 같은 Run의
 별도 후속 runtime은 부모 완료 장벽에 포함하지 않고 기존 이력을 유지한다.
-상속 finalizer/혼합 다중 member의 전체 CLI 수용, 백업에 없는 완료 허가·실행,
+후속 [상속 finalizer 검증](evidence/m9-recovery-stream-finalizer-results.md)은 실제 실패2회·
+원래 시작 기록3개·완료 허가1개·종료 Pod3개를 연결했다. Kubernetes35개/VD39개에서
+원래 결과/실패 이력 보존·재시도 정책 모순 거절·응답 유실 후 무변경 재검사를 확인했다.
+재시도 배정/VD readiness는 명시적 fixture이며 자동 스케줄러 수용과 구분한다.
+혼합 다중 member의 전체 CLI 수용, 백업에 없는 완료 허가·실행,
 전역 writer/API 차단·종합 활성화와 새 CI/배포는 잔여이며 전체 M9 완료가 아니다.

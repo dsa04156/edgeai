@@ -36,7 +36,10 @@ SQL 직전과 commit 후에 실제 종료·broker·S3·DB를 다시 확인한다
 Kubernetes30개/VD34개와 기존 BATCH20/24·Remote15개, 최종123개 감사가 PASS다.
 검증 근거는 [STREAM 결과 복원 시험](../evidence/m9-recovery-stream-results.md)에 기록한다.
 실제 API로 원래 시작·완료 허가·Result를 생성하는 시험과 명시적 SQL 그룹 준비 fixture의
-범위를 구분한다. 상속 finalizer와 혼합 다중 member의 전체 CLI 수용 검증은 후속이다.
+범위를 구분한다. 후속 [상속 finalizer 검증](../evidence/m9-recovery-stream-finalizer-results.md)은
+실제 두 번의 실패·세 번의 시작 기록과 원래 완료 허가를 연결해 Kubernetes35개/VD39개
+전체 복원 CLI 시험을 통과했다. 재시도 배정과 VD readiness는 명시적 fixture다.
+혼합 다중 member의 전체 CLI 수용 검증은 후속이다.
 
 백업 이후 누락된 완료 허가/실행의 독립 복원, 전역 writer/API 차단과 전체 서비스 재개,
 실제 모델·외부 계약 및 M0–M10 전체 수용은 별도 잔여 작업이다.

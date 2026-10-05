@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 from pathlib import Path
+import re
 import runpy
 import secrets
 import socket
@@ -89,8 +90,25 @@ def admit(fixture,pg,database,context,pod,kube,create,namespace,on_admitted=None
         try:response=urllib.request.urlopen(request,context=fixture.tls,timeout=15)
         except urllib.error.HTTPError as error:response=error
         with response:
-            assert response.status==expected,'Actual TLS Runner '+path+' returned HTTP '+str(response.status)
             raw=response.read()
+            if response.status!=expected:
+                # Retain a bounded classification before cleanup, never tokens,
+                # arbitrary server messages or raw response bodies.
+                error_code=None
+                try:
+                    value=json.loads(raw)
+                    candidate=value.get('code') if isinstance(value,dict) else None
+                    if isinstance(candidate,str) and re.fullmatch('[A-Z_]{1,80}',candidate):error_code=candidate
+                except (ValueError,UnicodeError):pass
+                diagnostic={'endpoint':path,'expectedStatus':expected,'actualStatus':response.status,
+                    'responseBytes':len(raw),'errorCode':error_code}
+                try:
+                    current=kube.read('/api/v1/namespaces/'+namespace+'/pods/'+pod['metadata']['name'])
+                    diagnostic['pod']={'sameUid':current['metadata']['uid']==pod['metadata']['uid'],
+                        'phase':current.get('status',{}).get('phase'),'deleting':bool(current['metadata'].get('deletionTimestamp'))}
+                except Exception as error:diagnostic['podObservationError']=type(error).__name__
+                with private_file(work/'unexpected-response.json','w') as target:json.dump(diagnostic,target)
+            assert response.status==expected,'Actual TLS Runner '+path+' returned HTTP '+str(response.status)
             return json.loads(raw) if raw else None
     # The source storage is intentionally inspected with its own explicit identity.
     from unittest.mock import patch

@@ -27,6 +27,12 @@ namespace 종료 작업의 복구 ID는 같아야 한다. 결과 output은 새 �
 시각을 검증하고 원래 broker 차단을 다시 관측한다. 오래된 백업에 허가가 없으면 exit2다.
 Result만으로 빠진 허가를 추정하거나 계산을 다시 실행하지 않는다.
 
+최종 저장 재시도의 결과라면 `--runtime-id`에는 실제 결과를 확정한 후속 runtime을
+지정한다. 원래 grant까지 이어지는 모든 `stream_finalization_recovery` 기록과 실패
+사유·재시도 정책이 필요하다. 선행 실패 runtime의 Pod도 종료 증거를 위해 보존한다.
+결과의 실행 신원은 후속 Attempt, checkpoint와 완료 허가의 신원은 원래 Attempt다.
+명령은 이 연결을 검증하며 새 재시도나 완료 허가를 만들지 않는다.
+
 성공 시 exit0이며 `results.json` scope는 `restored-kubernetes-stream-result-commit` 또는
 `restored-vd-stream-result-commit`이다. `resultsCreated`, `childrenReadied`,
 `publicationsCompleted`, `activated:false`를 확인한다. 일부 결과만 선택할 수도 있지만
@@ -47,5 +53,10 @@ EDGEAI_STREAM_PYTHON=<고정 Paho 환경>/bin/python \
   --report .tools/new-stream-results.json
 ```
 
-`--vd-tasks`로 VD 경로를 검사한다. 현재 수용 범위와 미검증 항목은
+`--vd-tasks`로 VD 경로를 검사한다. 시험에 `--finalizer-retries`를 추가하면 원래 완료
+허가 뒤 두 번 실패한 후속 실행의 결과 복원을 검사한다. 이 옵션은 시험 명령 전용이며
+`--stream-results`가 필요하다. 자동 재시도 배정의 fixture 범위와 실제 API/복원 검증은
+[상속 finalizer 시험](evidence/m9-recovery-stream-finalizer-results.md)에 구분한다.
+
+현재 수용 범위와 미검증 항목은
 [시험 근거](evidence/m9-recovery-stream-results.md)와 [ADR0109](adr/0109-restored-stream-results.md)를 따른다.

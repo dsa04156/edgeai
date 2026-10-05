@@ -286,7 +286,9 @@ def main():
                 '--report', '.tools/kind-recovery-vd-results.json'], env=env, timeout=600)
             if result.returncode:
                 raise RuntimeError('kind restored VD Result acceptance failed')
-            for producer, flags in [('kubernetes', []), ('vd', ['--vd-tasks'])]:
+            for producer, flags in [('kubernetes', []), ('vd', ['--vd-tasks']),
+                    ('finalizer-kubernetes', ['--finalizer-retries']),
+                    ('finalizer-vd', ['--vd-tasks', '--finalizer-retries'])]:
                 result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-' + producer + '-results',
                     'bash', 'scripts/test-recovery-kubernetes-results.sh', '--context', context, '--transport', 'compose',
                     '--stream-results', *flags, '--minio-binary', '.tools/minio-recovery-tested',

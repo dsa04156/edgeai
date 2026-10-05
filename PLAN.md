@@ -2,6 +2,20 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+상속 finalizer 결과 복원을 실제 실패2회·시작 기록3개·종료 Pod3개에서 독립 백업·복원 CLI까지
+검증했다. Kubernetes35개021900Z-a9a73602/VD39개021504Z-64750523 PASS, 원래 grant와
+checkpoint·두 실패 이력·결과 ID/시각을 유지하며 상속12종/원래 정책4종 모순을 거절한다.
+기존 STREAM30/34·BATCH20/24도 PASS, 최종182개/소스 해시 감사023758Z-5ef4cd70 PASS다.
+[근거](docs/evidence/m9-recovery-stream-finalizer-results.md). 재시도 배정/VD readiness는 fixture이며
+초기 claim503 원인은 미확정이다. 새 두 CI gate를 연결했고 신규 원격 CI/배포는 후속이다.
+선행d764480 CI37250820250은7jobs/원시41개 감사 PASS. GitOps5ba6ccc 실제 이미지/Ready/
+ArgoSynced·기존10파일/PVC/HTTPS 보존과 배포V36 적용도 확인했다. aggregate health는
+Progressing이며 [근거](docs/evidence/m9-stream-start-ci.md)의 범위/초기 감사 오류를 유지한다.
+다음은 혼합 다중 member 결과 복구, 백업에 없는 완료 허가·실행, 전역 writer/API 차단과
+종합 활성화다. M5 잔여/M7–M10 전체 수용과 실제 모델·외부 계약을 포함한 원래 목표를 유지한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0109의 STREAM 결과 복원을 추가했다. 원래 연결 그룹의 완료 허가·고정 checkpoint
 bytes/실행 계약·경로/END와 현재 producer/broker 차단을 검증해 원래 Result를 반영한다.
 Kubernetes30개014427Z-a9a2630f/VD34개014427Z-4b52b8e4 PASS: 각각 복원DB6·타38테이블·

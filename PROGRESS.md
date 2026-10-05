@@ -1,6 +1,21 @@
 # 진행 상태
 
 [STATUS]
+상속 finalizer 결과 복원을 Kubernetes35개021900Z-a9a73602/VD39개021504Z-64750523에서
+검증했다. 실제 실패2회·시작 기록3개·종료 Pod3개와 원래 grant/checkpoint1개를 연결하고,
+상속12종/원래 정책4종 모순 거절·원래 결과/실패 이력·원복/응답 유실·소유 정리를 확인했다.
+기존 STREAM30/34·BATCH20/24도 같은 소스에서 PASS, 최종182개 감사023758Z-5ef4cd70 PASS.
+[근거](docs/evidence/m9-recovery-stream-finalizer-results.md). 재시도 배정/VD readiness는
+명시적 fixture다. 최초 fixture 오류2개와 초기 claim503 원인 미확정/후속 PASS를 구분한다.
+선행d764480 CI37250820250 7jobs/원시41개 감사023533Z-6e61b5e8 PASS.
+GitOps5ba6ccc 실제 이미지/Ready/ArgoSynced023304Z-fc338e78·기존10파일/PVC/HTTPS 보존
+023400Z-ed3013b9·배포V36 적용023830Z-e73ac5fc PASS. aggregate health는Progressing이다.
+[CI/배포 근거](docs/evidence/m9-stream-start-ci.md). 새 STREAM 결과/상속 finalizer의
+원격 CI·배포, 혼합그룹 전체 CLI·누락 완료 권한/실행·전역 writer/API 차단·종합 활성화와
+M0–M10 전체 목표는 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0109 STREAM 결과 복원 Kubernetes30개014427Z-a9a2630f/VD34개014427Z-4b52b8e4 PASS.
 원래 완료 허가·고정 checkpoint bytes/실행 계약·broker/producer 차단·복원DB6/타38테이블·
 원래 결과 ID/시각·후속 이력·경쟁/원복/COMMIT 응답 유실과 소유 정리를 확인했다.
