@@ -12,7 +12,7 @@ from storage_backup import Client, validate_manifest
 
 
 # A migration that adds another durable S3 reference must extend this inventory before acceptance.
-SUPPORTED_VERSIONS = {str(version) for version in range(1, 39)}
+SUPPORTED_VERSIONS = {str(version) for version in range(1, 41)}
 # V35 adds an outbox referring to existing immutable Results, without new fixed S3 references.
 # Start/Result authority journals are separate post-snapshot recovery evidence.
 # V36 extends the same outbox to VD Results; it adds no table or fixed S3 reference.
@@ -20,9 +20,13 @@ SUPPORTED_VERSIONS = {str(version) for version in range(1, 39)}
 # including copies that might contradict the original checkpoint table after a bad restore.
 # V38 adds an ancestry publication flag; its fixed S3 references remain the existing
 # immutable stream_checkpoint rows. New authority journals are separate recovery evidence.
+# V39 permits exact historical inserts only inside a marked restore transaction;
+# no table, artifact reference type or live runtime authority is added.
+# V40 skips invented heartbeat initialization for those already CLOSED inserts;
+# it changes no persisted reference shape or normal generation initialization.
 def supported_schema(migrations):
     versions={row['version'] for row in migrations}
-    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35,36,37,38))
+    return (any(versions=={str(v) for v in range(1,last+1)} and len(migrations)==last for last in (33,34,35,36,37,38,39,40))
             and all(row['success'] is True for row in migrations))
 INVENTORY_SQL = """
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
@@ -107,7 +111,7 @@ def verify(pg, client, database, restore_report_path, storage_bundle):
         raise ValueError('Restored database identity or read-only snapshot differs')
     migrations = inventory['migrations'] or []
     if not supported_schema(migrations):
-        raise Blocked('This verifier inventories the complete V33–V38 artifact reference schema; review other migration versions first')
+        raise Blocked('This verifier inventories the complete V33–V40 artifact reference schema; review other migration versions first')
     references = inventory['references']
     versions = {(item['bucket'],item['key'],item['versionId']):item for item in manifest['versions']}
     required = {}

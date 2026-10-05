@@ -8,8 +8,10 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](sou
 ADR0110의 [STREAM 완료 허가 보존](adr/0110-stream-completion-journal.md)을 추가한다.
 연결 그룹 전체의 원래 허가를 DB transaction과 독립 S3 기록에 보존하며, 저장 장애·
 응답 유실·재시작/producer 종료 뒤 재발행과 V37 기존 이력 보존을 검증한다.
-검증 수치는 [근거](evidence/m9-stream-completion-journal.md)를 따른다. 이 기록을 소비해
-백업에 없는 허가·checkpoint 선행 이력·실행을 복원하는 CLI와 종합 활성화는 남는다.
+검증 수치는 [근거](evidence/m9-stream-completion-journal.md)를 따른다.
+[ADR0114](adr/0114-restored-stream-completion-history.md)는 원래 실행 이력이 있는 V40
+격리 DB에 누락 허가와 checkpoint 선행 이력을 반영한다. 백업에 없는 실행 자체의 복원과
+전역 차단·종합 활성화는 남는다.
 
 | 요구 영역 | 현재 근거 | 남은 수용 |
 |---|---|---|
@@ -207,7 +209,7 @@ Kubernetes30개/VD34개에서 각각 복원DB6·원래 Result ID/시각·타38�
 checkpoint API·그룹 완료 허가·각 Result와 독립 백업/복원을 연결한다. 서로 다른 복원
 순서에서 후속 작업 대기·한 번만 준비, peer 증거 누락/경쟁·원복/응답 유실과 원래 이력을
 검증한다. Device END·경로·배정/readiness는 fixture이며 상속 finalizer와의 결합은 별도다.
-백업에 없는 완료 허가·실행,
+백업에 없는 실행 자체의 복원,
 전역 writer/API 차단·종합 활성화와 새 CI/배포는 잔여이며 전체 M9 완료가 아니다.
 
 ## 완료 그룹 체크포인트 선행 이력
@@ -215,5 +217,7 @@ checkpoint API·그룹 완료 허가·각 Result와 독립 백업/복원을 연�
 [ADR0111](adr/0111-stream-completion-checkpoint-history.md)은 완료 객체를 발행하기 전에
 원래 terminal checkpoint와 그 선행 행의 ID/시각/previous/handover 참조를 별도 S3 receipt로
 보존한다. V38은 기존 발행 완료 그룹도 보완 대상으로 잡는다. 독립 백업 reader의 성공은
-누락 상태의 DB 복원이나 실행 재개 권한을 뜻하지 않는다. 시작 허가/실행 계약·producer/broker
-차단 대조와 원자적 DB 반영·종합 활성화는 후속 수용 범위다.
+누락 상태의 DB 복원이나 실행 재개 권한을 뜻하지 않는다.
+[완료 이력 복원 CLI](recovery-stream-completions.md)는 시작 허가/실행 계약·producer/broker
+차단을 대조하고 원래 허가·checkpoint를 원자적으로 반영한다. 누락된 실행 및 선행 generation
+권한 복원, 종합 활성화는 후속 수용 범위다.

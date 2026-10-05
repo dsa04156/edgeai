@@ -188,8 +188,8 @@ def prepare(pg,args):
     if not args.runtime_id or len(set(args.runtime_id))!=len(args.runtime_id):raise Blocked('Select distinct restored runtime IDs explicitly')
     for rid in args.runtime_id:uid(rid)
     schema=database_inventory(pg,args.database,args.restore_report,retirement.CATALOG_SQL)
-    if {m['version'] for m in schema['migrations']} not in tuple({str(v) for v in range(1,last+1)} for last in (35,36,37,38)):
-        raise Blocked('Kubernetes Result recovery requires the reviewed V35–V38 publication schema')
+    if {m['version'] for m in schema['migrations']} not in tuple({str(v) for v in range(1,last+1)} for last in (35,36,37,38,39,40)):
+        raise Blocked('Kubernetes Result recovery requires the reviewed V35–V40 publication schema')
     if vd and '36' not in {m['version'] for m in schema['migrations']}:
         raise Blocked('VD Result recovery requires the reviewed V36 publication schema')
     retired=retirement.prepare(pg,args)

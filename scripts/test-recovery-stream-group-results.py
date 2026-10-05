@@ -121,6 +121,11 @@ def main():
         report.update(image=image,imageSourceRevision=revision,apiJarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         ns=create({'apiVersion':'v1','kind':'Namespace','metadata':{'name':namespace,
             'labels':{PART:'edgeai',MANAGER:'edgeai-bootstrap','edgeai.io/recovery-test':token}}});namespace_uid=ns['metadata']['uid']
+        # The namespace controller may not have provisioned this account yet.
+        # Prepare it explicitly within the newly owned test namespace; apply
+        # also handles the controller having created it between these calls.
+        call(['apply','-f','-','-o','json'],{'apiVersion':'v1','kind':'ServiceAccount',
+            'metadata':{'name':'default','namespace':namespace}})
         source='edgeai_backup_group_'+token;pg.sql('CREATE DATABASE '+identifier(source),'postgres');remember(source)
         stream=GroupFixture(work,args.minio_binary,namespace,operation);stream.env['EDGEAI_VD_ENABLED']='true'
         api=Api(source,work,extra_env=stream.env);apis.append(api)
@@ -161,7 +166,7 @@ def main():
         passed('actual NODE and VD claims, task-source checkpoint cursors and one atomic group completion grant precede both Result commits')
         storage_backup(client,[fixture.bucket],120);origin.terminate();origin.wait(15);shutil.rmtree(fixture.work/'origin-data');drop(source)
         report.update(sourceDatabaseRemoved=True,sourceStorageRemoved=True)
-        for snapshot in ('sealed','sealed','sealed','partial','committed','before-claim'):
+        for snapshot in ('sealed','sealed','sealed','partial','committed','before-claim','before-claim'):
             db='edgeai_restore_group_'+uuid.uuid4().hex
             restoring=Postgres(args.transport,diagnostics=work/('restore-'+uuid.uuid4().hex));restore(restoring,work/snapshot,db);remember(db)
             targets.append((db,restoring.directory/'restore-report.json'))
@@ -179,6 +184,14 @@ def main():
         check_completion_backup(pg,targets[0][0],targets[0][1],bundle,client,fixture.pin,passed,report)
         for key in members:refuse_cli(options(5,key))
         passed('neither member can invent an absent group completion grant from a before-claim backup')
+        from test_stream_completion_recovery import check as check_completion_recovery
+        check_completion_recovery(pg,options,fingerprints,passed,report)
+        child_state(targets[5][0],False)
+        assert cli(options(5,'root'))['resultsCreated']==1
+        child_state(targets[5][0],False)
+        assert cli(options(5,'peer'))['resultsCreated']==1
+        child_state(targets[5][0],True);originals(targets[5][0])
+        passed('restored missing completion history authorizes both original NODE/VD Results and releases the BATCH join exactly once')
         from test_stream_group_result_checks import check
         check(pg,options,members,stream,results,refuse_cli,fingerprints,passed,report)
         allowed={'task','task_attempt','task_result','result_artifact','runtime_result_publication'}

@@ -1,6 +1,17 @@
 # 진행 상태
 
 [STATUS]
+ADR0114/V39–V40 완료 이력 DB복원: 실제 혼합39개071615Z-bc6e1d21·기존45테이블/97그룹
+업그레이드072406Z-9a812199 PASS/소유정리다. 원래checkpoint5·공동grant3을 보존하고
+새heartbeat/활성경로를 만들지 않으며 두Result 뒤에만 후속작업을 한 번 준비한다.
+[근거](docs/evidence/m9-stream-completion-recovery.md). 일반PG232 PASS, 함께 실행한STREAM은
+연결풀대기1실패로 전체명령FAIL이다. 독립STREAM15개073126Z-b8cf730f PASS/참조22·소유정리;
+DB지연 근본원인은 미해결이다. 선행CI37270925730은Kubernetes검증FAIL/새배포생략이다.
+V40 백업/격리복원13개073407Z-093a44eb도 PASS/소유정리다.
+새복구 원격CI/배포·누락실행/선행generation 권한·전역차단/종합활성화 및 M0–M10 전체는 남는다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 Device driver의 초기조회·미저장 DATA/END 재시도10개062606Z-4fb0d151와 실제Spring15개
 062215Z-326c6a54 PASS/소유DB·MinIO 정리다. [근거](docs/evidence/m7-device-driver-retries.md).
 성공한 peer 샘플을 다시 보내지 않으며 SQLite COMMIT 직전 만료/rollback도 확인했다.

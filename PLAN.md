@@ -2,6 +2,18 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0114/V39–V40: 독립 STREAM 완료 문서와 모든 checkpoint receipt를 격리 DB에
+반영한다. 실제 혼합39개071615Z-bc6e1d21·기존45테이블/97그룹 업그레이드 보존
+072406Z-9a812199 PASS/소유정리다. [근거](docs/evidence/m9-stream-completion-recovery.md).
+일반PG232개는 통과했지만 함께 실행한STREAM15개 중1개가 연결풀5초 초과로 실패했다.
+같은코드의 독립STREAM15개073126Z-b8cf730f PASS는 근본원인 해결로 판정하지 않는다.
+V40 백업/격리복원13개073407Z-093a44eb도 PASS/소유정리다.
+선행3afc0f0 CI37270925730은 실제Kubernetes검증FAIL/GitOps생략이다.
+새복구 코드의 원격CI/배포·누락 실행/선행generation 권한 복원·전역writer/API차단·종합활성화와
+M5 잔여/M7–M10 실모델·외부계약·전체 수용을 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 Device 시험 driver가 미저장 DATA/END만 재시도하고 기존 peer heartbeat를 유지하도록
 수정했다. 실제 HTTPS/MQTT/SQLite10개062606Z-4fb0d151·Spring15개062215Z-326c6a54
 PASS/소유DB·MinIO 정리다. [근거](docs/evidence/m7-device-driver-retries.md).
