@@ -114,10 +114,17 @@ def execute(runner, assignment):
             except Exception:
                 # A peer may already have obtained the component's durable grant,
                 # after which route revocation can race this owner's next step.
-                # Re-read that exact grant; a local END or expiry never grants it.
-                if terminal is not None and finalization(min(1,runner.timeout())):
-                    break
-                raise
+                # A lost/delayed response must not turn that revocation into a
+                # failed result. Stop data-plane work and retain only the sealed
+                # intent while re-reading the exact authenticated grant. WAITING
+                # and transient errors never grant permission; the Runner's
+                # cancellation, identity and original deadline still apply.
+                if terminal is None:
+                    raise
+                session.close()
+                while not finalization(min(1,runner.timeout())):
+                    cancelled.wait(min(.1,runner.timeout()))
+                break
             cancelled.wait(.005)
     finally:
         session.close()

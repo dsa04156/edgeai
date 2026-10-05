@@ -2,6 +2,17 @@
 
 ## 활성 목표: M0–M10 전체 구현과 검증
 
+ADR0112: 그룹 완료로 route가 종료된 뒤 FINALIZE 응답이 지연돼도 봉인 상태를 유지하며
+현재 신원·취소·원래 기한 아래에서 정확한 허가를 다시 조회한다. 수정 전050405Z 재현FAIL,
+새5개 실제HTTPS/MQTT 경계/Runner111개/이미지 provenance8개 PASS다.
+전체MQTT102개는1실패/10오류, 실제Spring15개는그룹 재시도1실패로 전체회귀는 미해결이다.
+소유PG/MinIO 정리 및 initdb timeout 뒤 잔여프로세스0을 확인했다.
+[근거](docs/evidence/m7-stream-delayed-completion.md). 기한·fsync·권한 검사는 완화하지 않았다.
+V38 이력보존은88b16d7에 커밋했다. 새원격CI/배포·누락상태DB반영·전역writer차단·
+종합활성화·실모델/외부계약과 전체 M0–M10 수용을 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0111/V38: 완료 그룹의 terminal checkpoint부터 모든 previous/handover 이력을
 독립 S3 receipt로 보존한다. 대상17개043141Z-613f4059·V37→38 기존45테이블/완료그룹97개
 보존043212Z-981c466a·실제 혼합 복구27개043302Z-4f2452a7 PASS/소유 정리다.

@@ -34,7 +34,7 @@ class StreamExecutionTest(unittest.TestCase):
         self.recovery = 'NEW'; self.unavailable = 0
         self.hold_grant=False;self.granted=threading.Event();self.release_grant=threading.Event()
         self.finalized_calls=0;self.finalized_status=None;self.reject_during_download=False;self.swap_final_routes=False
-        self.checkpoint_actor=None
+        self.checkpoint_actor=None;self.complete_status=None
         self.telemetry=[];self.telemetry_status=200;self.metric_sequence=0
         profile = json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
         self.spec = profile['stream']; self.spec['command'] = [sys.executable,str(ROOT/'runner/examples/stream_sum.py')]
@@ -89,12 +89,15 @@ class StreamExecutionTest(unittest.TestCase):
                     # Concrete proof includes the final output ACK, not just input END.
                     if any(not r['ended'] or r['received']!=r['committed'] for r in latest['summary']['routes']):
                         return self.reply(409,{})
+                    if owner.complete_status:return self.reply(owner.complete_status,{})
                     if owner.unavailable:
                         owner.unavailable-=1;return self.reply(503,{})
                     if owner.finalize and owner.hold_grant:
                         owner.granted.set();owner.release_grant.wait(8)
-                    try:return self.reply(200,{'state':'FINALIZE' if owner.finalize else 'WAITING',
-                        'checkpointId':str(uuid.uuid4()) if owner.wrong_receipt else latest['id']})
+                    try:
+                        if owner.complete_status:return self.reply(owner.complete_status,{})
+                        return self.reply(200,{'state':'FINALIZE' if owner.finalize else 'WAITING',
+                            'checkpointId':str(uuid.uuid4()) if owner.wrong_receipt else latest['id']})
                     except (BrokenPipeError,ConnectionResetError,ssl.SSLEOFError):return
                 if operation=='uploads':
                     return self.reply(200,{'outputs':[{'port':'result','url':owner.api.url+'/artifact',
@@ -225,6 +228,54 @@ class StreamExecutionTest(unittest.TestCase):
         self.process.send_signal(signal.SIGTERM);self.finish(False)
         self.assertIsNone(self.artifact);self.assertFalse(self.commits)
         self.assertEqual('CANCELLED',self.failure)
+
+    def test_lost_grant_response_after_route_revocation_preserves_finalization_wait(self):
+        self.finalize=True;self.hold_grant=True;self.start();self.emit()
+        self.until(self.granted.is_set)
+        # A committed component grant closes data routes, while independent
+        # publication or a lost HTTP response can still delay FINALIZE delivery.
+        self.api.status=409
+        self.until(lambda:self.complete_calls>=3)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+        self.hold_grant=False;self.release_grant.set();self.finish(True)
+        self.assertEqual({'sum':14},json.loads(self.artifact));self.assertEqual(1,len(self.commits))
+
+    def pending_revoked_grant(self):
+        self.finalize=True;self.hold_grant=True;self.start();self.emit()
+        self.until(self.granted.is_set);self.api.status=409
+        self.until(lambda:self.complete_calls>=3)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_cancellation_during_revoked_route_grant_wait_never_runs_finalizer(self):
+        self.pending_revoked_grant()
+        self.process.send_signal(signal.SIGTERM);self.finish(False)
+        self.assertEqual('CANCELLED',self.failure)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_completion_identity_fence_during_revoked_route_wait_never_runs_finalizer(self):
+        self.pending_revoked_grant()
+        self.complete_status=409;self.hold_grant=False;self.release_grant.set()
+        self.finish(False)
+        self.assertIsNone(self.failure);self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_revoked_route_waiting_reply_cannot_bypass_runner_deadline(self):
+        self.assignment['timeoutSeconds']=5;self.pending_revoked_grant()
+        self.finalize=False;self.hold_grant=False;self.release_grant.set()
+        self.finish(False)
+        self.assertEqual('TIMEOUT',self.failure)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
+
+    def test_foreign_receipt_after_revoked_route_wait_never_runs_finalizer(self):
+        self.pending_revoked_grant()
+        self.wrong_receipt=True;self.hold_grant=False;self.release_grant.set()
+        self.finish(False)
+        self.assertIsNone(self.artifact);self.assertFalse(self.commits)
+        self.assertFalse((self.root/'work/stream-state').exists())
 
     def test_setgid_work_volume_still_creates_private_stream_session_and_commits(self):
         # Kubernetes fsGroup marks emptyDir setgid; mkdir(0700) inherits that bit.

@@ -1,6 +1,16 @@
 # 진행 상태
 
 [STATUS]
+ADR0112 Runner 완료응답 지연 경합을 실제HTTPS/MQTT에서 재현하고 수정했다.
+정확한봉인허가를 받기 전에는finalizer를 실행하지 않으며 취소/신원거절/기한/외래checkpoint
+거절을 포함한 새5개 PASS다. 기본Runner111개·native발행gate8개도 PASS다.
+전체MQTT102개는1실패/10오류, 실제Spring15개052054Z-d89f7a34는그룹재시도1실패로
+전체회귀는 미해결이다. 소유DB/MinIO 정리, 별도initdb timeout의 잔여프로세스0을 확인했다.
+[근거](docs/evidence/m7-stream-delayed-completion.md). V38 보존은88b16d7 로컬커밋,
+새CI/배포·누락상태복원·종합활성화와 M0–M10 전체목표는 계속 진행한다.
+
+아래는 선행 구현·검증 이력과 당시 상태다.
+
 ADR0111/V38 완료 그룹의 모든 선행 checkpoint receipt를 원래 ID/시각/고정 payload 참조와
 함께 독립 보존한다. 대상17개043141Z-613f4059·기존45테이블/완료그룹97개 upgrade
 043212Z-981c466a·실제 혼합 복구27개043302Z-4f2452a7 PASS/소유 정리다.
