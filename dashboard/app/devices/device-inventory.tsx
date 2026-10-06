@@ -25,7 +25,7 @@ export function DeviceInventory() {
     const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
-      throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 403 ? "연결이 만료되었습니다. 다시 연결하세요." : value.message || "요청을 처리하지 못했습니다.");
+      throw new Error(response.status === 401 ? "Dashboard 서버의 API 연결 계정을 확인하세요." : response.status === 403 ? "연결이 만료되었습니다. 화면을 새로고침하세요." : value.message || "요청을 처리하지 못했습니다.");
     }
     return response;
   }

@@ -5,19 +5,22 @@
 ## 개발 단계
 
 - **완료된 단계:** M0–M4, M6의 해당 구현·검증 범위.
-- **현재 우선순위:** 실제 GPU·NPU 노드와 서비스 실행 연결, 기관 워크플로 편집기 연결. 종합 검증은 후속으로 미룹니다.
+- **현재 우선순위:** 백엔드·Dashboard 관리 흐름 완성. Runner/STREAM 고도화와 종합 검증은 보류합니다.
 - **남은 범위:** M5의 외부 시스템 계약·상태형 복원 수용, M8 성능 기준, M9 종합 운영/복구, M10 실장비·실모델 수용.
 - 단계별 범위는 [PLAN.md](PLAN.md)를 확인하세요.
 
 ## 이번 작업
 
-- 사용자 요청으로 워크플로 제외 결정을 변경하고 시각 편집·실장비 연결을 우선합니다.
-- Kubernetes에서 10개 노드 모두 Ready, GPU 자원 등록 노드 5개와 NPU 자원 등록 노드 3개를 관측했습니다.
-  NVIDIA GPU/공유 GPU 슬롯, Hailo H8, Mobilint 자원입니다. 실제 추론 성공을 뜻하지 않습니다.
-- 노드의 전체 allocatable 자원을 DB V41·API·화면에 연결했습니다. 서비스 등록에서 실제 노드·GPU/NPU 요청량을 선택해 실행 규격에 반영합니다.
-- 기관 도구의 ReactFlow 캔버스·노드 편집 방식을 우리 SERVICE Profile·DAG 버전·Run API에 맞게 이식했습니다.
-  연결선은 실제 DAG 의존 관계가 됩니다. 원본의 DDS YAML/Gitea/FastAPI API를 그대로 연결한 것은 아닙니다.
-- Java 컴파일과 Dashboard 타입·lint 검사는 통과했습니다. 이 변경의 빌드·배포는 진행 중이며 실모델·성능·복구 종합 검증은 실행하지 않습니다.
+- Runner/STREAM 고도화를 중단하고 Dashboard의 관리·배치·결과 조회 흐름을 우선합니다.
+- 로그인 폼을 제거했습니다. Dashboard 서버가 기존 API 계정을 사용하며 비밀번호는 브라우저로 전달하지 않습니다.
+- Profile 기본 양식과 다음 단계 링크, Device/VD의 프로필·장치·노드 선택을 연결했습니다.
+- Workflow Builder는 편집 즉시 DAG에 반영하며 작업 매개변수, 포트 선택 연결, 순환·중복 입력 연결 방지를 지원합니다.
+- 실행 요청 후 `/runs`로 이동합니다. 선택한 Task를 유지하며 상태·배치·결과를 3초마다 갱신합니다.
+- `GET /api/v1/workflow-runs/{runId}/placements`가 최신 Attempt의 실제 노드·Pod·Job·실패 원인을 제공합니다. 내부 claim nonce는 제외합니다.
+- 앞선 V41 자원 연결로 GPU·NPU를 포함한 allocatable 자원이 API·화면에 표시됩니다.
+  기관 도구는 ReactFlow 편집 방식을 기존 Profile/DAG/Run에 맞게 적용했으며 DDS/Gitea/FastAPI 전체 이식은 아닙니다.
+- Java 컴파일·관리 API 계약 시험, Dashboard 타입·lint·빌드 확인을 진행했습니다. 최종 푸시·배포 상태는 아래에 갱신합니다.
+- 실모델 추론·성능·복구·전체 브라우저 수용 검증은 사용자 요청에 따라 후속으로 미룹니다.
 
 ## 직전 배포 기록
 

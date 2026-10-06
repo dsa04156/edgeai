@@ -5,6 +5,8 @@ import { useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 
 import { ConnectionPanel } from "../components/connection-panel";
+import { registryItems } from "../../lib/registry";
+import { ProfileFields } from "./profile-fields";
 import { HardwareProfileFields } from "./hardware-profile-fields";
 
 type Profile = components["schemas"]["ProfileVersion"];
@@ -25,6 +27,7 @@ export function ProfileRegistry() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [nodes, setNodes] = useState<components["schemas"]["ExecutionNode"][]>([]);
+  const [profileChoices, setProfileChoices] = useState<Profile[]>([]);
   const [specText, setSpecText] = useState("");
 
   async function api(path: string, authorization = auth, init?: RequestInit) {
@@ -33,8 +36,8 @@ export function ProfileRegistry() {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      const message = response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요."
-        : response.status === 403 ? "연결이 만료되었습니다. 연결을 해제한 뒤 다시 연결하세요."
+      const message = response.status === 401 ? "Dashboard 서버의 API 연결 계정을 확인하세요."
+        : response.status === 403 ? "연결이 만료되었습니다. 화면을 새로고침하세요."
         : body.message || "요청을 처리하지 못했습니다. 다시 시도하세요.";
       throw new Error(message);
     }
@@ -56,7 +59,10 @@ export function ProfileRegistry() {
     void run(async () => {
       const authorization = "dashboard";
       const token = await (await api("csrf", authorization)).json();
-      await load(kind, 0, "", authorization);
+      const selectedKind = new URLSearchParams(window.location.search).get("kind");
+      const initialKind = kinds.includes(selectedKind as Kind) ? selectedKind as Kind : kind;
+      setKind(initialKind); await load(initialKind, 0, "", authorization);
+      setProfileChoices((await Promise.all(["SERVICE", "DEVICE"].map(value => registryItems<Profile>(`profiles/${value}`, path => api(path, authorization))))).flat());
       setNodes((await (await api("nodes?limit=100", authorization)).json()).items);
       setAuth(authorization); setCsrf(token.token);
     });
@@ -77,6 +83,7 @@ export function ProfileRegistry() {
       });
       const saved = parse(await response.text()) as Profile;
       setDetail(saved);
+      if (kind !== "VD") setProfileChoices(previous => [...previous.filter(p => p.id !== saved.id), saved]);
       setNotice(response.status === 201 ? "새 버전을 발행했습니다." : "같은 내용의 버전이 이미 발행되어 있습니다.");
       await load(kind, 0, filter);
     });
@@ -91,7 +98,7 @@ export function ProfileRegistry() {
         <div className="toolbar"><h2 id="registry-title">발행된 Profile</h2><span className="muted">내용 수정 없이 버전으로 관리</span></div>
         <fieldset className="kind-picker" disabled={busy}><legend>Profile 종류</legend>
           {kinds.map(value => <label key={value}><input type="radio" name="kind" checked={kind === value} onChange={() => {
-            setKind(value); setDetail(null); setResult(null); setFilter("");
+            setKind(value); setSpecText(""); setDetail(null); setResult(null); setFilter("");
             void run(() => load(value, 0, ""));
           }} />{names[value]} <span className="mono">{value}</span></label>)}
         </fieldset>
@@ -120,6 +127,7 @@ export function ProfileRegistry() {
       </section>
       {detail && <section className="panel" aria-labelledby="detail-title">
         <div className="toolbar"><h2 id="detail-title">{detail.key} · {detail.version}</h2><span className="stage">발행됨 · 불변</span></div>
+        <div className="toolbar"><button onClick={() => setSpecText(stringify(detail.spec, null, 2) || "")}>이 규격으로 새 버전 작성</button><a href={detail.kind === "DEVICE" ? `/devices?profile=${detail.id}` : detail.kind === "VD" ? `/virtual-devices?profile=${detail.id}` : `/workflows?service=${detail.id}`}>{detail.kind === "DEVICE" ? "장치 등록" : detail.kind === "VD" ? "가상 장치 등록" : "서비스 실행 구성"} →</a></div>
         <p className="mono digest">버전 ID {detail.id}</p><p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
       </section>}
       <section className="panel" aria-labelledby="publish-title">
@@ -128,6 +136,7 @@ export function ProfileRegistry() {
           <fieldset disabled={busy} className="publish-fields">
             <div className="form-row"><label>Profile 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-sensor" /></label>
               <label>버전<input name="version" required maxLength={32} pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)" placeholder="1.0.0" /></label></div>
+            <ProfileFields kind={kind} value={specText} onChange={setSpecText} profiles={profileChoices} />
             {kind === "SERVICE" && <HardwareProfileFields nodes={nodes} value={specText} onChange={setSpecText} />}
             <label>JSON 규격<textarea name="spec" rows={9} spellCheck={false} required value={specText} onChange={e => setSpecText(e.target.value)} placeholder={'{\n  "protocol": "mqtt"\n}'} aria-describedby="spec-help" /></label>
             <p className="hint" id="spec-help">비어 있지 않은 JSON 객체 · 최대 64 KiB. 비밀번호나 토큰을 규격에 넣지 마세요. 등록은 실행 호환성을 보장하지 않습니다.</p>

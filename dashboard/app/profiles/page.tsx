@@ -1,4 +1,4 @@
-import { workflowsEnabled } from "../../lib/features";
+import { SectionNav } from "../components/section-nav";
 import Link from "next/link";
 import { ProfileRegistry } from "./profile-registry";
 
@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export default function Profiles() {
   return <main>
-    <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">M1 · Profile</span></header>
-    <nav className="section-nav" aria-label="관리 메뉴"><Link href="/profiles" aria-current="page">Profile 관리</Link><Link href="/devices">장치·노드 관리</Link>{workflowsEnabled() && <Link href="/workflows">워크플로·실행 관리</Link>}<Link href="/virtual-devices">가상 장치 관리</Link><Link href="/audit">감사 기록</Link></nav>
+    <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">Edge AI Platform</span></header>
+    <SectionNav current="/profiles" />
     <section>
       <p className="eyebrow">PROFILE REGISTRY</p>
       <h1>실행의 기준을 버전으로 남깁니다.</h1>

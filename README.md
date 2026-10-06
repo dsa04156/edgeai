@@ -53,3 +53,9 @@ docs/        용도별 문서
 
 과거 설계 결정과 검증 기록은 `docs/adr`, `docs/evidence`, `docs/history`에 있습니다.
 현재 개발 상태는 **PROGRESS.md 한 곳**에서 확인합니다.
+
+Dashboard는 로그인 입력 없이 API에 연결합니다. Dashboard 서버에도 `EDGEAI_API_USER`와
+`EDGEAI_API_PASSWORD`를 전달해야 하며, Kubernetes에서는 기존 runtime Secret을 참조합니다.
+브라우저에 비밀번호를 전달하지 않습니다. 이 환경의 Dashboard에 접근 가능한 사용자는 관리 기능을 사용할 수 있습니다.
+Profile → DeviceManager / Virtual Device → Workflow Builder → Run·Task·Placement 순서로 사용합니다.
+당분간 Runner/STREAM 고도화는 중단하고 관리 화면과 API 완성을 우선합니다.

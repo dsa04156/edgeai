@@ -1,22 +1,20 @@
 "use client";
 
-// Adapted from Platform-Service/flow_project's ReactFlow canvas and K8sNode.
-// Edges become EdgeAI DAG dependencies; execution uses the existing Spring API.
-import { useState, useCallback, memo } from "react";
+// ReactFlow editing adapted from the partner tool; the DAG remains the single source of truth.
+import { useState, useMemo, memo } from "react";
 import { parse, stringify } from "lossless-json";
-import { ReactFlow, Background, Controls, Handle, Position, addEdge, useNodesState, useEdgesState,
-  type Node, type NodeProps, type Edge, type Connection } from "@xyflow/react";
+import { ReactFlow, Background, Controls, Handle, Position, type Node, type NodeProps, type Connection } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { components } from "../../lib/api-schema";
 
 type Profile = components["schemas"]["ProfileVersion"];
-type Data = { label: string; key: string; profileId: string; inputs: string[]; outputs: string[]; parameters: Record<string, unknown> };
+type Dag = components["schemas"]["WorkflowDag"];
+type Data = { label: string; key: string; inputs: string[]; outputs: string[] };
 type ServiceNode = Node<Data, "service">;
-type Link = Edge<{ mode: "BATCH" | "STREAM" }>;
-function ports(profile: Profile, direction: "inputs" | "outputs") {
-  const spec = profile.spec as Record<string, unknown>;
-  const stream = spec.stream as Record<string, unknown> | undefined;
-  return [...new Set([...Object.keys(spec[direction] as object || {}), ...Object.keys(stream?.[direction] as object || {})])];
+function ports(profile: Profile | undefined, direction: "inputs" | "outputs") {
+  const spec = profile?.spec as Record<string, unknown> | undefined;
+  const stream = spec?.stream as Record<string, unknown> | undefined;
+  return [...new Set([...Object.keys(spec?.[direction] as object || {}), ...Object.keys(stream?.[direction] as object || {})])];
 }
 const ServiceCard = memo(function ServiceCard({ data, selected }: NodeProps<ServiceNode>) {
   return <div className={`workflow-card${selected ? " selected" : ""}`}>
@@ -33,81 +31,82 @@ const nodeTypes = { service: ServiceCard };
 export function GraphEditor({ profiles, value, onApply, disabled }: {
   profiles: Profile[]; value: string; onApply: (value: string) => void; disabled: boolean;
 }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<ServiceNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Link>([]);
+  const dag = useMemo(() => {
+    try { const parsed = parse(value) as Dag; return Array.isArray(parsed.tasks) && Array.isArray(parsed.dependencies) ? parsed : null; }
+    catch { return null; }
+  }, [value]);
   const [profileId, setProfileId] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const current = nodes.find(n => n.id === selected);
-  const connect = useCallback((connection: Connection) => {
-    if (connection.source === connection.target || !connection.sourceHandle || !connection.targetHandle) {
-      setError("서로 다른 작업의 출력 포트와 입력 포트를 연결하세요."); return;
-    }
-    const source = nodes.find(n => n.id === connection.source);
-    const profile = profiles.find(p => p.id === source?.data.profileId);
-    const streamOutputs = (profile?.spec as { stream?: { outputs?: object } } | undefined)?.stream?.outputs;
-    const mode = streamOutputs && connection.sourceHandle in streamOutputs ? "STREAM" : "BATCH";
-    setEdges(previous => addEdge({ ...connection, data: { mode }, label: mode }, previous)); setError(""); setNotice("");
-  }, [nodes, profiles, setEdges]);
-  function addService() {
-    const profile = profiles.find(p => p.id === profileId); if (!profile) return;
-    let index = nodes.length + 1;
-    while (nodes.some(n => n.id === `task-${index}` || n.data.key === `task-${index}`)) index++;
-    const key = `task-${index}`;
-    setNodes(previous => [...previous, { id: key, type: "service", position: { x: (previous.length % 3) * 260 + 30, y: Math.floor(previous.length / 3) * 160 + 30 },
-      data: { key, profileId, label: `${profile.key} · ${profile.version}`, inputs: ports(profile, "inputs"), outputs: ports(profile, "outputs"), parameters: {} } }]);
-    setSelected(key); setNotice("");
+  const [source, setSource] = useState(""); const [target, setTarget] = useState("");
+  const nodes: ServiceNode[] = (dag?.tasks || []).map((task, index) => {
+    const profile = profiles.find(p => p.id === task.serviceProfileVersionId);
+    return { id: task.key, type: "service", selected: selected === task.key,
+      position: positions[task.key] || { x: (index % 3) * 270 + 25, y: Math.floor(index / 3) * 170 + 25 },
+      data: { key: task.key, label: profile ? `${profile.key} · ${profile.version}` : task.serviceProfileVersionId,
+        inputs: ports(profile, "inputs"), outputs: ports(profile, "outputs") } };
+  });
+  const current = dag?.tasks.find(task => task.key === selected);
+  function commit(next: Dag) { onApply(stringify(next, null, 2) || ""); setError(""); }
+  function connect(connection: Connection) {
+    if (!dag) return;
+    const { source: fromTask, target: toTask, sourceHandle: fromPort, targetHandle: toPort } = connection;
+    if (!nodes.some(n => n.id === fromTask && n.data.outputs.includes(fromPort || "")) || !nodes.some(n => n.id === toTask && n.data.inputs.includes(toPort || ""))) { setError("현재 작업의 포트를 다시 선택하세요."); return; }
+    if (fromTask === toTask || !fromPort || !toPort) { setError("서로 다른 작업의 출력과 입력을 연결하세요."); return; }
+    if (dag.dependencies.some(edge => edge.toTask === toTask && edge.toPort === toPort)) { setError("이미 연결된 입력 포트입니다. 기존 연결을 먼저 삭제하세요."); return; }
+    const reachable = new Set([toTask]);
+    for (let index = 0; index < dag.tasks.length; index++)
+      for (const edge of dag.dependencies) if (reachable.has(edge.fromTask)) reachable.add(edge.toTask);
+    if (reachable.has(fromTask)) { setError("순환 연결은 만들 수 없습니다."); return; }
+    const spec = (key: string) => profiles.find(p => p.id === dag.tasks.find(t => t.key === key)?.serviceProfileVersionId)?.spec as { stream?: { inputs?: object; outputs?: object } } | undefined;
+    const fromStream = fromPort in (spec(fromTask)?.stream?.outputs || {});
+    const toStream = toPort in (spec(toTask)?.stream?.inputs || {});
+    if (fromStream !== toStream) { setError("BATCH와 STREAM 포트는 서로 연결할 수 없습니다."); return; }
+    commit({ ...dag, dependencies: [...dag.dependencies, { fromTask, toTask, fromPort, toPort, mode: fromStream ? "STREAM" : "BATCH" }] });
   }
-  function loadJson() {
-    try {
-      const dag = parse(value) as components["schemas"]["WorkflowDag"];
-      if (!Array.isArray(dag.tasks) || !Array.isArray(dag.dependencies)) throw new Error("tasks와 dependencies가 있는 DAG JSON을 입력하세요.");
-      const next: ServiceNode[] = dag.tasks.map((task, index) => {
-        const profile = profiles.find(p => p.id === task.serviceProfileVersionId);
-        if (!profile) throw new Error(`서비스 버전을 먼저 조회하세요: ${task.serviceProfileVersionId}`);
-        return { id: task.key, type: "service", position: { x: (index % 3) * 260 + 30, y: Math.floor(index / 3) * 160 + 30 },
-          data: { key: task.key, profileId: profile.id, label: `${profile.key} · ${profile.version}`, inputs: ports(profile, "inputs"), outputs: ports(profile, "outputs"), parameters: task.parameters } };
-      });
-      setNodes(next); setEdges(dag.dependencies.map((edge, i) => ({ id: `edge-${i}`, source: edge.fromTask, target: edge.toTask,
-        sourceHandle: edge.fromPort, targetHandle: edge.toPort, data: { mode: edge.mode }, label: edge.mode })));
-      setSelected(null); setError(""); setNotice("JSON을 편집 화면으로 불러왔습니다.");
-    } catch (e) { setError(e instanceof Error ? e.message : "DAG JSON을 확인하세요."); }
-  }
-  function apply() {
-    const keys = nodes.map(n => n.data.key);
-    if (!nodes.length || new Set(keys).size !== keys.length || keys.some(key => !/^[a-z][a-z0-9]*([._-][a-z0-9]+)*$/.test(key))) {
-      setError("서비스를 추가하고 작업 키를 중복 없이 지정하세요."); return;
-    }
-    const keyById = new Map(nodes.map(n => [n.id, n.data.key]));
-    const dag = { tasks: nodes.map(n => ({ key: n.data.key, serviceProfileVersionId: n.data.profileId, parameters: n.data.parameters })),
-      dependencies: edges.map(e => ({ fromTask: keyById.get(e.source), toTask: keyById.get(e.target), fromPort: e.sourceHandle,
-        toPort: e.targetHandle, mode: e.data?.mode || "BATCH" })) };
-    onApply(stringify(dag, null, 2) || ""); setError(""); setNotice("편집 내용을 반영했습니다. 아래에서 버전을 발행한 뒤 실행 노드를 선택하세요.");
+  function remove(key: string) {
+    if (!dag) return;
+    commit({ tasks: dag.tasks.filter(t => t.key !== key), dependencies: dag.dependencies.filter(e => e.fromTask !== key && e.toTask !== key) });
+    setSelected(null);
   }
   return <div className="workflow-editor" aria-label="워크플로 시각 편집기">
-    <p className="hint">서비스를 배치하고 출력·입력 포트를 연결하세요. 연결선이 실제 DAG 의존 관계로 저장됩니다.</p>
+    <p className="hint">SERVICE를 추가하고 포트를 연결하세요. 편집은 즉시 DAG에 반영됩니다. 버전을 발행하면 실행할 수 있습니다.</p>
+    {!dag && <p className="error" role="alert">DAG JSON의 tasks와 dependencies를 확인하세요.</p>}
     <div className="toolbar filter-form"><label>추가할 SERVICE<select value={profileId} onChange={e => setProfileId(e.target.value)} disabled={disabled}>
       <option value="">서비스 선택</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}
-    </select></label><button type="button" disabled={disabled || !profileId} onClick={addService}>작업 추가</button>
-      <button type="button" disabled={disabled} onClick={loadJson}>JSON 불러오기</button></div>
-    <div className="workflow-canvas"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect}
-      onNodeClick={(_, node) => setSelected(node.id)} nodesDraggable={!disabled} nodesConnectable={!disabled}
-      deleteKeyCode={disabled ? null : ["Backspace", "Delete"]} fitView minZoom={0.3} maxZoom={1.5}>
-      <Background /><Controls showInteractive={false} />
-    </ReactFlow></div>
-    {current && <div className="toolbar filter-form"><label>선택한 작업 키<input value={current.data.key} maxLength={100} disabled={disabled}
-      onChange={e => { const key = e.target.value; setNodes(previous => previous.map(n => n.id === current.id ? { ...n, data: { ...n.data, key } } : n)); setNotice(""); }} /></label>
-      <button type="button" disabled={disabled} onClick={() => { setNodes(previous => previous.filter(n => n.id !== current.id)); setEdges(previous => previous.filter(e => e.source !== current.id && e.target !== current.id)); setSelected(null); }}>선택 작업 삭제</button></div>}
-    {!!edges.length && <ul className="history-list">{edges.map(edge => <li key={edge.id}>
-      {nodes.find(n => n.id === edge.source)?.data.key}.{edge.sourceHandle} → {nodes.find(n => n.id === edge.target)?.data.key}.{edge.targetHandle}
-      <select aria-label={`${edge.source}에서 ${edge.target} 연결 방식`} disabled={disabled} value={edge.data?.mode || "BATCH"} onChange={e => {
-        const mode = e.target.value as "BATCH" | "STREAM"; setEdges(previous => previous.map(item => item.id === edge.id ? { ...item, label: mode, data: { mode } } : item));
-      }}><option value="BATCH">BATCH · 완료 후 전달</option><option value="STREAM">STREAM · 실시간 전달</option></select>
-      <button type="button" disabled={disabled} onClick={() => setEdges(previous => previous.filter(item => item.id !== edge.id))}>연결 삭제</button>
+    </select></label><button type="button" disabled={disabled || !profileId || !dag} onClick={() => {
+      if (!dag) return;
+      let index = dag.tasks.length + 1; while (dag.tasks.some(t => t.key === `task-${index}`)) index++;
+      const key = `task-${index}`; commit({ ...dag, tasks: [...dag.tasks, { key, serviceProfileVersionId: profileId, parameters: {} }] }); setSelected(key);
+    }}>작업 추가</button></div>
+    {!profiles.length && <p><a href="/profiles?kind=SERVICE">SERVICE Profile 먼저 등록 →</a></p>}
+    <div className="workflow-canvas"><ReactFlow nodes={nodes} nodeTypes={nodeTypes}
+      edges={(dag?.dependencies || []).map((e, i) => ({ id: String(i), source: e.fromTask, target: e.toTask, sourceHandle: e.fromPort, targetHandle: e.toPort, label: e.mode }))}
+      onNodesChange={changes => { if (!disabled) for (const change of changes) if (change.type === "position" && change.position) setPositions(previous => ({ ...previous, [change.id]: change.position! })); }}
+      onConnect={connect} onNodeClick={(_, node) => setSelected(node.id)} nodesDraggable={!disabled} nodesConnectable={!disabled}
+      deleteKeyCode={null} fitView minZoom={0.3} maxZoom={1.5}><Background /><Controls showInteractive={false} /></ReactFlow></div>
+    <div className="toolbar filter-form"><label>편집할 작업<select value={selected || ""} onChange={e => setSelected(e.target.value)}><option value="">작업 선택</option>{nodes.map(n => <option key={n.id}>{n.id}</option>)}</select></label></div>
+    {current && <fieldset className="publish-fields" disabled={disabled} key={current.key}><legend>{current.key} · ServiceTask</legend>
+      <label>작업 키<input defaultValue={current.key} maxLength={100} onBlur={e => {
+        const key = e.target.value.trim(); if (key === current.key || !dag) return;
+        if (!/^[a-z][a-z0-9]*([._-][a-z0-9]+)*$/.test(key) || dag.tasks.some(t => t.key === key)) { setError("중복되지 않는 영문 소문자 작업 키를 입력하세요."); e.target.value = current.key; return; }
+        commit({ tasks: dag.tasks.map(t => t.key === current.key ? { ...t, key } : t), dependencies: dag.dependencies.map(edge => ({ ...edge, fromTask: edge.fromTask === current.key ? key : edge.fromTask, toTask: edge.toTask === current.key ? key : edge.toTask })) }); setSelected(key);
+      }} /></label>
+      <label>작업 매개변수 JSON<textarea rows={3} defaultValue={stringify(current.parameters, null, 2) || "{}"} onBlur={e => {
+        try { const parameters = parse(e.target.value); if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) throw new Error();
+          if (dag) commit({ ...dag, tasks: dag.tasks.map(t => t.key === current.key ? { ...t, parameters: parameters as Record<string, unknown> } : t) });
+        } catch { setError("작업 매개변수는 JSON 객체여야 합니다. 수정한 값이 반영되지 않았습니다."); }
+      }} /></label>
+      <button type="button" onClick={() => remove(current.key)}>선택 작업 삭제</button>
+    </fieldset>}
+    {!!nodes.length && <fieldset className="publish-fields" disabled={disabled}><legend>포트 연결</legend><div className="form-row">
+      <label>출력 포트<select value={source} onChange={e => setSource(e.target.value)}><option value="">출력 선택</option>{nodes.flatMap(n => n.data.outputs.map(port => <option key={`${n.id}/${port}`} value={JSON.stringify([n.id, port])}>{n.id} · {port}</option>))}</select></label>
+      <label>입력 포트<select value={target} onChange={e => setTarget(e.target.value)}><option value="">입력 선택</option>{nodes.flatMap(n => n.data.inputs.map(port => <option key={`${n.id}/${port}`} value={JSON.stringify([n.id, port])}>{n.id} · {port}</option>))}</select></label>
+    </div><button type="button" disabled={!source || !target} onClick={() => { const [sourceId, sourceHandle] = JSON.parse(source); const [targetId, targetHandle] = JSON.parse(target); connect({ source: sourceId, sourceHandle, target: targetId, targetHandle }); }}>포트 연결 추가</button></fieldset>}
+    {!!dag?.dependencies.length && <ul className="history-list">{dag.dependencies.map((edge, index) => <li key={index}>
+      {edge.fromTask}.{edge.fromPort} → {edge.toTask}.{edge.toPort} · {edge.mode} <button type="button" disabled={disabled} aria-label={`${edge.fromTask} → ${edge.toTask} 연결 삭제`} onClick={() => commit({ ...dag, dependencies: dag.dependencies.filter((_, i) => i !== index) })}>연결 삭제</button>
     </li>)}</ul>}
-    {error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}
-    <button type="button" className="primary" disabled={disabled || !nodes.length} onClick={apply}>편집 내용을 DAG에 반영</button>
+    {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }

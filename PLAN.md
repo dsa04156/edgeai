@@ -20,9 +20,10 @@
 
 2026-10-06 사용자 요청으로 구현 우선순위를 변경했습니다.
 
-1. 이미 등록된 실제 GPU·NPU 노드의 자원 관측·서비스 자원 요청·실행 위치 선택을 먼저 연결합니다.
-2. `Platform-Service/flow_project`의 ReactFlow 편집 흐름을 우리 Profile·DAG·Kubernetes 실행 API에 연결합니다.
-3. 실모델 추론·성능·복구 및 M5/M7–M10 종합 수용 검증은 연결 구현 이후에 진행합니다.
+1. **Runner/STREAM 고도화는 당분간 중단**합니다. 기존 Runner는 최소 실행 엔진으로 유지합니다.
+2. Dashboard의 로그인 입력을 없애고 Profile → DeviceManager → Workflow/ServiceTask → 실행 요청 → 배치·결과 조회를 완성합니다.
+3. Device/Virtual Device 등록·편집·원본 연결·노드 선택, Workflow Builder, Run/Task/Placement 화면과 필요한 관리 API를 우선합니다.
+4. 이미 등록된 GPU·NPU 자원은 장비 선택과 배치 관측에 연결합니다. 실모델 추론·성능·복구 종합 검증은 뒤로 미룹니다.
 
 검증된 구성 요소와 전체 플랫폼 수용 완료는 구분합니다.
 실제 외부 시스템 계약·GPU/NPU·성능 수치는 확인 없이 가정하지 않습니다.

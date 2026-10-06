@@ -421,6 +421,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflow-runs/{runId}/placements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 작업별 최신 실행 배치·노드·Pod·실패 원인 조회
+         * @description Run의 모든 Task와 최신 Attempt에 속한 Runtime 관측을 조회합니다. 아직 배치되지 않은 작업은 attempt 또는 runtime이 null입니다. 요청 정책과 실제 관측 위치를 구분하며 실행 토큰·claim nonce는 포함하지 않습니다.
+         */
+        get: operations["getRunPlacements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflow-runs/{runId}/streams": {
         parameters: {
             query?: never;
@@ -1360,6 +1382,28 @@ export interface components {
             state: "QUEUED" | "DISPATCHING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "OFFLOADED";
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Placement: {
+            /** Format: uuid */
+            taskId: string;
+            taskKey: string;
+            taskState: string;
+            attempt: components["schemas"]["TaskAttempt"] | null;
+            runtime: components["schemas"]["RuntimePlacement"] | null;
+        };
+        RuntimePlacement: {
+            /** Format: uuid */
+            id: string;
+            namespace: string;
+            jobName: string | null;
+            nodeName: string | null;
+            /** Format: uuid */
+            podUid: string | null;
+            desiredState: string;
+            observedState: string;
+            failureReason: string | null;
             /** Format: date-time */
             updatedAt: string;
         };
@@ -3343,6 +3387,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunDetail"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Basic 인증 필요 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRunPlacements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 저장 상태 또는 동일 입력 재요청 결과입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Placement"][];
                 };
             };
             /** @description 잘못된 필드·UUID·DAG·페이지 입력 */

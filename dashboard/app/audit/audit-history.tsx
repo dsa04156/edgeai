@@ -35,7 +35,7 @@ export function AuditHistory() {
     const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", headers: authorization.startsWith("Basic ") ? { Authorization: authorization } : {} });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
-      throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 404 ? "해당 감사 기록을 찾을 수 없습니다." : value.message || "감사 기록을 불러오지 못했습니다.");
+      throw new Error(response.status === 401 ? "Dashboard 서버의 API 연결 계정을 확인하세요." : response.status === 404 ? "해당 감사 기록을 찾을 수 없습니다." : value.message || "감사 기록을 불러오지 못했습니다.");
     }
     return response.json();
   }

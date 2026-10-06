@@ -3,11 +3,12 @@ import type { components } from "../../lib/api-schema";
 
 export type TaskExecutions = components["schemas"]["TaskExecutions"];
 
-export function TaskExecutionFields({ tasks, value, onChange, stream, nodes = [] }: {
+export function TaskExecutionFields({ tasks, value, onChange, stream, nodes = [], virtualDevices = [] }: {
   tasks: components["schemas"]["DagTask"][];
   value: TaskExecutions;
   onChange: (value: TaskExecutions) => void;
   stream: boolean;
+  virtualDevices?: components["schemas"]["VirtualDevice"][];
   nodes?: components["schemas"]["ExecutionNode"][];
 }) {
   function select(key: string, mode: string) {
@@ -39,10 +40,7 @@ export function TaskExecutionFields({ tasks, value, onChange, stream, nodes = []
             {node.name} · {node.architecture} · {hardwareLabel(node)}
           </option>)}
         </select></label>}
-        {placement?.mode === "VD" && <label>{task.key} 가상 장치 ID<input required maxLength={36}
-          pattern="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
-          value={placement.vdId} placeholder="Ready인 VD UUID"
-          onChange={e => onChange({ ...value, [task.key]: { mode: "VD", vdId: e.target.value } })} /></label>}
+        {placement?.mode === "VD" && <label>{task.key} 가상 장치<select required value={placement.vdId} onChange={e => onChange({ ...value, [task.key]: { mode: "VD", vdId: e.target.value } })}><option value="">가상 장치 선택</option>{virtualDevices.filter(vd => vd.state === "REGISTERED").map(vd => <option key={vd.id} value={vd.id} disabled={vd.serviceProfileVersionId !== task.serviceProfileVersionId}>{vd.displayName} · {vd.key}</option>)}</select></label>}
         {placement?.mode === "REMOTE" && <label>{task.key} Remote 제공자 key<input required maxLength={63}
           pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={placement.providerKey}
           onChange={e => onChange({ ...value, [task.key]: { mode: "REMOTE", providerKey: e.target.value } })} /></label>}
