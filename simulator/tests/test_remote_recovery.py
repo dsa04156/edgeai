@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 import test_tls_fixture as fixture
 sys.path.insert(0, str(fixture.ROOT / 'simulator'))
 import remote_server
-sys.path.insert(0, str(fixture.ROOT / 'scripts'))
+sys.path.insert(0, str(fixture.ROOT / 'scripts/internal'))
 import recovery_remote_inventory as inventory
 from recovery_remote_fence import Client
 from recovery_remote_outputs import download
