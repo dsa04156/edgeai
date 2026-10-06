@@ -1,7 +1,13 @@
-name: Platform verification
+name: Platform CI/CD
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      full_verification:
+        description: Run the full recovery and Kubernetes suite on main (does not deploy)
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -10,7 +16,7 @@ concurrency:
 jobs:
   scaffold:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.full_verification && 20 || 10 }}
     env:
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
@@ -27,24 +33,38 @@ jobs:
           cache: pnpm
       - run: bash scripts/dev/bootstrap.sh
       - run: bash scripts/dev/preflight.sh local
+      - name: Run basic unit, API contract and dashboard checks
+        if: inputs.full_verification != true
+        run: |
+          bash scripts/collect-evidence.sh unit bash scripts/test/test-unit.sh
+          bash scripts/collect-evidence.sh contract bash scripts/test/test-contract.sh
+          pnpm --filter @edgeai/dashboard typecheck
+          pnpm --filter @edgeai/dashboard lint
       - name: Verify recovery Kubernetes inventory classification and list boundaries
+        if: inputs.full_verification == true
         run: python3 scripts/internal/test-recovery-kubernetes.py
       - name: Verify conservative producer termination evidence and recovery ownership
+        if: inputs.full_verification == true
         run: python3 scripts/internal/test-recovery-stop.py
       - name: Verify bounded stream failure evidence without response bodies
         run: python3 scripts/internal/test-stream-failure-evidence.py
       - name: Verify native Runner provenance and immutable platform image checks
         run: bash scripts/collect-evidence.sh runner-images python3 scripts/internal/test-runner-images.py
       - name: Verify encrypted private material backup and isolated restore
+        if: inputs.full_verification == true
         run: |
           bash scripts/dev/install-age.sh
           bash scripts/collect-evidence.sh private-material bash scripts/test/test-private-material.sh --report docs/evidence/runs/private-material-report.json
       - name: Verify consistent encrypted Device journals and quarantined source restoration
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh device-journal bash scripts/test/test-device-journal.sh --report docs/evidence/runs/device-journal-report.json
       - name: Verify durable original Device retirement and final snapshot preservation
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh device-source-retirement bash scripts/test/test-device-source-retirement.sh --report docs/evidence/runs/device-source-retirement-report.json
       - run: bash scripts/dev/dev-up.sh
+        if: inputs.full_verification == true
       - name: Verify real TLS broker authority and revocation
+        if: inputs.full_verification == true
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends mosquitto postgresql-client
@@ -53,27 +73,38 @@ jobs:
           export EDGEAI_STREAM_PYTHON="$PWD/.tools/stream-venv/bin/python"
           bash scripts/collect-evidence.sh stream-broker bash scripts/test/test-stream-broker.sh
       - run: bash scripts/collect-evidence.sh infra bash scripts/test/test-infra.sh
+        if: inputs.full_verification == true
       - run: pnpm --filter @edgeai/dashboard exec playwright install --with-deps chromium
+        if: inputs.full_verification == true
       - run: bash scripts/test/verify-all.sh scaffold
+        if: inputs.full_verification == true
       - run: bash scripts/collect-evidence.sh postgres bash scripts/test/test-integration.sh
+        if: inputs.full_verification == true
       - name: Verify PostgreSQL → Spring → Next.js
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh health bash scripts/test/test-profiles-stack.sh compose
       - name: Verify load measurement and acceptance classification
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh load-acceptance bash scripts/test/test-load-acceptance.sh
       - name: Verify PostgreSQL backup and isolated restore with matching container clients
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh postgres-backup bash scripts/test/test-postgres-backup.sh --transport compose --report docs/evidence/runs/postgres-backup-report.json
       - name: Verify real management audit admission failure, result failure and restart
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh management-audit bash scripts/test/test-management-audit.sh --transport compose --report docs/evidence/runs/management-audit-report.json
       - name: Verify source database connection fencing and unrelated database preservation
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-database-fence bash scripts/test/test-recovery-database-fence.sh --transport compose --report docs/evidence/runs/recovery-database-fence-report.json
       - name: Verify broker controller retirement and durable principal fencing with real TLS
+        if: inputs.full_verification == true
         env:
           EDGEAI_STREAM_PYTHON: .tools/stream-venv/bin/python
         run: bash scripts/collect-evidence.sh recovery-mqtt-fence bash scripts/test/test-recovery-mqtt-fence.sh --report docs/evidence/runs/recovery-mqtt-fence-report.json
       - name: Verify restored Remote allocations against fenced provider history with real TLS
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-remote-inventory bash scripts/test/test-recovery-remote-inventory.sh --transport compose --report docs/evidence/runs/recovery-remote-inventory-report.json
       - name: Stop test services and retain volumes
-        if: always()
+        if: always() && inputs.full_verification == true
         run: bash scripts/dev/dev-down.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -86,7 +117,7 @@ jobs:
           retention-days: 14
   storage:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.full_verification && 30 || 15 }}
     permissions:
       contents: read
       packages: write
@@ -111,6 +142,7 @@ jobs:
       - name: Verify immutable artifact versions and content checksums
         run: bash scripts/collect-evidence.sh runtime-storage bash scripts/test/test-runtime-storage.sh
       - name: Verify version-preserving backup with the built MinIO binary and real TLS
+        if: inputs.full_verification == true
         run: |
           mkdir -p .tools
           backup_tools_container=$(docker create edgeai-dev-minio)
@@ -119,46 +151,57 @@ jobs:
           bash scripts/dev/install-minio-client.sh
           bash scripts/collect-evidence.sh storage-backup bash scripts/test/test-storage-backup.sh --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/storage-backup-report.json
       - name: Verify S3 root fencing, admitted request drain and retained versions
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-storage-fence bash scripts/test/test-recovery-storage-fence.sh --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-storage-fence-report.json
       - name: Start PostgreSQL for real storage-to-result transactions
+        if: inputs.full_verification == true
         run: bash scripts/dev/dev-up.sh
       - name: Verify restored database references with independent TLS backup storage
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-references bash scripts/test/test-recovery-references.sh --transport compose --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-references-report.json
       - name: Verify Remote retirement and retain a private output bundle for storage verification
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-remote-retire bash scripts/test/test-recovery-remote-retire.sh --transport compose --bundle-output .tools/recovery-remote-ci-input --report docs/evidence/runs/recovery-remote-retire-report.json
       - name: Verify recovery output publication and pinned versions with the tested MinIO binary
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-remote-storage bash scripts/test/test-recovery-remote-storage.sh --bundle .tools/recovery-remote-ci-input --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-remote-storage-report.json
       - name: Verify recovered Remote Result transactions with original sources offline
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-remote-results bash scripts/test/test-recovery-remote-results.sh --transport compose --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-remote-results-report.json
       - name: Verify recovered Remote failure, cancellation and original retry budgets
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh recovery-remote-failures bash scripts/test/test-recovery-remote-failures.sh --transport compose --report docs/evidence/runs/recovery-remote-failures-report.json
       - name: Prepare real stream broker and SDK for storage completion tests
+        if: inputs.full_verification == true
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y mosquitto mosquitto-clients
           python3 -m venv .tools/stream-venv
           .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
       - name: Verify Device drivers retain pending samples across bootstrap and reconnect
+        if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh stream-drivers .tools/stream-venv/bin/python -W error::ResourceWarning scripts/internal/test-stream-drivers.py
       - name: Verify real S3 content and atomic PostgreSQL Result commit
+        if: inputs.full_verification == true
         env:
           EDGEAI_STREAM_PYTHON: ${{ github.workspace }}/.tools/stream-venv/bin/python
         run: bash scripts/collect-evidence.sh runtime-results bash scripts/test/test-runtime-results.sh
       - name: Verify restored Device journals, fixed checkpoint bytes and retired original broker authority
+        if: inputs.full_verification == true
         env:
           EDGEAI_STREAM_PYTHON: ${{ github.workspace }}/.tools/stream-venv/bin/python
         run: |
           bash scripts/dev/install-age.sh
           bash scripts/collect-evidence.sh recovery-device-journal bash scripts/test/test-recovery-device-journal.sh --transport compose --verify-authority --retire-routes --minio-binary .tools/minio-backup-tested --report docs/evidence/runs/recovery-device-journal-report.json
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested storage image
         id: publish
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         env:
           MINIO_IMAGE: ghcr.io/dsa04156/edgeai-minio:sha-${{ github.sha }}
         run: |
@@ -208,14 +251,14 @@ jobs:
           EDGEAI_STREAM_PYTHON: .tools/stream-venv/bin/python
         run: bash scripts/collect-evidence.sh stream-mqtt bash scripts/test/test-stream.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the exact tested reference Runner
         id: publish
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         env:
           RUNNER_IMAGE: ghcr.io/dsa04156/edgeai-runner:sha-${{ github.sha }}-${{ matrix.architecture }}
         run: |
@@ -226,7 +269,7 @@ jobs:
           TARGET_ARCHITECTURE: ${{ matrix.architecture }}
         run: |
           published=()
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then published=(--published); fi
+          if { [ "$GITHUB_EVENT_NAME" = push ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; } && [ "$GITHUB_REF" = refs/heads/main ]; then published=(--published); fi
           python3 scripts/internal/runner_platform.py native --architecture "$TARGET_ARCHITECTURE" --revision "$GITHUB_SHA" --output .tools/runner-platform.json "${published[@]}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -239,7 +282,7 @@ jobs:
           retention-days: 14
   runner:
     needs: [runner-native]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -273,12 +316,10 @@ jobs:
           retention-days: 14
   images:
     needs: [scaffold, storage, runner]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    # Run 37256444752 passed all 45 evidence reports and kind cleanup, then hit
-    # the 90m job cap during image publication. Include the added group recovery
-    # gate and publication margin; individual acceptance timeouts stay bounded.
-    timeout-minutes: 120
+    # Full recovery is opt-in; normal pushes verify the built HTTP stack.
+    timeout-minutes: ${{ inputs.full_verification && 120 || 20 }}
     permissions:
       contents: read
       packages: write
@@ -330,6 +371,7 @@ jobs:
       - name: Verify built containers against a real database
         run: bash scripts/collect-evidence.sh images bash scripts/test/test-images.sh
       - name: Prepare restored-database recovery fixtures from the exact built API
+        if: inputs.full_verification == true
         run: |
           source scripts/lib.sh
           load_env
@@ -339,6 +381,7 @@ jobs:
           docker cp "$recovery_container:/app/app.jar" backend/app/build/libs/edgeai-control-plane.jar
           compose up -d --wait postgres
       - name: Prepare recovery storage from the exact verified MinIO image
+        if: inputs.full_verification == true
         env:
           RECOVERY_MINIO_IMAGE: ghcr.io/dsa04156/edgeai-minio@${{ needs.storage.outputs.minio_digest }}
         run: |
@@ -348,25 +391,30 @@ jobs:
           docker cp "$recovery_storage_container:/usr/local/bin/minio" .tools/minio-recovery-tested
           bash scripts/dev/install-minio-client.sh
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: inputs.full_verification == true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: inputs.full_verification == true
         with:
           node-version: '22.23.2'
           cache: pnpm
       - name: Install artifact verification client
+        if: inputs.full_verification == true
         run: pnpm install --frozen-lockfile
       - name: Prepare native TLS broker credentials for the Kubernetes stream gate
+        if: inputs.full_verification == true
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends mosquitto
           python3 -m venv .tools/stream-venv
           .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
       - name: Verify actual Kubernetes Runner and recovery before publishing API images
+        if: inputs.full_verification == true
         env:
           EDGEAI_RUNNER_DIGEST: ${{ needs.runner.outputs.runner_digest }}
           EDGEAI_MINIO_DIGEST: ${{ needs.storage.outputs.minio_digest }}
         run: bash scripts/collect-evidence.sh kind bash scripts/test/test-kind.sh
       - name: Stop isolated recovery fixture database and retain volumes
-        if: always()
+        if: always() && inputs.full_verification == true
         run: bash scripts/dev/dev-down.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -409,6 +457,7 @@ jobs:
           retention-days: 14
   gitops:
     needs: [images, storage, runner]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

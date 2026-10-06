@@ -1,9 +1,16 @@
 # GitHub Actions → GHCR → Git → ArgoCD
 
-`main` push 시 기존 `scaffold`/`storage` 검증을 통과한 커밋만 이미지를 만든다.
-`images` job은 backend와 standalone Dashboard 컨테이너를 빌드한 뒤 별도 PostgreSQL과
-함께 실행해 실제 HTTP 경로를 검증한다. 검증한 동일 이미지를 GHCR에 발행한다.
-`gitops` job은 두 이미지의 SHA-256 digest와 소스 커밋을 Git에 기록한다.
+2026-10-06부터 일반 push/PR은 기본 검증만 실행한다. `main` push가 통과하면
+GitHub Actions가 이미지를 GHCR에 발행하고 digest를 Git에 기록하며 ArgoCD가 자동 배포한다.
+
+- 기본 검증: Spring 단위·API 계약, Dashboard 타입·lint, Runner AMD64/ARM64 실행·MQTT,
+  MinIO 업로드/다운로드·고정 버전, 빌드한 API/Dashboard와 실제 DB의 HTTP smoke.
+- 백업·복구·부하·브라우저 E2E·Kubernetes 전체 검증은 자동 배포의 선행 조건에서 제외했다.
+- 전체 검증: Actions → **Platform CI/CD** → **Run workflow** → branch `main`,
+  `full_verification=true`. 기존 전체 검증을 실행하며 시험 이미지도 발행하지만
+  `gitops`는 건너뛰므로 배포 설정을 변경하지 않는다.
+- 동일 브랜치의 새 실행은 진행 중 실행을 취소한다. 배포 중 수동 전체 검증을 시작하지 않는다.
+- 기본 검증 통과는 전체 복구·실장비 수용 완료를 뜻하지 않는다.
 
 2026-10-02 첫 실제 연결을 확인했다. [Actions 36958143060](https://github.com/dsa04156/edgeai/actions/runs/36958143060)의
 네 job이 성공했고, Git digest 자동 커밋·ArgoCD 동기화·세 Pod Ready·배포 HTTP 검증까지 통과했다.
@@ -32,7 +39,7 @@ flowchart LR
   `GITHUB_TOKEN`으로 만든 커밋은 후속 Actions 실행을 재귀적으로 만들지 않는다.
 - 더 최신 `main` 커밋이 있으면 이전 실행의 이미지로 배포 설정을 덮어쓰지 않는다.
   push 경쟁은 non-fast-forward로 실패하며 강제 push하지 않는다.
-- PR에서는 기존 CI가 실행되며 이미지 발행·배포 변경은 `main` push에서만 수행한다.
+- PR에서는 기존 CI가 실행되며 이미지 자동 발행·배포 변경은 `main` push에서 수행한다. 수동 `main` 검증도 시험 이미지를 발행하지만 배포 설정은 변경하지 않는다.
 
 Actions는 job별 `packages: write`, `contents: write` 권한을 사용한다.
 GitHub에 Kubernetes 관리자 kubeconfig나 ArgoCD 비밀번호를 저장할 필요가 없다.
@@ -112,7 +119,7 @@ ADR0095 이후 Runner는 아래 두 native 플랫폼을 검증한다. 현재 배
 ## Runner native amd64·arm64
 
 `runner-native`는 `ubuntu-24.04`와 `ubuntu-24.04-arm`에서 각각 컨테이너111개와
-TLS MQTT97개를 실행한다. 소스 revision label, 호스트와 실제 컨테이너 architecture,
+TLS MQTT112개를 실행한다. 소스 revision label, 호스트와 실제 컨테이너 architecture,
 원시 시험 수와 고정 image config digest를 artifact에 보존한다.
 main에서는 시험한 동일 이미지를 `sha-<source>-amd64`/`-arm64`로 발행한다.
 
@@ -140,7 +147,7 @@ evidence 및 `kind-recovery-kubernetes-retire.json`을 수집한다.
 기록된 취소·재시도 기한·후손/Run, 미확정 결과 보존, 실제 잠금·응답 유실·변경0 재실행을 검사한다.
 전환 source claim과 원래 기한, 미기록 target/새 epoch 보존을 추가로 검사한다.
 DB/API/namespace 정리를 확인하며 job 종료 시 Compose 서비스를 내리고 볼륨은 보존한다.
-추가 실제 결합 시험을 위해 images 제한은55분이다. 새 gate의 CI 성공은 별도 확인한다.
+수동 전체 검증의 images 제한은120분, 기본 검증은20분이다. 전체 gate의 성공은 별도 확인한다.
 
 scaffold는 `test-postgres-backup.sh --transport compose`로 PostgreSQL17 서비스 내부의
 동일 major pg_dump/pg_restore를 사용한다. 별도 DB와 API를 만들고 백업·격리 복원·거절·정리를

@@ -11,32 +11,26 @@
 
 ## 이번 작업
 
-- 문서와 스크립트 정리분 `f1bc4a4`를 푸시했습니다.
-- 경로·문서 링크, 셸96/Node6/Python121개 문법, CI YAML, 환경 점검과 관련 검사11개를 통과했습니다.
-- 이 정리 작업에서 전체 실행·클러스터 테스트는 다시 실행하지 않았습니다.
-- 정리 CI에서 발견된 Remote 테스트의 Python 검색 경로 누락을 수정했습니다.
-- VD Runner 진입점의 오류 타입·취소 상태 공유 수정과 신규 시나리오5개를 별도 커밋에 포함했습니다.
-- 해당5개와 이미지 발행 검사8개는 통과했습니다. Session/Source/측정 시험 조건 변경3파일은 로컬에 남아 있습니다.
-- 전체 STREAM 112개 실행은 1오류, 후속 Session 20개 실행은 임대 만료 3오류입니다.
-- 기본 Runner 111개 실행은 측정 테스트의 정상/503 응답 두 서브케이스 실패입니다.
-- 전체 회귀 통과로 판정하지 않습니다. [상세 검증 기록](docs/evidence/m7-vd-module-entrypoint.md)
+- 사용자 요청에 따라 자동 CI를 기본 단위·계약·타입/lint·이미지 smoke 위주로 줄였습니다.
+- 백업·복구·부하·Kubernetes 전체 검증은 `full_verification=true` 수동 실행으로 분리했습니다.
+- Runner native AMD64/ARM64의 111+112개 검증과 고정 이미지 provenance는 유지합니다.
+- 기존 CI [37406753649](https://github.com/dsa04156/edgeai/actions/runs/37406753649)는
+  scaffold/storage/native 2종/Runner 발행 성공 후, 사용자 요청으로 긴 Kubernetes 검증을 취소했습니다.
+- 경로 정리 누락과 VD Python 진입점 문제는 수정·푸시했습니다. 실제 Kubernetes VD 완료/전환
+  두 경로와 결과6개·실행 기록·자원 정리는 `20261006T025722Z-f68dcdc7`에서 통과했습니다.
+- Session/Source/측정 시험 fixture 변경3파일은 로컬에 보존하며 이번 CI 변경에 포함하지 않습니다.
 
 ## DB와 배포
 
-- 로컬 PostgreSQL `localhost:15432/edgeai`에 연결을 확인했습니다.
-- `edgeai` 스키마의 테이블은 43개, 적용 마이그레이션은 V34입니다.
-- 저장소의 마이그레이션은 V40까지 있어 이 로컬 DB에 최신 반영이 필요합니다.
-- CI [37404577288](https://github.com/dsa04156/edgeai/actions/runs/37404577288)는 양쪽 native111+107개와
-  Runner 발행을 통과했으나 scaffold의 Remote 모듈 import 실패로 새 배포가 차단됐습니다.
-- 수정 후 격리 Python import/19개 수집은 정상입니다. 로컬 실행19개는 TLS 준비3실패·응답 timeout1오류로 전체 실패입니다.
-- 기존 배포는 Argo Synced·Pod Ready·두 주소 HTTP200/UP이며, 적용 DB는 V36입니다.
-- GitHub Actions·GHCR·ArgoCD 연결은 구성돼 있지만 이번 수정의 배포 성공은 확인 전입니다.
+- 기존 Kubernetes 배포는 API·Dashboard HTTP200, Pod5개 Ready입니다.
+- ArgoCD는 Git 동기화 완료지만 기존 Ingress 주소 게시 문제로 전체 health는 Progressing입니다.
+- 기존 배포 DB는 V36, 로컬 DB는 V34입니다. 저장소 마이그레이션은 V40입니다.
+- 간소화한 CI의 성공 및 신규 이미지 자동 배포·DB 반영은 확인 중입니다.
 
 ## 다음 순서
 
-1. 경로 오류와 VD 진입점 수정의 원격 CI를 통과시킵니다.
-2. 검증된 이미지 digest의 GitOps 갱신을 확인합니다.
-3. 통과한 이미지의 Kubernetes·ArgoCD 상태를 확인합니다.
+1. 기본 CI 통과와 GitOps 이미지 digest 자동 커밋 확인.
+2. ArgoCD 동기화·정확한 실행 이미지·DB V40·HTTP 및 기존 데이터 보존 확인.
 
 과거 진행 이력은 [보관 기록](docs/history/progress-through-2026-10-06.md)에 있습니다.
 이 파일은 최신 상태로 교체하며 과거 실행 로그를 계속 덧붙이지 않습니다.
