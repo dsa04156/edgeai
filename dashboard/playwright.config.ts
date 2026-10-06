@@ -11,7 +11,7 @@ export default defineConfig({
     { name: "mobile", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
   ],
   webServer: {
-    env: { EDGEAI_API_PORT: "1", EDGEAI_API_BASE_URL: "", EDGEAI_DASHBOARD_PORT: "13081", NEXT_TELEMETRY_DISABLED: "1" },
+    env: { EDGEAI_WORKFLOW_ENABLED: "true", EDGEAI_API_PORT: "1", EDGEAI_API_BASE_URL: "", EDGEAI_DASHBOARD_PORT: "13081", NEXT_TELEMETRY_DISABLED: "1" },
     command: "node scripts/start.mjs",
     url: "http://127.0.0.1:13081",
     reuseExistingServer: false,

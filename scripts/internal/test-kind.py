@@ -202,7 +202,7 @@ def main():
                                  **({'digest': ref.split('@')[1]} if '@' in ref else {'newTag': ref.rsplit(':', 1)[1]})})
                 (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))
                 (Path(overlay) / 'kustomization.yaml').write_text(json.dumps({'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
-                    'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins, 'patches': [{'path': 'remote-api.json'}]}))
+                    'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins, 'patches': [{'path': 'remote-api.json'}, {'patch': json.dumps({'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'edgeai-config'}, 'data': {'EDGEAI_WORKFLOW_ENABLED': 'true'}})}]}))
                 kcall(['apply', '-k', overlay])
             for resource in ['statefulset/edgeai-postgres', 'statefulset/edgeai-minio', 'deployment/edgeai-remote', 'deployment/edgeai-api', 'deployment/edgeai-dashboard']:
                 print('Waiting for ' + resource, flush=True)
@@ -318,7 +318,7 @@ def main():
                 (Path(overlay) / 'remote-api.json').write_text(json.dumps(remote_api_patch()))
                 (Path(overlay) / 'kustomization.yaml').write_text(json.dumps({'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
                     'namespace': 'edgeai', 'resources': ['../../kubernetes/base'], 'images': pins,
-                    'components': ['../../kubernetes/components/stream'], 'patches': [{'path': 'remote-api.json'}]}))
+                    'components': ['../../kubernetes/components/stream'], 'patches': [{'path': 'remote-api.json'}, {'patch': json.dumps({'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'edgeai-config'}, 'data': {'EDGEAI_WORKFLOW_ENABLED': 'true'}})}]}))
                 kcall(['-n', 'edgeai', 'apply', '-k', overlay])
             for resource in ['statefulset/edgeai-minio', 'deployment/edgeai-api']:
                 kcall(['-n', 'edgeai', 'rollout', 'status', resource, '--timeout=240s'], timeout=250)

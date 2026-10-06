@@ -8,6 +8,8 @@ on:
         description: Run the full recovery and Kubernetes suite on main (does not deploy)
         type: boolean
         default: true
+env:
+  EDGEAI_WORKFLOW_ENABLED: ${{ inputs.full_verification && 'true' || 'false' }}
 permissions:
   contents: read
 concurrency:

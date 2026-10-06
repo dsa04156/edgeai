@@ -354,7 +354,7 @@ with response: print(response.status)
             api_env = [env('EDGEAI_BIND_ADDRESS', '0.0.0.0'), env('EDGEAI_API_PORT', '18080'), env('EDGEAI_DB_HOST', db + '.edgeai.svc'), env('EDGEAI_DB_PORT', '5432'),
                 env('EDGEAI_API_TLS_ENABLED', 'true'), env('EDGEAI_API_TLS_PORT', '18443'),
                 env('EDGEAI_API_TLS_CERTIFICATE_FILE', '/tmp/identity/server.crt'), env('EDGEAI_API_TLS_PRIVATE_KEY_FILE', '/tmp/identity/server.key'),
-                env('EDGEAI_KUBE_ENABLED', 'true'), env('EDGEAI_RUNTIME_ENABLED', 'true'), env('EDGEAI_RUNTIME_NAMESPACE', 'edgeai-runtimes'), env('EDGEAI_RUNTIME_CONTROL_PLANE_URL', api_origin),
+                env('EDGEAI_WORKFLOW_ENABLED', 'true'), env('EDGEAI_KUBE_ENABLED', 'true'), env('EDGEAI_RUNTIME_ENABLED', 'true'), env('EDGEAI_RUNTIME_NAMESPACE', 'edgeai-runtimes'), env('EDGEAI_RUNTIME_CONTROL_PLANE_URL', api_origin),
                 env('EDGEAI_RUNTIME_CA_CONFIG_MAP', root + '-ca'), env('EDGEAI_KUBE_API_URL', 'https://kubernetes.default.svc'),
                 env('EDGEAI_KUBE_TOKEN_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/token'), env('EDGEAI_KUBE_CA_FILE', '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'),
                 env('EDGEAI_RUNNER_KEY_FILE', '/tmp/identity/runner.key'), env('EDGEAI_STORAGE_URL', 'https://' + storage + '.edgeai.svc:9000'), env('EDGEAI_STORAGE_RUNNER_URL', 'https://' + storage + '.edgeai.svc:9000'),

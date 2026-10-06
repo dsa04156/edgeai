@@ -1,3 +1,4 @@
+import { workflowsEnabled } from "../../../../lib/features";
 import { NextRequest, NextResponse } from "next/server";
 import { controlPlaneOrigin } from "../../../../lib/control-plane";
 
@@ -6,6 +7,8 @@ export const dynamic = "force-dynamic";
 async function forward(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const target = path.join("/");
+  if (!workflowsEnabled() && /^(workflows|workflow-runs)(\/|$)/.test(target))
+    return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const allowed = request.method === "GET" ? target === "csrf"
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)

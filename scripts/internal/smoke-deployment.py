@@ -128,6 +128,22 @@ print("PASS: deployed Device lifecycle, CSRF on every mutation, revision conflic
 if args.through == "device":
     raise SystemExit(0)
 
+status, body = request(api + "/api/v1/platform", authenticated=True)
+assert status == 200
+if "workflows" not in json.loads(body)["capabilities"]:
+    assert request(ui + "/workflows")[0] == 404
+    for page in ("/", "/profiles", "/devices", "/virtual-devices", "/audit"):
+        status, html = request(ui + page)
+        assert status == 200 and b'href="/workflows"' not in html
+    for path in ("workflows", "workflow-runs"):
+        for origin in (api + "/api/v1/", ui + "/api/control-plane/"):
+            assert request(origin + path, authenticated=True)[0] == 404
+            assert request(origin + path, "POST", {}, authenticated=True, csrf=csrf, idempotency=str(uuid.uuid4()))[0] == 404
+    status, contract = request(api + "/openapi.yaml", authenticated=True)
+    assert status == 200 and b"/api/v1/workflows" not in contract and b"/api/v1/workflow-runs" not in contract
+    print("PASS: deferred workflow UI, direct URL, public API, proxy and Swagger endpoints are unavailable; other management pages remain available")
+    raise SystemExit(0)
+
 assert request(ui + "/workflows")[0] == 200
 workflow_url = ui + "/api/control-plane/workflows"
 runs_url = ui + "/api/control-plane/workflow-runs"

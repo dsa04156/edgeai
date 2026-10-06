@@ -20,6 +20,8 @@ dependencies {
 }
 
 tasks.named('bootJar') { archiveFileName = 'edgeai-control-plane.jar' }
+// Existing workflow contract tests explicitly exercise the retained integration capability.
+tasks.withType(Test).configureEach { systemProperty 'edgeai.workflow.enabled', 'true' }
 tasks.named('test') { exclude '**/*IntegrationTest.class' }
 tasks.register('integrationTest', Test) {
     description = 'Requires a real PostgreSQL database; never substitutes an in-memory database.'

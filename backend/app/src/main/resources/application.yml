@@ -28,6 +28,8 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  workflow:
+    enabled: ${EDGEAI_WORKFLOW_ENABLED:false}
   recovery:
     inspect-only: ${EDGEAI_RECOVERY_INSPECT_ONLY:false}
   api-tls:

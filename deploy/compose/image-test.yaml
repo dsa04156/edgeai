@@ -19,6 +19,7 @@ services:
       EDGEAI_DB_NAME: edgeai
       EDGEAI_DB_USER: edgeai
       EDGEAI_DB_PASSWORD: ${EDGEAI_DB_PASSWORD}
+      EDGEAI_WORKFLOW_ENABLED: ${EDGEAI_WORKFLOW_ENABLED:-false}
       EDGEAI_API_USER: ${EDGEAI_API_USER}
       EDGEAI_API_PASSWORD: ${EDGEAI_API_PASSWORD}
     ports: ['127.0.0.1:18080:18080']
@@ -28,4 +29,5 @@ services:
     image: ${EDGEAI_DASHBOARD_IMAGE:?Missing dashboard image}
     environment:
       EDGEAI_API_BASE_URL: http://api:18080
+      EDGEAI_WORKFLOW_ENABLED: ${EDGEAI_WORKFLOW_ENABLED:-false}
     ports: ['127.0.0.1:13080:13080']

@@ -1,7 +1,12 @@
+import { notFound } from "next/navigation";
+import { workflowsEnabled } from "../../lib/features";
 import Link from "next/link";
 import { WorkflowConsole } from "./workflow-console";
 
+export const dynamic = "force-dynamic";
+
 export default function Workflows() {
+  if (!workflowsEnabled()) notFound();
   return <main>
     <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">M4 · Runtime / Result</span></header>
     <nav className="section-nav" aria-label="관리 메뉴"><Link href="/profiles">Profile 관리</Link><Link href="/devices">장치·노드 관리</Link><Link href="/workflows" aria-current="page">워크플로·실행 관리</Link><Link href="/virtual-devices">가상 장치 관리</Link><Link href="/audit">감사 기록</Link></nav>

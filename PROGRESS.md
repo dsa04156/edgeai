@@ -11,26 +11,24 @@
 
 ## 이번 작업
 
-- 사용자 요청에 따라 자동 CI를 기본 단위·계약·타입/lint·이미지 smoke 위주로 줄였습니다.
-- 백업·복구·부하·Kubernetes 전체 검증은 `full_verification=true` 수동 실행으로 분리했습니다.
-- Runner native AMD64/ARM64의 111+112개 검증과 고정 이미지 provenance는 유지합니다.
-- 기존 CI [37406753649](https://github.com/dsa04156/edgeai/actions/runs/37406753649)는
-  scaffold/storage/native 2종/Runner 발행 성공 후, 사용자 요청으로 긴 Kubernetes 검증을 취소했습니다.
-- 경로 정리 누락과 VD Python 진입점 문제는 수정·푸시했습니다. 실제 Kubernetes VD 완료/전환
-  두 경로와 결과6개·실행 기록·자원 정리는 `20261006T025722Z-f68dcdc7`에서 통과했습니다.
-- Session/Source/측정 시험 fixture 변경3파일은 로컬에 보존하며 이번 CI 변경에 포함하지 않습니다.
+- 기관 간 통합 전까지 워크플로 메뉴·직접 URL·공개 API·Swagger 작업 목록을 제외합니다.
+  기본값은 `EDGEAI_WORKFLOW_ENABLED=false`이며 API와 Dashboard에 함께 적용합니다.
+- 공유 내부 실행 코드와 기존 DB 데이터는 보존합니다. 다른 Platform-Service 저장소는 검토만 했고 통합하지 않았습니다.
+- 관련 Java 테스트 10개와 Dashboard 타입·lint·빌드 검사는 통과했습니다. 이번 변경의 CI와 배포는 확인 중입니다.
+- 자동 CI 간소화는 완료했습니다. 백업·복구·부하·Kubernetes 전체 검증은 `full_verification=true` 수동 실행입니다.
 
 ## DB와 배포
 
-- 기존 Kubernetes 배포는 API·Dashboard HTTP200, Pod5개 Ready입니다.
+- CI [37411420254](https://github.com/dsa04156/edgeai/actions/runs/37411420254)는 전체 7개 job이 성공했습니다.
+- GitOps `a50e0e7` 배포에서 소스 `9c8ebba`의 API·Dashboard·MinIO 실행 이미지 일치,
+  Pod Ready·PVC Bound·API와 Dashboard HTTP 200을 확인했습니다.
 - ArgoCD는 Git 동기화 완료지만 기존 Ingress 주소 게시 문제로 전체 health는 Progressing입니다.
-- 기존 배포 DB는 V36, 로컬 DB는 V34입니다. 저장소 마이그레이션은 V40입니다.
-- 간소화한 CI의 성공 및 신규 이미지 자동 배포·DB 반영은 확인 중입니다.
+- Kubernetes DB는 V40 적용 성공을 확인했습니다. 이번 기능 제외에는 DB 변경이 없습니다.
 
 ## 다음 순서
 
-1. 기본 CI 통과와 GitOps 이미지 digest 자동 커밋 확인.
-2. ArgoCD 동기화·정확한 실행 이미지·DB V40·HTTP 및 기존 데이터 보존 확인.
+1. 워크플로 제외 변경의 CI·GitOps 자동 배포 확인.
+2. 배포된 메뉴·직접 URL·공개 API·Swagger에서 제외 상태와 기존 관리 기능 확인.
 
 과거 진행 이력은 [보관 기록](docs/history/progress-through-2026-10-06.md)에 있습니다.
 이 파일은 최신 상태로 교체하며 과거 실행 로그를 계속 덧붙이지 않습니다.

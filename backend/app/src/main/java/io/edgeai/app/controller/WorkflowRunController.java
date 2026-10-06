@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="edgeai.workflow.enabled", havingValue="true")
 @RestController
 @RequestMapping("/api/v1/workflow-runs")
 public class WorkflowRunController {
