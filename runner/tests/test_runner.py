@@ -261,7 +261,6 @@ pathlib.Path(os.environ['EDGEAI_OUTPUT_DIR'],'output').write_text('{}')
             with self.subTest(status=status, error=error), Fixture(self.python(body), telemetry_status=status, telemetry_error=error) as f:
                 code, out = f.finish(f.start())
                 self.assertTrue(f.telemetry)
-                self.assertGreater(f.telemetry[0]['latencyMicros'], 0)
                 if f.image:
                     self.assertIsNotNone(f.telemetry[0]['cpuUsageMicros'])
                     self.assertEqual(500, f.telemetry[0]['cpuLimitMillicores'])
@@ -273,6 +272,13 @@ pathlib.Path(os.environ['EDGEAI_OUTPUT_DIR'],'output').write_text('{}')
                 else:
                     self.assertEqual(0, code); self.assertEqual(1, len(f.commits))
                     self.assertGreaterEqual(len(f.telemetry), 2)
+                    # Resource measurements can arrive before the workload publishes
+                    # its first latency. Require a real latency during successful work,
+                    # while a first-sample identity fence may stop that work earlier.
+                    latencies = [s['latencyMicros'] for s in f.telemetry if s['latencyMicros'] is not None]
+                    self.assertTrue(latencies)
+                    for latency in latencies:
+                        self.assertGreater(latency, 0)
                     self.assertEqual(sorted({s['sequence'] for s in f.telemetry}), [s['sequence'] for s in f.telemetry])
 
 

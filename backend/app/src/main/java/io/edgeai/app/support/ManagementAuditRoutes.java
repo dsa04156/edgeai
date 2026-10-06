@@ -32,6 +32,7 @@ public final class ManagementAuditRoutes {
         new Route("POST","/api/v1/workflow-runs","createWorkflowRun"),
         new Route("GET","/api/v1/workflow-runs","listWorkflowRuns"),
         new Route("GET","/api/v1/workflow-runs/{runId}","getWorkflowRun"),
+        new Route("GET","/api/v1/workflow-runs/{runId}/placements","getRunPlacements"),
         new Route("GET","/api/v1/workflow-runs/{runId}/streams","listRunStreamRoutes"),
         new Route("POST","/api/v1/workflow-runs/{runId}/cancel","cancelWorkflowRun"),
         new Route("GET","/api/v1/tasks/{taskId}","getTask"),

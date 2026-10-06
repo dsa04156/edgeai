@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { parse, stringify } from "lossless-json";
 import type { components } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
+import { registryItems } from "../../lib/registry";
 import { hardwareLabel } from "../../lib/hardware";
 
 type Schema = components["schemas"];
@@ -17,10 +18,11 @@ export function DeviceInventory() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
   const [page, setPage] = useState<Schema["DevicePage"] | null>(null); const [offset, setOffset] = useState(0);
   const [nodes, setNodes] = useState<Node[]>([]); const [nodeOffset, setNodeOffset] = useState(0); const [nextNodeOffset, setNextNodeOffset] = useState<number | null>(null);
+  const [initialProfile, setInitialProfile] = useState("");
   const [profiles, setProfiles] = useState<Schema["ProfileVersion"][]>([]);
   const [detail, setDetail] = useState<Detail | null>(null); const [rawDetail, setRawDetail] = useState(""); const [confirmRelease, setConfirmRelease] = useState(false);
   async function api(path: string, init?: RequestInit, authorization = auth) {
-    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { Authorization: authorization, ...init?.headers } });
+    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
       throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 403 ? "연결이 만료되었습니다. 다시 연결하세요." : value.message || "요청을 처리하지 못했습니다.");
@@ -38,17 +40,17 @@ export function DeviceInventory() {
   async function show(id: string) {
     const text = await (await api(`devices/${id}`)).text(); setDetail(JSON.parse(text)); setRawDetail(stringify(parse(text), null, 2) || ""); setConfirmRelease(false);
   }
-  function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const input = new FormData(form);
+  function connect() {
     void run(async () => {
-      const authorization = `Basic ${btoa(String.fromCharCode(...new TextEncoder().encode(`${input.get("username")}:${input.get("password")}`)))}`;
+      const authorization = "dashboard";
       const token = await (await api("csrf", undefined, authorization)).json();
       await loadDevices(0, authorization); await loadNodes(0, authorization);
-      setProfiles((await (await api("profiles/DEVICE?limit=100", undefined, authorization)).json()).items);
-      setAuth(authorization); setCsrf(token.token); form.reset();
+      setProfiles(await registryItems("profiles/DEVICE", path => api(path, undefined, authorization)));
+      setInitialProfile(new URLSearchParams(window.location.search).get("profile") || "");
+      setAuth(authorization); setCsrf(token.token);
     });
   }
-  function disconnect() { setAuth(""); setCsrf(""); setPage(null); setNodes([]); setProfiles([]); setDetail(null); setRawDetail(""); setConfirmRelease(false); setError(""); setNotice(""); }
+
   function write(method: string, body?: object): RequestInit {
     return { method, headers: { "X-CSRF-TOKEN": csrf, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) };
   }
@@ -61,7 +63,7 @@ export function DeviceInventory() {
     });
   }
   return <>
-    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p role="alert" className="error">{error}</p>}
     {auth && <>
@@ -89,6 +91,7 @@ export function DeviceInventory() {
           }}><div className="form-row"><label>연결할 노드<select name="nodeId" required defaultValue=""><option value="" disabled>아래 노드 목록의 현재 페이지에서 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {statusNames[n.status]}</option>)}</select></label>
             <label>연결 포트<input name="port" required maxLength={128} placeholder="camera-0 / ttyUSB0" /></label></div><button disabled={busy || !nodes.some(n => n.status === "READY")}>노드 연결</button></form>
         </>}
+        <p><a href={`/virtual-devices?device=${detail.device.id}`}>이 장치로 가상 장치 만들기 →</a></p>
         <h3>최근 연결 이력</h3>{detail.attachments.length ? <ul className="history-list">{detail.attachments.map(a => <li key={a.id}><span className="mono">{nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}</span> · {a.port} · {a.detachedAt ? "종료됨" : "활성"}</li>)}</ul> : <p className="muted">아직 연결된 노드가 없습니다.</p>}
         <h3>최근 관측</h3>{detail.observations.length ? <ul className="history-list">{detail.observations.map(o => <li key={o.id}>{statusNames[o.status]} · sequence {o.sequence} · {new Date(o.receivedAt).toLocaleString()}</li>)}</ul> : <p className="muted">아직 상태 보고를 받지 않았습니다. 장치 에이전트가 세션을 시작한 뒤 보고합니다.</p>}
         <details><summary>세션·관측 데이터 상세</summary><pre aria-label="장치 상세 JSON">{rawDetail}</pre></details>
@@ -96,9 +99,8 @@ export function DeviceInventory() {
       </section>}
       <section className="panel" aria-labelledby="register-title"><h2 id="register-title">새 장치 등록</h2>
         <form onSubmit={register}><fieldset disabled={busy} className="publish-fields"><div className="form-row"><label>장치 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="factory-a-temperature-01" /></label><label>장치 이름<input name="displayName" required maxLength={128} placeholder="A동 온도 센서" /></label></div>
-          <label>DEVICE Profile 버전 ID<input name="profileVersionId" required list="device-profile-versions" maxLength={36} placeholder="Profile 관리에서 확인한 UUID" /></label>
-          <datalist id="device-profile-versions">{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</datalist>
-          <p className="hint">처음 100개 버전을 제안합니다. 다른 버전은 Profile 관리 화면의 UUID를 입력하세요.</p>
+          <label>DEVICE Profile 버전<select name="profileVersionId" required defaultValue={initialProfile}><option value="">프로필 선택</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</select></label>
+          {!profiles.length && <p className="hint"><a href="/profiles">DEVICE Profile을 먼저 등록하세요 →</a></p>}
           <label>데이터 출처<select name="sourceMode" defaultValue="LIVE"><option value="LIVE">실제 장치</option><option value="REPLAY">재생 데이터</option><option value="SYNTHETIC">합성 데이터</option></select></label>
           <button className="primary">장치 등록</button></fieldset></form>
       </section>

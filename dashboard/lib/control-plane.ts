@@ -14,3 +14,10 @@ export function controlPlaneOrigin(): string {
     throw new Error("Invalid EDGEAI_API_PORT");
   return `http://127.0.0.1:${port}`;
 }
+
+export function controlPlaneAuthorization(): string | null {
+  const password = process.env.EDGEAI_API_PASSWORD;
+  if (!password) return null;
+  const username = process.env.EDGEAI_API_USER || "edgeai";
+  return `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
+}

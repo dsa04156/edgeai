@@ -57,7 +57,7 @@ export function VirtualDeviceExecution({ vd, auth, csrf, disabled }: { vd: Schem
   function prepare(action: Action) { setDraft({ action, key: requestKey(), revision: vd.revision }); setCommandError(""); setNotice(""); }
   return <section aria-labelledby="vd-execution-title">
     <div className="toolbar"><h3 id="vd-execution-title">VD 실행</h3><button disabled={busy || disabled} onClick={() => void refresh()}>실행 상태 새로고침</button></div>
-    <p className="hint">등록과 실행 준비는 별개입니다. 상태는 3초마다 갱신됩니다. 현재는 실행 준비·교체·종료를 지원하며 VD를 통한 작업 배정은 아직 연결되지 않았습니다.</p>
+    <p className="hint">등록과 실행 준비는 별개입니다. 상태는 3초마다 갱신됩니다. 준비된 VD를 Workflow 작업의 실행 위치로 선택하면 같은 SERVICE 버전의 작업을 배정할 수 있습니다.</p>
     {error && <p role="alert" className="error">{error} 현재 준비 상태를 확인할 수 없습니다.</p>}
     {!data && !error && <p role="status">실행 상태 조회 중…</p>}
     {data && <>

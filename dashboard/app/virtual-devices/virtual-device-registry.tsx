@@ -2,6 +2,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 import { VirtualDeviceExecution } from "./virtual-device-execution";
+import { registryItems } from "../../lib/registry";
+import { hardwareLabel } from "../../lib/hardware";
 import { ConnectionPanel } from "../components/connection-panel";
 
 type Schema = components["schemas"];
@@ -11,24 +13,24 @@ type Source = Schema["VirtualDeviceSources"][number];
 const stateNames = { REGISTERED: "등록됨", RELEASED: "해제됨" };
 const sourceNames = { LIVE: "실제 장치", REPLAY: "재생 데이터", SYNTHETIC: "합성 데이터" };
 
-function SourceFields({ initial = [] }: { initial?: Source[] }) {
+function SourceFields({ initial = [], devices }: { initial?: Source[]; devices: Schema["Device"][] }) {
   const sequence = useRef(initial.length);
   const [rows, setRows] = useState(initial.map((source, index) => ({ ...source, row: index })));
   return <fieldset className="publish-fields"><legend>원본 연결</legend>
-    <p className="hint">VD Profile에 선언한 원본 키와 호환되는 Device ID를 입력하세요. 필수 원본은 모두 연결해야 합니다.</p>
+    <p className="hint">VD Profile에 선언한 원본 키와 호환되는 장치를 선택하세요. 필수 원본은 모두 연결해야 합니다.</p>
     {rows.map((source, index) => <div key={source.row} className="publish-fields">
       <div className="form-row"><label>원본 키 {index + 1}<input name="sourceKey" required maxLength={100} defaultValue={source.sourceKey} placeholder="input" /></label>
-        <label>원본 Device ID {index + 1}<input name="deviceId" required maxLength={36} defaultValue={source.deviceId} list="vd-source-devices" placeholder="장치 관리에서 확인한 UUID" /></label></div>
+        <label>원본 장치 {index + 1}<select name="deviceId" required defaultValue={source.deviceId}><option value="">장치 선택</option>{devices.filter(d => d.state === "ACTIVE" || d.id === source.deviceId).map(d => <option key={d.id} value={d.id} disabled={d.state !== "ACTIVE"}>{d.displayName} · {sourceNames[d.sourceMode]}</option>)}</select></label></div>
       <button type="button" onClick={() => setRows(rows.filter(row => row.row !== source.row))}>원본 {index + 1} 제거</button>
     </div>)}
     {!rows.length && <p className="muted">연결할 원본이 없습니다. 원본 없는 emulation 규격은 이 상태로 등록할 수 있습니다.</p>}
     <button type="button" disabled={rows.length >= 16} onClick={() => setRows([...rows, { row: sequence.current++, sourceKey: "", deviceId: "" }])}>원본 추가</button>
   </fieldset>;
 }
-function PlacementFields({ initial = { mode: "AUTO" } }: { initial?: VD["placement"] }) {
+function PlacementFields({ initial = { mode: "AUTO" }, nodes }: { initial?: VD["placement"]; nodes: Schema["ExecutionNode"][] }) {
   const [mode, setMode] = useState(initial.mode);
   return <><label>배치 의도<select name="mode" value={mode} onChange={e => setMode(e.target.value as "AUTO" | "NODE")}><option value="AUTO">자동 배치</option><option value="NODE">특정 노드 지정</option></select></label>
-    {mode === "NODE" && <label>배치 Node ID<input name="nodeId" required maxLength={36} defaultValue={initial.mode === "NODE" ? initial.nodeId : ""} placeholder="장치·노드 관리에서 확인한 UUID" /></label>}
+    {mode === "NODE" && <label>배치 노드<select name="nodeId" required defaultValue={initial.mode === "NODE" ? initial.nodeId : ""}><option value="">노드 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {hardwareLabel(n)}</option>)}</select></label>}
     <p className="hint">새 VD는 등록 후 실행을 시작할 수 있습니다. 실행 중인 VD의 원본·배치를 바꾸면 이전 실행 종료 후 교체합니다.</p></>;
 }
 function configuration(form: FormData) {
@@ -42,9 +44,12 @@ export function VirtualDeviceRegistry() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
   const [page, setPage] = useState<{ items: VD[]; nextOffset: number | null } | null>(null); const [offset, setOffset] = useState(0);
   const [profiles, setProfiles] = useState<Schema["ProfileVersion"][]>([]); const [devices, setDevices] = useState<Schema["Device"][]>([]);
+  const [nodes, setNodes] = useState<Schema["ExecutionNode"][]>([]);
+  const [selectedProfile, setSelectedProfile] = useState("");
+  const [initialDevice, setInitialDevice] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null); const [confirmRelease, setConfirmRelease] = useState(false); const [formVersion, setFormVersion] = useState(0);
   async function api(path: string, init?: RequestInit, authorization = auth) {
-    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { Authorization: authorization, ...init?.headers } });
+    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
       throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 403 ? "연결이 만료되었습니다. 다시 연결하세요." : value.message || "요청을 처리하지 못했습니다.");
@@ -59,18 +64,24 @@ export function VirtualDeviceRegistry() {
   function write(method: string, body?: object): RequestInit {
     return { method, headers: { "X-CSRF-TOKEN": csrf, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) };
   }
-  function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget, input = new FormData(form);
+  function connect() {
     void run(async () => {
-      const authorization = `Basic ${btoa(String.fromCharCode(...new TextEncoder().encode(`${input.get("username")}:${input.get("password")}`)))}`;
+      const authorization = "dashboard";
       const token = await (await api("csrf", undefined, authorization)).json();
       await load(0, authorization);
-      setProfiles((await (await api("profiles/VD?limit=100", undefined, authorization)).json()).items);
-      setDevices((await (await api("devices?limit=100", undefined, authorization)).json()).items);
-      setAuth(authorization); setCsrf(token.token); form.reset();
+      const [profileItems, deviceItems, nodeItems] = await Promise.all([
+        registryItems<Schema["ProfileVersion"]>("profiles/VD", path => api(path, undefined, authorization)),
+        registryItems<Schema["Device"]>("devices", path => api(path, undefined, authorization)),
+        registryItems<Schema["ExecutionNode"]>("nodes", path => api(path, undefined, authorization)),
+      ]);
+      setProfiles(profileItems); setDevices(deviceItems); setNodes(nodeItems);
+      const query = new URLSearchParams(window.location.search);
+      setSelectedProfile(query.get("profile") || ""); setInitialDevice(query.get("device") || "");
+      if (query.get("vd")) setDetail(await (await api(`virtual-devices/${query.get("vd")}`, undefined, authorization)).json());
+      setAuth(authorization); setCsrf(token.token);
     });
   }
-  function disconnect() { setAuth(""); setCsrf(""); setPage(null); setProfiles([]); setDevices([]); setDetail(null); setConfirmRelease(false); setError(""); setNotice(""); }
+
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const input = new FormData(event.currentTarget);
     void run(async () => {
@@ -80,7 +91,7 @@ export function VirtualDeviceRegistry() {
     });
   }
   return <>
-    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p role="alert" className="error">{error}</p>}
     {auth && <>
@@ -98,14 +109,15 @@ export function VirtualDeviceRegistry() {
         <p className="digest mono">VD ID {detail.vd.id}</p>
         <dl><div><dt>VD Profile 버전</dt><dd className="mono digest">{detail.vd.profileVersionId}</dd></div><div><dt>실행 서비스 버전</dt><dd className="mono digest">{detail.vd.serviceProfileVersionId}</dd></div></dl>
         <VirtualDeviceExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} />
+        <p><a href={`/workflows?service=${detail.vd.serviceProfileVersionId}&vd=${detail.vd.id}`}>이 가상 장치로 서비스 실행 구성 →</a></p>
         <h3>현재 원본 연결</h3>{detail.activeSources.length ? <ul className="history-list">{detail.activeSources.map(source => <li key={source.id}><strong>{source.sourceKey}</strong> · {sourceNames[source.sourceMode]}<span className="block mono digest">{source.deviceId}</span></li>)}</ul> : <p className="muted">활성 원본 연결이 없습니다.</p>}
         {detail.vd.state === "REGISTERED" && <form key={`${detail.vd.id}-${detail.vd.revision}`} aria-label="VD 설정 수정" onSubmit={event => {
           event.preventDefault(); const input = new FormData(event.currentTarget);
           void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("PATCH", { revision: detail.vd.revision, ...configuration(input) })); await show(detail.vd.id); await load(); setNotice("VD 설정을 저장했습니다. 기존 원본 연결 이력은 보존됩니다."); });
         }}><fieldset disabled={busy} className="publish-fields"><legend>설정 수정</legend>
           <label>표시 이름<input name="displayName" required maxLength={128} defaultValue={detail.vd.displayName} /></label>
-          <SourceFields initial={detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId }))} />
-          <PlacementFields initial={detail.vd.placement} /><button>VD 설정 저장</button>
+          <SourceFields devices={devices} initial={detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId }))} />
+          <PlacementFields nodes={nodes} initial={detail.vd.placement} /><button>VD 설정 저장</button>
         </fieldset></form>}
         <h3>원본 연결 이력</h3>
         {detail.sourceHistoryTruncated && <p className="hint">최근 연결 100개를 표시합니다. 현재 활성 연결은 위에서 모두 확인할 수 있습니다.</p>}
@@ -116,10 +128,9 @@ export function VirtualDeviceRegistry() {
       <section className="panel" aria-labelledby="vd-register-title"><h2 id="vd-register-title">새 가상 장치 등록</h2>
         <form key={formVersion} onSubmit={register} aria-label="VD 등록"><fieldset disabled={busy} className="publish-fields">
           <div className="form-row"><label>VD 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="factory-a-virtual-sensor" /></label><label>VD 이름<input name="displayName" required maxLength={128} /></label></div>
-          <label>VD Profile 버전 ID<input name="profileVersionId" required list="vd-profile-versions" maxLength={36} placeholder="Profile 관리에서 확인한 UUID" /></label>
-          <datalist id="vd-profile-versions">{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</datalist>
-          <p className="hint">Profile과 원본 장치는 처음 100개를 제안합니다. 다른 항목은 관리 화면의 UUID를 입력하세요.</p>
-          <SourceFields /><PlacementFields /><button className="primary">VD 등록</button>
+          <label>VD Profile 버전<select name="profileVersionId" required value={selectedProfile} onChange={e => setSelectedProfile(e.target.value)}><option value="">프로필 선택</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</select></label>
+          {!profiles.length && <p className="hint"><a href="/profiles?kind=VD">VD Profile을 먼저 등록하세요 →</a></p>}
+          <SourceFields key={selectedProfile} devices={devices} initial={Object.keys((profiles.find(p => p.id === selectedProfile)?.spec as { sources?: object } | undefined)?.sources || {}).map((sourceKey, index) => ({ sourceKey, deviceId: index === 0 ? initialDevice : "" }))} /><PlacementFields nodes={nodes} /><button className="primary">VD 등록</button>
         </fieldset></form>
       </section>
     </>}

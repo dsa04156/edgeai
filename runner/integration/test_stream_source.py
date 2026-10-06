@@ -115,13 +115,15 @@ class StreamSourceTest(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory(prefix='source-sdk-');self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
         self.broker=Broker(self.root);self.addCleanup(self.broker.stop);self.broker.enable_tls()
-        self.api=DeviceApi(self.broker);self.addCleanup(self.api.close)
         token=self.root/'device.token';token.write_text('fixture-device');token.chmod(0o600)
-        self.client=BindingClient(self.api.url,A.producer,token,ca_file=self.broker.ca)
         self.directory=self.root/'source';self.directory.mkdir(mode=0o700)
         self.source=None
         self.sink=Journal(self.root/'sink',[A],[],create=True);self.addCleanup(self.sink.close)
         self.link=Link(self.sink,self.broker.endpoint('processor'),'source-test-consumer');self.addCleanup(self.link.close)
+        # Allocate original fixture authority after preparing the durable peer;
+        # never refresh an issued or expired lease to accommodate setup latency.
+        self.api=DeviceApi(self.broker);self.addCleanup(self.api.close)
+        self.client=BindingClient(self.api.url,A.producer,token,ca_file=self.broker.ca)
         self.addCleanup(lambda:self.source.close() if self.source else None)
 
     def open(self,**options):

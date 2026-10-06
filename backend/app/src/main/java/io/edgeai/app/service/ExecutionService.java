@@ -111,6 +111,16 @@ public class ExecutionService {
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public RunSnapshot detail(UUID id) { return new RunSnapshot(run(id,false),repository.tasks(id)); }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
+    public List<io.edgeai.app.dto.PlacementResponse> placements(UUID runId) {
+        run(runId,false);
+        return repository.tasks(runId).stream().map(task -> {
+            var attempts=repository.attempts(task.id());
+            var latest=attempts.isEmpty()?null:attempts.getFirst();
+            var runtime=latest==null?null:runtimes.byAttempt(latest.id()).orElse(null);
+            return io.edgeai.app.dto.PlacementResponse.from(task,latest,runtime);
+        }).toList();
+    }
+    @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public TaskSnapshot taskDetail(UUID id) { return snapshot(task(id)); }
     private TaskSnapshot snapshot(Task task) {
         var attempts=repository.attempts(task.id());

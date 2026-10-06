@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { parse, stringify } from "lossless-json";
 import type { components, operations } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
@@ -59,7 +59,7 @@ export function WorkflowConsole() {
   const [cancel, setCancel] = useState<{ kind: "run" | "task"; id: string } | null>(null);
 
   async function api(path: string, init?: RequestInit, authorization = auth) {
-    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { Authorization: authorization, ...init?.headers } });
+    const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
       throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 403 ? "연결이 만료되었습니다. 다시 연결하세요." : value.message || "요청을 처리하지 못했습니다.");
@@ -91,24 +91,18 @@ export function WorkflowConsole() {
     const [detail, result] = await Promise.all([api(`tasks/${id}`), api(`tasks/${id}/results`)]);
     setTask(await detail.json()); setResults(await result.json());
   }
-  function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+  function connect() {
     void action(async () => {
-      const authorization = `Basic ${btoa(String.fromCharCode(...new TextEncoder().encode(`${data.get("username")}:${data.get("password")}`)))}`;
+      const authorization = "dashboard";
       const token = await (await api("csrf", undefined, authorization)).json();
       await Promise.all([loadWorkflows(0, authorization), loadRuns(0, authorization)]);
       const profiles: operations["listProfiles"]["responses"][200]["content"]["application/json"] = await (await api("profiles/SERVICE?limit=100", undefined, authorization)).json();
       setProfiles(profiles.items); setExampleProfile(profiles.items[0]?.id || "");
       setNodes((await (await api("nodes?limit=100", undefined, authorization)).json()).items);
-      setAuth(authorization); setCsrf(token.token); form.reset();
+      setAuth(authorization); setCsrf(token.token);
     });
   }
-  function disconnect() {
-    setVdId("");
-    setTaskExecutions({});
-    setAuth(""); setCsrf(""); setWorkflows(null); setWorkflow(null); setVersion(null); setVersionJson(""); setProfiles([]); setNodes([]);
-    setRuns(null); setRun(null); setRunJson(""); setTask(null); setResults(null); setOffload(null); setCancel(null); setKey(""); setError(""); setNotice(""); setDag('{"tasks": [], "dependencies": []}'); setParameters("{}"); setRetryAttempts(1); setAutomaticOffload(null); setRetryBackoff(5); setRetryWindow(600); setRetryOn(["STORAGE_FAILED", "RUNTIME_LOST"]);
-  }
+
   async function confirmCancellation() {
     if (!cancel) return;
     await post(cancel.kind === "run" ? `workflow-runs/${cancel.id}/cancel` : `tasks/${cancel.id}/cancel`, {});
@@ -116,7 +110,7 @@ export function WorkflowConsole() {
   }
 
   return <>
-    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p className="error" role="alert">{error}</p>}
     {auth && <>

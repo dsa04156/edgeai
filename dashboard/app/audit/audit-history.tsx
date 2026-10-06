@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
 
@@ -32,7 +32,7 @@ export function AuditHistory() {
   const [page, setPage] = useState<AuditPage | null>(null); const [offset, setOffset] = useState(0);
   const [detail, setDetail] = useState<Audit | null>(null);
   async function api(path: string, authorization = auth) {
-    const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", headers: { Authorization: authorization } });
+    const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", headers: authorization.startsWith("Basic ") ? { Authorization: authorization } : {} });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
       throw new Error(response.status === 401 ? "계정 정보를 확인하고 다시 연결하세요." : response.status === 404 ? "해당 감사 기록을 찾을 수 없습니다." : value.message || "감사 기록을 불러오지 못했습니다.");
@@ -49,16 +49,15 @@ export function AuditHistory() {
     setPage(await api(`audit-requests?limit=20&offset=${nextOffset}`, authorization)); setOffset(nextOffset);
   }
   async function show(id: string) { setDetail(null); setDetail(await api(`audit-requests/${id}`)); }
-  function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const input = new FormData(form);
+  function connect() {
     void run(async () => {
-      const authorization = `Basic ${btoa(String.fromCharCode(...new TextEncoder().encode(`${input.get("username")}:${input.get("password")}`)))}`;
-      await load(0, authorization); setAuth(authorization); form.reset();
+      const authorization = "dashboard";
+      await load(0, authorization); setAuth(authorization);
     });
   }
-  function disconnect() { setAuth(""); setPage(null); setDetail(null); setOffset(0); setError(""); }
+
   return <>
-    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     {error && <p role="alert" className="error">{error}</p>}
     {busy && <p role="status">감사 기록을 확인하는 중…</p>}
     {auth && <>

@@ -1,6 +1,6 @@
 import { workflowsEnabled } from "../../../../lib/features";
 import { NextRequest, NextResponse } from "next/server";
-import { controlPlaneOrigin } from "../../../../lib/control-plane";
+import { controlPlaneOrigin, controlPlaneAuthorization } from "../../../../lib/control-plane";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^virtual-devices/${uuid}/execution$`).test(target)
-    || new RegExp(`^workflow-runs/${uuid}/streams$`).test(target)
+    || new RegExp(`^workflow-runs/${uuid}/(streams|placements)$`).test(target)
     || new RegExp(`^(devices|nodes|virtual-devices)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
     : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
@@ -22,9 +22,14 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices|virtual-devices)/${uuid}$`).test(target);
   if (!allowed)
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
-  const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Basic "))
-    return NextResponse.json({ message: "개발 계정으로 연결하세요." }, { status: 401 });
+  const authorization = controlPlaneAuthorization();
+  if (!authorization)
+    return NextResponse.json({ message: "Dashboard 서버의 API 연결 계정이 설정되지 않았습니다." }, { status: 503 });
+  // The open dashboard may mutate through its own origin only. Spring still verifies CSRF.
+  const origin = request.headers.get("origin");
+  if (request.headers.get("sec-fetch-site") === "cross-site" ||
+      (origin && origin !== request.nextUrl.origin && origin !== `${request.nextUrl.protocol}//${request.headers.get("host")}`))
+    return NextResponse.json({ message: "같은 Dashboard에서 요청하세요." }, { status: 403 });
   const headers = new Headers({ Authorization: authorization });
   const session = request.cookies.get("EDGEAI_SESSION")?.value;
   if (session) headers.set("Cookie", `EDGEAI_SESSION=${session}`);

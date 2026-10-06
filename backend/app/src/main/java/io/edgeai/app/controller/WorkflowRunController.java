@@ -25,6 +25,8 @@ public class WorkflowRunController {
     public RunDetailResponse detail(@PathVariable UUID runId) {
         var value=service.detail(runId);return new RunDetailResponse(WorkflowRunResponse.from(value.run()),value.tasks().stream().map(TaskResponse::from).toList());
     }
+    @GetMapping("/{runId}/placements")
+    public java.util.List<PlacementResponse> placements(@PathVariable UUID runId) { return service.placements(runId); }
     @PostMapping(value="/{runId}/cancel",consumes="application/json")
     public WorkflowRunResponse cancel(@PathVariable UUID runId,@RequestBody String body) { return WorkflowRunResponse.from(service.cancelRun(runId,body)); }
 }

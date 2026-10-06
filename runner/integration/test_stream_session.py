@@ -160,15 +160,21 @@ class StreamSessionTest(unittest.TestCase):
         temp=tempfile.TemporaryDirectory(prefix='edgeai-session-');self.addCleanup(temp.cleanup)
         self.root=Path(temp.name)
         self.broker=Broker(self.root);self.addCleanup(self.broker.stop);self.broker.enable_tls()
+        self.journals,self.links={},{}
+        self.session=None
+        self.addCleanup(self.close_flow)
+        # Peer storage preparation is outside the live authority window. Create
+        # the fixture's original leases only after the durable peers are ready.
+        for actor,inputs,outputs in [('source-a',[],[A]),('source-b',[],[B]),('sink',[OUT],[])]:
+            journal=Journal(self.root/actor,inputs,outputs,Limits(max_frames=6),create=True)
+            self.journals[actor]=journal
+            self.links[actor]=Link(journal,self.broker.endpoint(actor),'session-test-'+actor)
         self.api=SessionApi(self.broker);self.addCleanup(self.api.close)
         for name,value in [('claim','fixture-claim'),('pod','fixture-pod')]:
             path=self.root/name;path.write_text(value);path.chmod(0o600)
         self.client=BindingClient(self.api.url,OUT.producer,self.root/'claim',pod_uid=POD,
                                   pod_token_file=self.root/'pod',ca_file=self.broker.ca)
         self.directory=self.root/'session';self.directory.mkdir(mode=0o700)
-        self.journals,self.links={},{}
-        self.session=None
-        self.addCleanup(self.close_flow)
 
     def close_flow(self):
         if self.session is not None:self.session.close()
@@ -183,10 +189,6 @@ class StreamSessionTest(unittest.TestCase):
         return self.session
 
     def setup_flow(self, **options):
-        for actor,inputs,outputs in [('source-a',[],[A]),('source-b',[],[B]),('sink',[OUT],[])]:
-            journal=Journal(self.root/actor,inputs,outputs,Limits(max_frames=6),create=True)
-            self.journals[actor]=journal
-            self.links[actor]=Link(journal,self.broker.endpoint(actor),'session-test-'+actor)
         session=self.open_session(**options)
         eventually(self.pump,lambda:all(link.ready for link in self.links.values()) and session.link.ready)
         return session
@@ -349,13 +351,16 @@ class StreamSessionTest(unittest.TestCase):
         self.assertIsNotNone(child.poll())
 
     def test_session_timeout_cannot_be_extended_by_valid_heartbeats(self):
-        session=self.setup_flow(timeout=.8,command=[sys.executable,str(RUNNER/'tests/fixtures/stream_workload.py'),'hang'])
-        self.emit(A,b'4');self.emit(B,b'5')
-        eventually(self.pump,lambda:session.processor.workload is not None)
-        child=session.processor.workload.process
-        with self.assertRaises((SessionError,AssignmentError)):
+        # The original budget includes connection setup. A valid timeout there
+        # must not fail a prerequisite that assumes a model has already started.
+        # The processor-deadline test below separately verifies child shutdown.
+        session=self.open_session(timeout=.8)
+        deadline=session.deadline
+        with self.assertRaisesRegex(SessionError,'^STREAM_SESSION_TIMEOUT$'):
             eventually(self.pump,lambda:session.closed,3)
-        self.assertTrue(session.closed);self.assertIsNotNone(child.poll())
+        self.assertGreater(session.heartbeats,0)
+        self.assertEqual(deadline,session.deadline)
+        self.assertTrue(session.closed);self.assertTrue(session.link.closed)
 
     def test_deadline_crossed_inside_processor_reports_session_timeout_and_stops_child(self):
         session=self.setup_flow(timeout=2,command=[sys.executable,str(RUNNER/'tests/fixtures/stream_workload.py'),'hang'])

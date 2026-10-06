@@ -35,6 +35,12 @@ spec:
           image: ghcr.io/dsa04156/edgeai-dashboard:bootstrap
           ports: [{name: http, containerPort: 13080}]
           env:
+            - name: EDGEAI_API_USER
+              valueFrom:
+                configMapKeyRef: {name: edgeai-config, key: EDGEAI_API_USER}
+            - name: EDGEAI_API_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: edgeai-runtime, key: EDGEAI_API_PASSWORD}
             - name: EDGEAI_WORKFLOW_ENABLED
               valueFrom:
                 configMapKeyRef: {name: edgeai-config, key: EDGEAI_WORKFLOW_ENABLED}

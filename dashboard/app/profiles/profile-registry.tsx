@@ -29,7 +29,7 @@ export function ProfileRegistry() {
 
   async function api(path: string, authorization = auth, init?: RequestInit) {
     const response = await fetch(`/api/control-plane/${path}`, {
-      ...init, cache: "no-store", headers: { Authorization: authorization, ...init?.headers },
+      ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers },
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -52,23 +52,16 @@ export function ProfileRegistry() {
     catch (error) { setError(error instanceof Error ? error.message : "연결 상태를 확인하세요."); }
     finally { setBusy(false); }
   }
-  function login(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
+  function connect() {
     void run(async () => {
-      const bytes = new TextEncoder().encode(`${data.get("username")}:${data.get("password")}`);
-      const authorization = `Basic ${btoa(String.fromCharCode(...bytes))}`;
+      const authorization = "dashboard";
       const token = await (await api("csrf", authorization)).json();
       await load(kind, 0, "", authorization);
       setNodes((await (await api("nodes?limit=100", authorization)).json()).items);
-      setAuth(authorization); setCsrf(token.token); form.reset();
+      setAuth(authorization); setCsrf(token.token);
     });
   }
-  function disconnect() {
-    setNodes([]); setSpecText("");
-    setAuth(""); setCsrf(""); setResult(null); setDetail(null); setError(""); setNotice(""); setFilter("");
-  }
+
   function publish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -90,7 +83,7 @@ export function ProfileRegistry() {
   }
 
   return <>
-    <ConnectionPanel connected={!!auth} busy={busy} onConnect={login} onDisconnect={disconnect} />
+    <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p role="alert" className="error">{error}</p>}
     {auth && <>

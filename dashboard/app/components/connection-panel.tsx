@@ -1,17 +1,15 @@
 "use client";
-import type { FormEvent } from "react";
+import { useEffect, useRef } from "react";
 
-export function ConnectionPanel({ connected, busy, onConnect, onDisconnect }: {
-  connected: boolean; busy: boolean; onConnect: (event: FormEvent<HTMLFormElement>) => void; onDisconnect: () => void;
+/** Connect once on entry; credentials stay on the Dashboard server. */
+export function ConnectionPanel({ connected, busy, onConnect }: {
+  connected: boolean; busy: boolean; onConnect: () => void;
 }) {
-  return <section className="panel" aria-labelledby="connection-title">
-    <h2 id="connection-title">개발 계정 연결</h2>
-    {connected ? <div className="toolbar"><p>연결됨 · 이 탭을 새로고침하면 다시 연결해야 합니다.</p><button disabled={busy} onClick={onDisconnect}>연결 해제</button></div>
-      : <form onSubmit={onConnect} className="login-form">
-        <label>사용자 이름<input name="username" autoComplete="username" required maxLength={100} /></label>
-        <label>비밀번호<input name="password" type="password" autoComplete="current-password" required maxLength={256} /></label>
-        <button className="primary" disabled={busy}>{busy ? "연결 중…" : "연결"}</button>
-        <p className="hint">현재 환경에 설정한 API 계정을 사용하세요. 계정 정보는 브라우저 저장소에 보관하지 않습니다.</p>
-      </form>}
-  </section>;
+  const initialConnect = useRef(onConnect);
+  useEffect(() => { initialConnect.current(); }, []);
+  if (connected) return null;
+  return <div className="toolbar" role="status">
+    <p>{busy ? "데이터를 불러오는 중…" : "서버 연결을 확인하세요."}</p>
+    {!busy && <button onClick={onConnect}>다시 불러오기</button>}
+  </div>;
 }
