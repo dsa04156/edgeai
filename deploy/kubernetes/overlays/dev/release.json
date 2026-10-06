@@ -1,16 +1,16 @@
 {
-  "sourceRevision": "4f378731106aac923c5d3d55e43260b09f923d4f",
-  "runnerSourceRevision": "42f724769f58b482eff70700b5e61cd3e402aea4",
-  "apiDigest": "sha256:45b8d124885dbc18b94c859163c75e495cda83ac66f5607054a46177612c0d49",
-  "dashboardDigest": "sha256:87496bdd7c7847aa39160c7ecb1ca529ce0200aab4a3a87616cf631770ceab99",
-  "runnerDigest": "sha256:651228b39e6419676f8c672670485ffff4e3c43f4cf437be7cdef50689a1cadd",
-  "minioDigest": "sha256:dc7309d2b109ce719095d103486759066889c80eb48e87a053b2c41112015dee",
+  "sourceRevision": "6254c1bed0d4dbb3ddb72781c72d987ac2c8a222",
+  "runnerSourceRevision": "6254c1bed0d4dbb3ddb72781c72d987ac2c8a222",
+  "apiDigest": "sha256:48f85514d37a10bdb9e9439a029ac3c915edbcca1c2153b772e3796a7a5b5707",
+  "dashboardDigest": "sha256:b026c64e791f516cf938782787d890e88bb1f63520fa31378fee0a9d8dfdd732",
+  "runnerDigest": "sha256:eaa0d78a0ef7187667993a2833adea2b62c0447c7a77539ffd56b9556d09a9cf",
+  "minioDigest": "sha256:64aab65ca0d19654c9ea97564b1a0fda36a2833f762fd840f3bd517758035d51",
   "runtimeImagePlatforms": [
     "linux/amd64",
     "linux/arm64"
   ],
   "runnerPlatformDigests": {
-    "linux/amd64": "sha256:dd674fa4e992a9223048826c8cc6d777669068b25999d89e9e38dc5562666cff",
-    "linux/arm64": "sha256:73a1ba5e9fc8b37ccc0273ce53f13099263675f78e9600fbb12ff4fa5a34f9b0"
+    "linux/amd64": "sha256:85a1c4b7d9e1d0c9cc3fcdeb4538ea8268e2c72f932cf72d354f30c4e68b5117",
+    "linux/arm64": "sha256:a2688f7de8eb6ebe17b5ca076b0284547b227527f70f787fd981276e3462d09b"
   }
 }
