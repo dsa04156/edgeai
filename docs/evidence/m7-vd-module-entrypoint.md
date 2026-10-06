@@ -23,7 +23,9 @@ AssignmentFenced와 lease 만료가 있다. 원인은 미확정이며 재실행 
 기본 Runner `20261006T014423Z-c1835cc3`도111개 중1오류로 FAIL이다. 측정503
 서브케이스가 첫 resource sample의 `latencyMicros=None`을 양수와 비교했다.
 실제 Spring/Kubernetes와 수정 뒤 전체 회귀는 별도로 확인해야 한다.
-현재 변경은 로컬이며 아직 커밋·push·배포하지 않았다.
+VD 진입점·신규5개·native112개 발행 조건을 독립 수정 커밋에 포함했다.
+Session/Source fixture와 측정 시험 조건 변경은 로컬에 보존하며 이 커밋에는 포함하지 않는다.
+새 이미지 CI와 실제 배포 결과는 아직 확인 전이다.
 
 ## 시험 준비와 측정 조건 정비
 
