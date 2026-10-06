@@ -79,6 +79,8 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 
 같은 이미지의 `python3 /opt/edgeai/vd.py`는 지속 Pod 안에서 독립 Runner session을 실행한다.
 `python3 /opt/edgeai/vd.py --ready`는 유효한 runtime lease의 준비 상태만 확인한다.
+VD 자식의 `python -m edgeai_runner.main`도 파일 진입점과 같은 모듈의 main을 호출하여
+스트리밍 SDK와 오류 클래스·취소 상태를 공유한다. [진입점 검증](../docs/evidence/m7-vd-module-entrypoint.md)을 확인한다.
 [내부 poll 계약](../contracts/openapi/vd-runtime-api.yaml), [ADR0014](../docs/adr/0014-virtual-device-runtime.md),
 [구성 요소 검증](../docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
 배정 연결까지 [M6 수용](../docs/evidence/m6-completion-audit.md)을 통과했다.

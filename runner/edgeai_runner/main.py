@@ -416,4 +416,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # VD children use `python -m edgeai_runner.main`. Start through the same
+    # imported module as the stream SDK so error types and cancellation share
+    # one owner instead of separate __main__ and edgeai_runner.main instances.
+    from edgeai_runner.main import main as entrypoint
+    sys.exit(entrypoint())

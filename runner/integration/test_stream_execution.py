@@ -143,7 +143,12 @@ class StreamExecutionTest(unittest.TestCase):
             'EDGEAI_ATTEMPT_EPOCH':str(self.assignment['epoch']),'EDGEAI_POD_UID':POD,'EDGEAI_CONTROL_PLANE_URL':self.api.url,
             'EDGEAI_CLAIM_FILE':str(self.root/'claim'),'EDGEAI_POD_TOKEN_FILE':str(self.root/'pod'),
             'EDGEAI_WORK_DIR':str(self.root/'work')}
-        self.process=subprocess.Popen([sys.executable,str(ROOT/'runner/runner.py')],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        command=[sys.executable,str(ROOT/'runner/runner.py')]
+        if getattr(self,'module_entrypoint',False):
+            # This is the actual command used by the persistent VD supervisor.
+            command=[sys.executable,'-m','edgeai_runner.main']
+            env['PYTHONPATH']=str(ROOT/'runner')
+        self.process=subprocess.Popen(command,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 
     def emit(self):
         for actor,binding,numbers in [('source-a',A,[4,2]),('source-b',B,[5,3])]:
@@ -228,6 +233,26 @@ class StreamExecutionTest(unittest.TestCase):
         self.process.send_signal(signal.SIGTERM);self.finish(False)
         self.assertIsNone(self.artifact);self.assertFalse(self.commits)
         self.assertEqual('CANCELLED',self.failure)
+
+    def test_vd_module_entrypoint_retries_unavailable_completion_without_restarting_work(self):
+        self.module_entrypoint=True
+        self.test_real_runner_waits_for_sealed_last_ack_and_server_barrier_then_writes_artifact()
+
+    def test_vd_module_entrypoint_retains_sealed_intent_after_lost_grant_and_route_revocation(self):
+        self.module_entrypoint=True
+        self.test_lost_grant_response_after_route_revocation_preserves_finalization_wait()
+
+    def test_vd_module_entrypoint_cancellation_stops_revoked_route_wait_without_finalizer(self):
+        self.module_entrypoint=True
+        self.test_cancellation_during_revoked_route_grant_wait_never_runs_finalizer()
+
+    def test_vd_module_entrypoint_identity_fence_never_runs_finalizer(self):
+        self.module_entrypoint=True
+        self.test_completion_identity_fence_during_revoked_route_wait_never_runs_finalizer()
+
+    def test_vd_module_entrypoint_waiting_reply_cannot_extend_original_deadline(self):
+        self.module_entrypoint=True
+        self.test_revoked_route_waiting_reply_cannot_bypass_runner_deadline()
 
     def test_lost_grant_response_after_route_revocation_preserves_finalization_wait(self):
         self.finalize=True;self.hold_grant=True;self.start();self.emit()
