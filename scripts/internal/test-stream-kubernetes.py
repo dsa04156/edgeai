@@ -214,7 +214,7 @@ with response: print(response.status)
     snapshot.update(apiJarSha256=None if jar is None else hashlib.sha256(jar).hexdigest(),
                     apiArtifactMode='packaged-image' if jar is None else 'local-jar', apiImage=api_image,
                     imageSourceRevision=args.api_source or pin['sourceRevision'], minioImage=minio_image,
-                    runnerSourceRevision=args.runner_source or pin['sourceRevision'], runnerImage=runner_image)
+                    runnerSourceRevision=args.runner_source or pin.get('runnerSourceRevision', pin['sourceRevision']), runnerImage=runner_image)
     report_path = args.report
 
     with tempfile.TemporaryDirectory(prefix='stream-kube-', dir=ROOT / '.tools') as temporary:

@@ -11,9 +11,13 @@ parser.add_argument('--runner', required=True)
 parser.add_argument('--runner-platform-digests', required=True)
 parser.add_argument('--minio', required=True)
 parser.add_argument('--revision', required=True)
+parser.add_argument('--runner-source')
 args = parser.parse_args()
 if not re.fullmatch(r'[0-9a-f]{40}', args.revision):
     parser.error('revision must be a full Git SHA')
+runner_source=args.runner_source or args.revision
+if not re.fullmatch(r'[0-9a-f]{40}',runner_source):
+    parser.error('runner-source must be a full Git SHA')
 for value in [args.api, args.dashboard, args.runner, args.minio]:
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
         parser.error('images must be immutable SHA-256 digests')
@@ -30,7 +34,7 @@ for name, digest in [('api', args.api), ('dashboard', args.dashboard), ('minio',
         raise SystemExit(f'Expected one {name} image pin')
 path.write_text(text)
 Path('deploy/kubernetes/overlays/dev/release.json').write_text(
-    json.dumps({'sourceRevision': args.revision, 'apiDigest': args.api,
+    json.dumps({'sourceRevision': args.revision, 'runnerSourceRevision':runner_source, 'apiDigest': args.api,
                             'dashboardDigest': args.dashboard, 'runnerDigest': args.runner,
                             'minioDigest': args.minio, 'runtimeImagePlatforms': sorted(runner_platforms),
                             'runnerPlatformDigests':runner_platforms}, indent=2) + '\n')

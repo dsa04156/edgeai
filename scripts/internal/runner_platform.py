@@ -11,6 +11,45 @@ from image_identity import digest,manifest,platforms,SINGLE,INDEX
 
 REPOSITORY='ghcr.io/dsa04156/edgeai-runner'
 ARCHITECTURES={'amd64':'x86_64','arm64':'aarch64'}
+RUNNER_INPUTS=['runner/', 'scripts/test/test-runner.sh', 'scripts/test/test-stream.sh',
+    'scripts/collect-evidence.sh', 'scripts/lib.sh']
+
+
+def needs_build(release, source, force=False):
+    if force:return True
+    try:
+        previous=revision(release.get('runnerSourceRevision',release['sourceRevision']))
+        digest(release['runnerDigest'])
+        expected=release['runnerPlatformDigests']
+        if set(expected)!={'linux/amd64','linux/arm64'} or len(set(expected.values()))!=2:return True
+        for value in expected.values():digest(value)
+    except (KeyError,ValueError,TypeError):return True
+    ancestor=subprocess.run(['git','merge-base','--is-ancestor',previous,source],capture_output=True)
+    if ancestor.returncode:return True
+    changed=call(['git','diff','--name-only',previous,source,'--',*RUNNER_INPUTS])
+    return bool(changed.strip())
+
+
+def plan(args):
+    release=json.loads(args.release.read_text()) if args.release.exists() else {}
+    rebuild=needs_build(release,args.revision,args.force)
+    if 'GITHUB_OUTPUT' in os.environ:
+        with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('rebuild='+str(rebuild).lower()+'\n')
+    return {'scope':'runner-build-plan','sourceRevision':args.revision,'rebuild':rebuild}
+
+
+def reuse(args):
+    release=json.loads(args.release.read_text())
+    if needs_build(release,args.revision):raise ValueError('Runner inputs changed; native builds are required')
+    index=digest(release['runnerDigest']);expected=release['runnerPlatformDigests']
+    if platforms(manifest(REPOSITORY+'@'+index))!=expected:
+        raise ValueError('Retained Runner index differs from its verified platform digests')
+    source=revision(release.get('runnerSourceRevision',release['sourceRevision']))
+    if 'GITHUB_OUTPUT' in os.environ:
+        with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+            out.write('runner_digest='+index+'\nrunner_platform_digests='+json.dumps(expected,separators=(',',':'))+'\nrunner_source='+source+'\n')
+    return {'scope':'reused-runner-platform-index','status':'PASS','sourceRevision':source,
+        'runnerDigest':index,'platformDigests':expected}
 
 
 def call(command):
@@ -90,7 +129,7 @@ def publish(args):
         raise ValueError('Published index does not contain exactly the tested platform digests')
     if 'GITHUB_OUTPUT' in os.environ:
         with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-            out.write('runner_digest='+index+'\nrunner_platform_digests='+json.dumps(expected,separators=(',',':'))+'\n')
+            out.write('runner_digest='+index+'\nrunner_platform_digests='+json.dumps(expected,separators=(',',':'))+'\nrunner_source='+args.revision+'\n')
     return {'formatVersion':1,'scope':'verified-runner-platform-index','status':'PASS','sourceRevision':args.revision,
         'runnerDigest':index,'platformDigests':expected,'nativeTests':records}
 
@@ -101,11 +140,15 @@ def main():
     record.add_argument('--image',default='edgeai-runner:verify');record.add_argument('--evidence',type=Path,default=Path('docs/evidence/runs'))
     record.add_argument('--published',action='store_true')
     index=commands.add_parser('publish');index.add_argument('--directory',type=Path,required=True)
-    for command in (record,index):
+    selection=commands.add_parser('plan');selection.add_argument('--force',action='store_true')
+    retained=commands.add_parser('reuse')
+    for command in (selection,retained):
+        command.add_argument('--release',type=Path,default=Path('deploy/kubernetes/overlays/dev/release.json'))
+    for command in (record,index,selection,retained):
         command.add_argument('--revision',type=revision,required=True);command.add_argument('--output',type=Path,required=True)
-    args=parser.parse_args();result=native(args) if args.action=='native' else publish(args)
+    args=parser.parse_args();result={'native':native,'publish':publish,'plan':plan,'reuse':reuse}[args.action](args)
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2)+'\n')
-    print('PASS: '+result['scope']+'; exact source '+args.revision)
+    print('PASS: '+result['scope']+'; exact source '+result['sourceRevision'])
 
 
 if __name__=='__main__':main()

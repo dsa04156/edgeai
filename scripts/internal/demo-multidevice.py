@@ -89,7 +89,7 @@ def main():
     labels = {'app.kubernetes.io/part-of': 'edgeai', 'app.kubernetes.io/managed-by': 'edgeai-stream-demo', 'edgeai.io/test-id': root}
     keys = {name: str(uuid.uuid4()) for name in ('auto', 'node', 'cancel')}
     records, forwards, seen, run_ids = [], [], {}, set()
-    report = {'scope': 'existing-deployment-stream-dag', 'testId': root, 'runnerImage': image, 'runnerSourceRevision': args.runner_source or pin['sourceRevision'],
+    report = {'scope': 'existing-deployment-stream-dag', 'testId': root, 'runnerImage': image, 'runnerSourceRevision': args.runner_source or pin.get('runnerSourceRevision', pin['sourceRevision']),
               'architecture':args.architecture,'edgeOnly':args.edge_only,
               'apiImage': deployment['spec']['template']['spec']['containers'][0]['image'],
               'checkpointBarriers': [], 'observedPods': seen}

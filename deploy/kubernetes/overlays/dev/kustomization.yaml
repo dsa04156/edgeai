@@ -8,6 +8,16 @@ components:
   - ../../components/stream
 patches:
   - path: vd-execution.yaml
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: edgeai-api
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: etri-ser0001-cg0msb
 images:
   - name: ghcr.io/dsa04156/edgeai-api
     digest: sha256:843441433303e894c48d65da3a82e35cc8a22ad8ffe6260ee4ccafcdcac7d23a

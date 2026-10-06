@@ -60,7 +60,7 @@ def main():
     token='hardware-runtime-'+uuid.uuid4().hex[:12]
     keys={c:str(uuid.uuid4()) for c in args.cases};runs=set();forwards=[];request=None
     report={'scope':'public-api-hardware-runtime','sourceMode':'SYNTHETIC','fullHardwareAcceptance':False,
-        'runnerImage':image,'runnerSourceRevision':args.runner_source or release['sourceRevision'],
+        'runnerImage':image,'runnerSourceRevision':args.runner_source or release.get('runnerSourceRevision', release['sourceRevision']),
         'cases':[],'ownedRuntimeResourcesRemoved':False}
     def own_runs():
         sql='SELECT id FROM edgeai.workflow_run WHERE idempotency_key IN('+','.join("'"+key+"'" for key in keys.values())+')'

@@ -3,8 +3,12 @@
 2026-10-06부터 일반 push/PR은 기본 검증만 실행한다. `main` push가 통과하면
 GitHub Actions가 이미지를 GHCR에 발행하고 digest를 Git에 기록하며 ArgoCD가 자동 배포한다.
 
-- 기본 검증: Spring 단위·API 계약, Dashboard 타입·lint, Runner AMD64/ARM64 실행·MQTT,
+- 기본 검증: Spring 단위·API 계약, Dashboard 타입·lint,
   MinIO 업로드/다운로드·고정 버전, 빌드한 API/Dashboard와 실제 DB의 HTTP smoke.
+- API·Dashboard는 `linux/amd64`만 빌드한다. Runner 멀티 아키텍처 빌드는 마지막으로 검증한
+  Runner 소스와 비교해 `runner/`, Runner·STREAM 시험 명령 또는 공통 실행 명령이 바뀔 때만 수행한다.
+  서버 코드만 바뀌면 기존 Runner digest와 두 아키텍처 digest를 레지스트리에서 확인해 재사용한다.
+  최초 발행·비교 불가·수동 전체 검증에서는 두 아키텍처를 다시 빌드·검사한다.
 - 백업·복구·부하·브라우저 E2E·Kubernetes 전체 검증은 자동 배포의 선행 조건에서 제외했다.
 - 전체 검증: Actions → **Platform CI/CD** → **Run workflow** → branch `main`,
   `full_verification=true`. 기존 전체 검증을 실행하며 시험 이미지도 발행하지만
@@ -38,6 +42,7 @@ flowchart LR
   CI에서 검증한 Docker Hub 이미지와 동일한 digest이며, 실제 노드의 Docker Hub CDN 연결
   reset이 반복되어 같은 노드에서 ECR 이미지 실행을 확인한 후 전환했다.
 - 배포 상태: `deploy/kubernetes/overlays/dev/kustomization.yaml`과 `release.json`.
+- `sourceRevision`은 서버 소스, `runnerSourceRevision`은 실제 Runner 소스다. 재사용 시 두 값이 다를 수 있다.
 - 이미지 변경은 `deploy: pin verified images ... [skip ci]` 커밋으로 기록한다.
   `GITHUB_TOKEN`으로 만든 커밋은 후속 Actions 실행을 재귀적으로 만들지 않는다.
 - 더 최신 `main` 커밋이 있으면 이전 실행의 이미지로 배포 설정을 덮어쓰지 않는다.
@@ -58,6 +63,8 @@ Public으로 설정하면 노드는 자격 증명 없이 pull할 수 있다. Pri
 - context: `kubernetes-admin@kubernetes`, 기존 ArgoCD namespace: `argocd`.
 - ArgoCD: `http://argocd.192.168.0.56.sslip.io` 또는 `http://argocd.10.254.192.217.nip.io`.
 - Application: `edgeai-dev`, 전용 AppProject: `edgeai`, 대상 namespace: `edgeai`.
+- API는 AMD64 이미지로 빌드하고 개발 배포 overlay에서 56번 서버
+  `etri-ser0001-cg0msb`에 고정한다. Runner만 AMD64·ARM64 멀티 아키텍처로 발행한다.
 - Dashboard: `http://edgeai.192.168.0.56.sslip.io` 또는 `http://edgeai.10.254.192.217.nip.io`.
 - Swagger: 위 EdgeAI 주소의 `/swagger-ui.html`.
 - IngressClass `traefik`, 기본 StorageClass `local-path`를 확인했다.

@@ -116,7 +116,7 @@ def main():
         client.call(['mb','origin/'+fixture.bucket]);client.call(['version','enable','origin/'+fixture.bucket])
         pin=json.loads((ROOT/'deploy/kubernetes/overlays/dev/release.json').read_text())
         assert bool(args.runner_image)==bool(args.runner_source)
-        image=args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@'+pin['runnerDigest'];revision=args.runner_source or pin['sourceRevision']
+        image=args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@'+pin['runnerDigest'];revision=args.runner_source or pin.get('runnerSourceRevision', pin['sourceRevision'])
         assert re.fullmatch(r'ghcr\.io/dsa04156/edgeai-runner@sha256:[a-f0-9]{64}',image) and re.fullmatch('[a-f0-9]{40}',revision)
         report.update(image=image,imageSourceRevision=revision,apiJarSha256=hashlib.sha256((ROOT/'backend/app/build/libs/edgeai-control-plane.jar').read_bytes()).hexdigest())
         ns=create({'apiVersion':'v1','kind':'Namespace','metadata':{'name':namespace,

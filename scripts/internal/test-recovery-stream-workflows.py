@@ -95,7 +95,7 @@ def main():
         pin=json.loads((ROOT/'deploy/kubernetes/overlays/dev/release.json').read_text())
         assert bool(args.runner_image)==bool(args.runner_source)
         image=args.runner_image or 'ghcr.io/dsa04156/edgeai-runner@'+pin['runnerDigest']
-        revision=args.runner_source or pin['sourceRevision']
+        revision=args.runner_source or pin.get('runnerSourceRevision', pin['sourceRevision'])
         assert re.fullmatch(r'ghcr\.io/dsa04156/edgeai-runner@sha256:[0-9a-f]{64}',image) and re.fullmatch('[0-9a-f]{40}',revision)
         namespace_uid=create({'apiVersion':'v1','kind':'Namespace','metadata':{'name':namespace,
             'labels':{PART:'edgeai',MANAGER:'edgeai-bootstrap','edgeai.io/recovery-test':token}}})['metadata']['uid']

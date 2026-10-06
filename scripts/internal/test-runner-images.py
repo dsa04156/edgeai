@@ -9,7 +9,8 @@ import unittest
 from unittest.mock import patch
 
 import image_identity as images
-from runner_platform import selected,test_results
+from runner_platform import selected,test_results,needs_build,reuse
+from types import SimpleNamespace
 
 ROOT=Path(__file__).resolve().parents[2]
 SOURCE='a'*40
@@ -33,6 +34,39 @@ def records():
 
 
 class Images(unittest.TestCase):
+    def test_runner_build_selection_uses_last_verified_source_not_previous_push(self):
+        release={'sourceRevision':'b'*40,'runnerSourceRevision':SOURCE,'runnerDigest':INDEX,
+            'runnerPlatformDigests':{'linux/amd64':AMD,'linux/arm64':ARM}}
+        with patch('runner_platform.subprocess.run',return_value=SimpleNamespace(returncode=0)), \
+                patch('runner_platform.call',return_value='') as changed:
+            self.assertFalse(needs_build(release,'c'*40))
+            self.assertEqual([SOURCE,'c'*40],changed.call_args.args[0][3:5])
+            changed.return_value='runner/edgeai_runner/main.py\n'
+            self.assertTrue(needs_build(release,'c'*40))
+            changed.return_value='runner/deleted.py\n'
+            self.assertTrue(needs_build(release,'c'*40))
+        with patch('runner_platform.subprocess.run',return_value=SimpleNamespace(returncode=1)):
+            self.assertTrue(needs_build(release,'c'*40))
+        self.assertTrue(needs_build({},'c'*40))
+        self.assertTrue(needs_build(release,'c'*40,force=True))
+
+    def test_runner_reuse_checks_immutable_index_and_preserves_its_source(self):
+        with tempfile.TemporaryDirectory() as work:
+            p=Path(work)/'release.json'
+            p.write_text(json.dumps({'sourceRevision':'b'*40,'runnerSourceRevision':SOURCE,
+                'runnerDigest':INDEX,'runnerPlatformDigests':{'linux/amd64':AMD,'linux/arm64':ARM}}))
+            args=SimpleNamespace(release=p,revision='c'*40)
+            with patch('runner_platform.needs_build',return_value=False), \
+                    patch('runner_platform.manifest',return_value=descriptor()):
+                result=reuse(args)
+                self.assertEqual(SOURCE,result['sourceRevision']);self.assertEqual(INDEX,result['runnerDigest'])
+            with patch('runner_platform.needs_build',return_value=True):
+                with self.assertRaises(ValueError):reuse(args)
+            bad=descriptor();bad['manifests'][0]['digest']=OTHER
+            with patch('runner_platform.needs_build',return_value=False), \
+                    patch('runner_platform.manifest',return_value=bad):
+                with self.assertRaises(ValueError):reuse(args)
+
     def test_single_platform_keeps_exact_digest_proof_without_registry_dependency(self):
         with patch.object(images,'manifest',side_effect=AssertionError('Unexpected registry access')):
             self.assertEqual(INDEX,images.verify_image_id(REF,'docker-pullable://example@'+INDEX))
@@ -107,6 +141,12 @@ class Images(unittest.TestCase):
             value=json.loads((overlay/'release.json').read_text());self.assertEqual(INDEX,value['runnerDigest'])
             self.assertEqual(['linux/amd64','linux/arm64'],value['runtimeImagePlatforms'])
             self.assertEqual({'linux/amd64':AMD,'linux/arm64':ARM},value['runnerPlatformDigests'])
+            self.assertEqual(SOURCE,value['runnerSourceRevision'])
+            separate=subprocess.run(command+[json.dumps({'linux/amd64':AMD,'linux/arm64':ARM}),
+                '--runner-source','b'*40],cwd=root,capture_output=True)
+            self.assertEqual(0,separate.returncode)
+            value=json.loads((overlay/'release.json').read_text())
+            self.assertEqual(SOURCE,value['sourceRevision']);self.assertEqual('b'*40,value['runnerSourceRevision'])
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
