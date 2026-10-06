@@ -59,7 +59,7 @@ assert status == 200
 assets = re.findall(r'href="([^" ]+\.css(?:\?[^" ]*)?)"', html.decode())
 assert assets, "Dashboard must serve its built CSS"
 assert request(ui + assets[0])[0] == 200
-assert request(api + "/swagger-ui/index.html")[0] == 401
+assert request(api + "/swagger-ui/index.html")[0] == 200
 assert request(api + "/swagger-ui/index.html", authenticated=True)[0] == 200
 status, contract = request(api + "/openapi.yaml", authenticated=True)
 assert status == 200 and b"publishProfile" in contract

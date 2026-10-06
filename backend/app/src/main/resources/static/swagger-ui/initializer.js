@@ -9,7 +9,7 @@ window.addEventListener("load", () => {
     showMutatedRequest: false,
     validatorUrl: null,
     presets: [SwaggerUIBundle.presets.apis],
-    // Existing HTTP Basic authentication protects docs and API alike. Credentials
+    // Documentation is public; direct API execution uses HTTP Basic. Credentials
     // entered in Authorize are kept in memory; cookie-based CSRF remains enabled.
     requestInterceptor: async request => {
       const target = new URL(request.url, window.location.origin);

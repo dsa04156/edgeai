@@ -47,6 +47,6 @@ class WorkflowDisabledTest {
             .andExpect(status().isOk()).andExpect(content().string(not(containsString("/api/v1/workflows"))))
             .andExpect(content().string(not(containsString("/api/v1/workflow-runs"))))
             .andExpect(content().string(containsString("operationId: publishProfile")));
-        mvc.perform(get("/openapi.yaml")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/openapi.yaml")).andExpect(status().isOk());
     }
 }

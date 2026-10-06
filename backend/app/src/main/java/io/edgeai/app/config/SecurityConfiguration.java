@@ -10,6 +10,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -35,6 +36,8 @@ public class SecurityConfiguration {
             .authenticationProvider(provider)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui", "/swagger-ui/**",
+                    "/openapi.yaml", "/stream-openapi.yaml").permitAll()
                 .requestMatchers("/internal/**").denyAll()
                 .requestMatchers(request -> inspection && !Set.of("GET", "HEAD", "OPTIONS").contains(request.getMethod())).denyAll()
                 .anyRequest().authenticated())

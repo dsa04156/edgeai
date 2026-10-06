@@ -59,3 +59,6 @@ Dashboard는 로그인 입력 없이 API에 연결합니다. Dashboard 서버에
 브라우저에 비밀번호를 전달하지 않습니다. 이 환경의 Dashboard에 접근 가능한 사용자는 관리 기능을 사용할 수 있습니다.
 Profile → DeviceManager / Virtual Device → Workflow Builder → Run·Task·Placement 순서로 사용합니다.
 당분간 Runner/STREAM 고도화는 중단하고 관리 화면과 API 완성을 우선합니다.
+
+Swagger 문서(`/swagger-ui.html`, `/openapi.yaml`)는 로그인 없이 조회합니다.
+Swagger에서 직접 관리 API를 실행할 때는 Authorize의 API 계정과 CSRF를 사용합니다.
