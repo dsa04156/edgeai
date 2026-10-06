@@ -22,7 +22,7 @@ ArtifactCommitService와 결과 API/OpenAPI/화면이다. M0–M4 완료 판정�
 ID·체크섬·파일 버전의 긴 값은 모바일에서 줄바꿈하며 가로 넘침 시험도 통과했다.
 실제 MinIO 시험은 프로젝트의 소스 빌드 바이너리를 소유한 loopback 임시 서버로 실행했다.
 시험 종료 후 해당 서버와 임시 저장소를 제거했으며 프로젝트 PostgreSQL은 유지했다.
-재현 명령은 `scripts/test-integration.sh`, `test-runtime-results.sh`, `test-unit.sh`,
+재현 명령은 `scripts/test/test-integration.sh`, `test-runtime-results.sh`, `test-unit.sh`,
 `test-contract.sh`, `test-ui.sh`, `test-profiles-stack.sh local`이다. MinIO/DB가 필요한 시험은 실제 저장소를 요구한다.
 
 ## 상태·신원·경쟁 조건

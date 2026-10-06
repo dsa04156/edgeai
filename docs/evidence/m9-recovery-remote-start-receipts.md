@@ -30,7 +30,7 @@ Remote 할당6개, 실제 TLS 제공자/SQLite와 별도 TLS MinIO를 사용했�
 업무 신원/할당/전환은 명시적 SQL fixture이며 실제 외부 제공자 수용을 뜻하지 않는다.
 
 ```bash
-bash scripts/test-recovery-kubernetes-retire.sh \
+bash scripts/test/test-recovery-kubernetes-retire.sh \
   --context <명시적-시험-context> \
   --vd-tasks --workflows --offloads --unclaimed-jobs --remote-offloads \
   --remote-start-receipts --minio-binary <시험-MinIO-실행파일>

@@ -42,4 +42,4 @@ containerID·시작/종료 시각·exitCode를 요구한다. `ContainerStatusUnk
 복원 DB의 실행 상태 조정, fence/종료 기록의 안전한 해제와 서비스 활성화가 남는다.
 해당 조건을 합친 종합 복구에서만 M9 완료를 판단한다.
 
-[실행법](../recovery-producer-stop.md), [실제 종료 검증](../evidence/m9-recovery-producer-stop.md).
+[실행법](../operations/recovery/recovery-producer-stop.md), [실제 종료 검증](../evidence/m9-recovery-producer-stop.md).

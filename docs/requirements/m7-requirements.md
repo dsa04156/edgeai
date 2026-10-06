@@ -1,0 +1,127 @@
+# M7 다중 장치 DAG·Streaming 요구사항
+
+2026-10-03 KST에 Notion 전체 설계/API/ERD/실행 지시를 다시 조회했다. 수정 시각은
+[기존 출처](../architecture/sources.md)의 2026-10-01과 같았다. 이 문서는 다음 구현의 수용 범위이며
+전체 STREAM 수용 완료 기록이 아니다. [ADR0041](../adr/0041-public-stream-runs.md) 이후 공개 STREAM
+Run은 명시적으로 활성화한 환경에서 AUTO/NODE를 지원한다. ADR0055는 VD를 추가해 서버·DB·UI를
+검증하고 실제 Kubernetes VD 스트리밍6개를 통과했다. 새 이미지 CI/배포와 아래 남은 수용은
+별도다. 기본 비활성 환경은501을 반환한다.
+
+## 원문에서 요구하는 동작
+
+- 서로 다른 물리 Device의 입력을 BATCH/STREAM DAG로 연결하고 실제 데이터를 처리한다.
+  Device·실행 Node·VD·Runtime의 식별자와 책임을 계속 구분한다.
+- MQTT/Streaming 데이터 경로는 센서/adapter→broker→AI Runtime이다. PostgreSQL에는
+  관리 상태·메타데이터를 저장하며 고주기 원시 스트림을 모두 적재하지 않는다.
+- STREAM 연결에는 DataRoute와 generation이 필요하다. 실행 중 전환은 같은 Task의
+  새 Attempt, producer fencing, 필요한 drain/checkpoint 및 route 전환을 유지한다.
+- `scripts/demo/demo-multidevice.sh`는 여러 Device가 참여하는 실제 BATCH/STREAM DAG를
+  재현해야 한다. 관리 행이나 route 메타데이터 생성만으로 통과 판정하지 않는다.
+- 합성/replay/live 출처를 구분한다. 합성 센서·참조 workload의 결과는 실제 장비·모델
+  또는 성능 수용을 대신하지 않는다. 외부 장비 계약은 확인 전까지 고정하지 않는다.
+
+근거: [전체 설계 §7/§9/§12](https://app.notion.com/p/3ecbafd382d681b295f4f878aad79160),
+[API 도메인·확장 엔티티](https://app.notion.com/p/3ebbafd382d681feb4a5c3610d9d3b3b),
+[ERD TaskDependency·DataRoute/Checkpoint](https://app.notion.com/p/3ebbafd382d681cf8568e6d870fe97f3),
+[실행 지시 §6/§7](https://app.notion.com/p/3ebbafd382d681bd920ae91452b0463a).
+
+## 현재 코드와의 차이
+
+현재 BATCH는 검증된 선행 S3 결과를 다음 작업의 고정 입력으로 전달한다. Device 등록·session
+관측과 VD source binding은 관리 경로이며 센서 payload를 실행 입력으로 전달하는 경로가 아니다.
+Run의 실행 정책은 전체 DAG 기본값이다. 공개 STREAM 실행은 현재 Device session을 고정하고
+같은 스트림 그룹을 함께 배정한다. ADR0047은 기존 retry를 그룹/최종 처리 복구에 연결하며
+ADR0051은 명시적 NODE offload, ADR0052는 측정 기반 자동 그룹 offload를 연결한다.
+ADR0053은 AUTO/NODE Run의 작업별 최초 AUTO/NODE 배치를 연결한다. 실제 PG212·UI42·
+실API/DB/Swagger10개 및 실제 Kubernetes 전체11개/Pod39개/S324를 통과했다.
+ADR0054는 BATCH 작업별 VD/REMOTE를 연결하고 PG214·실제 저장소40·UI42·실API/Swagger10,
+기존 Task9,359개의 업그레이드 보존과 실제 VD→NODE→VD·API 교체를 검증했다.
+후속 실제 Kubernetes의 NODE→REMOTE→NODE·REMOTE→AUTO·혼합 취소3개와 API 교체·독립
+TLS 제공자의 계산1회·고정 S3결과5개도 통과했다. V30은 abf6bfd CI37151914101·GitOps720203b
+실제 이미지/Ready·PVC·ArgoSynced·기존 데이터 보존을 확인했다. 후속 Remote3개도0d31eb8
+CI37154396986·GitOps8b17e24에서 원시 증거/실제 이미지와 기존 데이터 보존을 확인했다.
+ADR0055/V31–V32 VD STREAM의 자기 VD 권한·동시 용량·그룹/최종 처리 복구를 PG219·기존
+저장소40·단위105·계약·UI에서 검증했다. 새 VD의 Pod/브로커/S3 receipt는 DB 시험 fixture다.
+후속 실제 supervisor/자식 Runner5개·전체 저장소45개에서 TLS/S3·그룹 상태 복원·취소·결과28/37을
+확인했다. 후속 실제 Kubernetes6개/VD14Pods·Node1Pod/S3결과15개·API 교체·자식 SIGKILL 후
+복구·취소와 소유 자원 정리도 통과했다. 후속 VD 공개 교체·Pod 유실 후 복원·완료 허가 뒤
+최종 처리 복구3개/VD10Pods/S3결과9개도 실제 Kubernetes에서 통과했다. drain 중 자식 종료
+보고의 실패 분류 수정 후 전체 PG220개도 통과했다. 소스b144c8b CI37157334661은 저장소
+시험 실패로 images/gitops를 실행하지 않았다. CI 실패 원인 확인·새 수정의 CI/배포,
+STREAM REMOTE는 남는다. 후속 ADR0056/V33은 VD 그룹의 수동 NODE 전환·동료 VD 유지와
+전체 종료/회수 장벽을 연결했다. PG223·실제 저장소47·UI46·실API/Swagger10·기존 Task9,371개
+보존, 실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S36개를 통과했다. 후속 대기 중 API 교체·
+전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS다. 새 CI·배포는
+[VD 그룹 전환 근거](../evidence/m7-vd-stream-group-offload.md)의 후속 판정을 따른다.
+선행415a1ce CI37159106124의20개 스트림 게이트·5jobs/원시17개와 GitOps2227a91의 실제
+이미지·Ready/PVC·ArgoSynced·기존 파일10개/두PVC 보존은 확인했다. 이는 V31–V32 판정이다.
+[VD 스트리밍 근거](../evidence/m7-vd-stream-execution.md)를 따른다.
+[작업별 배치 근거](../evidence/m7-task-initial-placement.md)와
+[혼합 배치 근거](../evidence/m7-mixed-task-targets.md)를 따른다.
+실제 검증 범위는 [공개 재시도 근거](../evidence/m7-public-stream-retry.md)와
+[그룹 전환 근거](../evidence/m7-stream-group-offload.md), [자동 전환 근거](../evidence/m7-stream-automatic-offload.md)를 따른다.
+따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
+
+## 구현 전에 정할 계약과 검증
+
+| 경계 | 정할 계약 | 필요한 증거 |
+|---|---|---|
+| 장치 입력 | Device/Profile/session과 named port, 출처·schema·시간·sequence, 입력 스냅샷 | 여러 Device 입력이 실제 계산값에 반영, 이전 session/잘못된 형식 거절 |
+| 실행 배치 | 각 단계의 실행 대상과 Run 기본값, AUTO/NODE/VD 및 SERVICE 호환성 | 서로 다른 실제 Runtime 간 흐름, scheduler bind와 실제 생산자 대조 |
+| 데이터 route | 불변 연결 식별자, 현재 generation, producer/consumer Attempt와 권한 | 교체 전후 세대·이력 보존, 이전 producer 전송이 최종 결과에 영향 없음 |
+| 전달 | 메시지 envelope·순서·중복·ack, 최대 payload·buffer·대기 시간 | 중복/재전송·순서 오류·느린 소비자에서 bounded memory/backpressure |
+| 복구 | broker·네트워크·API·Runner 재연결, drain/cancel, checkpoint/offset 수명 | 장애 주입 뒤 손실/중복 정책 검증, 같은 Task/새 Attempt와 늦은 메시지 차단 |
+| 결과 | 종료/완료 조건과 고정 S3 결과·출처 추적 | 프로세스 종료만으로 성공하지 않음, 실제 bytes·SHA/version·기대 계산값 일치 |
+| 공개 관리 | Run/Task의 route/진행/오류 조회, Swagger와 화면 | 실제 API/DB와 PC·모바일 조회, 인증·세대 정보·오류가 일치 |
+
+메시지 wire format, broker별 권한 관리, 전달 보장 수준과 checkpoint 형식은 원문에 상세
+정의가 없다. [ADR0021](../adr/0021-stream-frame-boundary.md)과
+[ADR0022](../adr/0022-stream-processing-journal.md)에서 frame/처리 확인·로컬 journal·MQTT adapter를
+구체화했다. [ADR0023](../adr/0023-stream-route-authority.md)/V19는 DataRoute 영속 상태와 세대 제어를
+구현하고 실제 DB에서 검증했다. 후속 broker 권한 수명·인증 배정의 구성 요소 검증은 아래를 따른다. S3 checkpoint와 M5의 상태형
+복원 잔여 조건은 이 결정과 함께 검토하고, 단순 처음부터 재시작을 checkpoint 복원이라 부르지 않는다.
+
+수용은 프로토콜 단위→실제 DB/브로커→Runner/다중 입력→실제 Kubernetes→장애/재연결→
+화면/Swagger→CI·배포 순으로 확장한다. M8 규모 시험과 M10 실장비 합격 기준은 별도로 남는다.
+
+## 데이터 전달 계약을 정할 때 반영할 근거
+
+MQTT QoS1에서는 중복 전달이 가능하다. MQTT5 Receive Maximum은 연결별 미확인 QoS1/2
+PUBLISH 개수를 제한하며 QoS0와 애플리케이션 내부 버퍼 전체를 제한하지 않는다. 따라서
+route/producer/generation·메시지 식별자, 처리 완료 ack와 bounded queue를 별도로 정의하고
+broker 수신 확인을 AI 처리 또는 Result 확정으로 해석하지 않아야 한다.
+[OASIS MQTT5 §3.3/§4.9](https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html).
+
+Paho Python의 공식 제한 설명은 클라이언트 세션을 메모리에 보관하며 프로세스 재시작 때
+미완료 메시지가 유실될 수 있음을 명시한다. 자동 reconnect 또는 QoS 설정만으로 상태 복원과
+무손실을 주장하지 않는다. 실제 사용할 버전·MQTT5 경로의 동작을 시험하고 애플리케이션의
+checkpoint/재전송/중복 제거 경계를 정의해야 한다.
+[Paho Python known limitations](https://eclipse.dev/paho/files/paho.mqtt.python/html/#known-limitations).
+
+현재 Compose MQTT는 loopback 공개 개발용 익명 broker이며 런타임별 권한 격리를 구현하지
+않았다. 별도 통합 시험은 private 계정/정확한 topic ACL·TLS를 사용하지만 운영 계정 발급/해제와
+실행 배정 연결 완료를 뜻하지 않는다. 실제 실행 전달 경로는 Compose 설정을 그대로 운영 계약으로 사용하지 않는다. Mosquitto
+Dynamic Security의 client/role/topic 제어는 [ADR0024](../adr/0024-stream-broker-authority.md)에서 채택해
+실제 TLS broker adapter로 검증했다. ADR0050은 dev 배포의 영속 TLS broker/API/MinIO와
+실제 다중 장치 데모를 검증했다. 새 CI의 영속 기반 게이트는 별도로 확인한다.
+[공식 설명](https://mosquitto.org/documentation/dynamic-security/).
+
+후속 [ADR0025](../adr/0025-stream-authority-worker.md)는 DB의 PREPARING/FENCED 상태를 영속 명령으로
+삼아 주기적 현재 주체 검사와 bounded broker 발급/회수를 연결한다. 실제 Spring scheduler·DB/TLS
+broker·응답 유실·두 worker 경합과 CI·배포를 검증했다.
+후속 [ADR0026](../adr/0026-stream-authenticated-bindings.md)은 Device 세션 토큰과 Runner/Pod 인증을
+배정 조회에 연결했고 실제 HTTP/DB/TLS broker 시험을 통과했다. Pod 신원은 명시적 fixture다.
+후속 ADR0027/0028의 SDK lease·heartbeat는 CI·배포까지 검증했다. ADR0029 지속 계산
+프로세스·watchdog·journal은 실제 TLS MQTT와 Spring 인증 probe로 로컬 검증했다.
+이후 SERVICE/Runner 실행, S3 체크포인트 저장·동일 Attempt 새 볼륨 복원, 서버 검증 인계,
+Task/Device 공동 완료와 공개 Run 연결은 [검증 목록](../testing/verification-matrix.md)에 각각 기록했다.
+dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 장애 복구는 검증했다.
+그룹 노드 전환은 실제 Kubernetes의 다른 Node·체크포인트 인계·대기 중 API 교체/취소까지
+검증했고 전체7개 회귀와 해당 이미지 CI를 통과했다. 자동 정책의 실제 모델 메모리 부하·다른 노드 전환·checkpoint/결과·동료의 전환 한도·취소도
+현재 JAR 전체9개/Pod31개/S318에서 통과했다. 이미지/CI별 범위는
+[자동 전환 근거](../evidence/m7-stream-automatic-offload.md)를 따른다.
+AUTO/NODE 작업별 배치는 ADR0053, BATCH VD/REMOTE 혼합은 ADR0054의 위 범위로 검증했다.
+혼합 Remote의 실제 Kubernetes 종단3개와 VD STREAM은 위 범위로 검증했으며,
+STREAM REMOTE·VD 자동 전환·실장비 수용은 남는다.
+선행204645f의9개 CI는 자동 취소 driver 실패로 게시/배포되지 않았으며,
+로컬 재통과와 CI 원인 해소를 구분한다.

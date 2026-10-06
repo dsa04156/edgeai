@@ -53,4 +53,4 @@ CI는 빌드된 MinIO binary로 동일 게이트를 실행한다. 새 게이트�
 파일·버전·IAM 이력을 삭제하지 않으며 운영 Secret/StatefulSet도 수정하지 않는다. Remote와
 장치 producer·journal, 전체 쓰기 종료 확인, 복원 DB/파일/키 대조 및 재활성화는 계속 남는다.
 
-[운영 명령](../recovery-storage-fence.md), [실제 검증](../evidence/m9-recovery-storage-fence.md).
+[운영 명령](../operations/recovery/recovery-storage-fence.md), [실제 검증](../evidence/m9-recovery-storage-fence.md).

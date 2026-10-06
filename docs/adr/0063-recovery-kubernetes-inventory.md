@@ -27,4 +27,4 @@ Kubernetes 목록은 페이지 간 resourceVersion과 중복 UID/continuation을
 현재 UID·소유권을 다시 확인해야 한다. Remote·broker·장치·claim Secret 관측 및 회수,
 원래 producer의 실제 종료, 키/journal 복원, 서비스 활성화와 종합 RPO/RTO 수용은 남는다.
 
-[실행법](../recovery-kubernetes.md), [검증](../evidence/m9-recovery-kubernetes.md).
+[실행법](../operations/recovery/recovery-kubernetes.md), [검증](../evidence/m9-recovery-kubernetes.md).

@@ -8,7 +8,7 @@ Kustomize 컴포넌트를 준비한다. 배포 API의 STREAM 활성화와 다중
 
 ## 신원과 복구
 
-`scripts/bootstrap-stream-secrets.py --context <context>`는 기존 소유 namespace `edgeai`와
+`scripts/internal/bootstrap-stream-secrets.py --context <context>`는 기존 소유 namespace `edgeai`와
 `edgeai-runtimes`의 UID를 확인하고 고정 v1 Secret4개·공개 ConfigMap3개를 준비한다.
 실행 전 모든 기존 객체의 소유 label·불변 설정·전체 데이터를 비교한다. 다른 값은 덮어쓰지 않으며
 부분 생성 실패는 같은 recovery bundle로 재실행한다. 서로 다른 설치에는 별도 state directory가 필요하다.

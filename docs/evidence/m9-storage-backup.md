@@ -3,7 +3,7 @@
 2026-10-04 KST. [ADR0060](../adr/0060-version-preserving-storage-backup.md)의 object-version
 구성 요소다. 격리된 실제 TLS MinIO 두 개와 합성 파일을 사용하며 기존 개발 bucket을 바꾸지 않았다.
 
-최종 `20261004T013635Z-8b24378d`의 `scripts/test-storage-backup.sh`가11개 사례 exit0/PASS다.
+최종 `20261004T013635Z-8b24378d`의 `scripts/test/test-storage-backup.sh`가11개 사례 exit0/PASS다.
 체크포인트 key의 이전/현재 두 버전, 빈 파일, 한글 경로의256KiB 파일을 사용했다.
 총4개 고정 version·262,176bytes의 실제 ID/길이/SHA-256을 확인했다.
 
@@ -42,4 +42,4 @@ source/replica TLS 시험에 사용한다. 로컬 Docker 권한이 없어 해당
 새 DB로 복원한 `result_artifact`·`stream_checkpoint` 전체 참조와 replica의 정확한 버전 대조는
 [ADR0061 후속 시험](m9-recovery-references.md)에 기록했다. S3 목록만의 보존으로 DB와의 교차 정합성을 주장하지 않는다.
 IAM/CA/Secret·broker/device journal·실행 중 외부 상태·운영 활성화·백업 저장 위치/보존 정책은
-[M9 수용 범위](../m9-requirements.md)에 남아 있다.
+[M9 수용 범위](../requirements/m9-requirements.md)에 남아 있다.

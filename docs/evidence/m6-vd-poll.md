@@ -52,8 +52,8 @@ JUnit failures/errors/skipped는 모두0이다. 공개 UI/API 계약은 변경�
 
 V15는 실제 DB에 적용됐으며 SHA-256은
 `9267e6321d746cee30bd1717141116a3b670d011fb835c875a8d85839372def7`이다.
-V1–V15 적용본을 수정하지 않는다. 재현은 `scripts/test-unit.sh`, `scripts/test-integration.sh`,
-`scripts/test-contract.sh`이며 모든 셸 실행은 `rtk proxy`를 사용한다.
+V1–V15 적용본을 수정하지 않는다. 재현은 `scripts/test/test-unit.sh`, `scripts/test/test-integration.sh`,
+`scripts/test/test-contract.sh`이며 모든 셸 실행은 `rtk proxy`를 사용한다.
 
 ## 남은 게이트
 

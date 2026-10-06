@@ -49,7 +49,7 @@ java.security 이름 충돌 컴파일 오류도 실제 시험 전 수정했다.
 
 ## 재현과 범위
 
-`bash scripts/test-stream-broker.sh`는 로컬 .env/실제 PostgreSQL, Python3/OpenSSL과 실제 mosquitto/mosquitto_ctrl/dynamic-security
+`bash scripts/test/test-stream-broker.sh`는 로컬 .env/실제 PostgreSQL, Python3/OpenSSL과 실제 mosquitto/mosquitto_ctrl/dynamic-security
 plugin을 요구하며 없으면 성공으로 건너뛰지 않는다. 비표준 설치는 아래 경로 환경 변수로 지정한다.
 
 - `EDGEAI_MOSQUITTO_BINARY`

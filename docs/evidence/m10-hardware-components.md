@@ -23,7 +23,7 @@ CUDA는 실제 driver 초기화·장치 1개·primary context·GPU 메모리 할
 ARIES는 배정된 character device를 UID10001에서 열고 닫는다. NPU 추론은 실행하지 않았으며
 `inferenceVerified: false`를 유지한다. CUDA 계산도 실제 모델의 정확도·성능 수용은 아니다.
 
-`scripts/test-hardware-components.py`는 시험 직전 Ready·압박·taint·등록 자원·사용 중 요청을
+`scripts/internal/test-hardware-components.py`는 시험 직전 Ready·압박·taint·등록 자원·사용 중 요청을
 조회한다. ARM 서버 CUDA의 RuntimeClass는 명시적으로 받는다. 실제 Pod/Node UID,
 고정 Python 이미지 digest, 컨테이너 machine, UID10001과 종료 결과를 대조한다.
 이미지는 `python:3.13-slim-bookworm@sha256:5024f48ba9441d4b13a95d3945abc6365538e3a31109833367a1923523c6efed`다.
@@ -48,7 +48,7 @@ Evicted되어 FAIL이었다. 노드 DiskPressure=True와 전환 시각17:41:09 U
 디스크 문제 자체를 해결한 것은 아니며, 공유 노드 설정·데이터는 변경하지 않았다.
 
 ```bash
-python3 scripts/test-hardware-components.py \
+python3 scripts/internal/test-hardware-components.py \
   --context kubernetes-admin@kubernetes \
   --cuda-arm64-runtime-class nvidia-spark \
   --report .tools/hardware-components.json

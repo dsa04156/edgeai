@@ -7,7 +7,7 @@ source45ce85f의 CI37016556197에서 실제 kind22Run과 결과 파일20개 검�
 
 기존 kind 격리·소유 label·cleanup 규칙과18개 Run을 유지하고 독립 TLS Remote Pod/PVC를 추가한다.
 API는 서비스 DNS와 CA·bearer로 참조 제공자에 연결하며 별도 API Pod 교체가 제공자를 교체하지 않는다.
-표준 kind 게이트에서 네 Run을 추가하도록 연결했다. 구현은 scripts/test-kind.py와 smoke-runtime.py다.
+표준 kind 게이트에서 네 Run을 추가하도록 연결했다. 구현은 scripts/internal/test-kind.py와 smoke-runtime.py다.
 
 - REMOTE BATCH/API 교체: 같은 Attempt·allocation·단일 실제 계산과 하위 BATCH 결과를 확인한다.
 - NODE→REMOTE BATCH child 전환: 이전 Pod 삭제·늦은 commit 차단, 같은 Task의 새 epoch와

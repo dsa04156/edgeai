@@ -30,7 +30,7 @@ ADR0079의 재시도 예산·후손 취소·Run 완료 SQL을 `recovery_workflow
 
 ## 범위
 
-명령은 [복원 작업 상태 조정](../recovery-kubernetes-workflows.md), 검증 근거는
+명령은 [복원 작업 상태 조정](../operations/recovery/recovery-kubernetes-workflows.md), 검증 근거는
 [결합 시험](../evidence/m9-recovery-kubernetes-workflows.md)을 따른다. 기존 kind 복구 게이트에
 `--workflows`를 추가하며 원격 CI 성공은 해당 코드의 실행 결과로 별도 판정한다.
 

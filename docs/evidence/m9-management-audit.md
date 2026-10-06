@@ -1,7 +1,7 @@
 # M9 관리 HTTP 감사 검증
 
 2026-10-04. [ADR0066](../adr/0066-management-request-audit.md),
-[실행/조회 안내](../management-audit.md). 전체 M9 완료나 운영 사용자별 RBAC 수용이 아니다.
+[실행/조회 안내](../operations/management-audit.md). 전체 M9 완료나 운영 사용자별 RBAC 수용이 아니다.
 
 소스 `0e9d7a0`의 CI37177835436은5개 job과 원시23개 결과가 모두 PASS다
 (`20261004T053859Z-52c9a721`). 단위122/PG229·감사API8·PG17 백업13/43테이블·

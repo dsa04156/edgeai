@@ -30,7 +30,7 @@ ADR0073은 단일 SYNTHETIC 참조 제공자 전체의 접근 차단과 계산 �
 
 OpenAPI 타입 생성·각 변경 shell 문법·git diff 확인도 수행한다. Java/API/DB migration은
 변경하지 않는다. 실제 Spring/S3 시험의 Pod 신원·Kubernetes 전환 관측은 기존 fixture 범위다.
-새 테스트는 기존 `scripts/test-remote.sh`의 Python discover를 통해 CI scaffold에도 포함된다.
+새 테스트는 기존 `scripts/test/test-remote.sh`의 Python discover를 통해 CI scaffold에도 포함된다.
 원격 CI/이미지 배포 판정은 별도이며 로컬 시험으로 대신하지 않는다.
 API JAR SHA256은 기존3968964d694d6291cc69fb60ce545d540b0d0d379f6ae108f65439554f7174b7과 같다.
 

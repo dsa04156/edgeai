@@ -41,4 +41,4 @@ DB만 과거 시점으로 되돌린 후 worker를 활성화하는 절차는 제�
 Workflow·Run을 백업하고, 새 DB의 모든 edgeai 테이블 내용·API 응답·불변 제약을 대조한다.
 백업 후 새 쓰기는 복원에 나타나지 않아야 한다. 손상/기존 DB/파일 권한 거절 및 실제 복원
 제약 오류 이후 소유 DB 정리를 검증한다. 오류 없는 dump에 대한 stderr 주입은 별도 fixture다.
-[실행 방법](../postgres-backup.md), [전체 M9 범위](../m9-requirements.md).
+[실행 방법](../operations/backup/postgres-backup.md), [전체 M9 범위](../requirements/m9-requirements.md).

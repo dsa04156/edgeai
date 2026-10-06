@@ -30,7 +30,7 @@ OFFLOADED source 이력을 모순으로 취급하지 않는다.
 
 ## 검증과 남은 범위
 
-[실행법](../recovery-kubernetes-workflows.md), [검증](../evidence/m9-recovery-batch-offloads.md).
+[실행법](../operations/recovery/recovery-kubernetes-workflows.md), [검증](../evidence/m9-recovery-batch-offloads.md).
 실제 부모/자식 종료 증거와 복원 DB에서 명시적인 전환/claim/과거 시각 fixture를 사용한다.
 공개 offload 요청이나 새 target 기동을 이 시험에서 수행했다고 주장하지 않는다.
 

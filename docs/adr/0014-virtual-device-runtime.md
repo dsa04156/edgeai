@@ -54,4 +54,4 @@ API 재시작·중복 명령·늦은 생성·교체 중 취소·죽은 runtime�
 
 근거: [Python subprocess의 session/process group](https://docs.python.org/3/library/subprocess.html),
 [Kubernetes Pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/),
-[M6 원문 요구사항](../m6-requirements.md).
+[M6 원문 요구사항](../requirements/m6-requirements.md).

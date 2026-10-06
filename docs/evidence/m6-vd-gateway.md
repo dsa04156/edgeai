@@ -50,11 +50,11 @@ patch·exec·다른 namespace Pod 생성·Runner Pod 생성은 거절된다.
 재현:
 
 ```bash
-rtk proxy bash scripts/test-unit.sh
-rtk proxy bash scripts/test-integration.sh
-rtk proxy bash scripts/test-contract.sh
-rtk proxy python3 scripts/bootstrap-runtime.py --context kubernetes-admin@kubernetes
-rtk proxy bash scripts/test-runtime-kubernetes.sh kubernetes-admin@kubernetes
+rtk proxy bash scripts/test/test-unit.sh
+rtk proxy bash scripts/test/test-integration.sh
+rtk proxy bash scripts/test/test-contract.sh
+rtk proxy python3 scripts/internal/bootstrap-runtime.py --context kubernetes-admin@kubernetes
+rtk proxy bash scripts/test/test-runtime-kubernetes.sh kubernetes-admin@kubernetes
 ```
 
 ## CI·배포 구분과 다음 게이트

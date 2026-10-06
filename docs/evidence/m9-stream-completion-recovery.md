@@ -1,7 +1,7 @@
 # 누락 STREAM 완료 이력의 DB 복원 검증
 
 2026-10-05. [ADR0114](../adr/0114-restored-stream-completion-history.md)와
-[실행 절차](../recovery-stream-completions.md)의 검증 근거다.
+[실행 절차](../operations/recovery/recovery-stream-completions.md)의 검증 근거다.
 
 ## 실제 검증 경로
 

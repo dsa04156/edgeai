@@ -1,7 +1,7 @@
 # M8 — 장치 관리 HTTP 부하 측정
 
 2026-10-04 KST. M8 일부 측정이며 전체 단계·실장비·합의 성능 수용 완료 판정이 아니다.
-[ADR0057](../adr/0057-device-management-load.md)과 [실행 방법](../load-testing.md)을 따른다.
+[ADR0057](../adr/0057-device-management-load.md)과 [실행 방법](../testing/load-testing.md)을 따른다.
 
 ## 실제 전체 규모 측정
 

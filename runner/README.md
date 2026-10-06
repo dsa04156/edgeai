@@ -35,9 +35,9 @@ Runner→Control Plane→MinIO→Result의 AUTO/NODE·BATCH·취소·재시작·
 ## 구성 요소 시험
 
 ```bash
-bash scripts/test-runner.sh
+bash scripts/test/test-runner.sh
 docker build -f runner/Dockerfile -t edgeai-runner:verify .
-EDGEAI_RUNNER_IMAGE=edgeai-runner:verify bash scripts/test-runner.sh
+EDGEAI_RUNNER_IMAGE=edgeai-runner:verify bash scripts/test/test-runner.sh
 ```
 
 첫 명령은 호스트 Python 자식 프로세스를, 마지막 명령은 실제 컨테이너를 사용한다.
@@ -117,7 +117,7 @@ SQLite에 입력·계산 상태·출력을 원자 저장한다. `stream_mqtt`는
 ```bash
 python3 -m venv .tools/stream-venv
 .tools/stream-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r runner/requirements-stream.txt
-EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test-stream.sh
+EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test/test-stream.sh
 ```
 
 실제 `mosquitto`, `mosquitto_passwd`, `openssl` 실행 파일을 요구하며 없으면 성공으로 건너뛰지 않는다.

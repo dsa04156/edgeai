@@ -1,7 +1,7 @@
 # STREAM 완료 장벽과 원래 확정 결과 복원 검증
 
 2026-10-05. [ADR0109](../adr/0109-restored-stream-results.md),
-[실행법](../recovery-stream-results.md).
+[실행법](../operations/recovery/recovery-stream-results.md).
 
 최종 Kubernetes30개 `20261005T014427Z-a9a2630f`, VD34개
 `20261005T014427Z-4b52b8e4`가 PASS/exit0다. 각각 복원DB6개와 실제 원래 완료 허가,

@@ -29,7 +29,7 @@ Run1개·Runner1Pod·고정 S3결과1개의 `[5,9,33,257]`/`aarch64`/UID10001과
 
 ## 선행 amd64 공개 실행
 
-2026-10-05 KST. `scripts/test-hardware-runtime.py`의 실제 배포 시험
+2026-10-05 KST. `scripts/internal/test-hardware-runtime.py`의 실제 배포 시험
 `20261004T175547Z-fb453bb8`에서2개가 PASS다.
 
 | 실행 | 요청한 자원 | 실제 노드 | 고정 S3 결과 |
@@ -53,7 +53,7 @@ argument4096자 상한을 넘었다. API 계약은 유지하고 시험 명령을
 나누어 실행한 뒤 통과했다. 첫 실패는 Run/Pod를 생성하지 않았으며 소유 Run 부재도 확인했다.
 
 ```bash
-python3 scripts/test-hardware-runtime.py \
+python3 scripts/internal/test-hardware-runtime.py \
   --context kubernetes-admin@kubernetes \
   --cases cuda-amd64 aries-access \
   --report .tools/hardware-runtime.json

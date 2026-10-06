@@ -10,7 +10,7 @@
 
 | 요구사항 | 현재 증거 | 판정 |
 |---|---|---|
-| 최신 설계의 greenfield 전제 | docs/sources.md, architecture.md, ADR-0001; 기존 플랫폼 코드 의존 없음 | 충족 |
+| 최신 설계의 greenfield 전제 | docs/architecture/sources.md, architecture.md, ADR-0001; 기존 플랫폼 코드 의존 없음 | 충족 |
 | 프로젝트 지침·개발 진입점 | 보존한 루트 AGENTS.md, backend/dashboard/scripts/AGENTS.md, DEVELOPMENT.md, README.md | 충족 |
 | Spring Boot·Next.js 빌드 환경 | Gradle wrapper/checksum/lockfile, pnpm lockfile, 기존 CI와 로컬 build/typecheck/lint | 충족 |
 | OpenAPI를 함께 사용하는 최소 API | platform-api.yaml, 생성된 api-schema.d.ts, test-contract.sh, 인증 401/200 시험 | 충족 |

@@ -1,7 +1,7 @@
 # ADR0022 — 처리 상태·입력 위치·출력의 원자적 스트림 기록
 
 상태: 구성 요소 구현·로컬 실제 프로세스/MQTT 검증. M7 공개 실행·DataRoute 영속 상태·실장비 수용 완료는 아니다.
-[메시지 형식](0021-stream-frame-boundary.md)과 [M7 요구사항](../m7-requirements.md)을 따른다.
+[메시지 형식](0021-stream-frame-boundary.md)과 [M7 요구사항](../requirements/m7-requirements.md)을 따른다.
 
 ## 처리와 전달 경계
 

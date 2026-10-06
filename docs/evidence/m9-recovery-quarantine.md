@@ -37,4 +37,4 @@ Mosquitto/SDK 경로를 사용했고 위47개가 통과했다. 같은 JAR의 참
 신규 코드의 원격 CI·배포는 후속이며, 이 결과를 기존6617d93 CI의 판정으로 대신하지 않는다.
 
 공유 원본 DB나 운영 namespace의 권한을 회수한 시험은 아니다. Secret/CA·broker/device
-journal·원래 외부 producer의 종료/권한 회수·운영 활성화는 [M9 수용 범위](../m9-requirements.md)에 남는다.
+journal·원래 외부 producer의 종료/권한 회수·운영 활성화는 [M9 수용 범위](../requirements/m9-requirements.md)에 남는다.

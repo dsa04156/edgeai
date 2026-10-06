@@ -34,4 +34,4 @@ source 재개·새 세션/외부 센서 재생 계약은 별도다. marker 삭�
 
 동일 사용자/관리자가 입력 경로를 병행 치환하는 환경, 운영 하드웨어·외부 adapter 수용은
 별도다. 강제 종료로 남은 개인 임시 파일의 매체 보안 삭제는 보장하지 않는다.
-[실행법](../device-journal-backup.md), [검증](../evidence/m9-device-journal-backup.md).
+[실행법](../operations/backup/device-journal-backup.md), [검증](../evidence/m9-device-journal-backup.md).

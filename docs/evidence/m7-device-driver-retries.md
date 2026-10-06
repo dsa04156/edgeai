@@ -33,7 +33,7 @@ journal이 만들어지기 전의 조회 실패만 호출자에서 재시도하�
   DB 관측 244개에서 I/O 대기는 최대 1.364183초였다. 앞선 17.873855초 지연의
   근본 원인이 해결됐다는 판정은 아니다.
 - Python 문법, CI YAML과 새 storage 검사의 의존성 설치 → driver 검사 → Spring 검사
-  순서를 확인했다. 새 10개는 `scripts/test-stream-drivers.py`를 CI에서 직접 실행한다.
+  순서를 확인했다. 새 10개는 `scripts/internal/test-stream-drivers.py`를 CI에서 직접 실행한다.
 
 ## 원격 검증과 남은 범위
 

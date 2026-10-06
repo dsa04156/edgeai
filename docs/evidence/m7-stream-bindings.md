@@ -70,6 +70,6 @@ heartbeat 검증은 [후속 기록](m7-stream-heartbeat.md)을 따른다.
 운영 broker·실제 Runner/SERVICE의 스트림 인터페이스, checkpoint/새 Pod 복원,
 공개 실행 API/화면과 실제 Kubernetes 다중 장치 수용은 남아 있다. 공개 STREAM 실행501을 유지한다.
 
-재현: 실제 PostgreSQL과 Mosquitto/OpenSSL을 준비하고 `bash scripts/test-stream-broker.sh`를 실행한다.
+재현: 실제 PostgreSQL과 Mosquitto/OpenSSL을 준비하고 `bash scripts/test/test-stream-broker.sh`를 실행한다.
 이 명령은 CI scaffold에도 포함된다. 기존 스크립트로 unit/integration/contract를 각각 실행하고
-`bash scripts/test-profiles-stack.sh none`으로 실제 관리 화면 회귀를 확인한다.
+`bash scripts/test/test-profiles-stack.sh none`으로 실제 관리 화면 회귀를 확인한다.

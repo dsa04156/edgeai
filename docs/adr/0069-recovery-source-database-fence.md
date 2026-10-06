@@ -39,4 +39,4 @@ SQL/API 진단 본문과 자격 증명을 공개 evidence나 CI artifact에 포�
 회수해야 한다. Kubernetes·Remote·MQTT·장치·S3 writer 중지와 키/journal 복원을 합친 종합
 복구·활성화, RPO/RTO 수용은 여전히 남는다.
 
-[실행법](../recovery-database-fence.md), [실제 PG/API 검증](../evidence/m9-recovery-database-fence.md).
+[실행법](../operations/recovery/recovery-database-fence.md), [실제 PG/API 검증](../evidence/m9-recovery-database-fence.md).

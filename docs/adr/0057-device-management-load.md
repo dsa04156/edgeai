@@ -3,11 +3,11 @@
 2026-10-04. M8의 측정 계약이며 M8 완료나 실장비 성능 수용 판정이 아니다.
 
 Notion 전체 설계·API·ERD·실행 지시를 다시 읽었다. 네 문서의 수정 시각은 기존
-`docs/sources.md`와 동일하다. 원문은 100→300→1,000 장치 관리 부하, 실제 Remote 계약 및
+`docs/architecture/sources.md`와 동일하다. 원문은 100→300→1,000 장치 관리 부하, 실제 Remote 계약 및
 성능 수치의 별도 확정, 외부 항목이 남아 있어도 독립 단계를 진행하도록 요구한다.
 M5/M7의 외부 수용·Remote STREAM·VD 자동 전환을 완료 처리하지 않고 M8을 병행한다.
 
-`scripts/test-load.sh`는 새 이름의 전용 PostgreSQL DB와 loopback API 프로세스를 만든다.
+`scripts/test/test-load.sh`는 새 이름의 전용 PostgreSQL DB와 loopback API 프로세스를 만든다.
 기존 DB·API·클러스터에 부하를 보내지 않는다. JVM heap512MiB·기본 Hikari pool5, 동일 JAR과
 실제 DB 버전·호스트 CPU 수·메모리 및 비격리 환경을 보고한다. API CPU/RSS와 해당 DB의
 크기·연결·deadlock 통계를 측정한다. 호스트 공유 PostgreSQL의 CPU를 전용 DB CPU로 표시하지 않는다.

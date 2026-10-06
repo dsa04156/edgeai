@@ -9,7 +9,7 @@ if [[ -x "$EDGEAI_ROOT/.tools/jdk/bin/javac" && -z "${JAVA_HOME:-}" ]]; then
 fi
 blocked() { printf 'BLOCKED: %s\n' "$*" >&2; exit 2; }
 load_env() {
-  [[ -f "$EDGEAI_ROOT/.env" ]] || blocked 'Run bash scripts/bootstrap.sh first.'
+  [[ -f "$EDGEAI_ROOT/.env" ]] || blocked 'Run bash scripts/dev/bootstrap.sh first.'
   set -a
   source "$EDGEAI_ROOT/.env"
   set +a

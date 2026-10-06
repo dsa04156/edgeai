@@ -4,7 +4,7 @@
 합성 업무 데이터와 실제 PostgreSQL16, 현재 패키징 API JAR을 사용했다. 전체 플랫폼 복구·
 운영 DB 복원·M9 완료 판정은 아니다.
 
-`20261004T010138Z-7ebea0c3`의 `scripts/test-postgres-backup.sh`가 exit0/PASS다.
+`20261004T010138Z-7ebea0c3`의 `scripts/test/test-postgres-backup.sh`가 exit0/PASS다.
 공개 API로 Profile·Device·세션·관측·두 작업의 Workflow·취소한 Run을 생성했다.
 기존 개발 DB와 별개인 소유 DB를 사용하고, 복원 API의 실행/VD/Remote/stream worker는 껐다.
 
@@ -37,4 +37,4 @@ CI scaffold에 `--transport compose`로 PostgreSQL17 컨테이너 내부 클라�
 동일 게이트를 추가했다. 로컬 Docker socket은 접근 권한이 없어 Compose 실행은 하지 않았다.
 새 커밋의 CI 통과 여부는 후속 확인한다. Native16 결과로 Compose17 통과를 주장하지 않는다.
 글로벌 역할/ACL·외부 Secret·S3 고정 version/bytes·broker/device journal·실행 중 외부 상태·
-주기/암호화/원격 보관/RPO/RTO는 [전체 M9 요구](../m9-requirements.md)의 남은 항목이다.
+주기/암호화/원격 보관/RPO/RTO는 [전체 M9 요구](../requirements/m9-requirements.md)의 남은 항목이다.

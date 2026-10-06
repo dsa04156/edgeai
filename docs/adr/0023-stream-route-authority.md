@@ -1,7 +1,7 @@
 # ADR0023 — 영속 DataRoute와 실행 세대의 권한
 
 상태: 내부 제어 상태 구현·실제 PostgreSQL 검증 완료. 공개 STREAM Run·broker 계정 발급·실제 Runner 연결은 후속 게이트다.
-[원문 요구사항](../m7-requirements.md)과 ADR0021–0022의 메시지/처리 기록을 제어 상태에 연결한다.
+[원문 요구사항](../requirements/m7-requirements.md)과 ADR0021–0022의 메시지/처리 기록을 제어 상태에 연결한다.
 
 논리 DataRoute는 한 Run의 특정 Task 입력 port와 Task 출력 또는 Device 출력의 연결이다.
 Task 간 연결은 같은 불변 DAG의 STREAM edge여야 한다. Device 연결은 별도 source port와

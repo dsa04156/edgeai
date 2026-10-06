@@ -1,7 +1,7 @@
 # ADR0034 — 인증된 최신 체크포인트로 새 볼륨 복원
 
 상태: 동일 Attempt·경로 세대의 SDK 복원 연결. 새 Attempt/generation 인계와 공개 STREAM
-실행은 아직 미완료이며 [전체 요구사항](../m7-requirements.md)을 계속 적용한다.
+실행은 아직 미완료이며 [전체 요구사항](../requirements/m7-requirements.md)을 계속 적용한다.
 
 ## 복원 권한과 파일 검증
 

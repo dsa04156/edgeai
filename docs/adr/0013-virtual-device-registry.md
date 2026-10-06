@@ -1,7 +1,7 @@
 # ADR0013: VD 식별자와 원본 연결
 
 상태: M6 첫 구현. 영속 등록/수정/해제와 원본 연결을 먼저 검증하며 실제 VD runtime·Operation·Run VD
-실행·화면·demo-vd까지 M6 완료 범위로 유지한다. [원문 요구사항](../m6-requirements.md)을 따른다.
+실행·화면·demo-vd까지 M6 완료 범위로 유지한다. [원문 요구사항](../requirements/m6-requirements.md)을 따른다.
 
 VD는 불변 VD ProfileVersion과 SERVICE ProfileVersion을 참조하고 공개 key/UUID를 유지한다.
 VDProfile `edgeai.vd/v1`은 sensorMirror/processing/emulation, 이름 있는 원본 조건0~16개,

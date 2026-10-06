@@ -66,7 +66,7 @@ checksum은 `1571392355`다. 비공개 snapshot은 로컬에만 보관한다.
 
 ## 후속 실제 Remote 혼합 실행
 
-`scripts/test-vd-kubernetes.py --context <context> --mixed-remote`는 현재 JAR를 쓰는 격리 API/DB/S3와
+`scripts/internal/test-vd-kubernetes.py --context <context> --mixed-remote`는 현재 JAR를 쓰는 격리 API/DB/S3와
 독립 TLS 참조 제공자 Pod로 새 `mixed_remote_acceptance.py`를 실행한다. 기존 공유 배포나 노드의
 스케줄링 상태를 바꾸지 않는다. 제공자 상태 볼륨은 API 재시작과 독립적이며 실제 제공자 재시작·
 외부 장비 계약 수용은 이 시험에 포함하지 않는다.

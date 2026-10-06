@@ -50,11 +50,11 @@ schema 로컬 검사015715Z-c46a7e16은 기존 jsonschema 환경에 `referencing
 
 ## 재현과 남은 연결
 
-Linux에서 `bash scripts/test-runner.sh`로 실제 프로세스/VD/journal 시험을 실행한다.
+Linux에서 `bash scripts/test/test-runner.sh`로 실제 프로세스/VD/journal 시험을 실행한다.
 해시 고정 `runner/requirements-stream.txt` 환경을 `EDGEAI_STREAM_PYTHON`으로 지정하고,
-실제 Mosquitto/password/openssl을 준비해 `bash scripts/test-stream.sh`를 실행한다.
+실제 Mosquitto/password/openssl을 준비해 `bash scripts/test/test-stream.sh`를 실행한다.
 해당 스크립트와 기존 CI job은 이제 `test_stream_*.py` 전체를 선택한다.
-실제 PostgreSQL·Mosquitto control/dynamic-security 환경의 `bash scripts/test-stream-broker.sh`는
+실제 PostgreSQL·Mosquitto control/dynamic-security 환경의 `bash scripts/test/test-stream-broker.sh`는
 Spring→Python 지속 계산 probe를 포함한다. 요청/응답 schema와 합성4+5 예제는 `contracts/streams/`다.
 
 운영 broker·SERVICE Profile/Runner entrypoint·공개 Run/API/Swagger/UI, S3 checkpoint와 새 Pod 복원,

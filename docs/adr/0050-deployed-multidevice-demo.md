@@ -7,7 +7,7 @@ API는 Recreate·단일 writer를 유지한다. 새로운 Flyway/도메인 계�
 
 ## 실제 배포를 쓰는 데모
 
-`scripts/demo-multidevice.sh <context>`는 기존 배포의 API·DB·broker·MinIO를 사용한다.
+`scripts/demo/demo-multidevice.sh <context>`는 기존 배포의 API·DB·broker·MinIO를 사용한다.
 고유 소유 label의 ConfigMap/합성 장치 driver Pod만 만들고 공개 관리 API·DeviceRunSource SDK로
 Profile/장치/세션·워크플로·Run을 생성한다. SOURCE는 SYNTHETIC이며 실제 물리 장치로 표기하지 않는다.
 

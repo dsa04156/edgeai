@@ -1,6 +1,6 @@
 # VD 시작·확정 결과의 격리 DB 복원 검증
 
-2026-10-05. [ADR0107](../adr/0107-recovery-vd-results.md), [실행법](../recovery-vd-results.md).
+2026-10-05. [ADR0107](../adr/0107-recovery-vd-results.md), [실행법](../operations/recovery/recovery-vd-results.md).
 
 `20261005T001119Z-2e34d057`: 실제 결합24개 PASS. 원본 PostgreSQL DB/MinIO 데이터를
 제거한 뒤 별도 TLS S3 백업과 복원 DB5개를 사용했다. 실제 Secret 소유 supervisor Pod,

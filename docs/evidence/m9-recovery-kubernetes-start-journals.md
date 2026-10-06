@@ -6,7 +6,7 @@ Kubernetes 시작 기록11개 확장을 함께 실행했다. 시험 종료 후 �
 Remote 제공자와 두 종류 MinIO 시험 프로세스의 정리를 확인했다.
 
 ```bash
-bash scripts/test-recovery-kubernetes-retire.sh \
+bash scripts/test/test-recovery-kubernetes-retire.sh \
   --context kubernetes-admin@kubernetes \
   --runner-image ghcr.io/dsa04156/edgeai-runner@sha256:8a2f8067c0bd3d5a10e76b2c46e145b045d8a0789c3f01c10984e1af915ac2ff \
   --runner-source 60c8be3e5bd0970ea83d15941ba3ec6761b8a240 \

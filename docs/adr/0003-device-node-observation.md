@@ -1,6 +1,6 @@
 # ADR 0003 — Device, Node, Session, Observation
 
-2026-10-02. Notion API/ERD의 M2 10개 작업과 관계를 상세화한다. 문서 수정 시각은 docs/sources.md와 같다.
+2026-10-02. Notion API/ERD의 M2 10개 작업과 관계를 상세화한다. 문서 수정 시각은 docs/architecture/sources.md와 같다.
 
 - Device는 물리 장치의 영속 식별자이며 Kubernetes ExecutionNode와 별개다. key는 전체 고유,
   DEVICE ProfileVersion을 FK로 참조한다. sourceMode LIVE/REPLAY/SYNTHETIC을 명시해 시험 데이터를 구분한다.

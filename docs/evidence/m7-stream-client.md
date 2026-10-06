@@ -53,5 +53,5 @@ journal의 로컬 ACK를 새 Pod에서도 복구 가능한 S3 checkpoint에 연�
 운영 broker/TLS 설정, Device 입력·SERVICE 스트림 workload, 실제 Kubernetes 다중 장치 DAG,
 공개 실행/조회/Swagger/UI와 M8 부하·M9 운영·M10 실장비 수용은 별도다. 공개 STREAM501은 유지한다.
 
-재현: `bash scripts/test-runner.sh`, 고정 Paho 환경과 실제 Mosquitto/OpenSSL에서
-`bash scripts/test-stream.sh`. 새 SDK/MQTT 시험은 기존 CI 명령에 자동 포함된다.
+재현: `bash scripts/test/test-runner.sh`, 고정 Paho 환경과 실제 Mosquitto/OpenSSL에서
+`bash scripts/test/test-stream.sh`. 새 SDK/MQTT 시험은 기존 CI 명령에 자동 포함된다.

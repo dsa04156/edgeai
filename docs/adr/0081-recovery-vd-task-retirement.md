@@ -31,7 +31,7 @@ claim/allocation/성공 Result는 명시적 SQL fixture이며 SDK claim·S3 파�
 
 kind CI의 동일 게이트에 확장 시험을 포함한다. 전체 테이블 보존 검사는 같은 전체 행을
 하나의 SQL snapshot에서 해시해 Compose 호출 비용을 줄인다. 누락 테이블을 허용하지 않는다.
-[검증 기록](../evidence/m9-recovery-vd-tasks.md), [명령](../recovery-kubernetes-retirement.md).
+[검증 기록](../evidence/m9-recovery-vd-tasks.md), [명령](../operations/recovery/recovery-kubernetes-retirement.md).
 
 작업 결과/취소/재시도 및 진행 중 offload 조정, STREAM/journal, 전역 writer 통제와 복원
 시스템 활성화는 종합 복구에서 연결해야 한다. 이 결정만으로 M9 완료를 판정하지 않는다.

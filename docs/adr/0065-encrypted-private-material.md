@@ -43,4 +43,4 @@ identity는 사용하지 않는다. 키는 명령행 값이나 로그로 전달�
 운영 Secret·CA 목록과 버전 매핑, 오프사이트 보관·일정·키 회전/전달, 서명 정책,
 broker·장치 journal, DB/S3와의 결합 복원 및 서비스 재활성화가 남는다.
 
-[실행법](../private-material-backup.md), [실제 시험 근거](../evidence/m9-private-material.md).
+[실행법](../operations/backup/private-material-backup.md), [실제 시험 근거](../evidence/m9-private-material.md).

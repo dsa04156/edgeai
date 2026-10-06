@@ -1,6 +1,6 @@
 # Kubernetes 확정 Result의 복원 DB 반영 검증
 
-2026-10-05. [ADR0104](../adr/0104-recovery-kubernetes-results.md), [실행법](../recovery-kubernetes-results.md).
+2026-10-05. [ADR0104](../adr/0104-recovery-kubernetes-results.md), [실행법](../operations/recovery/recovery-kubernetes-results.md).
 
 `20261004T221111Z-8496de2b`: 새 결합20개 PASS. 공개 API가 만든 BATCH 부모/자식,
 실제 Job/Pod·Pod-bound TokenReview·TLS Runner claim·서명 업로드·commit을 사용한다.

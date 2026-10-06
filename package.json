@@ -7,7 +7,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "dev": "bash scripts/dev-dashboard.sh",
+    "dev": "bash scripts/dev/dev-dashboard.sh",
     "build": "pnpm --filter @edgeai/dashboard build",
     "typecheck": "pnpm --filter @edgeai/dashboard typecheck",
     "lint": "pnpm --filter @edgeai/dashboard lint",

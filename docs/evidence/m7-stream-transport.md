@@ -59,7 +59,7 @@ hostname 거절, TLS 응답 정지 timeout·실제 소켓 정리도 확인했다
 
 ## 재현과 후속 게이트
 
-`bash scripts/test-runner.sh`와 [Runner의 실제 MQTT 시험 명령](../../runner/README.md#스트림-전달-구성-요소-m7-진행-중)을 따른다.
+`bash scripts/test/test-runner.sh`와 [Runner의 실제 MQTT 시험 명령](../../runner/README.md#스트림-전달-구성-요소-m7-진행-중)을 따른다.
 새 CI runner job은 이미지 빌드/기존 실행 회귀와 실제 MQTT9개를 성공해야 이미지를 발행한다.
 소스717b5cd7646012135975a88bb02a0d39f0f9b0f5를 main에 push했다.
 [CI37067700149](https://github.com/dsa04156/edgeai/actions/runs/37067700149)의 runner job은

@@ -18,11 +18,11 @@ ADR0082 [복원 Kubernetes/VD 작업 상태 조정](m9-recovery-kubernetes-workf
 
 | testRunId | 명령 | exit | 결과 |
 |---|---|---|---|
-| 20261001T074249Z-49975f51 | bash scripts/test-unit.sh | 0 | API 비인증 401/인증 metadata, 2 tests |
-| 20261001T074758Z-ef139f25 | bash scripts/test-integration.sh | 0 | 실제 PostgreSQL 16.15 + Flyway, 1 test |
-| 20261001T074854Z-0b774af7 | bash scripts/test-contract.sh | 0 | OpenAPI 생성 타입 일치 + API tests |
-| 20261001T074850Z-b27fea4b | bash scripts/test-ui.sh | 0 | lint/typecheck/build + desktop/mobile 2 tests, 연결 실패 503 |
-| 20261001T074945Z-eabe3444 | bash scripts/test-health-stack.sh | 0 | DB→Spring→Next.js UP, 인증 200/비인증 401 |
+| 20261001T074249Z-49975f51 | bash scripts/test/test-unit.sh | 0 | API 비인증 401/인증 metadata, 2 tests |
+| 20261001T074758Z-ef139f25 | bash scripts/test/test-integration.sh | 0 | 실제 PostgreSQL 16.15 + Flyway, 1 test |
+| 20261001T074854Z-0b774af7 | bash scripts/test/test-contract.sh | 0 | OpenAPI 생성 타입 일치 + API tests |
+| 20261001T074850Z-b27fea4b | bash scripts/test/test-ui.sh | 0 | lint/typecheck/build + desktop/mobile 2 tests, 연결 실패 503 |
+| 20261001T074945Z-eabe3444 | bash scripts/test/test-health-stack.sh | 0 | DB→Spring→Next.js UP, 인증 200/비인증 401 |
 
 추가 확인: shell 구문, Compose config, 비밀/로컬 파일 Git 제외, 미구현 스크립트 8개의 exit 2,
 desktop/mobile screenshot 직접 확인. 최초 M0 시점에는 MinIO 빌드·runtime을 검증하지 않았으며 후속 감사에서 아래와 같이 보완했다.
@@ -99,7 +99,7 @@ history schema 문제는 별도 새 DB에서 재현한 뒤 명시적 schema 설�
 
 ## Swagger UI (2026-10-02)
 
-[구성과 검증](../swagger-ui.md): 계약/자산 인증 및 원본 일치, 실제 desktop/mobile
+[구성과 검증](../guides/swagger-ui.md): 계약/자산 인증 및 원본 일치, 실제 desktop/mobile
 Swagger 렌더와 자동 CSRF Profile 등록을 통과했다. GitHub CI에 같은 검증을 포함한다.
 
 ## M2 Device/Node (2026-10-02)

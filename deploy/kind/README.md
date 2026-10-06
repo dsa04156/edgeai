@@ -1,6 +1,6 @@
 # kind — 실행·전환·VD·다중 장치 스트림 수용시험
 
-`bash scripts/test-kind.sh`는 Linux amd64 Docker 환경에서 이름이 임의 생성된 전용 클러스터를
+`bash scripts/test/test-kind.sh`는 Linux amd64 Docker 환경에서 이름이 임의 생성된 전용 클러스터를
 만들고 시험 후 해당 클러스터만 삭제한다. 사용자 kubeconfig와 현재 context는 읽거나 변경하지 않는다.
 Docker 권한이 없으면 exit2이며 자동으로 권한을 변경하지 않는다.
 

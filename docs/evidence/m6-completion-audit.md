@@ -1,6 +1,6 @@
 # M6 VD 완료 감사
 
-2026-10-03 KST. [M6 요구사항](../m6-requirements.md)과 ADR0013–0020의 STATELESS VD
+2026-10-03 KST. [M6 요구사항](../requirements/m6-requirements.md)과 ADR0013–0020의 STATELESS VD
 범위에 대해 구현·검증 완료로 판정한다. 전체 플랫폼은 PARTIAL이며 M5 잔여·M7–M10은 남는다.
 
 | 요구사항 | 구현·검증 근거 |

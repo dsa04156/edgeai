@@ -1,6 +1,6 @@
 # M9 — 복원 STREAM 그룹의 원래 시작 허가
 
-[ADR0108](../adr/0108-restored-stream-starts.md), [복구 명령](../recovery-stream-workflows.md).
+[ADR0108](../adr/0108-restored-stream-starts.md), [복구 명령](../operations/recovery/recovery-stream-workflows.md).
 
 ## 검증 경계
 
@@ -84,7 +84,7 @@ Kubernetes/VD/Remote 시작 복구91개 `010218Z-e0126123`는 소유 자원 정�
 ```bash
 EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
   bash scripts/collect-evidence.sh recovery-stream-vd-starts \
-  bash scripts/test-recovery-stream-workflows.sh \
+  bash scripts/test/test-recovery-stream-workflows.sh \
   --context '<시험 context>' --offloads --finalizers --runtime-start-journals --vd-peer \
   --minio-binary '<검증한 MinIO 실행파일>' \
   --report .tools/recovery-stream-vd-starts.json

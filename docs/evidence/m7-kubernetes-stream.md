@@ -4,7 +4,7 @@
 
 ## 구현
 
-`scripts/test-stream-kubernetes.sh <context>`는 현재 API JAR를 빌드한 뒤 소유 label과 UID를
+`scripts/test/test-stream-kubernetes.sh <context>`는 현재 API JAR를 빌드한 뒤 소유 label과 UID를
 확인하는 격리 API/DB/MinIO/Mosquitto/DeviceSource Pod 및 Service를 만든다. API는 native HTTPS,
 MinIO는 native HTTPS, MQTT는 TLS와 Dynamic Security를 사용한다. API/S3/MQTT의 인증서를
 검증하며 skip-verify를 사용하지 않는다. API는 제한된 제어 서버 SA를 사용하고 Runner는 실제

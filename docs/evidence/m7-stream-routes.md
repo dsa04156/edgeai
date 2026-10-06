@@ -50,7 +50,7 @@ V1–V18 원본 SHA-256 일치도 확인했다. 전체 PG148개는 기존136개�
 (`20261002T220753Z-c6dfafe1`,12개 실패)을 확인했다. 기존 parser 계약에 맞게 fixture를 수정한 뒤
 새12개 및 전체148개가 통과했다. V19 SQL이나 기존 SERVICE 계약을 완화하지 않았다.
 
-재현: `bash scripts/test-integration.sh`. 전체 CI에는 같은 통합시험이 자동 포함된다.
+재현: `bash scripts/test/test-integration.sh`. 전체 CI에는 같은 통합시험이 자동 포함된다.
 공개 API/화면에는 이번 변경이 없다.
 
 ## CI·배포 확인

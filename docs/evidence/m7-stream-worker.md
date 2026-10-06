@@ -59,6 +59,6 @@ Argo Synced 및 VD 실행 활성화를 확인했다. Argo 전체 health는 기�
 stream worker는 배포에서 기본 비활성으로 유지하며 운영 broker의 실제 활성 수용을 뜻하지 않는다.
 인증 배정의 후속 로컬 구현·검증은 [별도 기록](m7-stream-bindings.md)을 따른다.
 
-재현: 실제 PostgreSQL과 Mosquitto/OpenSSL을 준비한 뒤 `bash scripts/test-stream-broker.sh`.
+재현: 실제 PostgreSQL과 Mosquitto/OpenSSL을 준비한 뒤 `bash scripts/test/test-stream-broker.sh`.
 기존 CI scaffold job의 같은 명령에 자동 포함된다. 비표준 broker 경로는
 [broker 검증 문서](m7-stream-broker.md)의 환경 변수를 따른다.

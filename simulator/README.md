@@ -1,19 +1,19 @@
 # 합성 장치와 Remote 참조 시뮬레이터
 
 `device_load.py`는 실제 관리 API를 호출하는 고정 발송 스케줄·제한된 대기열·개별 지연 표본을
-제공한다. `bash scripts/test-load.sh --measure-only`로 전용 PostgreSQL DB와 API를 구성하고
+제공한다. `bash scripts/test/test-load.sh --measure-only`로 전용 PostgreSQL DB와 API를 구성하고
 100→300→1,000대 관측·조회·재접속을 측정한다. 실행 방법과 실제 장비 시험과의 경계는
-[부하 시험](../docs/load-testing.md)을 따른다. 아래 Remote 참조 계산과 별개다.
+[부하 시험](../docs/testing/load-testing.md)을 따른다. 아래 Remote 참조 계산과 별개다.
 
 ## Remote 참조 계산
 
 `remote_server.py`는 별도 Python 프로세스·실제 HTTP·SQLite·파일로 RemoteGateway 계약을 시험한다.
-자동 시험은 저장소 루트에서 `bash scripts/test-remote.sh`로 실행한다. Python3와 JDK21이 필요하다.
+자동 시험은 저장소 루트에서 `bash scripts/test/test-remote.sh`로 실행한다. Python3와 JDK21이 필요하다.
 별도 kind TLS launcher의 실제 인증서/인증/재시작 시험에는 OpenSSL도 필요하다.
 시험은 임시 디렉터리/임의 포트/임시 자격을 만들고 종료 시 프로세스를 정리한다. PostgreSQL은 필요 없다.
 
 프로토콜은 [remote-reference-api.yaml](../contracts/openapi/remote-reference-api.yaml),
-전체 계산의 복구 차단은 [별도 운영 절차](../docs/recovery-remote-fence.md),
+전체 계산의 복구 차단은 [별도 운영 절차](../docs/operations/recovery/recovery-remote-fence.md),
 경계와 후속 연결은 [ADR0010](../docs/adr/0010-remote-adapter-boundary.md)을 따른다.
 실제 2세부 API·OCI 실행·GPU/NPU·하드웨어 성능 수용을 대신하지 않는다. `sourceMode=SYNTHETIC`이다.
 
@@ -42,7 +42,7 @@ python3 simulator/remote_server.py \
 parameters의 `simulationDelayMillis`는0~60000의 장애 시험 전용 대기다. 성능 측정값이 아니다.
 실행 마감은 예약 때의 `expiresAt`으로 고정하고 제공자 시각으로 강제한다. 이 참조 구현은
 SERVICE.timeoutSeconds를 별도 타이머로 시행하지 않으므로 플랫폼 연결 시 더 짧은 마감을 예약해야 한다.
-플랫폼의 공개 REMOTE Run과 RemoteWorker를 통한 연결은 [설정 문서](../docs/remote.md)를 따른다.
+플랫폼의 공개 REMOTE Run과 RemoteWorker를 통한 연결은 [설정 문서](../docs/operations/remote.md)를 따른다.
 공개 API→실제 제공자→MinIO→Result는 로컬 검증했으며 실제 클러스터 배포에서는 Remote가 기본 비활성이다.
 
 시험 전용 `--fault-file`은 비공개 로컬 JSON 파일로 `reserve_timeout_once`를 주입한다.

@@ -53,7 +53,7 @@ Runner111·MQTT90, 새 부하 판정4개를 확인했다. 판정별 실제 요�
 이 CI의 최종 단위 XML은 후속 계약 task가 덮어쓴 MVC26개다. 전체 단위 command는 PASS지만
 해당 XML로 전체111개를 증명하지 않는다. 감사 도구의 최초111개 가정은
 `20261004T010743Z-953150d9`에서 실패했고, 실제 task 순서/선택자와 XML을 확인해 범위를
-수정했다. 제품 회귀 실패가 아니다. 후속 `scripts/test-unit.sh`는 전체 task 직후
+수정했다. 제품 회귀 실패가 아니다. 후속 `scripts/test/test-unit.sh`는 전체 task 직후
 `UNIT_TEST_COUNTS`를 출력한다. `20261004T010848Z-a6761d92`는 변경 없는 로컬 Gradle 결과를
 UP-TO-DATE로 재사용해111개·실패/오류/skip0의 즉시 기록을 확인했다.
 

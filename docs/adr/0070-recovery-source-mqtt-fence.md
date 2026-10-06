@@ -48,4 +48,4 @@ deny이며 group이 없는 전용 브로커만 대상으로 한다. 최대10,000
 새 자격을 사용하는 서비스 재개는 종합 복구 단계에 남는다. 임의 계정 재활성화나 초기
 Dynamic Security 파일 덮어쓰기 절차는 제공하지 않는다.
 
-[운영 명령](../recovery-mqtt-fence.md), [실제 TLS 검증](../evidence/m9-recovery-mqtt-fence.md).
+[운영 명령](../operations/recovery/recovery-mqtt-fence.md), [실제 TLS 검증](../evidence/m9-recovery-mqtt-fence.md).

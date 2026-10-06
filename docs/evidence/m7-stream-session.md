@@ -29,7 +29,7 @@ heartbeat 순번 재개·재시도·갱신, MQTT/journal/지속 계산의 생성
   기한을 넘긴 뒤 계산4+5=9·END·checkpoint3·요청3·처리 ACK·journal 자격 미저장을 확인했다.
   이 시험의 Kubernetes Pod 신원 확인은 명시적 RuntimeGateway fixture다.
 
-실제 HTTPS·MQTT9개는 `test_stream_session.py`이며 기존 `scripts/test-stream.sh`/CI 선택에
+실제 HTTPS·MQTT9개는 `test_stream_session.py`이며 기존 `scripts/test/test-stream.sh`/CI 선택에
 포함된다. `test-stream-broker.sh`는 실제 PostgreSQL·Mosquitto control/dynamic-security와
 해시 고정 Paho 환경을 요구한다. REST 경로·본문·DB schema는 변경하지 않았다.
 

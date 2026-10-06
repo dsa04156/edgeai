@@ -5,8 +5,8 @@
 현재 로컬 API JAR을 고정 API 이미지의 JRE로 실행했다. 전송 전후 JAR SHA-256을 대조했다.
 기존 배포·DB·스토리지는 변경하지 않았다. 새 API 컨테이너 이미지 시험은 별도 CI 대상이다.
 
-재현: `bash scripts/test-vd-kubernetes.sh <explicit-context>`.
-`scripts/vd_acceptance.py`를 실제 VD가 활성화된 API에서 실행하는 `demo-vd.sh`와
+재현: `bash scripts/test/test-vd-kubernetes.sh <explicit-context>`.
+`scripts/internal/vd_acceptance.py`를 실제 VD가 활성화된 API에서 실행하는 `demo-vd.sh`와
 격리 kind 검사에도 연결했다. 신규 kind CI 결과는 아래에 기록한다.
 
 ## 실제 관측

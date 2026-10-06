@@ -34,4 +34,4 @@ Pod claim과 broker activation은 명시적 SQL fixture이며 FK/check/trigger�
 운영 순서는 DB snapshot, 필요한 버전을 보존하는 S3 백업, 새 DB 복원, 이 대조 명령이다.
 그 사이 원본 고정 버전을 영구 삭제하면 대조가 실패한다. 동시 쓰기가 있는 DB/S3의 원자적
 snapshot을 주장하지 않는다. Secret/CA·journal·실행 권한 회수·중복 producer 방지·서비스
-활성화와 RPO/RTO는 [M9 수용 범위](../m9-requirements.md)에 남는다.
+활성화와 RPO/RTO는 [M9 수용 범위](../requirements/m9-requirements.md)에 남는다.

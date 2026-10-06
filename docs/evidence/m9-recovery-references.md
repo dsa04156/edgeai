@@ -4,7 +4,7 @@
 실제 PostgreSQL16·패키징 API·TLS MinIO 두 개로 검증했다. 합성 데이터이며 Pod claim과
 broker 활성화는 명시적 SQL fixture다. DB의 FK/check/trigger는 그대로 적용했다.
 
-최종 `20261004T014850Z-ae31f51c`의 `scripts/test-recovery-references.sh`가9개 사례
+최종 `20261004T014850Z-ae31f51c`의 `scripts/test/test-recovery-references.sh`가9개 사례
 exit0/PASS다. 결과2개(빈 파일·한글 경로의 이전 버전), Runner SDK로 생성한 과거/최신
 체크포인트2개를 사용했다. 백업에는 같은 key의 새 버전까지5개가 있으며, 복원 DB의 전체
 고정 참조4개/1,287bytes를 실제 읽었다. 원본 DB는 삭제했고 원본 MinIO 프로세스는 종료했으며

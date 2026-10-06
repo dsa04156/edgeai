@@ -368,7 +368,7 @@ except SourceError as error:
         try:
             eventually(lambda:self.link.step(.001),lambda:bool(self.sink.pending()),10)
             self.assertIsNone(child.poll())
-            scripts=sdk.parent/'scripts';sys.path.insert(0,str(scripts))
+            scripts=sdk.parent/'scripts/internal';sys.path.insert(0,str(scripts))
             try:
                 import recovery_device_retire as retirement
                 value,bindings,digest=retirement.read_source(self.directory,5)

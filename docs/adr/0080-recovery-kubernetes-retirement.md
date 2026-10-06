@@ -38,4 +38,4 @@ STREAM/journal, 미관측 producer와 전체 서비스 활성화는 남는다.
 실제 PostgreSQL 복원3개와 Kubernetes 부모/자식2쌍의16개 결합 시험이 통과했다.
 업무는 합성이며 runtime claim/VD binding은 명시적 DB fixture다. 실제 모델이나 SDK claim
 수용을 주장하지 않는다. [검증 근거](../evidence/m9-recovery-kubernetes-retirement.md),
-[운영 명령](../recovery-kubernetes-retirement.md).
+[운영 명령](../operations/recovery/recovery-kubernetes-retirement.md).

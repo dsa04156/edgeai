@@ -1,6 +1,6 @@
 # ADR0060 — 고정 S3 버전을 보존하는 별도 MinIO 백업
 
-2026-10-04. [M9](../m9-requirements.md)의 DB와 파일 복구 경계를 이어 구현한다.
+2026-10-04. [M9](../requirements/m9-requirements.md)의 DB와 파일 복구 경계를 이어 구현한다.
 `result_artifact`와 `stream_checkpoint`는 bucket/key뿐 아니라 정확한 object version과
 bytes/SHA-256을 참조한다. 다른 저장소에 같은 이름으로 PUT하면 그 참조를 복원할 수 없다.
 
@@ -51,4 +51,4 @@ bucket은 보존하여 운영자가 점검할 수 있게 한다. 프로세스 �
 전체 복구 게이트는 DB archive를 새 DB로 복원하고 **그 DB가 참조하는 모든 result/checkpoint
 버전**이 replica manifest와 실제 S3에 있는지 검증해야 한다. 현재 object-version 백업 성공을
 그 교차 검증으로 대신하지 않는다. Secret/CA·broker/device journal·실행 중 producer 경계와
-서비스 활성화도 [M9의 남은 범위](../m9-requirements.md)다.
+서비스 활성화도 [M9의 남은 범위](../requirements/m9-requirements.md)다.

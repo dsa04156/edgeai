@@ -43,4 +43,4 @@ NODE↔REMOTE가 가능하며 같은 고정 제공자로의 재전환은 거절�
 
 Remote 응답에는 providerKey/configurationDigest/sourceMode를 표시하고 Pod/Node UID를 만들지 않는다.
 SYNTHETIC 참조 계산은 실제 OCI/장비/모델 실행 증거와 구분한다. Remote 기능은 기본 비활성이며
-runtime 활성화·worker·versioned S3·제공자 설정이 필요하다. 설정은 [Remote 실행](../remote.md)을 따른다.
+runtime 활성화·worker·versioned S3·제공자 설정이 필요하다. 설정은 [Remote 실행](../operations/remote.md)을 따른다.

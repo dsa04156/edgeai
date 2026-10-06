@@ -63,7 +63,7 @@ heartbeat는 관리 경로의 생존 확인이며 계산 진행·외부 checkpoi
 기본 스트림 worker/binding 활성화 설정은 변경하지 않았다.
 
 재현은 실제 PostgreSQL, Mosquitto/control/dynamic-security와 고정 Paho 환경을 준비한 뒤
-`EDGEAI_STREAM_PYTHON`을 해당 Python으로 지정하고 `bash scripts/test-stream-broker.sh`를 실행한다.
+`EDGEAI_STREAM_PYTHON`을 해당 Python으로 지정하고 `bash scripts/test/test-stream-broker.sh`를 실행한다.
 새 Spring→Python probe 때문에 CI scaffold도 해시 고정된 `runner/requirements-stream.txt`를 설치한다.
 기존 `test-integration.sh`, `test-unit.sh`, `test-contract.sh`, `test-runner.sh`, `test-stream.sh`를 사용한다.
 

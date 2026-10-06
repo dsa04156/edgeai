@@ -15,7 +15,7 @@
 - 계층형 controller/service/domain/repository, Basic/CSRF 및 고정 upstream 프록시 유지.
 
 상세 계약은 [ADR 0004](../adr/0004-workflow-run-task.md),
-[OpenAPI](../../contracts/openapi/platform-api.yaml), [검증 기준](../verification-matrix.md)을 따른다.
+[OpenAPI](../../contracts/openapi/platform-api.yaml), [검증 기준](../testing/verification-matrix.md)을 따른다.
 
 ## 로컬 증거
 

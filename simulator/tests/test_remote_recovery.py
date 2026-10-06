@@ -100,7 +100,7 @@ class RemoteRecoveryTest(unittest.TestCase):
     def cli(self, binding=None, extra=(), expected=0):
         output = self.root / ('report-' + uuid.uuid4().hex)
         pin = hashlib.sha256(ssl.PEM_cert_to_DER_cert((self.root / 'cert.pem').read_text())).hexdigest()
-        command = [sys.executable, str(fixture.ROOT / 'scripts/recovery_remote_fence.py'),
+        command = [sys.executable, str(fixture.ROOT / 'scripts/internal/recovery_remote_fence.py'),
                    '--endpoint', 'https://127.0.0.1:' + str(self.port), '--ca-file', str(self.root / 'cert.pem'),
                    '--certificate-sha256', pin, '--recovery-token-file', str(self.root / 'operator'), '--output', str(output)]
         if binding:
