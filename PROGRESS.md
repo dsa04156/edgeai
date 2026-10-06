@@ -19,7 +19,10 @@
 - `GET /api/v1/workflow-runs/{runId}/placements`가 최신 Attempt의 실제 노드·Pod·Job·실패 원인을 제공합니다. 내부 claim nonce는 제외합니다.
 - 앞선 V41 자원 연결로 GPU·NPU를 포함한 allocatable 자원이 API·화면에 표시됩니다.
   기관 도구는 ReactFlow 편집 방식을 기존 Profile/DAG/Run에 맞게 적용했으며 DDS/Gitea/FastAPI 전체 이식은 아닙니다.
-- Java 컴파일·관리 API 계약 시험, Dashboard 타입·lint·빌드 확인을 진행했습니다. 최종 푸시·배포 상태는 아래에 갱신합니다.
+- Java 컴파일·관리 API 계약 시험, Dashboard 타입·lint·빌드가 통과했습니다. 로컬 새 화면에서 운영 API의 장치·GPU/NPU·VD 목록과 Builder 편집을 확인했습니다.
+- Dashboard 흐름 소스 `6254c1b`의 CI [37417379765](https://github.com/dsa04156/edgeai/actions/runs/37417379765)는 성공했고 GitOps `30d5dc1`이 생성됐습니다.
+- 후속 `1a031d0`은 Swagger 문서 조회의 Basic 인증을 제거했습니다. 직접 관리 API 실행 인증은 유지합니다. 관련 Java 테스트는 통과했고 CI [37418501519](https://github.com/dsa04156/edgeai/actions/runs/37418501519)는 진행 중입니다.
+- 최신 이미지의 전체 배포 완료는 아직 확인하지 않았습니다. 기존 수동 브라우저 시험에는 이전 로그인·입력 UI를 참조하는 부분이 남아 있습니다.
 - 실모델 추론·성능·복구·전체 브라우저 수용 검증은 사용자 요청에 따라 후속으로 미룹니다.
 
 ## 직전 배포 기록
@@ -48,7 +51,7 @@
 
 ## 다음 순서
 
-실장비 자원과 워크플로 편집·실행 연결을 배포합니다. 실모델·성능·복구 검증은 이후 진행합니다. 공유 Ingress 상태 게시 문제와
+Dashboard 흐름과 공개 Swagger 문서의 자동 배포가 진행 중입니다. 실모델·성능·복구 검증은 이후 진행합니다. 공유 Ingress 상태 게시 문제와
 서버 변경에도 재빌드되는 MinIO의 배포 대기 시간은 남은 운영 개선 사항입니다.
 
 과거 진행 이력은 [보관 기록](docs/history/progress-through-2026-10-06.md)에 있습니다.
