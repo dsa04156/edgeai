@@ -15,9 +15,8 @@ GitHub Actions가 이미지를 GHCR에 발행하고 digest를 Git에 기록하�
   `gitops`는 건너뛰므로 배포 설정을 변경하지 않는다.
 - 동일 브랜치의 새 실행은 진행 중 실행을 취소한다. 배포 중 수동 전체 검증을 시작하지 않는다.
 - 기본 검증 통과는 전체 복구·실장비 수용 완료를 뜻하지 않는다.
-- 일반 배포는 `EDGEAI_WORKFLOW_ENABLED=false`로 워크플로 화면·공개 API를 제외한다.
-  이미지 smoke는 직접 URL·API·프록시의 404와 Swagger 작업 목록 제외를 확인한다.
-  수동 전체 검증의 격리 환경에서만 기존 워크플로를 활성화한다.
+- 워크플로 화면·공개 API는 `EDGEAI_WORKFLOW_ENABLED`로 함께 제어한다. 기관 편집기 연결 요청으로
+  Kubernetes 배포는 활성화했다. 기본 이미지 smoke의 비활성 경로와 수동 전체 검증의 활성 경로는 유지한다.
 
 2026-10-02 첫 실제 연결을 확인했다. [Actions 36958143060](https://github.com/dsa04156/edgeai/actions/runs/36958143060)의
 네 job이 성공했고, Git digest 자동 커밋·ArgoCD 동기화·세 Pod Ready·배포 HTTP 검증까지 통과했다.

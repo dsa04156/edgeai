@@ -3,6 +3,8 @@ import { useState, type FormEvent } from "react";
 import { parse, stringify } from "lossless-json";
 import type { components, operations } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
+import { hardwareLabel } from "../../lib/hardware";
+import { GraphEditor } from "./graph-editor";
 import { RuntimeMeasurements } from "./runtime-measurements";
 import { StreamInputFields, type StreamInput } from "./stream-inputs";
 import { StreamRoutes } from "./stream-routes";
@@ -135,6 +137,7 @@ export function WorkflowConsole() {
         {workflow.versions.length ? <ul className="history-list">{workflow.versions.map(v => <li key={v.id}><button className="version-link" disabled={busy} onClick={() => void action(() => showVersion(v.workflowId, v.version))}>{v.version}</button> · {new Date(v.createdAt).toLocaleString()}</li>)}</ul> : <p className="muted">발행된 버전이 없습니다.</p>}
         <div className="pagination"><button disabled={busy || versionOffset === 0} onClick={() => void action(() => showWorkflow(workflow.workflow.id, versionOffset - 10))}>이전 버전</button><span>{versionOffset / 10 + 1} 페이지</span><button disabled={busy || workflow.nextOffset == null} onClick={() => void action(() => showWorkflow(workflow.workflow.id, workflow.nextOffset!))}>다음 버전</button></div>
         <h3>새 DAG 버전 발행</h3>
+        <GraphEditor key={workflow.workflow.id} profiles={profiles} value={dag} onApply={setDag} disabled={busy} />
         <div className="toolbar filter-form"><label>예제용 SERVICE Profile ID<input list="workflow-service-profiles" value={exampleProfile} onChange={e => setExampleProfile(e.target.value)} /></label><button disabled={busy || !exampleProfile} onClick={() => setDag(JSON.stringify({ tasks: [{ key: "source", serviceProfileVersionId: exampleProfile, parameters: {} }, { key: "process", serviceProfileVersionId: exampleProfile, parameters: {} }], dependencies: [{ fromTask: "source", toTask: "process", fromPort: "output", toPort: "input", mode: "BATCH" }] }, null, 2))}>예제 DAG 채우기</button></div>
         <datalist id="workflow-service-profiles">{profiles.map(p => <option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</datalist>
         <form onSubmit={event => { event.preventDefault(); const number = String(new FormData(event.currentTarget).get("version")); void action(async () => {
@@ -157,11 +160,11 @@ export function WorkflowConsole() {
           const value = await response.json(); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
           <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
-          {mode === "NODE" && <label>실행 노드 ID<input name="nodeId" list="workflow-execution-nodes" required maxLength={36} placeholder="관측된 Node UUID" /></label>}
+          {mode === "NODE" && <label>실행 노드<select name="nodeId" required defaultValue=""><option value="">실제 실행 노드 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {n.architecture} · {hardwareLabel(n)}</option>)}</select></label>}
           {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
           {mode === "VD" && <><label>실행할 가상 장치 ID<input required maxLength={36} value={vdId} onChange={e => setVdId(e.target.value)} placeholder="Ready인 VD UUID" /></label><p className="hint"><a href="/virtual-devices">가상 장치</a>에서 준비 상태와 ID를 확인하세요. 이 VD에 배치하는 작업은 같은 SERVICE 버전을 사용하며 실행 자리가 비면 시작합니다. 공유 자원 측정으로는 작업별 자동 전환을 설정할 수 없습니다.</p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
-          {version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} stream={streamExecution} onChange={value => { setTaskExecutions(value); if (Object.values(value).some(target => ["VD", "REMOTE"].includes(target.mode))) setAutomaticOffload(null); }} />}
+          {version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} nodes={nodes} stream={streamExecution} onChange={value => { setTaskExecutions(value); if (Object.values(value).some(target => ["VD", "REMOTE"].includes(target.mode))) setAutomaticOffload(null); }} />}
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
           <StreamInputFields value={streamInputs} onChange={setStreamInputs} />
           <label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>

@@ -68,7 +68,8 @@ public final class KubernetesNodeInventory implements NodeInventory, AutoCloseab
                         ready=switch(condition.path("status").asText()) { case "True"->"READY";case "False"->"NOT_READY";default->"UNKNOWN"; };
                     var labels=metadata.path("labels");
                     nodes.add(new ExecutionNode(id,metadata.path("name").asText(),info.path("architecture").asText(),info.path("operatingSystem").asText(),ready,
-                        status.path("allocatable").path("cpu").asText(),status.path("allocatable").path("memory").asText(),labels.isObject()?json.writeValueAsString(labels):"{}",observedAt));
+                        status.path("allocatable").path("cpu").asText(),status.path("allocatable").path("memory").asText(),labels.isObject()?json.writeValueAsString(labels):"{}",observedAt,
+                        status.path("allocatable").isObject()?json.writeValueAsString(status.path("allocatable")):"{}"));
                 }
                 continuation=root.path("metadata").path("continue").asText("");
                 if (!continuation.isEmpty() && !continuations.add(continuation)) throw new IllegalStateException("Repeated continuation");

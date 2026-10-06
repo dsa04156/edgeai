@@ -1,7 +1,7 @@
 # EdgeAI
 
 Spring Boot + Next.js + PostgreSQL 기반 Edge AI 관리 플랫폼입니다.
-Profile·장치·노드·가상 장치를 관리합니다. 워크플로 화면과 공개 API는 기관 간 통합 전까지 비활성화합니다.
+Profile·장치·노드·가상 장치를 관리하고, 시각 편집기로 워크플로를 구성해 Kubernetes에 실행합니다.
 
 ## 여기서 시작하세요
 
@@ -30,8 +30,8 @@ make dashboard   # Next.js — 별도 터미널
 | PostgreSQL | localhost:15432 / edgeai |
 
 환경변수는 `.env.example`을 기준으로 `.env`에 설정합니다.
-`EDGEAI_WORKFLOW_ENABLED=false`가 기본값이며 워크플로 메뉴·직접 URL·API·Swagger 작업 목록에 적용됩니다.
-통합 시 재활성화하려면 API와 Dashboard에 모두 `true`를 설정하고 재시작합니다.
+워크플로 편집·실행을 사용하려면 API와 Dashboard에 `EDGEAI_WORKFLOW_ENABLED=true`를 설정합니다.
+새 `.env`에는 활성화돼 있으며, 이전 `.env`를 사용한다면 해당 값을 바꾸고 두 서버를 재시작합니다.
 실제 작업 결과 저장에는 MinIO가 필요하며 `make storage`로 시작합니다.
 Docker 없이 PostgreSQL만 실행하려면 `make db-start`를 사용합니다.
 자세한 준비 조건과 종료 방법은 [로컬 개발 안내](docs/guides/local-development.md)를 확인하세요.

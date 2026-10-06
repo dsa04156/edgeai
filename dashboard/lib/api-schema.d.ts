@@ -1021,6 +1021,10 @@ export interface components {
             /** @enum {string} */
             status: "READY" | "NOT_READY" | "UNKNOWN" | "REMOVED" | "STALE";
             cpu: string;
+            /** @description Kubernetes가 보고한 할당 가능 총량. GPU·NPU vendor resource를 포함하며 현재 잔여량은 아닙니다. */
+            allocatable: {
+                [key: string]: string;
+            };
             memory: string;
             labels: {
                 [key: string]: string;

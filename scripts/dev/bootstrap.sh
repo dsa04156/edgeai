@@ -8,7 +8,8 @@ import os,secrets
 p=Path('.env')
 if not p.exists():
     text=Path('.env.example').read_text()
-    text=text.replace('EDGEAI_WORKFLOW_ENABLED=false', 'EDGEAI_WORKFLOW_ENABLED=' + ('true' if os.environ.get('EDGEAI_WORKFLOW_ENABLED') == 'true' else 'false'))
+    if 'EDGEAI_WORKFLOW_ENABLED' in os.environ:
+        text=text.replace('EDGEAI_WORKFLOW_ENABLED=true', 'EDGEAI_WORKFLOW_ENABLED=' + ('true' if os.environ['EDGEAI_WORKFLOW_ENABLED'] == 'true' else 'false'))
     while 'GENERATE_WITH_BOOTSTRAP' in text:
         text=text.replace('GENERATE_WITH_BOOTSTRAP',secrets.token_hex(24),1)
     fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)

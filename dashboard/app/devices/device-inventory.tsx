@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { parse, stringify } from "lossless-json";
 import type { components } from "../../lib/api-schema";
 import { ConnectionPanel } from "../components/connection-panel";
+import { hardwareLabel } from "../../lib/hardware";
 
 type Schema = components["schemas"];
 type Device = Schema["Device"];
@@ -103,7 +104,7 @@ export function DeviceInventory() {
       </section>
       <section aria-labelledby="nodes-title"><div className="toolbar"><h2 id="nodes-title">관측된 실행 노드</h2><button disabled={busy} onClick={() => void run(() => loadNodes())}>노드 새로고침</button></div>
         <p className="hint">Kubernetes 관측 결과입니다. 60초 넘게 갱신되지 않으면 관측 만료로 표시합니다. 자원은 노드의 할당 가능량이며 현재 남은 용량과 다릅니다.</p>
-        {nodes.length ? <div className="table-scroll"><table><caption className="sr-only">Kubernetes 실행 노드 목록</caption><thead><tr><th>노드 / 아키텍처</th><th>상태</th><th>할당 가능량</th><th>관측 시각</th></tr></thead><tbody>{nodes.map(n => <tr key={n.id}><td>{n.name}<span className="block muted mono">{n.architecture} · {n.operatingSystem}</span></td><td>{statusNames[n.status]}</td><td className="mono">CPU {n.cpu}<span className="block">메모리 {n.memory}</span></td><td>{new Date(n.observedAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">관측된 노드가 없습니다. Kubernetes 연결 설정과 관측 상태를 확인하세요.</p>}
+        {nodes.length ? <div className="table-scroll"><table><caption className="sr-only">Kubernetes 실행 노드 목록</caption><thead><tr><th>노드 / 아키텍처</th><th>상태</th><th>할당 가능량</th><th>GPU · NPU</th><th>관측 시각</th></tr></thead><tbody>{nodes.map(n => <tr key={n.id}><td>{n.name}<span className="block muted mono">{n.architecture} · {n.operatingSystem}</span></td><td>{statusNames[n.status]}</td><td className="mono">CPU {n.cpu}<span className="block">메모리 {n.memory}</span></td><td>{hardwareLabel(n)}</td><td>{new Date(n.observedAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">관측된 노드가 없습니다. Kubernetes 연결 설정과 관측 상태를 확인하세요.</p>}
         <div className="pagination"><button disabled={busy || nodeOffset === 0} onClick={() => void run(() => loadNodes(Math.max(0, nodeOffset - 20)))}>이전 노드</button><span>{nodeOffset / 20 + 1} 페이지</span><button disabled={busy || nextNodeOffset === null} onClick={() => void run(() => loadNodes(nextNodeOffset!))}>다음 노드</button></div>
       </section>
     </>}

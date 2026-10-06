@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 
 import { ConnectionPanel } from "../components/connection-panel";
+import { HardwareProfileFields } from "./hardware-profile-fields";
 
 type Profile = components["schemas"]["ProfileVersion"];
 type Kind = Profile["kind"];
@@ -23,6 +24,8 @@ export function ProfileRegistry() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [nodes, setNodes] = useState<components["schemas"]["ExecutionNode"][]>([]);
+  const [specText, setSpecText] = useState("");
 
   async function api(path: string, authorization = auth, init?: RequestInit) {
     const response = await fetch(`/api/control-plane/${path}`, {
@@ -58,10 +61,12 @@ export function ProfileRegistry() {
       const authorization = `Basic ${btoa(String.fromCharCode(...bytes))}`;
       const token = await (await api("csrf", authorization)).json();
       await load(kind, 0, "", authorization);
+      setNodes((await (await api("nodes?limit=100", authorization)).json()).items);
       setAuth(authorization); setCsrf(token.token); form.reset();
     });
   }
   function disconnect() {
+    setNodes([]); setSpecText("");
     setAuth(""); setCsrf(""); setResult(null); setDetail(null); setError(""); setNotice(""); setFilter("");
   }
   function publish(event: FormEvent<HTMLFormElement>) {
@@ -130,7 +135,8 @@ export function ProfileRegistry() {
           <fieldset disabled={busy} className="publish-fields">
             <div className="form-row"><label>Profile 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-sensor" /></label>
               <label>버전<input name="version" required maxLength={32} pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)" placeholder="1.0.0" /></label></div>
-            <label>JSON 규격<textarea name="spec" rows={9} spellCheck={false} required placeholder={'{\n  "protocol": "mqtt"\n}'} aria-describedby="spec-help" /></label>
+            {kind === "SERVICE" && <HardwareProfileFields nodes={nodes} value={specText} onChange={setSpecText} />}
+            <label>JSON 규격<textarea name="spec" rows={9} spellCheck={false} required value={specText} onChange={e => setSpecText(e.target.value)} placeholder={'{\n  "protocol": "mqtt"\n}'} aria-describedby="spec-help" /></label>
             <p className="hint" id="spec-help">비어 있지 않은 JSON 객체 · 최대 64 KiB. 비밀번호나 토큰을 규격에 넣지 마세요. 등록은 실행 호환성을 보장하지 않습니다.</p>
             <button className="primary" type="submit">{busy ? "처리 중…" : "버전 발행"}</button>
           </fieldset>

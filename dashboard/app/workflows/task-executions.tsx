@@ -1,12 +1,14 @@
+import { hardwareLabel } from "../../lib/hardware";
 import type { components } from "../../lib/api-schema";
 
 export type TaskExecutions = components["schemas"]["TaskExecutions"];
 
-export function TaskExecutionFields({ tasks, value, onChange, stream }: {
+export function TaskExecutionFields({ tasks, value, onChange, stream, nodes = [] }: {
   tasks: components["schemas"]["DagTask"][];
   value: TaskExecutions;
   onChange: (value: TaskExecutions) => void;
   stream: boolean;
+  nodes?: components["schemas"]["ExecutionNode"][];
 }) {
   function select(key: string, mode: string) {
     const next = { ...value };
@@ -31,10 +33,12 @@ export function TaskExecutionFields({ tasks, value, onChange, stream }: {
           <option value="VD">가상 장치 (VD)</option>
           <option value="REMOTE" disabled={stream}>원격 제공자 (REMOTE)</option>
         </select></label>
-        {placement?.mode === "NODE" && <label>{task.key} 노드 ID<input required maxLength={36}
-          pattern="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
-          list="workflow-execution-nodes" value={placement.nodeId} placeholder="관측된 Node UUID"
-          onChange={e => onChange({ ...value, [task.key]: { mode: "NODE", nodeId: e.target.value } })} /></label>}
+        {placement?.mode === "NODE" && <label>{task.key} 실행 노드<select required value={placement.nodeId}
+          onChange={e => onChange({ ...value, [task.key]: { mode: "NODE", nodeId: e.target.value } })}>
+          <option value="">노드 선택</option>{nodes.map(node => <option key={node.id} value={node.id} disabled={node.status !== "READY"}>
+            {node.name} · {node.architecture} · {hardwareLabel(node)}
+          </option>)}
+        </select></label>}
         {placement?.mode === "VD" && <label>{task.key} 가상 장치 ID<input required maxLength={36}
           pattern="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
           value={placement.vdId} placeholder="Ready인 VD UUID"

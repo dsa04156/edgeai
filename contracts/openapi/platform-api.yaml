@@ -2579,6 +2579,7 @@ components:
       - memory
       - labels
       - observedAt
+      - allocatable
       properties:
         id:
           type: string
@@ -2599,6 +2600,11 @@ components:
           - STALE
         cpu:
           type: string
+        allocatable:
+          type: object
+          description: Kubernetes가 보고한 할당 가능 총량. GPU·NPU vendor resource를 포함하며 현재 잔여량은 아닙니다.
+          additionalProperties:
+            type: string
         memory:
           type: string
         labels:
