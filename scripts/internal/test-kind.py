@@ -20,7 +20,7 @@ import uuid
 from vd_acceptance import VDScenario, wait as vd_wait
 from mixed_remote_acceptance import run_mixed_remote
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 KIND_VERSION = 'v0.33.0'
 KIND_SHA = 'aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d'
 NODE_IMAGE = 'kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0'

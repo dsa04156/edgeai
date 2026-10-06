@@ -14,7 +14,7 @@ import urllib.request
 import uuid
 from image_identity import verify_image_id
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def wait(check, seconds, message):
