@@ -20,8 +20,8 @@ patches:
               kubernetes.io/hostname: etri-ser0001-cg0msb
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:843441433303e894c48d65da3a82e35cc8a22ad8ffe6260ee4ccafcdcac7d23a
+    digest: sha256:45b8d124885dbc18b94c859163c75e495cda83ac66f5607054a46177612c0d49
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:cbef07a19a8c4a5f95a12120d2c5812290faad7d93c31e4ef1b90837bca0afa9
+    digest: sha256:87496bdd7c7847aa39160c7ecb1ca529ce0200aab4a3a87616cf631770ceab99
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:2f1f106550a259b0e863ec667f6398557362f50739f51b0ff9bd41a51a45f5fa
+    digest: sha256:dc7309d2b109ce719095d103486759066889c80eb48e87a053b2c41112015dee
