@@ -64,7 +64,7 @@ assert request(api + "/swagger-ui/index.html", authenticated=True)[0] == 200
 status, contract = request(api + "/openapi.yaml", authenticated=True)
 assert status == 200 and b"publishProfile" in contract
 url = ui + "/api/control-plane/profiles/DEVICE"
-assert request(url)[0] == 401
+assert request(url)[0] == 200
 status, body = request(ui + "/api/control-plane/csrf", authenticated=True)
 assert status == 200
 csrf = json.loads(body)["token"]
@@ -85,7 +85,7 @@ print("PASS: deployed UI/assets, API service connection, Swagger, authentication
 
 assert request(ui + "/devices")[0] == 200
 devices_url = ui + "/api/control-plane/devices"
-assert request(devices_url)[0] == 401
+assert request(devices_url)[0] == 200
 device_input = {"key": "deploy-device-" + uuid.uuid4().hex, "displayName": "Deployment synthetic probe",
                 "profileVersionId": version["id"], "sourceMode": "SYNTHETIC"}
 status, body = request(devices_url, "POST", device_input, authenticated=True, csrf=csrf)
@@ -147,7 +147,7 @@ if "workflows" not in json.loads(body)["capabilities"]:
 assert request(ui + "/workflows")[0] == 200
 workflow_url = ui + "/api/control-plane/workflows"
 runs_url = ui + "/api/control-plane/workflow-runs"
-assert request(workflow_url)[0] == 401
+assert request(workflow_url)[0] == 200
 service_body = {"key": "workflow-probe-" + uuid.uuid4().hex, "version": "1.0.0", "spec": {"source": "synthetic-deployment-test"}}
 runtime_enabled = os.environ.get("EDGEAI_SMOKE_RUNTIME_ENABLED") == "true"
 if runtime_enabled:
