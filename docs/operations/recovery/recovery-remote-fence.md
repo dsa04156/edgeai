@@ -1,5 +1,11 @@
 # 참조 Remote 제공자 복구 차단
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [ADR0073](../../adr/0073-recovery-reference-remote-fence.md)은 SYNTHETIC 참조 제공자의 전체
 계산을 중단하고 이전 controller의 접근을 영속 차단한다. 실제 외부 업체 API에는 사용하지 않는다.
 전용 제공자 전체가 대상이며 다른 업무와 공유한 제공자에 부분 적용하는 명령은 아니다.
@@ -11,6 +17,8 @@
 
 먼저 CA와 별도로 확인한 인증서 지문으로 설치 ID를 조회한다. 아래는 자리표시자다.
 
+## 실행
+
 ```bash
 bash scripts/ops/fence-recovery-remote.sh --inspect \
   --endpoint https://remote.example:8443 \
@@ -19,6 +27,8 @@ bash scripts/ops/fence-recovery-remote.sh --inspect \
   --recovery-token-file /private/recovery.token \
   --output /private/remote-inspection-new
 ```
+
+## 결과 확인과 제한
 
 `fence-report.json`의 observed.providerId가 의도한 설치인지 확인하고 동일 복구 UUID를 보관한다.
 차단 명령은 새 예약·입력·start·cancel·조회 접근을 막고 전체 DB 할당에 취소를 요청한다.

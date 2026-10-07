@@ -1,5 +1,11 @@
 # 복구 중 원본 PostgreSQL 연결 차단
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 복원본을 활성화하기 전에 기존 API가 원본 DB에 다시 쓰는 것을 막는 명령이다. 선택한 원본
 DB의 **새 연결과 기존 연결을 모두 차단**하므로 해당 DB를 사용하는 API는 사용할 수 없게 된다.
 백업을 만드는 명령이 아니며 복원할 archive는 [백업 절차](../backup/postgres-backup.md)로 준비한다.
@@ -8,6 +14,8 @@ DB의 **새 연결과 기존 연결을 모두 차단**하므로 해당 DB를 사
 `shobj_description(oid, 'pg_database')`를 조회해 이름·소유자·OID를 확인한다. 프로젝트의
 DB 환경을 사용하며, 소유자와 기존 backend를 종료할 권한이 필요하다. 복구 전체에서 유지할
 UUID를 정하고 아래의 인자를 명시한다.
+
+## 실행
 
 ```bash
 bash scripts/ops/fence-recovery-database.sh \
@@ -18,6 +26,8 @@ bash scripts/ops/fence-recovery-database.sh \
   --timeout 60 \
   --output .tools/recovery-db-fence-<새-실행명>
 ```
+
+## 결과 확인과 제한
 
 로컬 클라이언트 경로가 다르면 `--pg-bin <PostgreSQL-bin-경로>`를 지정한다.
 프로젝트 Compose DB는 `--transport compose`를 사용한다. 환경 변수의 암호는

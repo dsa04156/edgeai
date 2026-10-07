@@ -1,0 +1,25 @@
+name: etri-sensehat-humidity
+manufacturer: Raspberry Pi
+description: Read-only relative humidity from the Sense HAT
+model: Sense HAT v1 virtual humidity source
+labels:
+- sensehat
+- i2c
+- raspi
+- virtual-device
+linkedDeviceCount: 1
+deviceResources:
+- description: Relative humidity
+  name: humidity
+  isHidden: false
+  properties:
+    valueType: Float64
+    readWrite: R
+    units: '%RH'
+deviceCommands:
+- name: humidity
+  isHidden: false
+  readWrite: R
+  resourceOperations:
+  - deviceResource: humidity
+apiVersion: v2

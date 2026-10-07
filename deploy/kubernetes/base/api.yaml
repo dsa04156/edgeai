@@ -42,7 +42,11 @@ spec:
             - secretRef: {name: edgeai-runtime}
             - secretRef: {name: edgeai-artifact-storage}
           env:
+            - {name: EDGEAI_PROMETHEUS_ENABLED, value: 'true'}
+            - {name: EDGEAI_PROMETHEUS_URL, value: 'http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090'}
             - {name: EDGEAI_KUBE_ENABLED, value: 'true'}
+            - {name: EDGEAI_INFRASTRUCTURE_SOURCE, value: api}
+            - {name: EDGEAI_EDGEX_ENABLED, value: 'true'}
             - {name: EDGEAI_KUBE_API_URL, value: 'https://kubernetes.default.svc'}
             - {name: EDGEAI_KUBE_TOKEN_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/token}
             - {name: EDGEAI_KUBE_CA_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt}

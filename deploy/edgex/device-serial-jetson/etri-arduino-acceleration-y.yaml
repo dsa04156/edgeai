@@ -1,0 +1,23 @@
+apiVersion: v3
+name: etri-arduino-acceleration-y
+manufacturer: Arduino
+model: Arduino acceleration-y sensor
+labels:
+- arduino
+- serial
+- physical-sensor
+- edgeai
+description: Read-only acceleration-y channel on the shared Arduino serial connection
+deviceResources:
+- description: Raw acceleration Y value
+  name: acceleration_y_raw
+  isHidden: false
+  properties:
+    valueType: Int32
+    readWrite: R
+    units: raw
+deviceCommands:
+- name: acceleration-y
+  readWrite: R
+  resourceOperations:
+  - deviceResource: acceleration_y_raw

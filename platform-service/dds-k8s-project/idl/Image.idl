@@ -1,0 +1,6 @@
+struct ImagePacket {
+    unsigned long frame_id;
+    long width;
+    long height;
+    sequence<octet> data;
+};

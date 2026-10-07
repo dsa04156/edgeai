@@ -43,6 +43,16 @@ public final class JdbcProfileRepository implements ProfileRepository {
     }
 
     @Override
+    public boolean delete(ProfileIdentity identity) {
+        // Serialize against publication of VD specs whose references live in JSON.
+        // FK references from devices/workflows remain protected by PostgreSQL.
+        jdbc.execute("SET LOCAL lock_timeout='3s'");
+        jdbc.execute("LOCK TABLE edgeai.profile_version IN SHARE ROW EXCLUSIVE MODE");
+        return jdbc.update("DELETE FROM edgeai.profile_version WHERE kind=? AND profile_key=? AND version=?",
+            identity.kind().name(), identity.key(), identity.version()) == 1;
+    }
+
+    @Override
     public List<ProfileVersion> list(ProfileIdentity.Kind kind, String key, int limit, int offset) {
         String filter = key == null ? "" : " AND profile_key = ?";
         String sql = "SELECT * FROM edgeai.profile_version WHERE kind = ?" + filter +

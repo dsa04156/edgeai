@@ -1,0 +1,97 @@
+deviceList:
+- name: arduino-temperature-001
+  profileName: etri-arduino-temperature
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: temperature_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only temperature channel on the shared Arduino serial connection
+- name: arduino-light-001
+  profileName: etri-arduino-light
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: light_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only light channel on the shared Arduino serial connection
+- name: arduino-magnetic-001
+  profileName: etri-arduino-magnetic
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: magnetic_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only magnetic channel on the shared Arduino serial connection
+- name: arduino-acceleration-x-001
+  profileName: etri-arduino-acceleration-x
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: acceleration_x_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only acceleration-x channel on the shared Arduino serial connection
+- name: arduino-acceleration-y-001
+  profileName: etri-arduino-acceleration-y
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: acceleration_y_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only acceleration-y channel on the shared Arduino serial connection
+- name: arduino-acceleration-z-001
+  profileName: etri-arduino-acceleration-z
+  protocols:
+    serial:
+      BaudRate: 115200
+      DeviceID: arduino-001
+      Port: /dev/edgeai/arduino-001
+      ResourceName: acceleration_z_raw
+      RecoveryStrategy: on-demand-read
+  tags:
+    physicalDeviceId: arduino-001
+    nodeName: etri-dev0001-jetorn
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Read-only acceleration-z channel on the shared Arduino serial connection

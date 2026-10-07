@@ -1,7 +1,15 @@
 # 복원 Remote 성공 결과 확정
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 ADR0075 실행 정리 → ADR0076 파일 회수 → ADR0077 S3 등록 뒤 실행한다.
 복원 DB는 일반 기동이 차단된 상태를 유지하며 원본 Remote 제공자는 필요하지 않다.
+
+## 실행
 
 ```bash
 # .env의 DB 접속 설정과 별도로, 복구 대상 저장소 환경변수를 명시한다.
@@ -20,6 +28,8 @@ bash scripts/ops/recovery-remote-results.sh \
   --certificate-sha256 '<실제 대상 leaf 인증서 SHA256>' \
   --output /private/new-result-commit
 ```
+
+## 결과 확인과 제한
 
 `--transport compose` 또는 native `--pg-bin`을 선택할 수 있다. 저장소의 전체 검증 제한은
 `--timeout`(기본300초), DB lock 제한5초·statement 제한30초다. 출력은 반드시 새 경로다.

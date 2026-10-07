@@ -61,6 +61,16 @@ public class DeviceService {
         return find(id,false);
     }
     @Transactional
+    public void delete(UUID id) {
+        find(id,true);
+        if (repository.hasVirtualDeviceBindings(id) || repository.activeAttachment(id).isPresent() || repository.activeSession(id).isPresent())
+            throw error(409,"DEVICE_IN_USE","연결 또는 세션이 사용 중입니다. 장치를 해제한 뒤 삭제하세요.");
+        try { repository.delete(id); }
+        catch (org.springframework.dao.DataIntegrityViolationException used) {
+            throw error(409,"DEVICE_IN_USE","가상 장치 또는 실행 이력에서 참조하는 장치입니다. 참조가 남아 있어 삭제할 수 없습니다.");
+        }
+    }
+    @Transactional
     public DeviceAttachment attach(UUID id,UUID nodeId,String body) {
         String port=new DeviceInput(body,"port").text("port",128);
         active(id);

@@ -37,13 +37,13 @@ API worker는 계산 시작 전에 원래 작업·lease와 전환의 start deadl
 ## 공개 API와 화면
 
 `POST /api/v1/workflow-runs`의 `execution`에 다음을 지정한다. 나머지 workflowVersionId, parameters,
-선택적 retry, Basic 인증·CSRF·Idempotency-Key는 기존 Run 계약과 같다.
+선택적 retry, CSRF·Idempotency-Key는 기존 Run 계약과 같다.
 
 ```json
 {"mode":"REMOTE","providerKey":"reference"}
 ```
 
-`/workflows`의 실행 위치 정책에서 Remote 제공자를 선택할 수 있다. Task/Run 상세에는 고정 제공자와
+`/workflows?mode=dag`의 실행 위치 정책에서 Remote 제공자를 선택할 수 있다. Task/Run 상세에는 고정 제공자와
 SYNTHETIC/EXTERNAL 구분이 표시된다. Remote는 현재 자원·지연 측정과 자동 offload 정책을 지원하지 않는다.
 Run을 새로 만들지 않는 재전송에는 같은 Idempotency-Key를 유지한다. 실행이나 Remote 기능이 비활성이면
 새 REMOTE 요청은503, 미설정 key는404다.
@@ -54,10 +54,10 @@ SERVICE에 `recovery.mode=RESTART`가 필요하고 sourceAttemptId/drainTimeoutS
 필수다. 전환 성공은 새 producer 시작을 뜻한다. 결과 성공은 Result에서 별도로 확인한다.
 하위 BATCH는 최초 Run의 제공자 정책을, 재시도는 이전 Attempt의 정책을 유지한다.
 
-## 검증과 현재 제한
+## 검증과 외부 제공자 범위
 
 `scripts/test/test-runtime-results.sh`는 실제 PostgreSQL/MinIO를 요구하고 임시 Python/SQLite 제공자를
 기동해 공개 HTTP→스케줄러→Remote→S3→Result 경로, 장애·취소·재시도·동시 처리를 검증한다.
-기존 Kubernetes↔Remote 서비스 전환 시험의 Kubernetes 부분은 fixture다. 실제 클러스터에서
-양방향 전환과 API 프로세스 재시작을 포함한 종단 시험, 실제 외부 API와 상태형 복원은 남는다.
+기존 Kubernetes↔Remote 서비스 전환 시험의 Kubernetes 부분은 fixture다. 개별 kind·클러스터 시험의 결과는 해당 날짜의 evidence를 확인한다.
+참조 제공자 검증은 실제 외부 API 계약과 상태형 복원 수용을 대신하지 않는다.
 증거·실패 이력·남은 게이트는 [M5 worker 기록](../evidence/m5-remote-worker.md)을 따른다.

@@ -12,10 +12,6 @@ spring:
     default-schema: edgeai
     enabled: true
     clean-disabled: true
-  security:
-    user:
-      name: ${EDGEAI_API_USER:edgeai}
-      password: ${EDGEAI_API_PASSWORD}
 server:
   servlet:
     session:
@@ -28,8 +24,19 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  edgex:
+    enabled: ${EDGEAI_EDGEX_ENABLED:false}
+    metadata-url: ${EDGEAI_EDGEX_METADATA_URL:http://edgex-core-metadata.edgex-system.svc:59881}
+    data-url: ${EDGEAI_EDGEX_DATA_URL:http://edgex-core-data.edgex-system.svc:59880}
+    command-url: ${EDGEAI_EDGEX_COMMAND_URL:http://edgex-core-command.edgex-system.svc:59882}
+  infrastructure:
+    source: ${EDGEAI_INFRASTRUCTURE_SOURCE:disabled}
+    context: ${EDGEAI_INFRASTRUCTURE_CONTEXT:}
+  prometheus:
+    enabled: ${EDGEAI_PROMETHEUS_ENABLED:false}
+    url: ${EDGEAI_PROMETHEUS_URL:http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090}
   workflow:
-    enabled: ${EDGEAI_WORKFLOW_ENABLED:false}
+    enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:
     inspect-only: ${EDGEAI_RECOVERY_INSPECT_ONLY:false}
   api-tls:

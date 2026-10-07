@@ -1,0 +1,215 @@
+{
+  "groups": [
+    [
+      "getting-started",
+      "시작하기"
+    ],
+    [
+      "concepts",
+      "핵심 개념"
+    ],
+    [
+      "guides",
+      "사용 가이드"
+    ],
+    [
+      "operations",
+      "운영"
+    ],
+    [
+      "reference",
+      "참고 자료"
+    ],
+    [
+      "contributing",
+      "기여하기"
+    ],
+    [
+      "engineering",
+      "심화 구현·운영"
+    ],
+    [
+      "requirements",
+      "개발 수용 기준"
+    ],
+    [
+      "adr",
+      "설계 결정"
+    ],
+    [
+      "evidence",
+      "검증 기록"
+    ],
+    [
+      "history",
+      "과거 기록"
+    ]
+  ],
+  "pages": [
+    {
+      "source": "docs/getting-started/overview.md",
+      "group": "getting-started",
+      "description": "플랫폼의 목적, 구성 요소와 사용 경로를 이해합니다."
+    },
+    {
+      "source": "docs/guides/local-development.md",
+      "group": "getting-started",
+      "description": "API와 대시보드를 실행하고 연결을 확인합니다."
+    },
+    {
+      "source": "docs/getting-started/first-profile.md",
+      "group": "getting-started",
+      "description": "실습용 프로필을 발행·조회·정리합니다."
+    },
+    {
+      "source": "docs/README.md",
+      "group": "getting-started",
+      "description": "문서 종류와 목적별 읽는 순서를 확인합니다."
+    },
+    {
+      "source": "docs/concepts/resources.md",
+      "group": "concepts",
+      "description": "규격, 장치, 노드, 가상 장치의 관계를 이해합니다."
+    },
+    {
+      "source": "docs/concepts/workflows.md",
+      "group": "concepts",
+      "description": "DDS 배포와 Spring DAG 실행 모델을 구분합니다."
+    },
+    {
+      "source": "docs/concepts/observability.md",
+      "group": "concepts",
+      "description": "측정값의 출처·수집 시각·완료 상태를 해석합니다."
+    },
+    {
+      "source": "docs/architecture/architecture.md",
+      "group": "concepts",
+      "description": "관리·관측·실행 경계와 구성 요소를 확인합니다."
+    },
+    {
+      "source": "docs/guides/platform-usage.md",
+      "group": "guides",
+      "description": "프로필과 앱 장치를 등록하고 참조를 확인해 정리합니다."
+    },
+    {
+      "source": "docs/guides/infrastructure-inventory.md",
+      "group": "guides",
+      "description": "Kubernetes 노드와 EdgeX 센서 목록을 연결합니다."
+    },
+    {
+      "source": "docs/guides/node-metrics.md",
+      "group": "guides",
+      "description": "Prometheus의 CPU·메모리·GPU·NPU 지표를 연결합니다."
+    },
+    {
+      "source": "docs/guides/sensor-registration.md",
+      "group": "guides",
+      "description": "지원 수집기를 선택해 센서를 등록하고 실제 수신을 확인합니다."
+    },
+    {
+      "source": "docs/guides/sensor-controls-and-vd-deletion.md",
+      "group": "guides",
+      "description": "센서 측정 이력과 지원 명령을 사용합니다."
+    },
+    {
+      "source": "docs/guides/virtual-devices.md",
+      "group": "guides",
+      "description": "가상 장치 등록·실행·해제·삭제 순서를 확인합니다."
+    },
+    {
+      "source": "docs/guides/workflow-editor-integration.md",
+      "group": "guides",
+      "description": "DDS 서비스를 구성해 Buildx·Gitea·Argo CD로 배포합니다."
+    },
+    {
+      "source": "docs/guides/dag-execution.md",
+      "group": "guides",
+      "description": "Spring DAG 버전을 발행하고 작업 결과를 조회합니다."
+    },
+    {
+      "source": "docs/guides/swagger-ui.md",
+      "group": "guides",
+      "description": "Swagger와 HTTP 클라이언트에서 API를 호출합니다."
+    },
+    {
+      "source": "docs/operations/overview.md",
+      "group": "operations",
+      "description": "환경 준비와 일상 운영 점검 순서를 확인합니다."
+    },
+    {
+      "source": "docs/operations/cicd.md",
+      "group": "operations",
+      "description": "플랫폼 이미지의 CI/CD와 배포 완료를 확인합니다."
+    },
+    {
+      "source": "docs/operations/management-audit.md",
+      "group": "operations",
+      "description": "변경 요청의 접수·HTTP 결과·미확정 상태를 조회합니다."
+    },
+    {
+      "source": "docs/operations/troubleshooting.md",
+      "group": "operations",
+      "description": "연결, 관측, 삭제, 배포·실행 문제를 진단합니다."
+    },
+    {
+      "source": "docs/operations/backup-and-recovery.md",
+      "group": "operations",
+      "description": "보호 대상별 백업과 격리 복구 절차를 선택합니다."
+    },
+    {
+      "source": "docs/reference/api.md",
+      "group": "reference",
+      "description": "관리 API 목록과 계약별 역할을 확인합니다."
+    },
+    {
+      "source": "docs/reference/configuration.md",
+      "group": "reference",
+      "description": "환경변수와 기능 플래그의 기본값을 찾습니다."
+    },
+    {
+      "source": "docs/reference/access.md",
+      "group": "reference",
+      "description": "관리 접근, CSRF, 내부 실행 인증의 경계를 확인합니다."
+    },
+    {
+      "source": "docs/reference/support.md",
+      "group": "reference",
+      "description": "기능별 사용 조건과 미완료 수용 범위를 확인합니다."
+    },
+    {
+      "source": "docs/reference/design-alignment.md",
+      "group": "reference",
+      "description": "원 설계와 화면·API 연결, 유지하는 확장과 남은 수용 범위를 대조합니다."
+    },
+    {
+      "source": "docs/reference/glossary.md",
+      "group": "reference",
+      "description": "제품과 실행 모델의 용어를 찾아봅니다."
+    },
+    {
+      "source": "docs/architecture/erd.md",
+      "group": "reference",
+      "description": "DB 리소스 관계와 삭제·이력 보존 원칙을 확인합니다."
+    },
+    {
+      "source": "docs/contributing/development.md",
+      "group": "contributing",
+      "description": "코드와 계약 변경·검증의 작업 순서를 확인합니다."
+    },
+    {
+      "source": "docs/contributing/documentation.md",
+      "group": "contributing",
+      "description": "사용자 문서와 기록을 작성·검증하는 기준입니다."
+    },
+    {
+      "source": "docs/testing/commands.md",
+      "group": "contributing",
+      "description": "환경과 변경 범위에 맞는 검증 명령을 선택합니다."
+    },
+    {
+      "source": "docs/guides/web-documentation.md",
+      "group": "contributing",
+      "description": "웹 문서의 탐색·갱신·배포 방식을 확인합니다."
+    }
+  ]
+}

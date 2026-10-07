@@ -6,6 +6,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY dashboard/package.json dashboard/package.json
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY dashboard dashboard
+COPY docs docs
+COPY README.md PLAN.md PROGRESS.md ./
+COPY scripts/README.md scripts/README.md
+COPY deploy/edgex/README.md deploy/edgex/README.md
+COPY platform-service/README.md platform-service/README.md
 RUN mkdir -p dashboard/public && pnpm --filter @edgeai/dashboard build
 
 FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9

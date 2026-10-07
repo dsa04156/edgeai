@@ -9,8 +9,7 @@ window.addEventListener("load", () => {
     showMutatedRequest: false,
     validatorUrl: null,
     presets: [SwaggerUIBundle.presets.apis],
-    // Documentation is public; direct API execution uses HTTP Basic. Credentials
-    // entered in Authorize are kept in memory; cookie-based CSRF remains enabled.
+    // Management requests need no account. Writes still use the session CSRF token.
     requestInterceptor: async request => {
       const target = new URL(request.url, window.location.origin);
       if (target.origin !== window.location.origin) {
@@ -18,13 +17,10 @@ window.addEventListener("load", () => {
       }
       const prepared = { ...request, headers: { ...request.headers }, credentials: "same-origin" };
       if (!target.pathname.startsWith("/internal/") && !["GET", "HEAD", "OPTIONS"].includes((request.method || "GET").toUpperCase())) {
-        const headers = new Headers();
-        const authorization = prepared.headers.Authorization || prepared.headers.authorization;
-        if (authorization) headers.set("Authorization", authorization);
         const response = await fetch("/api/v1/csrf", {
-          credentials: "same-origin", cache: "no-store", headers, signal: AbortSignal.timeout(5000),
+          credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(5000),
         });
-        if (!response.ok) throw new Error("CSRF token request failed. Check your development account.");
+        if (!response.ok) throw new Error("CSRF token request failed. Reload the page and try again.");
         prepared.headers["X-CSRF-TOKEN"] = (await response.json()).token;
       }
       return prepared;

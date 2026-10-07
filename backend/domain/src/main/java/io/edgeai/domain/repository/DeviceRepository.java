@@ -10,6 +10,7 @@ public interface DeviceRepository {
     List<Device> list(int limit, int offset);
     void rename(UUID id, String name, Instant now);
     void release(UUID id, Instant now);
+    void delete(UUID id);
     boolean hasVirtualDeviceBindings(UUID id);
     void advanceEpoch(UUID id, Instant now);
     List<DeviceAttachment> attachments(UUID deviceId);

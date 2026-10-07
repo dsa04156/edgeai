@@ -19,19 +19,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class VDExecutionControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean VDExecutionService service;
-    @Test void authenticationCsrfAndRequiredKeyProtectAllCommands()throws Exception {
+    @Test void csrfAndRequiredKeyProtectAllCommands()throws Exception {
         String path="/api/v1/virtual-devices/"+UUID.randomUUID();
-        mvc.perform(get(path+"/execution")).andExpect(status().isUnauthorized());
         for(String action:List.of("provision","replace","drain")) {
-            mvc.perform(post(path+"/"+action).with(user("test")).contentType("application/json").content("{}")).andExpect(status().isForbidden());
-            mvc.perform(post(path+"/"+action).with(user("test")).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
+            mvc.perform(post(path+"/"+action).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+            mvc.perform(post(path+"/"+action).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
         }
         verifyNoInteractions(service);
     }
     @Test void storageAndInvalidRouteAreSanitized()throws Exception {
         UUID id=UUID.randomUUID();when(service.status(id)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("private password"));
-        mvc.perform(get("/api/v1/virtual-devices/"+id+"/execution").with(user("test"))).andExpect(status().isServiceUnavailable())
+        mvc.perform(get("/api/v1/virtual-devices/"+id+"/execution")).andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.code").value("VD_STORE_UNAVAILABLE")).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("password"))));
-        mvc.perform(get("/api/v1/virtual-devices/bad/execution").with(user("test"))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/virtual-devices/bad/execution")).andExpect(status().isBadRequest());
     }
 }

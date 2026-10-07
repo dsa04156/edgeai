@@ -1,7 +1,15 @@
 # 복원 Remote 실패·취소 작업 정리
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 실행 정리와 파일 회수가 끝난 동일 복원 DB에 적용한다. 성공 파일이0개여도 전체 Remote
 이력이 포함된 검증된 ADR0076 bundle을 사용한다. 원본 제공자와 S3는 접속하지 않는다.
+
+## 실행
 
 ```bash
 bash scripts/ops/recovery-remote-failures.sh \
@@ -10,6 +18,8 @@ bash scripts/ops/recovery-remote-failures.sh \
   --bundle /private/remote-output-bundle \
   --output /private/new-failure-recovery
 ```
+
+## 결과 확인과 제한
 
 DB 접속은 `.env`의 기존 설정을 사용한다. `--transport compose` 또는 native `--pg-bin`을
 선택할 수 있다. 출력은 새 개인 경로여야 한다. DB lock은5초, statement는30초로 제한한다.

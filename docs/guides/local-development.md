@@ -1,52 +1,90 @@
-# 빠른 시작
+# 로컬 빠른 시작
 
-일상 실행은 저장소 루트에서 `make help`를 확인하세요.
-`make setup` → `make up` 뒤 별도 터미널에서 `make backend`, `make dashboard`를 실행합니다.
-아래는 같은 명령의 스크립트 경로와 상세 설정입니다.
+이 가이드는 PostgreSQL·Spring API·Dashboard를 실행하고 관리 화면에 연결하는 과정을 설명합니다.
+실제 장비 연결이나 워크플로 배포는 기본 실행을 확인한 뒤 별도로 설정합니다.
 
-필수: Git, Node 22, Corepack 또는 pnpm 10.34.6, Python 3, curl, JDK 21, Docker Compose.
-Linux x86_64에서 JDK가 없으면 bootstrap이 검증된 Temurin 아카이브를 `.tools/jdk`에 설치합니다.
-시스템 권한·Docker 그룹·기존 Kubernetes context는 변경하지 않습니다.
+## 준비 사항
 
-Ubuntu 24.04 x86_64에서 Docker 접근이 없으면 `bash scripts/dev/dev-postgres-local.sh start`로
-프로젝트 전용 PostgreSQL 16.15를 실행할 수 있습니다. 종료는 같은 명령의 `stop`입니다.
-이 경로는 PostgreSQL만 대체하며 MQTT·MinIO·kind의 검증을 대신하지 않습니다.
+Git, Node.js 22, Corepack 또는 pnpm 10.34.6, Python 3, curl, JDK 21과 Docker Compose가 필요합니다.
+명령은 저장소 루트에서 실행합니다. 버전 기준은 [개발 환경](../reference/configuration.md)을 확인하세요.
+
+Linux x86_64에서 JDK가 없으면 bootstrap이 검증된 Temurin을 `.tools/jdk`에 설치할 수 있습니다.
+시스템 권한이나 Kubernetes context는 자동으로 변경하지 않습니다.
+
+## 1. 개발 환경 준비
 
 ```bash
-bash scripts/dev/bootstrap.sh
-bash scripts/dev/preflight.sh compose
-bash scripts/dev/dev-up.sh
+make setup
+make check
 ```
+
+`make setup`은 도구와 로컬 `.env`를 준비합니다. `.env.example`의 설명을 확인하고
+생성된 `.env`와 `.tools`는 Git에 추가하지 않습니다. API·DB 주소와 포트는
+[설정 참고](../reference/configuration.md)에 정리되어 있습니다.
+
+## 2. 기반 서비스 시작
+
+```bash
+make up
+```
+
+Compose 프로젝트 `edgeai-dev`에서 PostgreSQL과 MQTT를 시작합니다.
+Docker를 사용할 수 없는 Ubuntu 24.04 x86_64 환경에서는 `make db-start`로 프로젝트 전용 PostgreSQL을
+실행할 수 있습니다. 이 대안은 DB만 제공하며 MQTT·MinIO·컨테이너 실행을 대체하지 않습니다.
+
+## 3. API와 화면 실행
 
 각각 별도 터미널에서 실행합니다.
 
 ```bash
-bash scripts/dev/dev-backend.sh
-bash scripts/dev/dev-dashboard.sh
+# 터미널 1
+make backend
 ```
-
-- Dashboard: <http://127.0.0.1:13080>
-- Profile 관리: <http://127.0.0.1:13080/profiles> (`.env` 개발 계정으로 연결)
-- 장치·노드 관리: <http://127.0.0.1:13080/devices>
-- 가상 장치·원본 연결 관리: <http://127.0.0.1:13080/virtual-devices>
-- 워크플로·실행 요청 관리: <http://127.0.0.1:13080/workflows>
-- 관리 요청 감사 기록: <http://127.0.0.1:13080/audit> (접수·인증 주체·HTTP 결과 및 미확정 구분)
-- Dashboard → API → PostgreSQL 상태: <http://127.0.0.1:13080/api/health>
-- Swagger UI: <http://127.0.0.1:18080/swagger-ui.html>
-- 스트림 내부 API 설명: <http://127.0.0.1:18080/swagger-ui/index.html?contract=streams>
-- OpenAPI 계약: <http://127.0.0.1:18080/openapi.yaml>
-- API readiness: <http://127.0.0.1:18080/actuator/health/readiness>
-- API metadata: `GET /api/v1/platform` (로컬 Basic 인증 필요)
-- PostgreSQL: `127.0.0.1:15432`, MQTT: `127.0.0.1:11883`
-
-`.env`의 API 계정·비밀번호로 개발용 인증을 사용합니다. `.env`와 `.tools`는 커밋하지 않습니다.
-사용 중인 포트가 있으면 `.env`에서 변경한 뒤 앱을 재시작합니다.
-Profile·장치 등 관리 API만 사용할 때 MinIO는 선택 사항입니다. 실제 Runner 결과 저장에는 필요합니다.
-로컬 실행: `bash scripts/dev/dev-storage.sh`.
-공식 커뮤니티 소스를 빌드하므로 첫 실행은 오래 걸릴 수 있습니다.
-기동 후 `bash scripts/test/test-storage.sh`로 실제 S3 업로드·다운로드·metadata·비인증 차단을 확인합니다.
 
 ```bash
-bash scripts/test/test-health.sh
-bash scripts/dev/dev-down.sh  # edgeai-dev 컨테이너만 종료; 데이터 볼륨 유지
+# 터미널 2
+make dashboard
 ```
+
+| 확인 대상 | 기본 주소 | 기대 결과 |
+|---|---|---|
+| Dashboard | http://127.0.0.1:13080 | 운영 현황 화면 |
+| 프로젝트 문서 | http://127.0.0.1:13080/docs | 문서 홈 |
+| Swagger | http://127.0.0.1:18080/swagger-ui.html | 관리 API 설명 |
+| API readiness | http://127.0.0.1:18080/actuator/health/readiness | DB 연결 포함 상태 |
+
+현재 관리 API와 Dashboard는 로그인 계정을 요구하지 않습니다. 쓰기 요청에는 CSRF 세션이 필요하며
+화면과 Swagger가 처리합니다. 실제 배포에서는 [접근 경계](../reference/access.md)를 확인하세요.
+
+## 4. 연결 확인
+
+```bash
+make health
+```
+
+Dashboard의 서버 연결 상태와 API readiness를 함께 확인합니다. 화면이 열려도 API·DB 연결이
+실패할 수 있습니다. 인프라 목록이 비어 있는 것은 외부 수집기 미설정일 수도 있습니다.
+오류가 있으면 [문제 해결](../operations/troubleshooting.md)을 따릅니다.
+
+## 선택 기능 연결
+
+- 노드·센서 목록: [인프라 연결](infrastructure-inventory.md)
+- CPU·GPU·NPU 측정: [Prometheus 연결](node-metrics.md)
+- DDS 배포: [워크플로 배포](workflow-editor-integration.md)
+- Runner 결과 저장: `make storage`로 MinIO를 준비한 뒤 [실행 조건](../reference/support.md)을 확인
+
+워크플로 화면의 활성화와 Runner·VD·STREAM 실행 활성화는 별도 설정입니다.
+`.env`를 바꾸면 해당 프로세스를 다시 실행해야 합니다.
+
+## 종료
+
+API와 Dashboard 터미널에서 각각 `Ctrl+C`로 종료한 뒤 기반 서비스를 종료합니다.
+
+```bash
+make down
+# Docker 없는 PostgreSQL을 사용했다면
+make db-stop
+```
+
+`make down`은 개발 컨테이너를 종료하고 데이터 볼륨을 보존합니다.
+다음 단계: [첫 프로필 등록](../getting-started/first-profile.md).

@@ -1,7 +1,15 @@
 # 복원 Kubernetes/VD 작업 상태 조정
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [실행 정리](recovery-kubernetes-retirement.md)를 완료하고 같은 quota·Pod 종료 증거를
 보존한 상태에서 실행한다. 원래 DB/외부 producer의 전체 격리 상태는 계속 유지한다.
+
+## 실행
 
 ```bash
 bash scripts/ops/recovery-kubernetes-workflows.sh \
@@ -14,6 +22,8 @@ bash scripts/ops/recovery-kubernetes-workflows.sh \
   --restore-report /private/restore/restore-report.json \
   --output /private/kubernetes-workflows-new
 ```
+
+## 결과 확인과 제한
 
 `.env`의 DB 접속을 사용한다. Compose는 `--transport compose`, 별도 PostgreSQL 도구는
 `--pg-bin <경로>`를 추가한다. 매번 새 출력 디렉터리를 지정한다. 입력/intent/SQL/결과는

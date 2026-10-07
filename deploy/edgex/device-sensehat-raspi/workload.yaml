@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: device-sensehat-raspi
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-sensehat-raspi
+  namespace: edgex-edge
+spec:
+  ports:
+  - name: http
+    port: 59911
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/name: device-sensehat-raspi
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: device-sensehat-raspi
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-sensehat-raspi
+  namespace: edgex-edge
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: device-sensehat-raspi
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: device-sensehat-raspi
+        app.kubernetes.io/part-of: edgeai
+        app.kubernetes.io/managed-by: edgeai-repo
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - -cp=keeper.http://edgex-core-keeper.edgex-system.svc.cluster.local:59890
+        - -cd=/res
+        env:
+        - name: EDGEX_SECURITY_SECRET_STORE
+          value: 'false'
+        - name: SERVICE_HOST
+          value: device-sensehat-raspi.edgex-edge.svc.cluster.local
+        - name: SERVICE_SERVERBINDADDR
+          value: 0.0.0.0
+        - name: CLIENTS_CORE_METADATA_HOST
+          value: edgex-core-metadata.edgex-system.svc.cluster.local
+        - name: MESSAGEBUS_HOST
+          value: edgex-messagebus.edgex-system.svc.cluster.local
+        image: 192.168.0.56:5000/edgex-device-sensehat@sha256:10cb4d7f9a289b6d65a5968c675a409fc85e9f14017026cb10d60e2c55d0fd49
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/v3/ping
+            port: http
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: device-sensehat-raspi
+        ports:
+        - containerPort: 59911
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/v3/ping
+            port: http
+            scheme: HTTP
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 750m
+            memory: 384Mi
+          requests:
+            cpu: 50m
+            memory: 96Mi
+        securityContext:
+          allowPrivilegeEscalation: true
+          privileged: true
+          readOnlyRootFilesystem: true
+          runAsGroup: 0
+          runAsNonRoot: false
+          runAsUser: 0
+        startupProbe:
+          failureThreshold: 60
+          httpGet:
+            path: /api/v3/ping
+            port: http
+            scheme: HTTP
+          periodSeconds: 2
+          successThreshold: 1
+          timeoutSeconds: 1
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /res
+          name: service-config
+          readOnly: true
+        - mountPath: /dev/i2c-1
+          name: sensehat-i2c
+        - mountPath: /tmp
+          name: tmp
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/hostname: etri-dev0003-raspi5
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 20
+      volumes:
+      - configMap:
+          name: device-sensehat-raspi-config
+          items:
+          - key: configuration.yaml
+            path: configuration.yaml
+          - key: etri-sensehat-temperature.yaml
+            path: profiles/etri-sensehat-temperature.yaml
+          - key: etri-sensehat-humidity.yaml
+            path: profiles/etri-sensehat-humidity.yaml
+          - key: etri-sensehat-pressure.yaml
+            path: profiles/etri-sensehat-pressure.yaml
+          - key: etri-sensehat-compass.yaml
+            path: profiles/etri-sensehat-compass.yaml
+          - key: etri-sensehat-orientation.yaml
+            path: profiles/etri-sensehat-orientation.yaml
+          - key: etri-sensehat-gyroscope.yaml
+            path: profiles/etri-sensehat-gyroscope.yaml
+          - key: devices.yaml
+            path: devices/devices.yaml
+        name: service-config
+      - hostPath:
+          path: /dev/i2c-1
+          type: CharDevice
+        name: sensehat-i2c
+      - emptyDir: {}
+        name: tmp

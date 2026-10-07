@@ -1,29 +1,36 @@
-# 문서 안내
+# EdgeAI 문서
 
-**처음에는 아래 네 가지면 됩니다.** 상세 운영 절차와 과거 기록은 필요할 때 찾아보세요.
+EdgeAI는 엣지 AI 서버, 엣지 디바이스, 센서와 가상 장치를 관리하고 서비스 배포·실행 상태를 조회하는 플랫폼입니다.
+이 문서는 저장소의 현재 구현을 기준으로 사용 방법과 운영 경계를 설명합니다.
 
-| 목적 | 시작 문서 |
-|---|---|
-| 로컬 실행·환경변수·DB | [로컬 개발](guides/local-development.md) |
-| 현재 개발 단계와 남은 작업 | [현재 상태](../PROGRESS.md) · [단계](../PLAN.md) |
-| Spring Boot 구조·API·DB | [아키텍처](architecture/architecture.md) · [ERD](architecture/erd.md) · [Swagger](guides/swagger-ui.md) |
-| CI/CD·Kubernetes·ArgoCD | [배포 안내](operations/cicd.md) |
+## 처음 사용하는 경우
 
-## 필요할 때 보는 상세 문서
+1. [EdgeAI 소개](getting-started/overview.md)에서 구성 요소와 적용 범위를 확인합니다.
+2. [로컬 빠른 시작](guides/local-development.md)으로 API와 대시보드를 실행합니다.
+3. [첫 프로필 등록](getting-started/first-profile.md)을 따라 등록·조회·정리 흐름을 익힙니다.
+4. 실제 장비가 있는 환경은 [인프라 연결](guides/infrastructure-inventory.md)과 [센서 등록](guides/sensor-registration.md)·[센서 사용](guides/sensor-controls-and-vd-deletion.md)으로 이어갑니다.
 
-| 폴더 | 내용 |
-|---|---|
-| [guides](guides/) | 로컬 개발, 화면/API 사용, Swagger |
-| [architecture](architecture/) | 아키텍처, API 범위, ERD, 구현 계약, 설계 출처 |
-| [requirements](requirements/) | 단계별 상세 수용 범위 |
-| [operations](operations/) | CI/CD, Remote, 관리 감사; `backup/`은 백업, `recovery/`는 복구 절차 |
-| [testing](testing/) | 검증 기준, 명령 목록, 부하 시험 |
-| [adr](adr/) | 설계 결정을 바꾼 이유와 당시 제약 |
-| [evidence](evidence/) | 개별 검증의 실제 결과·실패·한계 |
-| [history](history/) | 정리 이전 README·계획·진행 이력 |
+## 목적별 문서
 
-[환경 호환성](compatibility.yaml) · [전체 검증 명령](testing/commands.md) · [스크립트 안내](../scripts/README.md)
+| 문서 영역 | 다루는 내용 | 시작 문서 |
+|---|---|---|
+| 시작하기 | 제품 범위, 준비, 첫 작업 | [소개](getting-started/overview.md) |
+| 핵심 개념 | 프로필, 장치, 노드, 가상 장치, 워크플로의 관계 | [리소스 모델](concepts/resources.md) |
+| 사용 가이드 | 화면과 API를 이용한 작업 | [관리 기능 사용](guides/platform-usage.md) |
+| 운영 | 배포, 관측, 장애 진단, 백업과 복원 | [운영 안내](operations/overview.md) |
+| 참고 자료 | API, 설정, 상태, 용어 | [API 참고](reference/api.md) |
+| 기여하기 | 코드 구조, 변경·검증·문서 작성 | [개발 참여](contributing/development.md) |
 
-현재 상태는 `PROGRESS.md`가 기준입니다. ADR·evidence·history의 날짜별 상태를
-현재 배포 상태로 해석하지 않습니다. 새 설명은 해당 분야의 기존 문서에 반영하고,
-새 설계 결정이나 독립 검증 근거가 있을 때만 기록을 추가합니다.
+## 문서의 기준
+
+API 필드와 오류 코드는 OpenAPI, 기본 설정은 애플리케이션 설정과 `.env.example`,
+DB 제약은 Flyway migration이 기준입니다. [원 설계와 현재 구현](reference/design-alignment.md)을 함께 대조할 수 있습니다. 웹에서 [문서를 검색](guides/web-documentation.md)할 수 있습니다.
+
+구현 여부와 실제 배포 상태는 다릅니다. 기능 플래그·외부 서비스·장비 지원이 필요한 기능은
+각 안내의 준비 사항을 확인하세요. 최신 개발 범위는 [현재 상태](../PROGRESS.md)와 [개발 단계](../PLAN.md)에 있습니다.
+
+## 개발 기록
+
+[설계 결정](adr/), [검증 기록](evidence/), [과거 문서](history/), [단계별 요구사항](requirements/)은
+설계·시험 당시의 근거입니다. 사용자 안내와 별도로 찾아볼 수 있으며 당시의 성공·제약을 현재 배포 상태로 해석하지 않습니다.
+세부 복구 명령과 구현 계약은 [운영 심화 자료](operations/backup-and-recovery.md)에서 필요한 범위만 선택합니다.

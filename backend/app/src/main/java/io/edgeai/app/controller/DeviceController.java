@@ -37,6 +37,11 @@ public class DeviceController {
     public DeviceResponse update(@PathVariable UUID deviceId,@RequestBody String body) { return DeviceResponse.from(service.rename(deviceId,body),clock.instant()); }
     @DeleteMapping("/{deviceId}")
     public DeviceResponse release(@PathVariable UUID deviceId) { return DeviceResponse.from(service.release(deviceId),clock.instant()); }
+    @DeleteMapping("/{deviceId}/registration")
+    public ResponseEntity<Void> delete(@PathVariable UUID deviceId) {
+        service.delete(deviceId);
+        return ResponseEntity.noContent().build();
+    }
     @PutMapping(value="/{deviceId}/attachments/{nodeId}",consumes="application/json")
     public DeviceAttachmentResponse attach(@PathVariable UUID deviceId,@PathVariable UUID nodeId,@RequestBody String body) {
         return DeviceAttachmentResponse.from(service.attach(deviceId,nodeId,body));

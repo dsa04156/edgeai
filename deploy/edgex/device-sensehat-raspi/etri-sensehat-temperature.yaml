@@ -1,0 +1,33 @@
+name: etri-sensehat-temperature
+manufacturer: Raspberry Pi
+description: Read-only temperatures from the Sense HAT humidity and pressure sensors
+model: Sense HAT v1 virtual temperature source
+labels:
+- sensehat
+- i2c
+- raspi
+- virtual-device
+linkedDeviceCount: 1
+deviceResources:
+- description: Temperature derived from the humidity sensor
+  name: temp_humidity
+  isHidden: false
+  properties:
+    valueType: Float64
+    readWrite: R
+    units: C
+- description: Temperature derived from the pressure sensor
+  name: temp_pressure
+  isHidden: false
+  properties:
+    valueType: Float64
+    readWrite: R
+    units: C
+deviceCommands:
+- name: temperature
+  isHidden: false
+  readWrite: R
+  resourceOperations:
+  - deviceResource: temp_humidity
+  - deviceResource: temp_pressure
+apiVersion: v2

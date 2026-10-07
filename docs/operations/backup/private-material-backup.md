@@ -1,5 +1,7 @@
 # 정적 키 파일 백업·복원
 
+이 문서는 대상별 백업·격리 복원 절차입니다. 다른 보호 대상과 복구 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
 DB와 S3 파일 외에 Runner 서명 키, 인증서/CA, 저장소 인증 설정 등 복구에 필요한 **정적 파일**을
 명시해서 암호화한다. 실행 환경은 Linux, Python3.11 이상과 고정 age 도구다.
 시험에는 OpenSSL도 필요하다. [ADR0065](../../adr/0065-encrypted-private-material.md)의 범위를 따른다.

@@ -1,0 +1,5 @@
+struct AlarmEvent
+{
+    unsigned long id;
+    string message;
+};

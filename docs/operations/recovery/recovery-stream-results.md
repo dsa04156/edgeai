@@ -1,7 +1,15 @@
 # 복원 STREAM 확정 결과 반영
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [Kubernetes 결과 복원](recovery-kubernetes-results.md)의 공통 옵션에 다음을 추가한다.
 VD 자식은 [VD 결과 복원](recovery-vd-results.md)의 `--vd-tasks`도 지정한다.
+
+## 실행
 
 ```bash
 --stream-results \
@@ -10,6 +18,8 @@ VD 자식은 [VD 결과 복원](recovery-vd-results.md)의 `--vd-tasks`도 지�
 --mqtt-ca-file /private/original-broker-ca.crt \
 --mqtt-original-password-file /private/original-admin.password
 ```
+
+## 결과 확인과 제한
 
 루트에서 `EDGEAI_STREAM_PYTHON=<고정 Paho 환경>/bin/python`을 지정해 실행한다.
 DB/독립 백업 저장소 접속 설정은 공통 결과 복원 명령을 따른다. 개인 MQTT 상태의 복구 ID와

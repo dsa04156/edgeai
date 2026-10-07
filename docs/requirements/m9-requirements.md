@@ -1,5 +1,9 @@
 # M9 운영·복구·보안·백업 수용 범위
 
+> **개발 기준 자료** — 단계별 설계·수용 조건과 당시 판단을 보존한 문서입니다.
+> 현재 사용자 기능과 기본 설정은 [지원 범위](../reference/support.md)와 [API 참고](../reference/api.md)를 확인하세요.
+> 아래의 과거 완료·미구현 표현을 현재 배포 상태로 해석하지 않습니다.
+
 2026-10-04. [실행 지시 M9](https://app.notion.com/p/3ebbafd382d681bd920ae91452b0463a)와
 [전체 설계](https://app.notion.com/p/3ecbafd382d681b295f4f878aad79160)의 Recovery / Security /
 Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](../architecture/sources.md)과 같다.

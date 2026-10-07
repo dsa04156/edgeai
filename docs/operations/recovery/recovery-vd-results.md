@@ -1,9 +1,17 @@
 # 복원 VD BATCH 성공 결과 반영
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [물리 실행 종료 조정](recovery-kubernetes-retirement.md)을 마친 V36 격리 DB에서
 [기존 결과 복원 명령](recovery-kubernetes-results.md)에 `--vd-tasks`를 추가한다.
 STREAM 완료 허가가 기록된 결과는 [STREAM 추가 옵션](recovery-stream-results.md)도 지정한다.
 `--runtime-id`는 VD supervisor ID가 아니라 자식 Task의 runtime ID다.
+
+## 실행
 
 ```bash
 bash scripts/ops/recovery-kubernetes-results.sh \
@@ -20,6 +28,8 @@ bash scripts/ops/recovery-kubernetes-results.sh \
   --runtime-id '<VD 자식 runtime UUID>' \
   --output /private/new-vd-result-recovery
 ```
+
+## 결과 확인과 제한
 
 백업 저장소 접속 환경 변수와 native/compose 선택은 기존 명령과 같다. 비밀번호는
 개인 비밀 관리 경로로 전달한다. `--runtime-id`를 반복하여 같은 종류의 대상을 선택한다.

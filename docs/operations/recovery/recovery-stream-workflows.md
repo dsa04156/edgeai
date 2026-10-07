@@ -1,8 +1,16 @@
 # 복원 STREAM 그룹의 취소·재시도 기한 조정
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [실제 producer 종료](recovery-producer-stop.md), [복원 runtime 정리](recovery-kubernetes-retirement.md),
 [원본 MQTT 차단](recovery-mqtt-fence.md)과 [복원 generation 종료](recovery-stream-retirement.md) 후
 기록된 STREAM 그룹 업무 상태를 조정한다. 명령은 원본 Kubernetes와 broker를 다시 조회한다.
+
+## 실행
 
 ```bash
 EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
@@ -21,6 +29,8 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
   --mqtt-original-password-file /private/original-admin.password \
   --output /private/new-stream-workflows
 ```
+
+## 결과 확인과 제한
 
 루트에서 실행하며 `lib.sh`로 DB 환경을 읽는다. Compose DB는 `--transport compose`,
 비표준 PostgreSQL 경로는 `--pg-bin`을 사용한다. output은 새 개인 디렉터리다.

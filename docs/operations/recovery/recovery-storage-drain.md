@@ -1,7 +1,15 @@
 # 원본 S3의 진행 중 요청 종료 확인
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [원본 root 차단](recovery-storage-fence.md)을 완료한 뒤, 기존 자격으로 이미 시작된 요청이
 남아 있지 않은지 확인한다. 현재 단일 MinIO 서버용이며 설정 변경이나 서비스 재시작을 하지 않는다.
+
+## 실행
 
 ```bash
 bash scripts/ops/verify-recovery-storage-drain.sh \
@@ -11,6 +19,8 @@ bash scripts/ops/verify-recovery-storage-drain.sh \
   --output /private/recovery/storage-drain-attempt-1 \
   --timeout 120
 ```
+
+## 결과 확인과 제한
 
 state directory에는 앞선 명령의 `recovery.json`, `confirmed.json`, `.lock`이 있어야 한다.
 파일·폴더는 소유자 전용이며 같은 복구 중 대상/자격을 교체하지 않는다. endpoint·인증서 pin·

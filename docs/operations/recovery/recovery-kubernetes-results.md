@@ -1,5 +1,11 @@
 # 복원 Kubernetes BATCH 성공 결과 반영
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [실행 종료 조정](recovery-kubernetes-retirement.md) 후 V35 또는 V36 격리 DB에서 실행한다.
 기본 대상은 Kubernetes BATCH Result다. V36 VD 자식은 [VD 복원 절차](recovery-vd-results.md)의
 `--vd-tasks` 옵션으로 명시적으로 선택한다.
@@ -7,6 +13,8 @@
 `--stream-results`와 원래 broker 증거를 함께 지정한다.
 원래 시작 허가·확정 Result 기록과 출력 파일이 같은 독립 S3 백업에 있어야 한다.
 실행이 전환 target이면 먼저 원래 시작 기록으로 전환 성공을 조정한다.
+
+## 실행
 
 ```bash
 export EDGEAI_BACKUP_STORAGE_URL=https://recovery-storage.example:9000
@@ -28,6 +36,8 @@ bash scripts/ops/recovery-kubernetes-results.sh \
   --unclaimed-jobs \
   --output /private/new-kubernetes-result-recovery
 ```
+
+## 결과 확인과 제한
 
 `--runtime-id`를 반복해 대상을 명시한다. `--unclaimed-jobs`는 DB에 Job UID는 있지만
 producer claim이 없는 백업을 허용한다. 실제 Job 자식 명단·종료·원래 시작 및 확정 결과가

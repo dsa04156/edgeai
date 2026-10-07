@@ -1,8 +1,16 @@
 # 복원 DB의 원본 STREAM 경로 종료
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [원본 MQTT 차단](recovery-mqtt-fence.md) 뒤 복원 DB의 같은 broker generation을 종료한다.
 원본 브로커를 실제 TLS로 다시 조회하고 기존 관리자 자격 거절과 모든 실행 계정 차단을
 확인한다. 과거 성공 보고서만으로 DB를 변경하지 않는다.
+
+## 실행
 
 ```bash
 EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
@@ -17,6 +25,8 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
   --timeout 60 \
   --output /private/new-stream-retirement
 ```
+
+## 결과 확인과 제한
 
 현재 프로젝트 DB 환경을 읽는다. Compose는 `--transport compose`, 비표준 PostgreSQL
 실행 경로는 `--pg-bin`으로 지정한다. output은 새 디렉터리다. 관리자 비밀번호 값이나 개인

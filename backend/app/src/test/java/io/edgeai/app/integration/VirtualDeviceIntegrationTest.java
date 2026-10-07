@@ -56,6 +56,29 @@ class VirtualDeviceIntegrationTest {
             "state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",1,"startupTimeoutSeconds",60,"drainTimeoutSeconds",60)));
         return new Fixture(dp,sp,publish(ProfileIdentity.Kind.VD,spec),device(dp,"SYNTHETIC"),device(dp,"SYNTHETIC"),spec);
     }
+    @Test void permanentDeleteRequiresReleaseAndPreservesSourcesAndProfiles() throws Exception {
+        var f=fixture();var vd=vds.create(encode(request(f))).value();
+        assertThatThrownBy(()->vds.deleteRegistration(vd.id())).isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("VD_IN_USE"));
+        assertThat(vds.detail(vd.id()).activeSources()).hasSize(1);
+        vds.release(vd.id());
+        mvc.perform(delete("/api/v1/virtual-devices/"+vd.id()+"/registration").with(csrf())).andExpect(status().isNoContent());
+        assertThatThrownBy(()->vds.detail(vd.id())).isInstanceOf(ControlPlaneException.class);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.vd_source_binding WHERE vd_id=?",Integer.class,vd.id())).isZero();
+        assertThat(devices.detail(f.a().id()).device().state()).isEqualTo(Device.State.ACTIVE);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.profile_version WHERE id=?",Integer.class,f.vdProfile())).isEqualTo(1);
+        mvc.perform(delete("/api/v1/virtual-devices/"+vd.id()+"/registration").with(csrf())).andExpect(status().isNotFound());
+    }
+    @Test void executionHistoryBlocksPermanentDeleteWithoutRemovingClosedSources() throws Exception {
+        var f=fixture();var vd=vds.create(encode(request(f))).value();vds.release(vd.id());
+        jdbc.update("""
+            INSERT INTO edgeai.vd_operation(id,vd_id,request_key,request_digest,kind,requested_revision,state,reason,created_at,updated_at,finished_at)
+            VALUES (?,?,?,'sha256:'||repeat('a',64),'DRAIN',1,'FAILED','TEST_FAILURE',now(),now(),now())
+            """,UUID.randomUUID(),vd.id(),"delete-test");
+        assertThatThrownBy(()->vds.deleteRegistration(vd.id())).isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("VD_IN_USE"));
+        assertThatThrownBy(()->jdbc.update("DELETE FROM edgeai.vd_source_binding WHERE vd_id=?",vd.id())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(()->jdbc.update("DELETE FROM edgeai.virtual_device WHERE id=?",vd.id())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(vds.detail(vd.id()).sourceHistory()).hasSize(1);
+    }
     private List<Map<String,Object>> sources(Device device) { return List.of(Map.of("sourceKey","input","deviceId",device.id().toString())); }
     private Map<String,Object> request(Fixture f) {
         return new HashMap<>(Map.of("key",key(),"displayName","가상 장치","profileVersionId",f.vdProfile().toString(),"sources",sources(f.a()),"placement",Map.of("mode","AUTO")));

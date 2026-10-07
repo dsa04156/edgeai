@@ -16,9 +16,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RecoveryInspectionSecurityTest {
     @Autowired MockMvc mvc;
 
-    @Test void authenticatedReadsStillRequireCredentials() throws Exception {
+    @Test void readsDoNotRequireCredentials() throws Exception {
         mvc.perform(get("/api/v1/platform").with(httpBasic("reader", "test-only"))).andExpect(status().isOk());
-        mvc.perform(get("/api/v1/platform")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/platform")).andExpect(status().isOk());
     }
 
     @Test void validAuthenticationAndCsrfCannotAuthorizeWrites() throws Exception {

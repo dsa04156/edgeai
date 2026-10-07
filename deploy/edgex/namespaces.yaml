@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: edgex-system
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    istio-injection: disabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: edgex-edge
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    istio-injection: disabled

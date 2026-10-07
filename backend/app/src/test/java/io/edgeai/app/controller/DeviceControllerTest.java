@@ -21,22 +21,29 @@ class DeviceControllerTest {
     @MockitoBean DeviceService devices;
     @MockitoBean NodeService nodes;
     @MockitoBean Clock clock;
-    @Test void readsRequireAuthAndAllWriteVerbsRequireCsrf() throws Exception {
-        for (String path:List.of("/api/v1/devices","/api/v1/nodes")) mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    @Test void deletingRegistrationRequiresCsrfAndReportsUsage() throws Exception {
+        var id=UUID.randomUUID();String path="/api/v1/devices/"+id+"/registration";
+        mvc.perform(delete(path)).andExpect(status().isForbidden());
+        verifyNoInteractions(devices);
+        mvc.perform(delete(path).with(csrf())).andExpect(status().isNoContent());
+        doThrow(new io.edgeai.app.exception.ControlPlaneException(409,"DEVICE_IN_USE","사용 중인 장치입니다.")).when(devices).delete(id);
+        mvc.perform(delete(path).with(csrf())).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DEVICE_IN_USE"));
+    }
+    @Test void allWriteVerbsRequireCsrf() throws Exception {
         String id=UUID.randomUUID().toString();
         for (var request:List.of(post("/api/v1/devices"),patch("/api/v1/devices/"+id),delete("/api/v1/devices/"+id),put("/api/v1/devices/"+id+"/attachments/"+id)))
-            mvc.perform(request.with(httpBasic("user","test-only-unused")).contentType("application/json").content("{}"))
+            mvc.perform(request.contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(devices,nodes);
     }
     @Test void dbFailureIs503WithoutLeakingConnectionDetails() throws Exception {
         when(devices.list(20,0)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("private server password"));
-        mvc.perform(get("/api/v1/devices").with(user("test"))).andExpect(status().isServiceUnavailable())
+        mvc.perform(get("/api/v1/devices")).andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.code").value("DEVICE_STORE_UNAVAILABLE"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("password"))));
     }
     @Test void malformedIdsAndPaginationHaveStableErrors() throws Exception {
-        mvc.perform(get("/api/v1/devices/not-a-uuid").with(user("test"))).andExpect(status().isBadRequest());
-        mvc.perform(get("/api/v1/nodes?limit=abc").with(user("test"))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/devices/not-a-uuid")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/nodes?limit=abc")).andExpect(status().isBadRequest());
     }
 }

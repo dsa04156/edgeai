@@ -14,6 +14,8 @@ public interface VirtualDeviceRepository {
     List<VDSourceBinding> sourceHistory(UUID id, int limit);
     void bind(VDSourceBinding binding);
     void close(UUID bindingId, long revision, Instant now);
+    boolean canDeleteRegistration(UUID id);
+    void deleteRegistration(UUID id);
     record Creation(VirtualDevice value, boolean created) {}
     record Snapshot(VirtualDevice vd, List<VDSourceBinding> activeSources,
                     List<VDSourceBinding> sourceHistory, boolean sourceHistoryTruncated) {}

@@ -1,6 +1,6 @@
 import { workflowsEnabled } from "../../../../lib/features";
 import { NextRequest, NextResponse } from "next/server";
-import { controlPlaneOrigin, controlPlaneAuthorization } from "../../../../lib/control-plane";
+import { controlPlaneOrigin } from "../../../../lib/control-plane";
 
 export const dynamic = "force-dynamic";
 
@@ -10,27 +10,27 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   if (!workflowsEnabled() && /^(workflows|workflow-runs)(\/|$)/.test(target))
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
-  const allowed = request.method === "GET" ? target === "csrf"
+  const allowed = request.method === "GET" ? target === "csrf" || target === "node-metrics" || target === "infrastructure"
+    || ["sensors/readings", "sensors/commands", "sensors/registration-options"].includes(target)
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^virtual-devices/${uuid}/execution$`).test(target)
     || new RegExp(`^workflow-runs/${uuid}/(streams|placements)$`).test(target)
     || new RegExp(`^(devices|nodes|virtual-devices)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
+    : request.method === "DELETE" ? new RegExp(`^(devices|virtual-devices)/${uuid}(/registration)?$`).test(target)
+      || /^profiles\/(DEVICE|SERVICE|VD)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices|virtual-devices)/${uuid}$`).test(target);
   if (!allowed)
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
-  const authorization = controlPlaneAuthorization();
-  if (!authorization)
-    return NextResponse.json({ message: "Dashboard 서버의 API 연결 계정이 설정되지 않았습니다." }, { status: 503 });
   // The open dashboard may mutate through its own origin only. Spring still verifies CSRF.
   const origin = request.headers.get("origin");
   if (request.headers.get("sec-fetch-site") === "cross-site" ||
       (origin && origin !== request.nextUrl.origin && origin !== `${request.nextUrl.protocol}//${request.headers.get("host")}`))
     return NextResponse.json({ message: "같은 Dashboard에서 요청하세요." }, { status: 403 });
-  const headers = new Headers({ Authorization: authorization });
+  const headers = new Headers();
   const session = request.cookies.get("EDGEAI_SESSION")?.value;
   if (session) headers.set("Cookie", `EDGEAI_SESSION=${session}`);
   const csrf = request.headers.get("x-csrf-token");
@@ -62,7 +62,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   }
   try {
     const response = await fetch(`${controlPlaneOrigin()}/api/v1/${target}${request.nextUrl.search}`, {
-      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
+      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(target.startsWith("sensors/") ? 20000 : 8000),
     });
     const outgoing = new Headers({ "Content-Type": response.headers.get("content-type") || "application/json", "Cache-Control": "no-store" });
     const cookie = response.headers.get("set-cookie");

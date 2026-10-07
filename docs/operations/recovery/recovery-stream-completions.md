@@ -1,5 +1,11 @@
 # 복원 DB의 누락 STREAM 완료 이력 반영
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 V40 DB의 원래 Run/Task/Attempt/runtime와 경로 정의가 남아 있고, 완료 허가 및 checkpoint만
 백업 이후 생긴 경우 사용하는 복구 단계다. [producer 종료](recovery-producer-stop.md),
 [runtime 정리](recovery-kubernetes-retirement.md), [broker 차단](recovery-mqtt-fence.md),
@@ -9,6 +15,8 @@ V40 DB의 원래 Run/Task/Attempt/runtime와 경로 정의가 남아 있고, 완
 DB 접속과 독립 저장소 환경은 [결과 복원](recovery-kubernetes-results.md)을 따른다.
 원래 완료 문서, 모든 선행 checkpoint receipt와 payload, 시작 허가가 같은 독립 백업에
 있어야 한다. 완료 ID는 원래 `authority/stream-completion/<id>.json`의 ID다.
+
+## 실행
 
 ```bash
 EDGEAI_STREAM_PYTHON='<고정 Paho 환경>/bin/python' \
@@ -29,6 +37,8 @@ EDGEAI_STREAM_PYTHON='<고정 Paho 환경>/bin/python' \
   --mqtt-original-password-file /private/original-admin.password \
   --output /private/new-stream-completion-recovery
 ```
+
+## 결과 확인과 제한
 
 `--transport native|compose`, `--pg-bin`, `--timeout`은 다른 복구 명령과 같다.
 DB 백업 당시 claim되지 않은 Job도 관측하려면 선행 종료/정리와 동일하게

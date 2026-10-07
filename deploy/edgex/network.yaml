@@ -1,0 +1,284 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: edgex-device-service-ingress
+  namespace: edgex-system
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-edge
+      podSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: In
+          values:
+          - device-serial-jetson
+          - device-sensehat-raspi
+    ports:
+    - port: 59890
+      protocol: TCP
+    - port: 59881
+      protocol: TCP
+    - port: 1883
+      protocol: TCP
+  podSelector:
+    matchExpressions:
+    - key: app.kubernetes.io/name
+      operator: In
+      values:
+      - edgex-core-keeper
+      - edgex-core-metadata
+      - edgex-messagebus
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: edgex-system-default-deny-ingress
+  namespace: edgex-system
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: edgex-system-internal-ingress
+  namespace: edgex-system
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-system
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: device-sensehat-raspi
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-sensehat-raspi-egress
+  namespace: edgex-edge
+spec:
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+  - ports:
+    - port: 59890
+      protocol: TCP
+    - port: 59881
+      protocol: TCP
+    - port: 1883
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-system
+      podSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: In
+          values:
+          - edgex-core-keeper
+          - edgex-core-metadata
+          - edgex-messagebus
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: device-sensehat-raspi
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: device-sensehat-raspi
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-sensehat-raspi-ingress
+  namespace: edgex-edge
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-system
+    ports:
+    - port: 59911
+      protocol: TCP
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          edge-ai.io/local-data-client: 'true'
+    ports:
+    - port: 59911
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: device-sensehat-raspi
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: device-serial-jetson
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-serial-jetson-egress
+  namespace: edgex-edge
+spec:
+  egress:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+  - ports:
+    - port: 59890
+      protocol: TCP
+    - port: 59881
+      protocol: TCP
+    - port: 1883
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-system
+      podSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: In
+          values:
+          - edgex-core-keeper
+          - edgex-core-metadata
+          - edgex-messagebus
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: device-serial-jetson
+  policyTypes:
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: device-serial-jetson
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+  name: device-serial-jetson-ingress
+  namespace: edgex-edge
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgex-system
+    ports:
+    - port: 59910
+      protocol: TCP
+  - from:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          edge-ai.io/local-data-client: 'true'
+    ports:
+    - port: 59910
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: device-serial-jetson
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgex-edge-default-deny
+  namespace: edgex-edge
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    app.kubernetes.io/managed-by: edgeai-repo
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-spring-metadata
+  namespace: edgex-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: edgex-core-metadata
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgeai
+      podSelector:
+        matchLabels:
+          app: edgeai-api
+    ports:
+    - port: 59881
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-spring-sensor-access
+  namespace: edgex-system
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app.kubernetes.io/name
+      operator: In
+      values: [edgex-core-data, edgex-core-command]
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: edgeai
+      podSelector:
+        matchLabels:
+          app: edgeai-api
+    ports:
+    - {port: 59880, protocol: TCP}
+    - {port: 59882, protocol: TCP}

@@ -1,5 +1,9 @@
 # M7 다중 장치 DAG·Streaming 요구사항
 
+> **개발 기준 자료** — 단계별 설계·수용 조건과 당시 판단을 보존한 문서입니다.
+> 현재 사용자 기능과 기본 설정은 [지원 범위](../reference/support.md)와 [API 참고](../reference/api.md)를 확인하세요.
+> 아래의 과거 완료·미구현 표현을 현재 배포 상태로 해석하지 않습니다.
+
 2026-10-03 KST에 Notion 전체 설계/API/ERD/실행 지시를 다시 조회했다. 수정 시각은
 [기존 출처](../architecture/sources.md)의 2026-10-01과 같았다. 이 문서는 다음 구현의 수용 범위이며
 전체 STREAM 수용 완료 기록이 아니다. [ADR0041](../adr/0041-public-stream-runs.md) 이후 공개 STREAM

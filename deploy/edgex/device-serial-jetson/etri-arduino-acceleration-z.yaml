@@ -1,0 +1,23 @@
+apiVersion: v3
+name: etri-arduino-acceleration-z
+manufacturer: Arduino
+model: Arduino acceleration-z sensor
+labels:
+- arduino
+- serial
+- physical-sensor
+- edgeai
+description: Read-only acceleration-z channel on the shared Arduino serial connection
+deviceResources:
+- description: Raw acceleration Z value
+  name: acceleration_z_raw
+  isHidden: false
+  properties:
+    valueType: Int32
+    readWrite: R
+    units: raw
+deviceCommands:
+- name: acceleration-z
+  readWrite: R
+  resourceOperations:
+  - deviceResource: acceleration_z_raw

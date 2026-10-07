@@ -20,6 +20,8 @@ public class ProfileExceptionHandler {
     ResponseEntity<ApiErrorResponse> conflict() { return error(409, "PROFILE_CONFLICT", "이미 발행한 버전입니다. 내용을 바꾸려면 새 버전을 등록하세요."); }
     @ExceptionHandler(ProfileNotFoundException.class)
     ResponseEntity<ApiErrorResponse> missing() { return error(404, "PROFILE_NOT_FOUND", "해당 Profile 버전을 찾을 수 없습니다."); }
+    @ExceptionHandler(ProfileInUseException.class)
+    ResponseEntity<ApiErrorResponse> inUse() { return error(409, "PROFILE_IN_USE", "장치·가상 장치·워크플로 또는 다른 프로필에서 사용 중인 버전입니다. 참조가 남아 있어 삭제할 수 없습니다."); }
     @ExceptionHandler(ProfilePayloadTooLargeException.class)
     ResponseEntity<ApiErrorResponse> tooLarge() { return error(413, "PAYLOAD_TOO_LARGE", "JSON 규격은 64 KiB 이하로 입력하세요."); }
     @ExceptionHandler({DataAccessException.class, CannotCreateTransactionException.class})

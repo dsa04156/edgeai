@@ -1,0 +1,23 @@
+apiVersion: v3
+name: etri-arduino-acceleration-x
+manufacturer: Arduino
+model: Arduino acceleration-x sensor
+labels:
+- arduino
+- serial
+- physical-sensor
+- edgeai
+description: Read-only acceleration-x channel on the shared Arduino serial connection
+deviceResources:
+- description: Raw acceleration X value
+  name: acceleration_x_raw
+  isHidden: false
+  properties:
+    valueType: Int32
+    readWrite: R
+    units: raw
+deviceCommands:
+- name: acceleration-x
+  readWrite: R
+  resourceOperations:
+  - deviceResource: acceleration_x_raw

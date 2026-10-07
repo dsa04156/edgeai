@@ -1,7 +1,15 @@
 # 복원한 장치 journal과 PostgreSQL 대조
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [장치 journal 격리 복원](../backup/device-journal-backup.md)과 [PostgreSQL 복원](../backup/postgres-backup.md)을
 완료한 뒤 실행한다. 읽기 전용 검사이며 장치 송신이나 API 서비스를 재개하지 않는다.
+
+## 실행
 
 ```bash
 bash scripts/ops/inspect-recovery-device-journal.sh \
@@ -11,6 +19,8 @@ bash scripts/ops/inspect-recovery-device-journal.sh \
   --run-id '<원래 Run UUID>' \
   --output /private/new-journal-comparison
 ```
+
+## 결과 확인과 제한
 
 DB 접속 환경변수는 기존 PostgreSQL 복원과 같다. Compose DB는 `--transport compose`를
 추가한다. journal 경로는 `source/`의 부모이며 출력은 존재하지 않는 새 디렉터리여야 한다.

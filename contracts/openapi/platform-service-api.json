@@ -1,0 +1,602 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Platform-Service workflow integration",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/config": {
+      "get": {
+        "summary": "Config",
+        "operationId": "config_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationConfig"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/workflow/build-image": {
+      "post": {
+        "summary": "Build Image",
+        "operationId": "build_image_workflow_build_image_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/workflow/save-and-push": {
+      "post": {
+        "summary": "Workflow Save Push",
+        "operationId": "workflow_save_push_workflow_save_and_push_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/workflow/status/{name}": {
+      "get": {
+        "summary": "Workflow Status",
+        "operationId": "workflow_status_workflow_status__name__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workflow/delete": {
+      "delete": {
+        "summary": "Workflow Delete",
+        "operationId": "workflow_delete_workflow_delete_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BuildRequest": {
+        "properties": {
+          "tag": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,99}$",
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag"
+        ],
+        "title": "BuildRequest"
+      },
+      "BuildResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "image",
+          "tag",
+          "platforms"
+        ],
+        "title": "BuildResponse"
+      },
+      "DeleteResponse": {
+        "properties": {
+          "argocd": {
+            "$ref": "#/components/schemas/StepResult"
+          },
+          "git": {
+            "$ref": "#/components/schemas/StepResult"
+          },
+          "local": {
+            "$ref": "#/components/schemas/StepResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "argocd",
+          "git",
+          "local"
+        ],
+        "title": "DeleteResponse"
+      },
+      "DeploymentResponse": {
+        "properties": {
+          "local_result": {
+            "$ref": "#/components/schemas/StepResult"
+          },
+          "git_result": {
+            "$ref": "#/components/schemas/StepResult"
+          },
+          "argocd_result": {
+            "$ref": "#/components/schemas/StepResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "local_result",
+          "git_result",
+          "argocd_result"
+        ],
+        "title": "DeploymentResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IntegrationConfig": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing"
+          },
+          "imageRepository": {
+            "type": "string",
+            "title": "Imagerepository"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms"
+          },
+          "buildConfigured": {
+            "type": "boolean",
+            "title": "Buildconfigured"
+          },
+          "repository": {
+            "type": "string",
+            "title": "Repository"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "missing",
+          "imageRepository",
+          "platforms",
+          "buildConfigured",
+          "repository",
+          "branch"
+        ],
+        "title": "IntegrationConfig"
+      },
+      "StepResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sync": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "deleting": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleting"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "StepResult"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkflowDeleteRequest": {
+        "properties": {
+          "local_directory": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Local Directory"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": "deployment.yaml"
+          },
+          "repo_path": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Repo Path"
+          },
+          "commit_message": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Commit Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "local_directory",
+          "repo_path",
+          "commit_message"
+        ],
+        "title": "WorkflowDeleteRequest"
+      },
+      "WorkflowRequest": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 1000000,
+            "minLength": 1,
+            "title": "Content"
+          },
+          "local_directory": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Local Directory"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": "deployment.yaml"
+          },
+          "overwrite_local": {
+            "type": "boolean",
+            "title": "Overwrite Local",
+            "default": true
+          },
+          "repo_path": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Repo Path"
+          },
+          "commit_message": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Commit Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "local_directory",
+          "repo_path",
+          "commit_message"
+        ],
+        "title": "WorkflowRequest"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Platform-Token"
+      }
+    }
+  }
+}

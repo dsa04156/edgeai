@@ -7,7 +7,7 @@ export const acceleratorNames: Record<string, string> = {
   "mobilint.com/npu": "Mobilint NPU",
 };
 
-export function accelerators(node: components["schemas"]["ExecutionNode"]) {
+export function accelerators(node: Pick<components["schemas"]["ExecutionNode"], "allocatable">) {
   return Object.entries(node.allocatable || {}).filter(([key, value]) => key.includes("/") && Number(value) > 0);
 }
 

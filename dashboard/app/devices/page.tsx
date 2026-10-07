@@ -1,16 +1,11 @@
-import { SectionNav } from "../components/section-nav";
-import Link from "next/link";
+import { PageHeading } from "../components/page-heading";
 import { DeviceInventory } from "./device-inventory";
 
 export const dynamic = "force-dynamic";
-
 export default function Devices() {
-  return <main>
-    <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">Edge AI Platform</span></header>
-    <SectionNav current="/devices" />
-    <section><p className="eyebrow">DEVICE INVENTORY</p><h1>장치의 연결과 변화를 확인합니다.</h1>
-      <p className="intro">장치 규격을 선택해 등록하고, 실행 노드·재접속 세션·최근 상태 보고를 확인합니다. 실제 데이터와 재생·합성 데이터를 구분해 관리합니다.</p></section>
+
+  return <main id="main-content" className="management-page devices-page">
+    <PageHeading eyebrow="INFRASTRUCTURE / DEVICES" title="서버 · 디바이스 · 센서" description="엣지 AI 서버와 현장 디바이스, 연결된 센서를 확인합니다." />
     <DeviceInventory />
-    <footer>연결 상태는 수신된 관측으로 판단합니다. 실제 장비·AI 실행의 수용시험은 별도로 진행합니다.</footer>
   </main>;
 }

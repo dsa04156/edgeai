@@ -5,6 +5,7 @@ import { registryItems } from "../../lib/registry";
 import { PlacementTable } from "./placement-table";
 import { parse, stringify } from "lossless-json";
 import type { components } from "../../lib/api-schema";
+import { StatusBadge } from "../components/status-badge";
 import { ConnectionPanel } from "../components/connection-panel";
 import { hardwareLabel } from "../../lib/hardware";
 import { GraphEditor } from "./graph-editor";
@@ -69,7 +70,8 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
     const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
-      throw new Error(response.status === 401 ? "Dashboard 서버의 API 연결 계정을 확인하세요." : response.status === 403 ? "연결이 만료되었습니다. 화면을 새로고침하세요." : value.message || "요청을 처리하지 못했습니다.");
+      if (response.status === 404 && /^(workflows|workflow-runs)/.test(path)) throw new Error("워크플로 API가 비활성 상태입니다. 변경된 설정으로 백엔드를 재실행하세요.");
+      throw new Error(response.status === 401 ? "API 연결을 확인하세요." : response.status === 403 ? "연결이 만료되었습니다. 화면을 새로고침하세요." : value.message || "요청을 처리하지 못했습니다.");
     }
     return response;
   }
@@ -159,21 +161,21 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       <section aria-labelledby="workflows-title" aria-busy={busy}>
         <div className="toolbar"><h2 id="workflows-title">등록된 워크플로</h2><button disabled={busy} onClick={() => void action(() => loadWorkflows())}>워크플로 새로고침</button></div>
         {busy && <p role="status">처리 중…</p>}
-        {workflows?.items.length ? <div className="table-scroll"><table><caption className="sr-only">워크플로 목록</caption><thead><tr><th>워크플로</th><th>생성 시각</th></tr></thead><tbody>{workflows.items.map(w => <tr key={w.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showWorkflow(w.id))}>{w.displayName}<span>{w.key}</span></button></td><td>{new Date(w.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 등록된 워크플로가 없습니다.</p>}
+        {workflows?.items.length ? <div className="table-scroll"><table><caption className="sr-only">워크플로 목록</caption><thead><tr><th>워크플로</th><th>생성 시각</th></tr></thead><tbody>{workflows.items.map(w => <tr key={w.id} data-selected={workflow?.workflow.id === w.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showWorkflow(w.id))}>{w.displayName}<span>{w.key}</span></button></td><td>{new Date(w.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 등록된 워크플로가 없습니다.</p>}
         <div className="pagination"><button disabled={busy || workflowOffset === 0} onClick={() => void action(() => loadWorkflows(workflowOffset - 20))}>이전 워크플로</button><span>{workflowOffset / 20 + 1} 페이지</span><button disabled={busy || workflows?.nextOffset == null} onClick={() => void action(() => loadWorkflows(workflows!.nextOffset!))}>다음 워크플로</button></div>
       </section>
-      <section className="panel" aria-labelledby="workflow-create-title"><h2 id="workflow-create-title">새 워크플로</h2>
+      <details className="create-panel" open={!workflows?.items.length || undefined}><summary><h2 id="workflow-create-title">새 워크플로 만들기</h2></summary>
         <form onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); void action(async () => {
           const response = await post("workflows", Object.fromEntries(data)); const value = await response.json();
           const draft = dag; await showWorkflow(value.id); setDag(draft); await loadWorkflows(0); setNotice(response.status === 201 ? "워크플로를 생성했습니다. DAG 버전을 발행하세요." : "동일한 워크플로가 이미 있습니다."); form.reset();
         }); }}><fieldset disabled={busy} className="publish-fields"><div className="form-row"><label>워크플로 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="factory-inspection" /></label><label>워크플로 이름<input name="displayName" required maxLength={128} placeholder="공장 검사" /></label></div><button className="primary">워크플로 생성</button></fieldset></form>
-      </section>
+      </details>
+      <section className="workflow-builder-panel" aria-label="서비스 워크플로 편집"><GraphEditor key={workflow?.workflow.id || "draft"} profiles={profiles} value={dag} onApply={setDag} disabled={busy} /></section>
       {workflow && <section className="panel" aria-labelledby="workflow-detail-title"><h2 id="workflow-detail-title">{workflow.workflow.displayName}</h2><p className="digest mono">Workflow ID {workflow.workflow.id}</p>
         <h3>발행된 DAG 버전</h3>
         {workflow.versions.length ? <ul className="history-list">{workflow.versions.map(v => <li key={v.id}><button className="version-link" disabled={busy} onClick={() => void action(() => showVersion(v.workflowId, v.version))}>{v.version}</button> · {new Date(v.createdAt).toLocaleString()}</li>)}</ul> : <p className="muted">발행된 버전이 없습니다.</p>}
         <div className="pagination"><button disabled={busy || versionOffset === 0} onClick={() => void action(() => showWorkflow(workflow.workflow.id, versionOffset - 10))}>이전 버전</button><span>{versionOffset / 10 + 1} 페이지</span><button disabled={busy || workflow.nextOffset == null} onClick={() => void action(() => showWorkflow(workflow.workflow.id, workflow.nextOffset!))}>다음 버전</button></div>
         <h3>새 DAG 버전 발행</h3>
-        <GraphEditor key={workflow.workflow.id} profiles={profiles} value={dag} onApply={setDag} disabled={busy} />
         <form onSubmit={event => { event.preventDefault(); const number = String(new FormData(event.currentTarget).get("version")); void action(async () => {
           const document = objectJson(dag);
           if (Object.keys(document).sort().join(",") !== "dependencies,tasks") throw new Error("DAG에는 tasks와 dependencies만 입력하세요.");
@@ -214,10 +216,10 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
         </fieldset></form>
       </section>}
       </>}
-      <section aria-labelledby="runs-title"><div className="toolbar"><h2 id="runs-title">실행 이력</h2><button disabled={busy} onClick={() => void action(async () => { await loadRuns(); if (run) await showRun(run.run.id); })}>실행 새로고침</button></div>
-        {runs?.items.length ? <div className="table-scroll"><table><caption className="sr-only">실행 요청 목록</caption><thead><tr><th>Run ID</th><th>상태 / 정책</th><th>생성 시각</th></tr></thead><tbody>{runs.items.map(r => <tr key={r.id}><td><button className="version-link mono" disabled={busy} onClick={() => void action(() => showRun(r.id))}>{r.id}</button></td><td>{stateNames[r.state]}<span className="block muted">{r.mode}{r.remoteTarget ? ` · ${r.remoteTarget.providerKey} · ${r.remoteTarget.sourceMode}` : ""}</span></td><td>{new Date(r.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 실행 요청이 없습니다. 발행한 DAG 버전을 선택해 요청을 만드세요.</p>}
+      {view === "runs" && <section aria-labelledby="runs-title"><div className="toolbar"><h2 id="runs-title">실행 이력</h2><button disabled={busy} onClick={() => void action(async () => { await loadRuns(); if (run) await showRun(run.run.id); })}>실행 새로고침</button></div>
+        {runs?.items.length ? <div className="table-scroll"><table><caption className="sr-only">실행 요청 목록</caption><thead><tr><th>Run ID</th><th>상태 / 정책</th><th>생성 시각</th></tr></thead><tbody>{runs.items.map(r => <tr key={r.id} data-selected={run?.run.id === r.id}><td><button className="version-link mono" disabled={busy} onClick={() => void action(() => showRun(r.id))} title={r.id}>{r.id.slice(0, 8)}…{r.id.slice(-4)}</button></td><td><StatusBadge state={r.state} /><span className="block muted">{r.mode}{r.remoteTarget ? ` · ${r.remoteTarget.providerKey} · ${r.remoteTarget.sourceMode}` : ""}</span></td><td>{new Date(r.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 실행 요청이 없습니다. 발행한 DAG 버전을 선택해 요청을 만드세요.</p>}
         <div className="pagination"><button disabled={busy || runOffset === 0} onClick={() => void action(() => loadRuns(runOffset - 20))}>이전 실행</button><span>{runOffset / 20 + 1} 페이지</span><button disabled={busy || runs?.nextOffset == null} onClick={() => void action(() => loadRuns(runs!.nextOffset!))}>다음 실행</button></div>
-      </section>
+      </section>}
       {pollError && <p className="error" role="alert">{pollError}</p>}
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
         <p className="hint">Run · Task · Placement · 결과를 3초마다 갱신합니다.</p>
@@ -226,7 +228,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <OffloadPolicySummary value={run.run.offload} />
         <details><summary>STREAM 경로</summary><StreamRoutes key={run.run.id} tasks={run.tasks} disabled={busy} fetchPage={async offset => (await api(`workflow-runs/${run.run.id}/streams?limit=20&offset=${offset}`)).json()} /></details>
-        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button><span className="block muted digest">최초 배치 · {t.initialMode}{t.initialNodeId ? ` · ${nodes.find(n => n.id === t.initialNodeId)?.name || t.initialNodeId}` : t.initialVdId ? ` · ${t.initialVdId}` : t.initialRemoteTarget ? ` · ${t.initialRemoteTarget.providerKey}` : ""}</span></td><td>{stateNames[t.state]}{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
+        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button><span className="block muted digest">최초 배치 · {t.initialMode}{t.initialNodeId ? ` · ${nodes.find(n => n.id === t.initialNodeId)?.name || t.initialNodeId}` : t.initialVdId ? ` · ${t.initialVdId}` : t.initialRemoteTarget ? ` · ${t.initialRemoteTarget.providerKey}` : ""}</span></td><td><StatusBadge state={t.state} />{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.remoteTarget ? ` · ${a.remoteTarget.providerKey} · ${a.remoteTarget.sourceMode}` : ""}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
         {task && (task.attempts[0]?.mode === "REMOTE"
           ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>

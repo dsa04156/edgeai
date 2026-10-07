@@ -1,8 +1,16 @@
 # 원본 MinIO root 접근 차단
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 현재 API가 사용하는 root 자격과 그 자격으로 발급한 S3 URL을 차단하는 복구 명령이다.
 DB·MQTT·Kubernetes 중지와 함께 조합할 구성 요소이며 전체 서비스 복원 명령은 아니다.
 [ADR0071](../../adr/0071-recovery-source-storage-root-fence.md)을 따른다.
+
+## 실행
 
 ```bash
 bash scripts/dev/install-minio-client.sh
@@ -17,6 +25,8 @@ bash scripts/ops/fence-recovery-storage.sh \
   --state-directory /private/recovery/storage-state \
   --output /private/recovery/storage-attempt-1
 ```
+
+## 결과 확인과 제한
 
 인증서와 deployment ID는 대상 설치에서 미리 확인한 값이어야 한다. 비밀번호 파일은 소유자만
 읽을 수 있는 일반 파일이며 줄바꿈 없이 정확한 원래 비밀번호를 담는다. 비밀번호를 인자나 셸

@@ -1,8 +1,16 @@
 # 복구 중 Kubernetes producer 중지
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 이 명령은 선택한 전용 실행 namespace에서 새 Pod/Job 생성을 막고 관측한 실행을 종료한다.
 정상 운영의 Run 취소 API와 목적이 다르다. [복원 점검](recovery-kubernetes.md)에서 대상과
 namespace UID를 확인한 뒤 같은 복구 작업에 사용할 UUID를 정한다.
+
+## 실행
 
 ```bash
 bash scripts/ops/stop-recovery-kubernetes.sh \
@@ -13,6 +21,8 @@ bash scripts/ops/stop-recovery-kubernetes.sh \
   --timeout 180 \
   --output .tools/recovery-stop-<새-실행명>
 ```
+
+## 결과 확인과 제한
 
 조회/생성/patch/delete 권한이 있는 운영자의 명시 context를 사용한다. API ServiceAccount에
 새 권한을 추가하지 않는다. 소유하지 않은 Job/Pod, 이름·실행 신원 충돌, 다른 복구 작업의

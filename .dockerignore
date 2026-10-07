@@ -14,6 +14,8 @@
 **/*.log
 **/*.tsbuildinfo
 **/__pycache__
-docs
-deploy
+deploy/*
+!deploy/edgex
+deploy/edgex/*
+!deploy/edgex/README.md
 .idea

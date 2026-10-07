@@ -53,7 +53,7 @@ export interface paths {
         };
         /**
          * 쓰기 요청에 사용할 CSRF 토큰 발급
-         * @description Basic 인증 후 호출하면 token과 EDGEAI_SESSION 세션 쿠키를 받습니다. 직접 POST를 호출하는 클라이언트는 같은 쿠키와 X-CSRF-TOKEN 헤더, Basic 인증을 함께 보내야 합니다. 토큰은 로그인용 액세스 토큰이 아닙니다. Swagger에서는 자동 처리하므로 수동 입력할 필요가 없습니다.
+         * @description 계정 인증 없이 호출하면 token과 EDGEAI_SESSION 세션 쿠키를 받습니다. 직접 POST를 호출하는 클라이언트는 같은 쿠키와 X-CSRF-TOKEN 헤더를 함께 보내야 합니다. 토큰은 로그인용 액세스 토큰이 아닙니다. Swagger에서는 자동 처리하므로 수동 입력할 필요가 없습니다.
          */
         get: operations["getCsrfToken"];
         put?: never;
@@ -88,7 +88,7 @@ export interface paths {
          *
          *     새 key/version은 201, 같은 종류·key·version에 같은 내용을 재전송하면 기존 id와 생성 시각을 유지한 200을 반환합니다. 같은 버전에 다른 내용을 보내면 409이며 version을 올려 등록해야 합니다. 발행 후 수정·삭제할 수 없습니다.
          *
-         *     Basic 인증·세션 쿠키·CSRF 토큰이 필요합니다. 요청은 UTF-8 기준 64 KiB 이하, spec은 비어 있지 않은 JSON 객체여야 합니다. 최대 중첩 깊이는 32이며 중복 JSON 키와 key/version/spec 이외의 최상위 필드는 거절합니다. 아래 규격은 입력 예시이며 실제 장치/런타임 호환성 검증은 후속 개발 범위입니다.
+         *     세션 쿠키·CSRF 토큰이 필요합니다. 요청은 UTF-8 기준 64 KiB 이하, spec은 비어 있지 않은 JSON 객체여야 합니다. 최대 중첩 깊이는 32이며 중복 JSON 키와 key/version/spec 이외의 최상위 필드는 거절합니다. 아래 규격은 입력 예시이며 실제 장치/런타임 호환성 검증은 후속 개발 범위입니다.
          */
         post: operations["publishProfile"];
         delete?: never;
@@ -118,7 +118,11 @@ export interface paths {
         get: operations["getProfileVersion"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 사용하지 않는 프로필 버전 삭제
+         * @description 장치·가상 장치·워크플로·실행 이력 또는 VD 프로필의 참조가 있으면 PROFILE_IN_USE(409)로 거절합니다. 다른 버전은 유지합니다.
+         */
+        delete: operations["deleteProfileVersion"];
         options?: never;
         head?: never;
         patch?: never;
@@ -198,6 +202,28 @@ export interface paths {
         patch: operations["updateDevice"];
         trace?: never;
     };
+    "/api/v1/devices/{deviceId}/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 사용하지 않는 장치 등록 삭제
+         * @description 활성 연결·세션이나 VD·실행 이력 참조가 있으면 DEVICE_IN_USE(409)로 거절합니다. 미사용 장치와 그 장치의 닫힌 연결·세션·관측 이력만 삭제하며 Kubernetes 노드는 변경하지 않습니다.
+         */
+        delete: operations["deleteDeviceRegistration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/devices/{deviceId}/attachments/{nodeId}": {
         parameters: {
             query?: never;
@@ -259,6 +285,43 @@ export interface paths {
          * @description 현재 sessionId, 증가하는 sequence, observedAt, ONLINE/OFFLINE, attributes를 보냅니다. 동일 sequence/내용 재전송은 200, 내용 변경·역순·이전 세션은 409입니다. observedAt은 서버보다 최대 30초 미래·24시간 과거를 허용합니다. 요청 최대 16 KiB이며 raw stream/대형 파일은 대상이 아닙니다.
          */
         post: operations["reportDeviceObservation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/infrastructure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 엣지 AI 서버·엣지 디바이스 및 EdgeX 센서 목록 조회 */
+        get: operations["getInfrastructure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/node-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 기존 Prometheus에서 노드와 가속기 사용량 조회
+         * @description 서버에 설정된 Prometheus만 조회합니다. CPU는 최근 두 수집값의 irate(2분 탐색 범위), Intel NPU는 1분 평균입니다. CPU 갱신 주기는 수집기 설정에 따릅니다. observedAt은 원본 수집 시각이며, 결측은 measurements에서 생략하고 0으로 대체하지 않습니다. 5초 서버 캐시를 사용합니다.
+         */
+        get: operations["getNodeMetrics"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -740,7 +803,7 @@ export interface paths {
         put?: never;
         /**
          * 현재 장치 세션의 스트림 배정 토큰 발급
-         * @description 관리자가 현재 활성 Device 세션에 설치할 토큰을 발급한다. Basic 인증과 CSRF가 필요하고 반복 요청은 같은 토큰이다. 장치 해제·세션 교체 뒤 기존 토큰은 사용할 수 없다. 토큰은 관리 API 권한이 없으며 별도 내부 스트림 배정 API에서 본인 세대의 MQTT 자격만 조회한다. 응답을 로그/일반 metadata에 저장하지 않는다. EDGEAI_STREAM_ENABLED가 false면501이며 공개 STREAM 실행을 활성화하는 API가 아니다.
+         * @description 관리자가 현재 활성 Device 세션에 설치할 토큰을 발급한다. CSRF가 필요하고 반복 요청은 같은 토큰이다. 장치 해제·세션 교체 뒤 기존 토큰은 사용할 수 없다. 토큰은 관리 API 권한이 없으며 별도 내부 스트림 배정 API에서 본인 세대의 MQTT 자격만 조회한다. 응답을 로그/일반 metadata에 저장하지 않는다. EDGEAI_STREAM_ENABLED가 false면501이며 공개 STREAM 실행을 활성화하는 API가 아니다.
          */
         post: operations["issueDeviceStreamToken"];
         delete?: never;
@@ -789,10 +852,201 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sensors/registration-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 배포된 수집기의 지원 센서 등록 항목 조회 */
+        get: operations["getSensorRegistrationOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sensors/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 지원하는 센서를 EdgeX에 수동 등록
+         * @description 배포된 Arduino Serial 또는 Sense HAT I2C 프로필을 사용한다. 새 드라이버나 프로필을 설치하지 않는다. 동일 이름·연결 정보는 기존 등록을 반환하고 이름 또는 동일 포트의 측정 항목 충돌은409다. 등록은 EdgeX DB에 저장되며 레포 YAML에는 자동 반영되지 않는다. 결과 미확인 시 자동 재시도하지 않는다. 같은 이름·입력값을 유지한 재요청으로 확인할 수 있다. 등록 완료는 실측 수신 확인과 다르다.
+         */
+        post: operations["registerSensor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sensors/readings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** EdgeX 센서의 최근 측정값 조회 */
+        get: operations["getSensorReadings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sensors/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 센서가 실제 지원하는 읽기·쓰기 명령 조회 */
+        get: operations["getSensorCommands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sensors/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * EdgeX에 등록된 센서 명령 실행
+         * @description CSRF가 필요하다. 명령 지원 여부와 adminState를 실행 전에 재조회한다. GET은 ds-pushevent=false로 직접 읽으며 PUT은 지정된 항목의 문자열 값을 전달한다. 자동 재시도하지 않으며 시간 초과 시 실제 장치 결과를 확인해야 한다.
+         */
+        post: operations["executeSensorCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 해제된 미사용 가상 장치 등록 영구 삭제
+         * @description 실행·작업 참조가 없는 RELEASED VD와 닫힌 원본 연결 기록만 삭제한다. 원본 물리 장치와 프로필은 보존한다. 실행 이력은 삭제하지 않으며 참조가 남으면409로 거절한다.
+         */
+        delete: operations["deleteVirtualDeviceRegistration"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SensorRegistrationTemplate: {
+            id: string;
+            label: string;
+            serviceName: string;
+            nodeName: string;
+            profileName: string;
+            /** @enum {string} */
+            protocol: "SERIAL" | "I2C";
+            resources: string[];
+            endpoint: string;
+            baudRates: (1200 | 2400 | 4800 | 9600 | 19200 | 38400 | 57600 | 115200 | 230400 | 460800 | 921600)[];
+        };
+        SensorRegistrationCatalog: {
+            templates: components["schemas"]["SensorRegistrationTemplate"][];
+        };
+        SensorRegistrationRequest: {
+            name: string;
+            templateId: string;
+            /** @description Serial은 /dev/edgeai/ 아래의 단일 장치명, Sense HAT는 /dev/i2c-1 */
+            endpoint: string;
+            physicalDeviceId: string;
+            /** @enum {integer|null} */
+            baudRate?: null | 1200 | 2400 | 4800 | 9600 | 19200 | 38400 | 57600 | 115200 | 230400 | 460800 | 921600;
+        };
+        SensorRegistrationResult: {
+            name: string;
+            serviceName: string;
+            profileName: string;
+            created: boolean;
+            adminState: string;
+            operatingState: string;
+        };
+        SensorReading: {
+            resource: string;
+            valueType: string;
+            /** @description 원본 문자열 값. Binary는 [binary]로 표시 */
+            value: string;
+            units: string;
+            /** Format: date-time */
+            observedAt: string;
+        };
+        SensorReadings: {
+            device: string;
+            /** Format: date-time */
+            fetchedAt: string;
+            readings: components["schemas"]["SensorReading"][];
+        };
+        SensorCommand: {
+            name: string;
+            readable: boolean;
+            writable: boolean;
+            parameters: {
+                resource: string;
+                valueType: string;
+            }[];
+        };
+        SensorCommands: {
+            device: string;
+            adminState: string;
+            operatingState: string;
+            commands: components["schemas"]["SensorCommand"][];
+        };
+        SensorCommandRequest: {
+            device: string;
+            command: string;
+            /** @enum {string} */
+            method: "GET" | "PUT";
+            values: {
+                [key: string]: string;
+            };
+        };
+        SensorCommandResult: {
+            device: string;
+            command: string;
+            /** @enum {string} */
+            method: "GET" | "PUT";
+            /** Format: date-time */
+            completedAt: string;
+            readings: components["schemas"]["SensorReading"][];
+        };
         ManagementAuditPage: {
             items: components["schemas"]["ManagementAudit"][];
             nextOffset: number | null;
@@ -1033,6 +1287,91 @@ export interface components {
             attachments: components["schemas"]["DeviceAttachment"][];
             sessions: components["schemas"]["DeviceSession"][];
             observations: components["schemas"]["DeviceObservation"][];
+        };
+        InfrastructureNode: {
+            name: string;
+            /**
+             * @description 현재 노드 역할·환경 라벨에 따른 분류. 누락·충돌은 UNKNOWN.
+             * @enum {string}
+             */
+            kind: "EDGE_AI_SERVER" | "EDGE_DEVICE" | "UNKNOWN";
+            architecture: string;
+            operatingSystem: string;
+            /** @enum {string} */
+            status: "READY" | "NOT_READY" | "UNKNOWN";
+        };
+        ClusterSensor: {
+            name: string;
+            nodeName: string;
+            model: string;
+            serviceName: string;
+            adminState: string;
+            operatingState: string;
+            properties: string[];
+        };
+        InfrastructureSnapshot: {
+            /** @enum {string} */
+            nodesStatus: "AVAILABLE" | "UNAVAILABLE" | "DISABLED";
+            /** @enum {string} */
+            sensorsStatus: "AVAILABLE" | "UNAVAILABLE" | "DISABLED";
+            /** Format: date-time */
+            fetchedAt: string;
+            nodes: components["schemas"]["InfrastructureNode"][];
+            sensors: components["schemas"]["ClusterSensor"][];
+        };
+        NodeMetric: {
+            /** @enum {string} */
+            key: "CPU_USAGE" | "CPU_TEMPERATURE" | "MEMORY_USAGE" | "GPU_USAGE" | "GPU_MEMORY_USED" | "GPU_MEMORY_TOTAL" | "GPU_TEMPERATURE" | "GPU_POWER" | "NPU_USAGE" | "NPU_MEMORY_USED" | "NPU_MEMORY_TOTAL" | "NPU_TEMPERATURE" | "NPU_POWER";
+            /** @description 가속기 식별자. CPU/호스트 메모리는 빈 문자열. */
+            device: string;
+            /** @description 유한한 실수. 사용률은 0부터 100까지의 백분율. */
+            value: number;
+            /** @enum {string} */
+            unit: "PERCENT" | "BYTES" | "CELSIUS" | "WATTS";
+            /** Format: date-time */
+            observedAt: string;
+            /** @description 원본 시각이 90초 이내이고 해당 exporter/collector가 정상인지 여부. */
+            fresh: boolean;
+        };
+        NodeReadiness: {
+            /**
+             * @description kube-state-metrics가 수집한 Kubernetes Node Ready 조건.
+             * @enum {string}
+             */
+            status: "READY" | "NOT_READY" | "UNKNOWN";
+            /** Format: date-time */
+            observedAt: string;
+            /** @description 원본 시각이 90초 이내이고 kube-state-metrics 수집이 정상인지 여부. */
+            fresh: boolean;
+        };
+        NodeAccelerator: {
+            /** @description 지표 연결용 내부 식별자. 화면에 표시하지 않는다. */
+            device: string;
+            /** @enum {string} */
+            kind: "GPU" | "NPU";
+            vendor: string;
+            model: string;
+            /** Format: date-time */
+            observedAt: string;
+            /** @description 장착 정보의 원본 시각과 exporter/collector 상태 검증 결과. 사용률 수집 여부와 독립적이다. */
+            fresh: boolean;
+        };
+        NodeMetrics: {
+            /** @description Prometheus의 Kubernetes 메타데이터에 매핑된 노드 이름. */
+            nodeName: string;
+            accelerators?: components["schemas"]["NodeAccelerator"][];
+            readiness?: components["schemas"]["NodeReadiness"] | null;
+            measurements: components["schemas"]["NodeMetric"][];
+        };
+        NodeMetricsSnapshot: {
+            /** @enum {string} */
+            status: "AVAILABLE" | "DISABLED" | "UNAVAILABLE";
+            /** Format: date-time */
+            fetchedAt: string;
+            maxAgeSeconds: number;
+            /** @description 신원을 확정할 수 없어 제외한 사용량 시계열 수. */
+            unmappedSeries: number;
+            items: components["schemas"]["NodeMetrics"][];
         };
         ExecutionNode: {
             /** Format: uuid */
@@ -1894,13 +2233,6 @@ export interface operations {
                     "application/json": components["schemas"]["PlatformInfo"];
                 };
             };
-            /** @description Authentication required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
         };
     };
     getReadiness: {
@@ -1941,7 +2273,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Send token as X-CSRF-TOKEN with the session cookie and Basic credentials. */
+            /** @description Send token as X-CSRF-TOKEN with the session cookie. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1951,13 +2283,6 @@ export interface operations {
                         token: string;
                     };
                 };
-            };
-            /** @description Authentication required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -1993,13 +2318,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["Invalid"];
-            /** @description Authentication required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             503: components["responses"]["Unavailable"];
         };
     };
@@ -2050,13 +2368,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["Invalid"];
-            /** @description Authentication required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Missing or invalid CSRF token */
             403: {
                 headers: {
@@ -2101,14 +2412,51 @@ export interface operations {
                 };
             };
             400: components["responses"]["Invalid"];
-            /** @description Authentication required */
-            401: {
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    deleteProfileVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                kind: components["parameters"]["Kind"];
+                /** @description 조회할 프로필의 고유 키입니다. */
+                key: components["schemas"]["ProfileKey"];
+                /** @description 조회할 정확한 발행 버전입니다. 예: 1.0.0 */
+                version: components["schemas"]["Version"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 버전 삭제 완료 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Invalid"];
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
             404: components["responses"]["NotFound"];
+            /** @description PROFILE_IN_USE — 다른 자원에서 참조하는 버전 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             503: components["responses"]["Unavailable"];
         };
     };
@@ -2176,13 +2524,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 장치·노드·참조 Profile이 없습니다. */
             404: {
                 headers: {
@@ -2242,13 +2583,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
@@ -2324,13 +2658,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 장치·노드·참조 Profile이 없습니다. */
             404: {
                 headers: {
@@ -2379,13 +2706,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
@@ -2465,13 +2785,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
                 headers: {
@@ -2517,6 +2830,45 @@ export interface operations {
             };
         };
     };
+    deleteDeviceRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 장치 등록 삭제 완료 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Invalid"];
+            /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description DEVICE_IN_USE — 활성 연결·세션 또는 다른 자원의 참조가 존재 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
     attachDevice: {
         parameters: {
             query?: never;
@@ -2550,13 +2902,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
@@ -2645,13 +2990,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
                 headers: {
@@ -2739,13 +3077,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
                 headers: {
@@ -2791,6 +3122,46 @@ export interface operations {
             };
         };
     };
+    getInfrastructure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Kubernetes 노드와 EdgeX Core Metadata 목록. EdgeX operatingState는 실측값의 신선도를 의미하지 않는다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InfrastructureSnapshot"];
+                };
+            };
+        };
+    };
+    getNodeMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 연결 상태와 정규화된 메트릭. 비활성/조회 실패는 상태로 구분합니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeMetricsSnapshot"];
+                };
+            };
+        };
+    };
     listNodes: {
         parameters: {
             query?: {
@@ -2822,13 +3193,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description 장치·노드·참조 Profile이 없습니다. */
             404: {
@@ -2879,13 +3243,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 장치·노드·참조 Profile이 없습니다. */
             404: {
                 headers: {
@@ -2935,13 +3292,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description 대상 리소스가 없습니다. */
             404: {
@@ -3002,13 +3352,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
             403: {
@@ -3088,13 +3431,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 대상 리소스가 없습니다. */
             404: {
                 headers: {
@@ -3156,13 +3492,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
             403: {
@@ -3239,13 +3568,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 대상 리소스가 없습니다. */
             404: {
                 headers: {
@@ -3307,13 +3629,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
             403: {
@@ -3398,13 +3713,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 대상 리소스가 없습니다. */
             404: {
                 headers: {
@@ -3454,13 +3762,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 대상 리소스가 없습니다. */
             404: {
                 headers: {
@@ -3506,13 +3807,6 @@ export interface operations {
             };
             /** @description 잘못된 UUID 또는 페이지 범위입니다. */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 관리 API 인증이 필요합니다. */
-            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3566,13 +3860,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
             403: {
@@ -3648,13 +3935,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 대상 리소스가 없습니다. */
             404: {
                 headers: {
@@ -3707,13 +3987,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
             403: {
@@ -3790,13 +4063,6 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Basic 인증이 필요합니다. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Task가 없습니다. 결과 대기 중인 Task와 구분합니다. */
             404: {
                 headers: {
@@ -3863,13 +4129,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 세션/토큰 필요 */
             403: {
                 headers: {
@@ -3930,13 +4189,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Operation이 없습니다. */
             404: {
                 headers: {
@@ -3980,13 +4232,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             503: components["responses"]["VirtualDeviceError"];
         };
     };
@@ -4022,13 +4267,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4064,13 +4302,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             404: components["responses"]["VirtualDeviceError"];
             503: components["responses"]["VirtualDeviceError"];
         };
@@ -4097,13 +4328,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4141,13 +4365,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4207,13 +4424,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4273,13 +4483,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4339,13 +4542,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description CSRF 쿠키/토큰 필요 */
             403: {
                 headers: {
@@ -4381,13 +4577,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["VirtualDeviceError"];
-            /** @description Basic 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             404: components["responses"]["VirtualDeviceError"];
             503: components["responses"]["VirtualDeviceError"];
         };
@@ -4429,13 +4618,6 @@ export interface operations {
             };
             /** @description 빈 JSON 객체가 필요함 */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 관리 Basic 인증 필요 */
-            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4507,13 +4689,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidAuditQuery"];
-            /** @description 관리 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             503: components["responses"]["AuditUnavailable"];
         };
     };
@@ -4538,13 +4713,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["InvalidAuditQuery"];
-            /** @description 관리 인증 필요 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description 해당 감사 접수 기록 없음 */
             404: {
                 headers: {
@@ -4553,6 +4721,318 @@ export interface operations {
                 content?: never;
             };
             503: components["responses"]["AuditUnavailable"];
+        };
+    };
+    getSensorRegistrationOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 EdgeX 서비스와 프로필이 확인된 지원 항목. 연결 가능 여부나 실측 수신을 보장하지 않는다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorRegistrationCatalog"];
+                };
+            };
+            /** @description EdgeX 목록 조회 실패 또는 조회 한도 초과 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 비활성화 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    registerSensor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensorRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 같은 이름·설정으로 이미 등록됨 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorRegistrationResult"];
+                };
+            };
+            /** @description 새 등록 저장과 읽기 확인 완료 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorRegistrationResult"];
+                };
+            };
+            /** @description 지원하지 않는 센서 또는 연결 설정 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 등록 충돌 또는 수집기·프로필 없음 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 조회 실패 또는 등록 결과 미확인 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 비활성화 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getSensorReadings: {
+        parameters: {
+            query: {
+                device: string;
+                /** @description 특정 측정 항목으로 제한 */
+                resource?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 최근 N개 측정값을 측정 시각 오름차순으로 반환. 미수집은 빈 배열이며 0과 구분한다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorReadings"];
+                };
+            };
+            /** @description 잘못된 조회 조건 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 센서 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 조회 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 비활성화 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getSensorCommands: {
+        parameters: {
+            query: {
+                device: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Core Command에서 조회한 명령. 외부 URL이나 프로토콜 인증 정보는 반환하지 않는다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorCommands"];
+                };
+            };
+            /** @description 센서 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 조회 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 비활성화 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    executeSensorCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensorCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description EdgeX 명령 응답. PUT 응답은 물리 장치 변경 검증을 뜻하지 않는다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorCommandResult"];
+                };
+            };
+            /** @description 지원하지 않는 명령 또는 잘못된 값 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 센서 또는 명령 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치 잠김 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 명령 응답 실패 또는 결과 미확인 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EdgeX 비활성화 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteVirtualDeviceRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 등록 삭제 완료 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VD 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 미해제 또는 실행·작업 참조가 남음 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 저장소 사용 불가 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }

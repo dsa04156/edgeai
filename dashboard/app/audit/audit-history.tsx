@@ -6,6 +6,8 @@ import { ConnectionPanel } from "../components/connection-panel";
 type Audit = components["schemas"]["ManagementAudit"];
 type AuditPage = components["schemas"]["ManagementAuditPage"];
 const operations: Record<string, string> = {
+  deleteProfileVersion: "프로필 버전 삭제", deleteDeviceRegistration: "장치 등록 삭제",
+  deleteVirtualDeviceRegistration: "가상 장치 등록 영구 삭제", executeSensorCommand: "센서 명령 실행",
   publishProfile: "프로필 버전 발행", registerDevice: "장치 등록", updateDevice: "장치 수정", releaseDevice: "장치 해제",
   attachDevice: "장치·노드 연결", openDeviceSession: "장치 세션 시작", reportDeviceObservation: "장치 상태 보고",
   createWorkflow: "워크플로 등록", publishWorkflowVersion: "워크플로 버전 발행", createWorkflowRun: "워크플로 실행 요청",
@@ -18,7 +20,7 @@ function operation(value: Audit) { return operations[value.operation] || (["GET"
 function actor(value: Audit) {
   const person = value.outcome?.actor;
   if (!person) return "확인되지 않음";
-  if (person.type === "UNAUTHENTICATED") return "미인증 요청";
+  if (person.type === "UNAUTHENTICATED") return "계정 없이 접수";
   return person.subjectFormat === "SHA256" ? "계정 식별 해시" : person.subject || "확인되지 않음";
 }
 function result(value: Audit) {
@@ -35,7 +37,7 @@ export function AuditHistory() {
     const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", headers: authorization.startsWith("Basic ") ? { Authorization: authorization } : {} });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
-      throw new Error(response.status === 401 ? "Dashboard 서버의 API 연결 계정을 확인하세요." : response.status === 404 ? "해당 감사 기록을 찾을 수 없습니다." : value.message || "감사 기록을 불러오지 못했습니다.");
+      throw new Error(response.status === 401 ? "API 연결을 확인하세요." : response.status === 404 ? "해당 감사 기록을 찾을 수 없습니다." : value.message || "감사 기록을 불러오지 못했습니다.");
     }
     return response.json();
   }

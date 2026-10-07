@@ -37,6 +37,11 @@ public class ProfileController {
     public ProfileVersionResponse find(@PathVariable ProfileIdentity.Kind kind, @PathVariable String key, @PathVariable String version) {
         return response(service.find(new ProfileIdentity(kind, key, version)));
     }
+    @DeleteMapping("/{key}/versions/{version}")
+    public ResponseEntity<Void> delete(@PathVariable ProfileIdentity.Kind kind, @PathVariable String key, @PathVariable String version) {
+        service.delete(new ProfileIdentity(kind, key, version));
+        return ResponseEntity.noContent().build();
+    }
     private ProfileVersionResponse response(ProfileVersion version) {
         return new ProfileVersionResponse(version.id(), version.identity().kind(), version.identity().key(),
             version.identity().version(), json.decode(version.specJson()), version.digest(), version.createdAt());

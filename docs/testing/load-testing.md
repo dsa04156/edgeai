@@ -4,6 +4,13 @@ M8의 HTTP 관리 경로를 실제 Spring Boot와 PostgreSQL로 측정한다. �
 상세/페이지 조회·재접속을 대상으로 하며 MQTT payload·AI 모델·물리 센서·Dashboard 성능 시험은 아니다.
 [측정 계약](../adr/0057-device-management-load.md)을 따른다.
 
+## 적용 범위와 선행 조건
+
+이 절차는 M8 측정 계약과 당시 검증 환경을 설명합니다. 현재 관리 API의 접근 정책은
+[접근과 요청 보호](../reference/access.md)를 확인하세요. 아래 감사 판정의 미인증 요청 수는
+과거 인증 계약에 해당하며, 현재 접근 정책과 시험 도구의 기대값을 대조한 뒤 실행해야 합니다.
+과거 보고서의 성공을 현재 코드의 부하 시험 통과로 해석하지 않습니다.
+
 ## 실행
 
 프로젝트 `.env`, JDK21, Python3, PostgreSQL과 `psql`이 필요하다. `scripts/lib.sh`의 JDK와

@@ -11,5 +11,6 @@ public interface ProfileRepository {
     Optional<ProfileVersion> find(ProfileIdentity identity);
     Optional<ProfileVersion> find(UUID id);
     List<ProfileVersion> list(ProfileIdentity.Kind kind, String key, int limit, int offset);
+    boolean delete(ProfileIdentity identity);
     record Publication(ProfileVersion version, boolean created) {}
 }

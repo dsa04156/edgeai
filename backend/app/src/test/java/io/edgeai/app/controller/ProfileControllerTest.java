@@ -21,22 +21,30 @@ import static org.mockito.ArgumentMatchers.*;
 class ProfileControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean ProfileService service;
-    @Test void protectsReadsAndWrites() throws Exception {
-        mvc.perform(get("/api/v1/profiles/DEVICE")).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/v1/profiles/DEVICE").with(httpBasic("user", "test-only-unused")).contentType("application/json").content("{}"))
+    @Test void deletingUnusedVersionRequiresCsrfAndReportsReferences() throws Exception {
+        String path = "/api/v1/profiles/SERVICE/example/versions/1.0.0";
+        mvc.perform(delete(path)).andExpect(status().isForbidden());
+        verifyNoInteractions(service);
+        mvc.perform(delete(path).with(csrf())).andExpect(status().isNoContent());
+        doThrow(new io.edgeai.app.exception.ProfileInUseException()).when(service).delete(any());
+        mvc.perform(delete(path).with(csrf())).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("PROFILE_IN_USE"));
+    }
+    @Test void writesRequireCsrf() throws Exception {
+        mvc.perform(post("/api/v1/profiles/DEVICE").contentType("application/json").content("{}"))
             .andExpect(status().isForbidden());
         verifyNoInteractions(service);
     }
     @Test void rejectsUnknownKindAndInvalidPaginationTypes() throws Exception {
-        mvc.perform(get("/api/v1/profiles/UNKNOWN").with(user("test"))).andExpect(status().isBadRequest());
-        mvc.perform(get("/api/v1/profiles/DEVICE?limit=abc").with(user("test"))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/profiles/UNKNOWN")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/profiles/DEVICE?limit=abc")).andExpect(status().isBadRequest());
     }
     @Test void exposesStableErrorsWithoutStorageDetails() throws Exception {
         when(service.publish(any(), anyString())).thenThrow(new ProfileConflictException());
-        mvc.perform(post("/api/v1/profiles/DEVICE").with(user("test")).with(csrf()).contentType("application/json").content("{}"))
+        mvc.perform(post("/api/v1/profiles/DEVICE").with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PROFILE_CONFLICT"));
         when(service.list(any(), any(), anyInt(), anyInt())).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("secret connection details"));
-        mvc.perform(get("/api/v1/profiles/DEVICE").with(user("test")))
+        mvc.perform(get("/api/v1/profiles/DEVICE"))
             .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("PROFILE_STORE_UNAVAILABLE"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret"))));
     }

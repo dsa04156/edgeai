@@ -45,6 +45,12 @@ public final class JdbcDeviceRepository implements DeviceRepository {
     public List<Device> list(int limit,int offset) { return jdbc.query(SELECT+" ORDER BY d.device_key COLLATE \"C\" LIMIT ? OFFSET ?",DEVICE,limit,offset); }
     public void rename(UUID id,String name,Instant now) { jdbc.update("UPDATE edgeai.device SET display_name=?,revision=revision+1,updated_at=? WHERE id=?",name,Timestamp.from(now),id); }
     public void release(UUID id,Instant now) { jdbc.update("UPDATE edgeai.device SET state='RELEASED',revision=revision+1,updated_at=? WHERE id=?",Timestamp.from(now),id); }
+    public void delete(UUID id) {
+        jdbc.update("DELETE FROM edgeai.device_observation WHERE device_id=?",id);
+        jdbc.update("DELETE FROM edgeai.device_session WHERE device_id=?",id);
+        jdbc.update("DELETE FROM edgeai.device_attachment WHERE device_id=?",id);
+        jdbc.update("DELETE FROM edgeai.device WHERE id=?",id);
+    }
     public boolean hasVirtualDeviceBindings(UUID id) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
             SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding b WHERE b.device_id=? AND

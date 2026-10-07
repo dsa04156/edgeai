@@ -1,19 +1,18 @@
-import { SectionNav } from "../components/section-nav";
+import { PageHeading } from "../components/page-heading";
+import PlatformService from "./platform-service/App";
+import { WorkflowConsole } from "./workflow-console";
 import { notFound } from "next/navigation";
 import { workflowsEnabled } from "../../lib/features";
 import Link from "next/link";
-import { WorkflowConsole } from "./workflow-console";
 
 export const dynamic = "force-dynamic";
-
-export default function Workflows() {
+export default async function Workflows({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (!workflowsEnabled()) notFound();
-  return <main>
-    <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">Edge AI Platform</span></header>
-    <SectionNav current="/workflows" />
-    <section><p className="eyebrow">WORKFLOW & EXECUTION</p><h1>작업의 순서를 정의하고 실행을 추적합니다.</h1>
-      <p className="intro">서비스를 DAG로 연결해 버전을 발행하고, 실행 요청과 작업별 시도를 관리합니다. 발행된 정의와 실행 이력은 별도로 보존합니다.</p></section>
-    <WorkflowConsole view="builder" />
-    <footer>서버의 실행 설정에 따라 작업을 배치합니다. 작업 상세에서 실제 상태와 검증·확정된 결과를 확인하세요.</footer>
+  const query = await searchParams;
+  const modules = query.mode !== "dds" || !!query.service || !!query.vd;
+  return <main id="main-content" className="management-page workflows-page">
+    <PageHeading eyebrow="ORCHESTRATION / BUILDER" title="서비스 워크플로" description={modules ? "SERVICE 모듈로 DAG를 발행하고, 실행 위치를 정해 Run · Task · 결과를 관리합니다." : "DDS 워크플로를 구성하고 Buildx · Gitea · Argo CD로 배포합니다."} />
+    <nav className="section-nav" aria-label="워크플로 경로"><Link href="/workflows" aria-current={modules ? "page" : undefined}>DAG 서비스 실행</Link><Link href="/workflows?mode=dds" aria-current={!modules ? "page" : undefined}>DDS · GitOps 배포</Link></nav>
+    {modules ? <WorkflowConsole view="builder" /> : <PlatformService />}
   </main>;
 }

@@ -1,19 +1,12 @@
-import { SectionNav } from "../components/section-nav";
-import Link from "next/link";
+import { PageHeading } from "../components/page-heading";
 import { ProfileRegistry } from "./profile-registry";
+import { workflowsEnabled } from "../../lib/features";
 
 export const dynamic = "force-dynamic";
-
 export default function Profiles() {
-  return <main>
-    <header><Link className="brand" href="/">EdgeAI</Link><span className="stage">Edge AI Platform</span></header>
-    <SectionNav current="/profiles" />
-    <section>
-      <p className="eyebrow">PROFILE REGISTRY</p>
-      <h1>실행의 기준을 버전으로 남깁니다.</h1>
-      <p className="intro">장치·서비스·가상 디바이스의 규격을 등록하고 조회합니다. 발행된 내용은 보존되며, 변경할 때는 새 버전을 등록합니다.</p>
-    </section>
-    <ProfileRegistry />
-    <footer>등록된 규격의 실행 호환성과 실장비 동작은 아직 검증하지 않습니다.</footer>
+
+  return <main id="main-content" className="management-page profiles-page">
+    <PageHeading eyebrow="MANAGEMENT / PROFILES" title="프로필 관리" description="DEVICE 장치 규격, SERVICE 실행 모듈, VD 템플릿을 발행합니다. 발행된 버전은 유지하고 변경은 새 버전으로 등록합니다." />
+    <ProfileRegistry workflows={workflowsEnabled()} />
   </main>;
 }

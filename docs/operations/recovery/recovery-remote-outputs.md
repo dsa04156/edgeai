@@ -1,8 +1,16 @@
 # Remote 복구 결과 파일 회수와 독립 검증
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [제공자 차단](recovery-remote-fence.md) 후 복원 DB에 아직 확정하지 못한 성공 파일을
 개인 복구 묶음으로 보존한다. [실행 정리](recovery-remote-retirement.md) 전후에 사용할 수 있으며,
 명령 자체가 실제 DB·TLS 전체 이력과 선택한 binding을 다시 대조한다.
+
+## 실행
 
 ```bash
 bash scripts/ops/recovery-remote-outputs.sh recover \
@@ -19,6 +27,8 @@ bash scripts/ops/recovery-remote-outputs.sh recover \
 
 bash scripts/ops/recovery-remote-outputs.sh verify --input /private/remote-results-new
 ```
+
+## 결과 확인과 제한
 
 `recover`의 DB 설정은 `.env`에서 읽으며 Compose는 `--transport compose`를 추가한다.
 원래 binding의 endpoint·CA bytes·provider key와 같은 설치/복구 UUID를 사용한다.

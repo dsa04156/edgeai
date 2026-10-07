@@ -1,7 +1,15 @@
 # 복원 DB의 Kubernetes 실행 정리
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [실행 중지](recovery-producer-stop.md)로 종료 Pod와 생성 차단을 보존한 뒤 사용한다.
 이 명령은 실제 Kubernetes를 다시 조회하고 복원 DB에 확인한 종료 사실만 반영한다.
+
+## 실행
 
 ```bash
 bash scripts/ops/retire-recovery-kubernetes.sh \
@@ -14,6 +22,8 @@ bash scripts/ops/retire-recovery-kubernetes.sh \
   --restore-report /private/restore/restore-report.json \
   --output /private/kubernetes-retirement-new
 ```
+
+## 결과 확인과 제한
 
 DB 접속은 `.env`를 사용하며 Compose는 `--transport compose`를 추가한다. 매번 새 출력
 디렉터리가 필요하다. 입력 보고서는0600 개인 파일이어야 하며 intent/SQL/결과도 개인 파일로

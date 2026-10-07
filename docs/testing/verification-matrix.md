@@ -1,28 +1,31 @@
-# 검증 기준
+# 단계별 검증 범위
+
+이 표는 단계별 검사 범위이며 최신 실행 결과가 아닙니다. 현재 명령 선택은 [테스트 안내](commands.md),
+사용자 기능은 [지원 범위](../reference/support.md)를 기준으로 합니다. 일부 과거 E2E는 현재 화면·접근 방식에 맞춘 별도 정비가 필요합니다.
 
 | ID | 명령 | 수용 기준 | 범위 |
 |---|---|---|---|
 | M0-ENV | scripts/dev/preflight.sh local | 도구 존재·버전 확인 | local |
-| M0-UNIT | scripts/test/test-unit.sh | 비인증 401, 인증 metadata 계약 | local |
+| M0-UNIT | scripts/test/test-unit.sh | 관리 metadata 계약·CSRF 경계 | local |
 | M0-CONTRACT | scripts/test/test-contract.sh | OpenAPI 타입 생성 일치·API 검증 | local |
 | M0-DB | scripts/test/test-integration.sh | 실제 PostgreSQL의 Flyway 성공 | DB 필요 |
 | M0-UI | scripts/test/test-ui.sh | lint/typecheck/build + desktop/mobile 표시 | local browser |
-| M0-HEALTH | scripts/test/test-health.sh | DB→API→UI UP, API 인증 401/200 | 실행 중인 서비스 |
+| M0-HEALTH | scripts/test/test-health.sh | DB→API→UI UP, API 연결·현재 접근 계약 | 실행 중인 서비스 |
 | M0-HEALTH-RECOVERY | scripts/test/test-health-stack.sh compose (로컬 PG 대안: local) | DB 중지 시 API/UI 503, DB 재시작 시 같은 앱 프로세스 UP | 프로젝트 전용 DB |
 | M0-INFRA | scripts/test/test-infra.sh | PG ready, MQTT 실제 pub/sub | Docker 필요 |
 | M0-STORAGE | scripts/dev/dev-storage.sh + scripts/test/test-storage.sh | 공식 MinIO source build, 실제 S3 PUT/stat/GET byte 일치·SHA-256 metadata·비인증 403 | storage profile |
 | M1-UNIT | scripts/test/test-unit.sh | JSON 정규화·숫자 정밀도·중복 필드·크기/깊이/Unicode·인증/CSRF | local |
-| M1-CONTRACT | scripts/test/test-contract.sh | 생성 타입 일치, HTTP 오류/인증 계약 | local |
+| M1-CONTRACT | scripts/test/test-contract.sh | 생성 타입 일치, HTTP 오류·CSRF 계약 | local |
 | M1-DB | scripts/test/test-integration.sh | 3종 CRUD 중 생성/조회, 동시 재등록/충돌, 불변 trigger·UNIQUE, paging/filter | 실제 PostgreSQL |
 | M1-UI | scripts/test/test-profiles-stack.sh local 또는 compose | 실제 DB/API와 desktop/mobile 등록·재등록·409·새 버전·상세·인증·정밀도 | 프로젝트 전용 DB, 빌드된 UI |
-| SWAGGER-CONTRACT | scripts/test/test-contract.sh | 문서/자산 인증401, 렌더 자산, packaged YAML과 원본 byte 일치 | local |
+| SWAGGER-CONTRACT | scripts/test/test-contract.sh | 문서/자산 계정 없이 조회, 렌더 자산, packaged YAML과 원본 byte 일치 | local |
 | SWAGGER-UI | scripts/test/test-profiles-stack.sh | desktop/mobile 실제 Swagger 렌더·자동 CSRF POST201·정확한 계약·외부 요청 없음 | 실제 DB/API/browser |
 | M2-UNIT | scripts/test/test-unit.sh | 60초 신선도, 입력 제한, 모든 쓰기 CSRF, Node pagination·실패·HTTP proxy | local |
 | M2-DB | scripts/test/test-integration.sh | 재등록/충돌, 동시 생성·재접속·보고, session fence, FK·활성 UNIQUE·attachment 이력 | 실제 PostgreSQL |
 | M2-UI | scripts/test/test-profiles-stack.sh local 또는 compose | PC·모바일 등록/수정/보고/재접속/해제, 이전 session 409, 큰 숫자 보존, DB 장애·복구 | 실제 DB/API/browser |
 | M2-NODE | scripts/test/test-node-inventory.sh <명시적-context> | 실제 Node UID·메타데이터 대조 및 Ready Node에 합성 장치 연결/중복/해제 | 읽기 가능한 실제 Kubernetes, 로컬 DB, 빌드된 UI |
-| M2-DEPLOY | scripts/internal/smoke-deployment.py --through device | 배포 HTTP 경유 장치 lifecycle, CSRF, 201/200/409, Node 조회 | 실행 중인 API/UI·환경 변수 인증 |
-| M3-UNIT | scripts/test/test-unit.sh | DAG cycle/self/reference/port 검증, JSON 정밀도, 인증·CSRF·Idempotency-Key 필수 | local |
+| M2-DEPLOY | scripts/internal/smoke-deployment.py --through device | 배포 HTTP 경유 장치 lifecycle, CSRF, 201/200/409, Node 조회 | 실행 중인 API/UI·환경 설정 |
+| M3-UNIT | scripts/test/test-unit.sh | DAG cycle/self/reference/port 검증, JSON 정밀도, 요청 보호·CSRF·Idempotency-Key 필수 | local |
 | M3-DB | scripts/test/test-integration.sh | seal·FK·활성 Attempt UNIQUE, 동시 발행/실행 1개, Run/Task 취소 경쟁·독립 분기·재전송 | 실제 PostgreSQL |
 | M3-UI | scripts/test/test-profiles-stack.sh local 또는 compose | DAG 발행/재발행/409, Run 생성/재전송/새 키, Attempt·취소 전파, PC·모바일·DB 장애 복구 | 실제 DB/API/browser |
 | M3-DEPLOY | scripts/internal/smoke-deployment.py | 이미지 경유 불변 DAG·Run/Task/Attempt·취소·재전송, 큰 숫자·인증/CSRF | 실행 중인 API/UI |
@@ -69,7 +72,7 @@
 | M7-PUBLIC-RETRY | scripts/test/test-integration.sh + scripts/test/test-ui.sh | retry 정책 검증·순서 정규화·중복/충돌·PC/모바일 정책 입력과 재전송 | 공개 MVC/실제 PG23개, UI HTTP fixture38개; m7-public-stream-retry.md |
 | M7-KUBERNETES-RETRY | scripts/test/test-stream-kubernetes.sh <명시적-context> | 공개 retry·실제 Job 유실·이전 Pod/권한 회수·새 Attempt2개 상태9·동일 Device 자동 재연결·결과37 | 수정 JAR+CI-tested Runner 실제 클러스터4개 시나리오/Pod13개/S3파일9개 PASS; 새 API 이미지 및 최종 처리 장애와 구분, m7-public-stream-retry.md |
 | M7-KUBERNETES-FINALIZER | scripts/test/test-stream-kubernetes.sh <명시적-context> | 허가 뒤 실제 Job 유실·단독 새 Pod/Attempt·원본 grant/checkpoint·peer Result 보존·계산 재실행 없음 | 현재 JAR+CI-tested Runner 전체5개 시나리오/Pod17개/S3파일12개 PASS; 새 API 이미지와 구분, m7-finalizer-kubernetes.md |
-| M7-API-TLS | scripts/test/test-unit.sh + scripts/test/test-integration.sh + scripts/test/test-stream-kubernetes.sh <context> | 기본 비활성·설정 오류·실제 PEM 시작 실패·HTTP/HTTPS 인증·CSRF·신뢰/hostname·추가 HTTPS의 스트림/복구 | 단위105·PG190·실제 K8 5개/Pod17개/S3파일12개 PASS; 운영 활성화와 구분, m7-native-api-tls.md |
+| M7-API-TLS | scripts/test/test-unit.sh + scripts/test/test-integration.sh + scripts/test/test-stream-kubernetes.sh <context> | 기본 비활성·설정 오류·실제 PEM 시작 실패·HTTP/HTTPS 요청 보호·CSRF·신뢰/hostname·추가 HTTPS의 스트림/복구 | 단위105·PG190·실제 K8 5개/Pod17개/S3파일12개 PASS; 운영 활성화와 구분, m7-native-api-tls.md |
 | M7-PERSISTENT-TLS | scripts/internal/test-stream-bootstrap.py --context <context> + scripts/internal/test-stream-platform-broker.py --context <context> | 실제 불변 신원 재실행/복구6개·인증/CA 거절·실제 새 broker Pod의 동일PVC/역할 유지 | 실제클러스터·d3797d6 CI37137184323 새 kind 게이트 PASS; m7-persistent-stream-platform.md |
 | M7-DEPLOYED-DEMO | scripts/demo/demo-multidevice.sh <context> + scripts/internal/test-stream-minio-tls.py --context <context> | 실제 배포의 API/DB/TLS MQTT/MinIO·AUTO/NODE/cancel·체크포인트·Pod/producer·S3 고정버전 | 실제 배포3개/8Pods/6S3·기존10파일/두PVC 보존, d3797d6 CI37137184323 전체 kind PASS; m7-deployed-multidevice-demo.md |
 | M7-DEVICE-DISCOVERY | scripts/test/test-integration.sh + scripts/test/test-runner.sh | Device 토큰·불변 세션 고정·다른 Run404·교체401/409·fanout 페이지·비밀 필드 거절·lease 불변 | 실제 PostgreSQL/MVC·실제 SDK/HTTP; m7-device-route-discovery.md |

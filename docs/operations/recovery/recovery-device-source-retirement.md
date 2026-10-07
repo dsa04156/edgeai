@@ -1,8 +1,16 @@
 # 원본 장치 source 종료와 최종 데이터 보존
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 같은 호스트의 원본 `DeviceSource` journal을 종료한다. 원본 source와 격리 복원본은
 동일 Device Session·출력 경로·generation이어야 한다. Linux 로컬 파일 잠금을 사용하며
 디렉터리0700/파일0600과 현재 사용자 소유를 요구한다. 원격 장비의 물리 종료 명령은 아니다.
+
+## 실행
 
 ```bash
 bash scripts/ops/retire-device-source.sh \
@@ -12,6 +20,8 @@ bash scripts/ops/retire-device-source.sh \
   --timeout 30 \
   --output /private/new-device-retirement
 ```
+
+## 결과 확인과 제한
 
 명령은 원본 `journal/retirement.json`을 영속 기록한다. 이 버전의 SDK는 실행 중 marker를
 확인해 연결과 journal을 닫으며 원래 journal의 재시작도 거절한다. 명령은 원래 owner.lock을

@@ -1,0 +1,85 @@
+deviceList:
+- name: env-sensehat-temperature-01
+  profileName: etri-sensehat-temperature
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: temperature
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime
+- name: env-sensehat-humidity-01
+  profileName: etri-sensehat-humidity
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: humidity
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime
+- name: env-sensehat-pressure-01
+  profileName: etri-sensehat-pressure
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: pressure
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime
+- name: imu-sensehat-compass-01
+  profileName: etri-sensehat-compass
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: compass
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime
+- name: imu-sensehat-orientation-01
+  profileName: etri-sensehat-orientation
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: orientation
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime
+- name: imu-sensehat-gyroscope-01
+  profileName: etri-sensehat-gyroscope
+  protocols:
+    i2c:
+      Bus: /dev/i2c-1
+      DeviceID: sensehat-001
+      ResourceGroup: gyroscope
+  tags:
+    physicalDeviceId: sensehat-001
+    nodeName: etri-dev0003-raspi5
+  labels:
+  - physical-sensor
+  - edgeai
+  description: Physical sensor input for EdgeAI; not a VirtualDevice runtime

@@ -1,0 +1,23 @@
+apiVersion: v3
+name: etri-arduino-light
+manufacturer: Arduino
+model: Arduino light sensor
+labels:
+- arduino
+- serial
+- physical-sensor
+- edgeai
+description: Read-only light channel on the shared Arduino serial connection
+deviceResources:
+- description: Raw light sensor value
+  name: light_raw
+  isHidden: false
+  properties:
+    valueType: Int32
+    readWrite: R
+    units: raw
+deviceCommands:
+- name: light
+  readWrite: R
+  resourceOperations:
+  - deviceResource: light_raw

@@ -1,8 +1,16 @@
 # 장치 복구 데이터와 원본 브로커 권한 확인
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [journal/DB 대조](recovery-device-journal.md), [고정 객체 백업](../backup/storage-backup.md),
 [원본 MQTT 차단](recovery-mqtt-fence.md)을 연결해 복원 입력을 확인한다. 매번 실제 저장소와
 브로커를 다시 조회하며 과거 성공 보고서만으로 통과시키지 않는다.
+
+## 실행
 
 ```bash
 EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
@@ -19,6 +27,8 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
   --timeout 60 \
   --output /private/new-device-readiness
 ```
+
+## 결과 확인과 제한
 
 PostgreSQL과 replica 접속 환경은 [DB/S3 참조 대조](recovery-references.md)와 같다.
 `EDGEAI_BACKUP_STORAGE_URL/USER/PASSWORD`, 필요하면 `EDGEAI_BACKUP_CA_FILE`을 사용한다.

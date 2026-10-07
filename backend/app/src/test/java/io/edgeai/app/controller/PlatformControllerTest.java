@@ -16,8 +16,8 @@ class PlatformControllerTest {
     @Autowired MockMvc mvc;
 
     @Test
-    void anonymousRequestsCannotReadPlatformMetadata() throws Exception {
-        mvc.perform(get("/api/v1/platform")).andExpect(status().isUnauthorized());
+    void anonymousRequestsCanReadPlatformMetadata() throws Exception {
+        mvc.perform(get("/api/v1/platform")).andExpect(status().isOk());
     }
 
     @Test

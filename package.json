@@ -12,7 +12,7 @@
     "typecheck": "pnpm --filter @edgeai/dashboard typecheck",
     "lint": "pnpm --filter @edgeai/dashboard lint",
     "test:ui": "pnpm --filter @edgeai/dashboard test:e2e",
-    "contract:generate": "openapi-typescript contracts/openapi/platform-api.yaml -o dashboard/lib/api-schema.d.ts"
+    "contract:generate": "openapi-typescript contracts/openapi/platform-api.yaml -o dashboard/lib/api-schema.d.ts && openapi-typescript contracts/openapi/platform-service-api.json -o dashboard/lib/platform-service-schema.d.ts"
   },
   "devDependencies": {
     "minio": "8.0.7",

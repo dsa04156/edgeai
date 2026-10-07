@@ -20,15 +20,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ResultControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean ResultService results;
-    @Test void authenticatedEmptyResultIsDistinctFromAuthenticationAndInvalidInput()throws Exception{
+    @Test void anonymousEmptyResultIsDistinctFromInvalidInput()throws Exception{
         UUID id=UUID.randomUUID();when(results.results(id)).thenReturn(new TaskResultsResponse(id,List.of()));
-        mvc.perform(get("/api/v1/tasks/"+id+"/results")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/v1/tasks/"+id+"/results").with(user("fixture"))).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
-        mvc.perform(get("/api/v1/tasks/not-a-uuid/results").with(user("fixture"))).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TASK_ID"));
+        mvc.perform(get("/api/v1/tasks/"+id+"/results")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        mvc.perform(get("/api/v1/tasks/not-a-uuid/results")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TASK_ID"));
     }
     @Test void unavailableDatabaseIsNotReportedAsAnEmptySuccess()throws Exception{
         UUID id=UUID.randomUUID();when(results.results(id)).thenThrow(new DataAccessResourceFailureException("private connection details"));
-        mvc.perform(get("/api/v1/tasks/"+id+"/results").with(user("fixture"))).andExpect(status().isServiceUnavailable())
+        mvc.perform(get("/api/v1/tasks/"+id+"/results")).andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.code").value("RESULT_STORE_UNAVAILABLE"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("private connection details"))));
     }
@@ -36,7 +35,7 @@ class ResultControllerTest {
         UUID task=UUID.randomUUID(),allocation=UUID.randomUUID();
         var result=new TaskResultsResponse.Result(UUID.randomUUID(),task,UUID.randomUUID(),UUID.randomUUID(),2,null,"sha256:"+"a".repeat(64),java.time.Instant.now(),List.of(),allocation,"SYNTHETIC",null);
         when(results.results(task)).thenReturn(new TaskResultsResponse(task,List.of(result)));
-        mvc.perform(get("/api/v1/tasks/"+task+"/results").with(user("fixture"))).andExpect(status().isOk())
+        mvc.perform(get("/api/v1/tasks/"+task+"/results")).andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].producerPodUid").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.items[0].remoteAllocationId").value(allocation.toString()))
             .andExpect(jsonPath("$.items[0].remoteSourceMode").value("SYNTHETIC"));

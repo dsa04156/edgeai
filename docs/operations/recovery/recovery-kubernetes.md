@@ -1,7 +1,15 @@
 # 복원 DB와 현재 Kubernetes 실행 대조
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 먼저 [새 DB 복원](../backup/postgres-backup.md)과 [DB/S3 참조 대조](recovery-references.md)를 수행한다.
 일반 API와 worker를 복원 DB에 연결하지 않는다. 아래 명령은 실행을 종료하거나 재가동하지 않는다.
+
+## 실행
 
 ```bash
 bash scripts/ops/inspect-recovery-kubernetes.sh \
@@ -11,6 +19,8 @@ bash scripts/ops/inspect-recovery-kubernetes.sh \
   --restore-report <복원-diagnostics>/restore-report.json \
   --output .tools/recovery-kubernetes-<새-점검명>
 ```
+
+## 결과 확인과 제한
 
 namespace를 여러 번 지정할 수 있다. Compose PostgreSQL을 조회하면 `--transport compose`를
 추가한다. native 클라이언트 경로는 `--pg-bin`으로 선택한다. DB 인증은 프로젝트 `.env`를 사용하고

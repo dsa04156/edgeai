@@ -1,9 +1,17 @@
 # 복구 중 원본 MQTT 접근 차단
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 선택한 전용 브로커에서 기존 API의 관리 자격을 교체하고 모든 EdgeAI Device/Task 계정을
 비활성화한다. **기존 관리자·장치·Task 연결이 끊어지고 재접속이 거절되는 작업**이다.
 [원본 DB 차단](recovery-database-fence.md)과 [실행 중지](recovery-producer-stop.md)에 사용한
 복구 UUID를 유지하고 원본 브로커의 endpoint·인증서·설정 digest를 확인한다.
+
+## 실행
 
 ```bash
 EDGEAI_STREAM_PYTHON=<고정-Paho-가상환경>/bin/python \
@@ -18,6 +26,8 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-가상환경>/bin/python \
   --timeout 60 \
   --output .tools/recovery-mqtt-result-<새-실행명>
 ```
+
+## 결과 확인과 제한
 
 의존성은 `runner/requirements-stream.txt`에 고정한다. hostname은 인증서 SAN과 일치해야
 한다. 인증서 SHA256은 PEM 텍스트가 아닌 DER 인증서의 해시이며, broker digest는 해당

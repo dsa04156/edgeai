@@ -1,5 +1,11 @@
 # 회수한 Remote 파일을 복구 저장소에 등록
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 [Remote 파일 회수](recovery-remote-outputs.md)의 완료 bundle과 [S3 버전 백업](../backup/storage-backup.md)의
 manifest를 사용한다. 대상은 백업 manifest의 별도 MinIO 설치이며 기존 artifact 버킷의
 versioning이 Enabled여야 한다. 기존 버킷/설정/객체를 삭제하거나 바꾸지 않는다.
@@ -12,6 +18,8 @@ versioning이 Enabled여야 한다. 기존 버킷/설정/객체를 삭제하거�
 | EDGEAI_BACKUP_STORAGE_USER / PASSWORD | 대상 저장소 조회·조건부 PUT·설치 ID 조회 권한을 가진 자격 |
 | EDGEAI_BACKUP_CA_FILE | 대상 CA 파일. 생략하면 시스템 CA 사용 |
 | EDGEAI_BACKUP_STORAGE_REGION | 기본 us-east-1 |
+
+## 실행
 
 ```bash
 bash scripts/ops/recovery-remote-storage.sh publish \
@@ -29,6 +37,8 @@ bash scripts/ops/recovery-remote-storage.sh verify \
   --receipt /private/remote-publication-new/publication.json \
   --output /private/remote-publication-check-new
 ```
+
+## 결과 확인과 제한
 
 이 wrapper는 `.env`를 자동으로 읽지 않는다. 위의 명시적 복구 저장소 환경을 사용하며 DB/
 Remote 자격은 필요 없다. `--timeout`은 전체 대상 저장소 통신의10..3600초 제한(기본300)이다.

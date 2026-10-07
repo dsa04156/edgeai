@@ -58,4 +58,12 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     public void close(UUID bindingId,long revision,Instant now) {
         jdbc.update("UPDATE edgeai.vd_source_binding SET closed_revision=?,closed_at=? WHERE id=? AND closed_at IS NULL",revision,Timestamp.from(now),bindingId);
     }
+    public boolean canDeleteRegistration(UUID id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT edgeai.vd_registration_deletable(?)",Boolean.class,id));
+    }
+    public void deleteRegistration(UUID id) {
+        jdbc.queryForList("SELECT id FROM edgeai.virtual_device WHERE id=? FOR UPDATE",id);
+        jdbc.update("DELETE FROM edgeai.vd_source_binding WHERE vd_id=?",id);
+        jdbc.update("DELETE FROM edgeai.virtual_device WHERE id=?",id);
+    }
 }

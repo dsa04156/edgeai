@@ -12,6 +12,7 @@ export function HardwareProfileFields({ nodes, value, onChange }: {
   const [nodeId, setNodeId] = useState("");
   const [resource, setResource] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [pinNode, setPinNode] = useState(false);
   const [error, setError] = useState("");
   const node = nodes.find(n => n.id === nodeId);
   function apply() {
@@ -26,21 +27,24 @@ export function HardwareProfileFields({ nodes, value, onChange }: {
       const requests = { cpu: "100m", memory: "256Mi", ...resources?.requests };
       const limits = { cpu: "1", memory: "1Gi", ...resources?.limits };
       if (resource) { Object.assign(requests, { [resource]: String(quantity) }); Object.assign(limits, { [resource]: String(quantity) }); }
+      const nodeSelector = { ...(spec.nodeSelector as Record<string, string> || {}), "kubernetes.io/arch": node.architecture };
+      if (pinNode) Object.assign(nodeSelector, { "kubernetes.io/hostname": node.name });
+      else delete (nodeSelector as Record<string, string>)["kubernetes.io/hostname"];
       const next = { ...spec, resources: { requests, limits },
-        platform: { os: "linux", architectures: [node.architecture] },
-        nodeSelector: { ...(spec.nodeSelector as Record<string, string> || {}),
-          "kubernetes.io/hostname": node.name, "kubernetes.io/arch": node.architecture } };
+        platform: { ...(spec.platform as object || {}), os: node.operatingSystem, architectures: [node.architecture] }, nodeSelector };
       onChange(stringify(next, null, 2) || ""); setError("");
     } catch (e) { setError(e instanceof Error ? e.message : "SERVICE JSON 규격을 확인하세요."); }
   }
-  return <details className="hardware-profile"><summary>실제 GPU·NPU 노드에 서비스 연결</summary>
+  return <details className="hardware-profile"><summary>관측 장비로 실행 요구사항 설정</summary>
     <p className="hint">서비스 이미지의 아키텍처와 장비용 라이브러리를 확인한 뒤 자원을 선택하세요. 등록된 자원 총량이며 현재 여유량은 아닙니다.</p>
-    <div className="form-row"><label>실행 노드<select value={nodeId} onChange={e => { setNodeId(e.target.value); setResource(""); setQuantity(1); }}>
+    <div className="form-row"><label>실행 노드<select aria-label="실행 노드" value={nodeId} onChange={e => { setNodeId(e.target.value); setResource(""); setQuantity(1); }}>
       <option value="">노드 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {n.architecture} · {hardwareLabel(n)}</option>)}
-    </select></label><label>요청할 GPU·NPU<select value={resource} onChange={e => setResource(e.target.value)}>
+    </select></label><label>요청할 GPU·NPU<select aria-label="요청할 GPU·NPU" value={resource} onChange={e => setResource(e.target.value)}>
       <option value="">기존 자원 요청 유지</option>{node && accelerators(node).map(([key, count]) => <option key={key} value={key}>{acceleratorNames[key] || key} · 총 {count}</option>)}
     </select></label><label>요청 수량<input type="number" min={1} max={node && resource ? Number(node.allocatable[resource]) : 1} value={quantity} disabled={!resource} onChange={e => setQuantity(Number(e.target.value))} /></label></div>
-    <button type="button" disabled={!node} onClick={apply}>선택한 장비·자원을 JSON에 반영</button>
+    <label className="checkbox-row"><input type="checkbox" checked={pinNode} onChange={event => setPinNode(event.target.checked)} /> 이 노드로 실행 위치 제한</label>
+    <p className="hint">선택하지 않으면 호환 자원·아키텍처만 반영하고 기존 hostname 제한을 해제합니다. 최종 배치는 kube-scheduler가 결정합니다. 실행 시 NODE 정책으로도 위치를 지정할 수 있습니다.</p>
+    <button type="button" disabled={!node} onClick={apply}>실행 요구사항 반영</button>
     {error && <p className="error" role="alert">{error}</p>}
   </details>;
 }

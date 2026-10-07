@@ -1,8 +1,16 @@
 # 복원 DB와 참조 Remote 이력 점검
 
+> **심화 운영 절차** — 격리된 복원 환경에서 사용하는 구성 요소별 절차입니다.
+> 적용할 schema·대상 신원·선행 보고서는 아래 조건을 따릅니다. 이 명령의 성공만으로 서비스를 재가동하지 않습니다.
+> 전체 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
+## 목적과 선행 조건
+
 먼저 [Remote 차단 절차](recovery-remote-fence.md)로 동일 설치/복구 ID의 차단과 계산 종료를
 확인한다. [DB 복원](../backup/postgres-backup.md)의 새 `edgeai_restore_*` DB는 활성화하지 않는다.
 이번 명령은 제공자와 DB를 읽기만 하며, 누락을 새 작업으로 채우거나 이력을 변경하지 않는다.
+
+## 실행
 
 ```bash
 bash scripts/ops/inspect-recovery-remote.sh \
@@ -17,6 +25,8 @@ bash scripts/ops/inspect-recovery-remote.sh \
   --recovery-token-file /private/recovery.token \
   --output /private/remote-inventory-new
 ```
+
+## 결과 확인과 제한
 
 로컬 DB 설정은 `.env`에서 읽는다. Compose PostgreSQL은 `--transport compose`를 추가한다.
 기존 Run/Attempt에 고정한 endpoint·CA 파일 bytes·provider key를 그대로 사용한다. 인증서

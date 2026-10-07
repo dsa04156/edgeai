@@ -18,8 +18,8 @@ class SwaggerUiTest {
         for (String path : new String[]{"/swagger-ui/index.html", "/openapi.yaml", "/stream-openapi.yaml", "/swagger-ui/assets/swagger-ui-bundle.js"})
             mvc.perform(get(path)).andExpect(status().isOk());
     }
-    @Test void managementApiStillRequiresAuthentication() throws Exception {
-        mvc.perform(get("/api/v1/platform")).andExpect(status().isUnauthorized());
+    @Test void managementApiIsPublic() throws Exception {
+        mvc.perform(get("/api/v1/platform")).andExpect(status().isOk());
     }
     @Test void servesPackagedUiAndTheReviewedContract() throws Exception {
         mvc.perform(get("/swagger-ui.html"))

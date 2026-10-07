@@ -1,5 +1,7 @@
 # 장치 journal 암호화 백업·격리 복원
 
+이 문서는 대상별 백업·격리 복원 절차입니다. 다른 보호 대상과 복구 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
 `DeviceSource`의 source 디렉터리(`journal/journal.sqlite`, 선택적 `completion.json`)를
 대상으로 한다. 단일 Device Session의 LOCAL 출력 journal만 지원한다. Task의 외부
 checkpoint는 기존 S3/서버 확정 절차를 사용한다.

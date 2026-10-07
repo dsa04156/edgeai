@@ -1,5 +1,7 @@
 # 고정 버전을 보존하는 MinIO 백업
 
+이 문서는 대상별 백업·격리 복원 절차입니다. 다른 보호 대상과 복구 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
 `backup-storage.sh`는 source의 현재/이전 파일 버전을 별도 MinIO에 복제하고 버전 ID·길이·
 SHA-256을 대조한다. `verify-storage-backup.sh`는 source가 없어도 backup의 같은 버전을 읽어
 검증한다. [DB 백업](postgres-backup.md)과 연결한 전체 서비스 복구 판정은 아직 별도다.

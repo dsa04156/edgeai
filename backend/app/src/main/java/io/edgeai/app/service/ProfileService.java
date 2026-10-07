@@ -25,6 +25,14 @@ public class ProfileService {
         return result;
     }
     public ProfileVersion find(ProfileIdentity identity) { return repository.find(identity).orElseThrow(ProfileNotFoundException::new); }
+    @Transactional
+    public void delete(ProfileIdentity identity) {
+        try {
+            if (!repository.delete(identity)) throw new ProfileNotFoundException();
+        } catch (org.springframework.dao.DataIntegrityViolationException used) {
+            throw new io.edgeai.app.exception.ProfileInUseException();
+        }
+    }
     public List<ProfileVersion> list(ProfileIdentity.Kind kind, String key, int limit, int offset) {
         if (key != null) ProfileIdentity.validateKey(key);
         if (limit < 1 || limit > 100 || offset < 0 || offset > 1000000)

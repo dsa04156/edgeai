@@ -1,5 +1,7 @@
 # PostgreSQL 백업·복원 실행
 
+이 문서는 대상별 백업·격리 복원 절차입니다. 다른 보호 대상과 복구 순서는 [백업과 복구 안내](../backup-and-recovery.md)를 확인하세요.
+
 이 명령은 DB를 백업하고 **새 DB에 복원**한다. MinIO의 파일/버전, Kubernetes Secret,
 외부 제공자 인증, broker·장치 journal과 실행 중 작업까지 복구하는 절차는
 [M9의 남은 범위](../../requirements/m9-requirements.md)다. 기존 API의 DB 연결이나 worker를 변경하지 않는다.

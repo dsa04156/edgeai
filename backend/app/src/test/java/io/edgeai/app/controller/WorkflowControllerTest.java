@@ -19,23 +19,21 @@ class WorkflowControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean WorkflowService workflows;
     @MockitoBean ExecutionService executions;
-    @Test void anonymousRequestsAndEveryCommandWithoutCsrfCannotInvokeServices() throws Exception {
+    @Test void commandsWithoutCsrfCannotInvokeServices() throws Exception {
         String id=UUID.randomUUID().toString();
-        for(String path:new String[]{"/workflows","/workflow-runs","/tasks/"+id})
-            mvc.perform(get("/api/v1"+path)).andExpect(status().isUnauthorized());
         for(String path:new String[]{"/workflows","/workflows/"+id+"/versions","/workflow-runs","/workflow-runs/"+id+"/cancel","/tasks/"+id+"/cancel"})
-            mvc.perform(post("/api/v1"+path).with(user("test")).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+            mvc.perform(post("/api/v1"+path).contentType("application/json").content("{}")).andExpect(status().isForbidden());
         verifyNoInteractions(workflows,executions);
     }
     @Test void missingIdempotencyAndMalformedIdentifiersAreControlledBadRequests() throws Exception {
-        mvc.perform(post("/api/v1/workflow-runs").with(user("test")).with(csrf()).contentType("application/json").content("{}"))
+        mvc.perform(post("/api/v1/workflow-runs").with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_WORKFLOW"));
-        mvc.perform(get("/api/v1/tasks/not-uuid").with(user("test"))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/tasks/not-uuid")).andExpect(status().isBadRequest());
         verifyNoInteractions(workflows,executions);
     }
     @Test void unavailableStorageDoesNotExposeConnectionDetails() throws Exception {
         when(workflows.list(20,0)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("internal credential detail"));
-        mvc.perform(get("/api/v1/workflows").with(user("test"))).andExpect(status().isServiceUnavailable())
+        mvc.perform(get("/api/v1/workflows")).andExpect(status().isServiceUnavailable())
             .andExpect(jsonPath("$.code").value("WORKFLOW_STORE_UNAVAILABLE"))
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("internal credential"))));
     }

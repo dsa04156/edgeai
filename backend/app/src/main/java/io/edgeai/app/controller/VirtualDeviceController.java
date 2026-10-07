@@ -29,4 +29,6 @@ public class VirtualDeviceController {
     public VirtualDeviceResponse update(@PathVariable UUID vdId,@RequestBody String body) { return VirtualDeviceResponse.from(service.update(vdId,body)); }
     @DeleteMapping("/{vdId}")
     public VirtualDeviceResponse release(@PathVariable UUID vdId) { return VirtualDeviceResponse.from(service.release(vdId)); }
+    @DeleteMapping("/{vdId}/registration")
+    public ResponseEntity<Void> deleteRegistration(@PathVariable UUID vdId) {service.deleteRegistration(vdId);return ResponseEntity.noContent().build();}
 }

@@ -56,7 +56,7 @@ export function VirtualDeviceExecution({ vd, auth, csrf, disabled }: { vd: Schem
   }
   function prepare(action: Action) { setDraft({ action, key: requestKey(), revision: vd.revision }); setCommandError(""); setNotice(""); }
   return <section aria-labelledby="vd-execution-title">
-    <div className="toolbar"><h3 id="vd-execution-title">VD 실행</h3><button disabled={busy || disabled} onClick={() => void refresh()}>실행 상태 새로고침</button></div>
+    <div className="toolbar"><h3 id="vd-execution-title">실행 연결 · Runtime Binding</h3><button disabled={busy || disabled} onClick={() => void refresh()}>실행 상태 새로고침</button></div>
     <p className="hint">등록과 실행 준비는 별개입니다. 상태는 3초마다 갱신됩니다. 준비된 VD를 Workflow 작업의 실행 위치로 선택하면 같은 SERVICE 버전의 작업을 배정할 수 있습니다.</p>
     {error && <p role="alert" className="error">{error} 현재 준비 상태를 확인할 수 없습니다.</p>}
     {!data && !error && <p role="status">실행 상태 조회 중…</p>}
@@ -89,13 +89,13 @@ export function VirtualDeviceExecution({ vd, auth, csrf, disabled }: { vd: Schem
         <strong>{kinds[operation.kind]} · {states[operation.state]}</strong><span className="block mono digest">Operation {operation.id}</span>
         {operation.reason && <span className="block">{operation.reason}</span>}
       </li>)}</ul> : <p className="muted">아직 실행 작업이 없습니다.</p>}
-      <details><summary>실행 세대와 연결 이력</summary>
+      <details><summary>실행 연결·세대 이력</summary>
         {data.runtimeHistoryTruncated && <p className="hint">최근 실행 100개를 표시합니다.</p>}
         {data.runtimeHistory.length ? <ul className="history-list">{data.runtimeHistory.map(runtime => <li key={runtime.id}>
           <strong>{runtime.generation}세대 · {observations[runtime.observedState]}</strong><span className="block mono digest">{runtime.id}</span><span>{runtime.nodeName ?? "실행 노드 미확정"}</span>
         </li>)}</ul> : <p className="muted">실행 이력이 없습니다.</p>}
         {data.bindingsTruncated && <p className="hint">최근 실행 연결 100개를 표시합니다.</p>}
-        {data.bindings.map(binding => <p key={binding.id} className="digest">{binding.closedAt ? "종료된 연결" : "현재 연결"} · revision {binding.openedRevision} → {binding.closedRevision ?? "현재"}<span className="block mono">{binding.runtimeId}</span></p>)}
+        {data.bindings.map(binding => <p key={binding.id} className="digest">{binding.closedAt ? "종료된 연결" : "현재 연결"} · revision {binding.openedRevision} → {binding.closedRevision ?? "현재"}<span className="block mono">{data.runtimeHistory.find(runtime => runtime.id === binding.runtimeId)?.nodeName || "실행 노드 미확정"} · {data.runtimeHistory.find(runtime => runtime.id === binding.runtimeId)?.generation ?? "—"}세대</span><span className="block">{new Date(binding.openedAt).toLocaleString()} → {binding.closedAt ? new Date(binding.closedAt).toLocaleString() : "현재"}</span></p>)}
       </details>
     </>}
   </section>;

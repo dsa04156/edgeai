@@ -68,6 +68,14 @@ public class VirtualDeviceService {
         for(var binding:repository.activeSources(id))repository.close(binding.id(),vd.revision()+1,now);
         var released=find(id,false);lifecycle.registryChanged(released);return released;
     }
+    @Transactional
+    public void deleteRegistration(UUID id) {
+        var vd=find(id,true);
+        if(vd.state()!=VirtualDevice.State.RELEASED) throw error(409,"VD_IN_USE","가상 장치를 먼저 해제하고 실행 종료를 확인하세요.");
+        if(!repository.canDeleteRegistration(id)) throw error(409,"VD_IN_USE","실행·작업 이력이 참조하는 가상 장치는 영구 삭제할 수 없습니다.");
+        try {repository.deleteRegistration(id);}
+        catch(org.springframework.dao.DataIntegrityViolationException e) {throw error(409,"VD_IN_USE","연결 또는 실행 참조가 남아 있어 삭제할 수 없습니다. 새로고침 후 확인하세요.");}
+    }
     private void bindChanges(VirtualDevice vd,List<VDSourceBinding> current,Map<String,UUID> requested,Map<UUID,Device> sources,Instant now) {
         var unchanged=new HashSet<String>();
         for(var binding:current) {

@@ -114,8 +114,6 @@ class ProfileIntegrationTest {
         var value = service.publish(ProfileIdentity.Kind.VD, body(key(), "1.0.0", "{\"type\":\"sensorMirror\"}")).version();
         assertThatThrownBy(() -> jdbc.update("UPDATE edgeai.profile_version SET spec = '{\"changed\":true}' WHERE id = ?", value.id()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("DELETE FROM edgeai.profile_version WHERE id = ?", value.id()))
-            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)
             .executeWithoutResult(status -> {
                 status.setRollbackOnly(); // Never remove data, even if the guard regresses.
@@ -126,5 +124,7 @@ class ProfileIntegrationTest {
         assertThatThrownBy(() -> jdbc.update("INSERT INTO edgeai.profile_version SELECT ?, kind, profile_key, version, spec, digest, created_at FROM edgeai.profile_version WHERE id = ?", UUID.randomUUID(), value.id()))
             .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
         assertThat(service.find(value.identity()).digest()).isEqualTo(value.digest());
+        service.delete(value.identity());
+        assertThatThrownBy(() -> service.find(value.identity())).isInstanceOf(io.edgeai.app.exception.ProfileNotFoundException.class);
     }
 }
