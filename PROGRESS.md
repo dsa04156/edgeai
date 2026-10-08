@@ -15,8 +15,9 @@
 - **관측·데이터:** 장치별 항목의 최신값·보고 시각과 Mapper 준비 상태·DMI heartbeat를 조회합니다.
   MQTT에는 매 수집 데이터를 발행하지만 해당 경로의 영속 이력 consumer·재전송 outbox는 없습니다.
 - **실행 입력:** Run 생성 시 선택한 Mapper 장치의 최신값을 BATCH 입력에 고정합니다.
-  동일 Idempotency-Key 재호출은 다시 읽지 않습니다. UUID 앱 Device·VD와 CRD 이름은 별도이며,
-  새 Mapper MQTT와 기존 STREAM/VD 원본 사이의 자동 연결은 남아 있습니다.
+  VD 원본에는 CRD 이름·UID·DeviceModel과 측정 항목/허용 시간을 저장합니다. BATCH Task별 고정 입력을
+  기존 Runner로 전달하며 같은 요청의 동시 재호출·재시도·원본 교체에도 입력을 유지합니다.
+  새 Mapper MQTT와 기존 STREAM 사이의 연속 실행 연결은 남아 있습니다.
 - **앱과 워크플로:** 기본 관리 화면은 로그인 입력 없이 사용하며 쓰기 요청은 CSRF 보호를 적용합니다.
   Spring DAG가 기본 서비스 경로이고 DDS·Buildx·Gitea·Argo CD는 별도 경로로 유지합니다.
   워크플로는 현재 기본 설정에서 활성화돼 있습니다.
@@ -28,7 +29,10 @@
 
 CRD/DMI 등록·변경·삭제와 Modbus·확장 프로토콜, BATCH 입력 snapshot을 검증했습니다.
 Arduino·Sense HAT의 실제 읽기·Twin·MQTT 수신도 확인했으며 항목 수는 사용자 추가·삭제에 따라 바뀝니다.
-개별 항목 수정 후 백엔드 186개·프록시 5개·PC/모바일 14개 테스트, 계약·타입·lint·빌드가 통과했습니다.
+개별 항목 수정과 VD 센서 BATCH에서 실제/fixture 경계를 나누어 검증했습니다.
+Sense HAT 온도→호스트 supervisor·Runner→HTTP/분리DB/MinIO→검증 Result가 완료됐습니다.
+이 시험의 Pod 인증은 fixture이며 실제 Kubernetes Pod 배포 수용과 구분합니다.
+상세 기준·결과는 [VD 센서 BATCH 검증](docs/evidence/vd-sensor-batch.md)을 확인하세요.
 날짜별 상세 보고서·스크린샷과 일회성 검증 도구는 Git에서 제외한 `output/`에 보관합니다.
 
 ## 개발 단계와 남은 범위
@@ -39,7 +43,7 @@ Arduino·Sense HAT의 실제 읽기·Twin·MQTT 수신도 확인했으며 항목
 
 - **완료 단계:** M0–M4, M6의 해당 구현·검증 범위입니다.
 - **우선순위:** Dashboard 관리 흐름을 우선합니다. Runner/STREAM 고도화와 종합 수용은 보류합니다.
-- **통합 입력:** Mapper 외부 신원과 UUID 앱 Device/VD 매핑, MQTT 영속 소비·재전송·연속 실행 연결이 남아 있습니다.
+- **통합 입력:** 센서→VD→SERVICE BATCH→Result 입력은 `feat/vd-sensor-batch`에서 검증했습니다. 실제 Kubernetes Pod에서 이 새 입력 경로의 수용과 MQTT 영속 소비·재전송·연속 실행 연결은 남아 있습니다.
 - **실제 모델:** ARM/x86 Runner와 CUDA 계산·NPU 접근 증거는 있지만 학습 모델의 종단 추론 수용은 미완료입니다.
 - **운영·성능:** M5 외부 계약·상태형 복원, M8 합의 성능 기준, M9 identity/RBAC·종합 복구,
   M10 실제 모델·2세부 연동이 남아 있습니다. 다수 항목의 DMI 보고 지연과 복구 시간도 추가 측정이 필요합니다.

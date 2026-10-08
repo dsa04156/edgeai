@@ -28,7 +28,7 @@
 검증된 구성 요소와 전체 플랫폼 수용 완료는 구분합니다.
 실제 외부 시스템 계약·GPU/NPU·성능 수치는 확인 없이 가정하지 않습니다.
 Mapper 최신값을 사용하는 BATCH 입력은 구현돼 있으며, 새 MQTT 데이터의 영속 소비·재전송과
-기존 STREAM/VD 원본으로의 자동 연결은 남아 있습니다. 기술 업그레이드는 현재 구현 우선순위를 변경하지 않습니다.
+센서→VD→SERVICE BATCH→Result 연결도 별도 브랜치에서 검증했습니다. 새 입력 경로의 실제 Kubernetes Pod 수용과 기존 STREAM 연속 연결은 남아 있습니다. 기술 업그레이드는 현재 구현 우선순위를 변경하지 않습니다.
 
 ## 상세 범위
 
@@ -37,3 +37,10 @@ Mapper 최신값을 사용하는 BATCH 입력은 구현돼 있으며, 새 MQTT �
 - [M6 가상 장치](docs/requirements/m6-requirements.md)
 - [M7 다중 장치·스트리밍](docs/requirements/m7-requirements.md)
 - [M9 운영·복구](docs/requirements/m9-requirements.md)
+
+## VD 센서 BATCH 다음 게이트
+
+`feat/vd-sensor-batch`는 측정 항목/허용 시간 설정, Task별 불변 입력, 동시 재호출·재시도 보존,
+실제 Sense HAT 읽기와 호스트 Runner·S3·Result 및 PC/mobile UI를 검증합니다.
+다음 수용은 같은 SERVICE를 실제 VD Pod에서 실행해 배치 노드·Pod·입력·Result 출처를 대조하는 것입니다.
+MQTT 연속 소비·재전송과 실모델 종합 수용은 별도 범위로 유지합니다.

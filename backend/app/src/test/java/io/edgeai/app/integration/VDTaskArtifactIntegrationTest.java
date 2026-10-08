@@ -170,12 +170,20 @@ class VDTaskArtifactIntegrationTest {
         UUID sp=fixture(false,true);
         var wf=workflows.create(encode(Map.of("key","sensehat-acceptance-"+UUID.randomUUID(),"displayName","Sense HAT temperature acceptance"))).value();
         var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","temperature","serviceProfileVersionId",sp.toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
-        var run=executionApi.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",vdId.toString()),"parameters",Map.of()))).value();
-        var task=executions.tasks(run.id()).getFirst();
+        var csrf=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/csrf")).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(csrf.statusCode()).isEqualTo(200);
+        var token=(Map<?,?>)json.decode(csrf.body());
+        String cookie=csrf.headers().allValues("Set-Cookie").stream().map(value->value.split(";",2)[0]).collect(java.util.stream.Collectors.joining("; "));
+        var created=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/workflow-runs"))
+            .header("Content-Type","application/json").header("Cookie",cookie).header("X-CSRF-TOKEN",(String)token.get("token")).header("Idempotency-Key",UUID.randomUUID().toString())
+            .POST(HttpRequest.BodyPublishers.ofString(encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",vdId.toString()),"parameters",Map.of())))).build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(created.statusCode()).isEqualTo(201);
+        UUID runId=UUID.fromString((String)((Map<?,?>)json.decode(created.body())).get("id"));
+        var task=executions.tasks(runId).getFirst();
         var frame=(Map<?,?>)json.decode(executions.vdInput(task.id()).orElseThrow());
         var source=(Map<?,?>)((Map<?,?>)frame.get("sources")).get("input");
         var reading=(Map<?,?>)((Map<?,?>)source.get("properties")).get("temp_humidity");
-        await(()->executions.run(run.id(),false).orElseThrow().state().equals("SUCCEEDED"),30,"Sense HAT input did not produce a verified Result");
+        await(()->executions.run(runId,false).orElseThrow().state().equals("SUCCEEDED"),30,"Sense HAT input did not produce a verified Result");
         await(()->allocations.open(supervisor.id()).isEmpty(),10,"Sensor child slot was not acknowledged");
         var result=runtimes.result(task.id()).orElseThrow();var artifact=result.outputs().getFirst().artifact();
         var response=client.send(HttpRequest.newBuilder(storage.download(artifact).url()).timeout(Duration.ofSeconds(5)).GET().build(),HttpResponse.BodyHandlers.ofString());
@@ -183,6 +191,11 @@ class VDTaskArtifactIntegrationTest {
         assertThat(output.get("sourceMode")).isEqualTo("SENSOR");assertThat(output.get("deviceUid")).isEqualTo(source.get("deviceUid"));
         assertThat(((Number)output.get("temperatureC")).doubleValue()).isEqualTo(((Number)reading.get("value")).doubleValue());
         assertThat(((Number)output.get("temperatureF")).doubleValue()).isCloseTo(((Number)reading.get("value")).doubleValue()*1.8+32,within(0.000001));
+        var taskResponse=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/tasks/"+task.id())).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(taskResponse.statusCode()).isEqualTo(200);
+        assertThat(encode(((Map<?,?>)json.decode(taskResponse.body())).get("vdInputs"))).isEqualTo(encode(frame));
+        var resultsResponse=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/tasks/"+task.id()+"/results")).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(resultsResponse.statusCode()).isEqualTo(200);assertThat(resultsResponse.body()).contains(artifact.sha256());
         verifyStart(runtimes.runtime(result.runtimeId()).orElseThrow());verifyResult(runtimes.runtime(result.runtimeId()).orElseThrow());
         System.out.println("VD_SENSOR_ACCEPTANCE "+encode(Map.of("deviceId",source.get("deviceId"),"deviceUid",source.get("deviceUid"),"observedAt",reading.get("observedAt"),"capturedAt",frame.get("capturedAt"),"temperatureC",output.get("temperatureC"),"temperatureF",output.get("temperatureF"),"sha256",artifact.sha256(),"bytes",artifact.bytes(),"runState","SUCCEEDED","podBoundary","fixture")));
         drain();verifyNoInteractions(jobs);
