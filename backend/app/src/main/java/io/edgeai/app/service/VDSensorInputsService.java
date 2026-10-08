@@ -69,7 +69,8 @@ public class VDSensorInputsService {
             if("bool".equals(type)){if(!Set.of("true","false").contains(raw))throw new IllegalArgumentException();return Boolean.valueOf(raw);}
             if(type==null || !Set.of("float32","float64","int16","uint16","int32","uint32").contains(type))throw new IllegalArgumentException();
             var value=new BigDecimal(raw);
-            if(!Double.isFinite(value.doubleValue()) || "float32".equals(type) && !Float.isFinite(value.floatValue()))throw new IllegalArgumentException();
+            // DataType describes the wire value; Mapper has already applied scale/offset in double precision.
+            if(!Double.isFinite(value.doubleValue()))throw new IllegalArgumentException();
             return value;
         } catch(IllegalArgumentException e){throw error("VD_SOURCE_VALUE_INVALID","VD 측정값의 자료형이나 숫자 형식이 올바르지 않습니다.");}
     }

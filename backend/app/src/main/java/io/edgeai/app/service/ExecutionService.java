@@ -66,6 +66,7 @@ public class ExecutionService {
             normalized.put("device",ref);
         }
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
+        repository.lockRequestKey(idempotency);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
         // Resolve protocol-independent references only after idempotency replay checks.

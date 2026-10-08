@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 const id="11111111-1111-4111-8111-111111111111", service="22222222-2222-4222-8222-222222222222";
 const template={id,kind:"VD",key:"sensor-template",version:"1.0.0",spec:{apiVersion:"edgeai.vd/v2",type:"sensorMirror",serviceProfileVersionId:service,
   sources:{input:{deviceModel:"edgeai-model-temperature",required:true}},state:{mode:"STATELESS"},runtime:{maxConcurrentTasks:1,startupTimeoutSeconds:60,drainTimeoutSeconds:60}}};
-const sensor={id:"sensehat-001",uid:"33333333-3333-4333-8333-333333333333",model:"edgeai-model-temperature",state:"ONLINE",targetNode:"edge-node",profile:{kind:"physical",properties:[{name:"temperature",dataType:"float64",unit:"°C"}]},properties:{temperature:{value:"26.5",timestamp:Date.now(),unit:"°C"}},mapper:{ready:true}};
+const sensor={id:"sensehat-001",uid:"33333333-3333-4333-8333-333333333333",model:"edgeai-model-temperature",state:"ONLINE",targetNode:"edge-node",profile:{kind:"physical",properties:[{name:"temperature",dataType:"float64",unit:"°C"},{name:"humidity",dataType:"float64",unit:"%"}]},properties:{temperature:{value:"26.5",timestamp:Date.now(),unit:"°C"},humidity:{value:"",timestamp:0}},mapper:{ready:true}};
 test("VD uses sensor inventory and does not offer duplicate app device registration",async({page},testInfo)=>{
   let created=false, posts=0;
   const requested:string[]=[];
@@ -30,6 +30,8 @@ test("VD uses sensor inventory and does not offer duplicate app device registrat
   await page.getByLabel("VD 키",{exact:true}).fill("sensor-vd");
   await page.getByLabel("VD 이름",{exact:true}).fill("온도 VD");
   await page.getByLabel("input · 필수 원본").selectOption(sensor.id);
+  await expect(page.getByText(/1970/)).toHaveCount(0);
+  await expect(page.getByText("미수집",{exact:false})).toBeVisible();
   await page.getByLabel("input · temperature 선택").check();
   await page.getByLabel("input · 최대 수신 경과 시간(초)").fill("45");
   await expect(page.getByText("원본 장치 바로 등록",{exact:true})).toHaveCount(0);

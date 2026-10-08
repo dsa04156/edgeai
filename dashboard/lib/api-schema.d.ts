@@ -2335,6 +2335,7 @@ export interface components {
             properties: {
                 [key: string]: {
                     value: string | number | boolean;
+                    /** @description 센서의 원시 자료형. value는 Mapper scale/offset 적용 후 공학 단위값입니다. */
                     dataType: string;
                     unit: string;
                     /** Format: date-time */

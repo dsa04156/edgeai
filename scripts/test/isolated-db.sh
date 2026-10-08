@@ -10,7 +10,9 @@ isolated_test_db() {
   export EDGEAI_DB_NAME="edgeai_test_$(date +%s)_${BASHPID}_${RANDOM}"
   export PGPASSWORD="$EDGEAI_DB_PASSWORD"
   EDGEAI_TEST_DROPDB="${pg_bin:+$pg_bin/}dropdb"
-  "${pg_bin:+$pg_bin/}createdb" -h "${EDGEAI_DB_HOST:-127.0.0.1}" -p "$EDGEAI_DB_PORT" -U "$EDGEAI_DB_USER" "$EDGEAI_DB_NAME"
+  if ! "${pg_bin:+$pg_bin/}createdb" -h "${EDGEAI_DB_HOST:-127.0.0.1}" -p "$EDGEAI_DB_PORT" -U "$EDGEAI_DB_USER" "$EDGEAI_DB_NAME"; then
+    blocked "Cannot create isolated test database; check PostgreSQL connection and CREATEDB permission."
+  fi
   trap 'test_db_cleanup' EXIT
   printf 'Isolated PostgreSQL database: %s\n' "$EDGEAI_DB_NAME"
 }

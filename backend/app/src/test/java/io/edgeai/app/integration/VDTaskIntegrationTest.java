@@ -79,6 +79,7 @@ class VDTaskIntegrationTest {
     @MockitoBean DeviceResourceGateway sensors;
     private final UUID sensorUid=UUID.randomUUID();
     private String sensorValue="26.5";
+    private String sensorType="float64";
     private long sensorObservedAt;
     private String sensorState="ONLINE";
     private boolean sensorMissing;
@@ -87,11 +88,11 @@ class VDTaskIntegrationTest {
     private record Fixture(VirtualDevice vd,VDRuntime supervisor,UUID session,WorkflowRun run,List<RuntimeInstance> work){}
     @BeforeEach void boundaries() {
         clock.offset.set(0);identities.clear();
-        sensorValue="26.5";sensorObservedAt=clock.millis();sensorState="ONLINE";sensorMissing=false;
+        sensorValue="26.5";sensorType="float64";sensorObservedAt=clock.millis();sensorState="ONLINE";sensorMissing=false;
         when(sensors.request(eq("GET"),anyString(),isNull())).thenAnswer(call->{
             String path=call.getArgument(1);Object document;
             if(path.endsWith("/devices/sensehat-001"))document=Map.of("metadata",Map.of("name","sensehat-001","uid",sensorUid.toString(),"resourceVersion","1","labels",Map.of("app.kubernetes.io/part-of","edgeai"),
-                "annotations",Map.of("edgeai.io/device-profile",encode(Map.of("kind","physical","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")))))),
+                "annotations",Map.of("edgeai.io/device-profile",encode(Map.of("kind","physical","properties",List.of(Map.of("name","temperature","dataType",sensorType,"scale",10,"unit","°C")))))),
                 "spec",Map.of("nodeName","edge-node","deviceModelRef",Map.of("name","edgeai-model-sensehat"),"protocol",Map.of("protocolName","edgeai-sensehat"),"properties",List.of(Map.of("name","temperature"))));
             else if(path.endsWith("/devicestatuses/sensehat-001"))document=Map.of("status",Map.of("state",sensorState,"lastOnlineTime",clock.instant().toString(),"twins",sensorMissing?List.of():List.of(Map.of("propertyName","temperature","reported",Map.of("value",sensorValue,"metadata",Map.of("timestamp",Long.toString(sensorObservedAt)))))));
             else if(path.contains("/deployments/"))document=Map.of("status",Map.of("readyReplicas",1));
@@ -163,7 +164,7 @@ class VDTaskIntegrationTest {
         mvc.perform(get("/api/v1/tasks/"+task.id())).andExpect(status().isOk())
             .andExpect(jsonPath("$.vdInputs.sources.input.properties.temperature.value").value(26.5))
             .andExpect(jsonPath("$.vdInputs.sources.input.deviceUid").value(sensorUid.toString()));
-        devices.reconfigure(f.vd().id(),encode(Map.of("revision",0,"displayName",f.vd().displayName(),"profileVersionId",f.vd().profileVersionId().toString(),"sources",List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temperature"),"maxAgeSeconds",45)),"placement",Map.of("mode","AUTO"))));
+        devices.update(f.vd().id(),encode(Map.of("revision",0,"displayName",f.vd().displayName(),"profileVersionId",f.vd().profileVersionId().toString(),"sources",List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temperature"),"maxAgeSeconds",45)),"placement",Map.of("mode","AUTO"))));
         sensorValue="41.5";clock.offset.set(45);
         var request=Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of());
         mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",f.run().idempotencyKey()).contentType("application/json").content(encode(request)))
@@ -201,6 +202,43 @@ class VDTaskIntegrationTest {
         request.put("workflowVersionId",version.id().toString());request.put("parameters",Map.of());
         mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(encode(request))).andExpect(status().isBadRequest());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run",Integer.class)).isEqualTo(before);
+    }
+    @Test void scaledFloat32ReportsAreEngineeringValuesRatherThanRawWireValues()throws Exception {
+        sensorType="float32";sensorValue="3.4e39";
+        var f=fixture(1,1,false,false,true);
+        var task=executions.tasks(f.run().id()).getFirst();
+        var frame=(Map<?,?>)json.decode(executions.vdInput(task.id()).orElseThrow());
+        var source=(Map<?,?>)((Map<?,?>)frame.get("sources")).get("input");
+        var reading=(Map<?,?>)((Map<?,?>)source.get("properties")).get("temperature");
+        assertThat(((Number)reading.get("value")).doubleValue()).isEqualTo(3.4e39);
+    }
+    @Test void concurrentReplayWaitsForTheFirstCommitAndNeverRereadsAnOfflineSensor()throws Exception {
+        var f=fixture(1,1,false,false,true);String key=UUID.randomUUID().toString();
+        var request=encode(Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of()));
+        var created=new CountDownLatch(1);var release=new CountDownLatch(1);
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            var first=pool.submit(()->transaction(()->{
+                var result=executionApi.create(key,request);created.countDown();
+                try {if(!release.await(10,TimeUnit.SECONDS))throw new AssertionError("First transaction was not released");}
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}
+                return result;
+            }));
+            assertThat(created.await(5,TimeUnit.SECONDS)).isTrue();
+            int firstReads=mockingDetails(sensors).getInvocations().size();
+            var second=pool.submit(()->executionApi.create(key,request));
+            try {
+                long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);boolean waiting=false;
+                while(System.nanoTime()<deadline) {
+                    waiting=jdbc.queryForObject("SELECT count(*)>0 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND pid<>pg_backend_pid()",Boolean.class);
+                    if(waiting)break;Thread.sleep(20);
+                }
+                assertThat(waiting).as("Second request is waiting on the first transaction").isTrue();
+                sensorState="OFFLINE";
+            } finally {release.countDown();}
+            var accepted=first.get(5,TimeUnit.SECONDS);var replay=second.get(5,TimeUnit.SECONDS);
+            assertThat(accepted.created()).isTrue();assertThat(replay.created()).isFalse();assertThat(replay.value().id()).isEqualTo(accepted.value().id());
+            assertThat(mockingDetails(sensors).getInvocations().size()).isEqualTo(firstReads);
+        } finally {release.countDown();}
     }
     private void rejectSensorRun(Object request,String code)throws Exception {
         mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(encode(request)))

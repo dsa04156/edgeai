@@ -46,7 +46,7 @@ function SourceSlot({ sourceKey, condition, devices, initial, onSelect }: { sour
         {(device.profile.properties || []).map(property => <label key={property.name}>
           <input type="checkbox" aria-label={`${sourceKey} · ${property.name} 선택`} checked={properties.includes(property.name)} onChange={event => setProperties(previous => event.target.checked ? [...previous, property.name] : previous.filter(name => name !== property.name))} />
           {property.name}{property.unit ? ` (${property.unit})` : ""}
-          <span className="muted"> · {device.properties[property.name] ? `${device.properties[property.name].value} · ${new Date(device.properties[property.name].timestamp).toLocaleString()}` : "미수집"}</span>
+          <span className="muted"> · {device.properties[property.name]?.timestamp > 0 ? `${device.properties[property.name].value} · ${new Date(device.properties[property.name].timestamp).toLocaleString()}` : "미수집"}</span>
         </label>)}
       </fieldset>
       <label>{sourceKey} · 최대 수신 경과 시간(초)<input aria-label={`${sourceKey} · 최대 수신 경과 시간(초)`} name="maxAgeSeconds" type="number" min={1} max={300} required value={maxAge} onChange={event => setMaxAge(Number(event.target.value))} /></label>

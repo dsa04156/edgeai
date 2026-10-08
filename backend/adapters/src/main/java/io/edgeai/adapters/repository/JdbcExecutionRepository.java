@@ -12,6 +12,9 @@ import org.springframework.jdbc.core.RowMapper;
 public final class JdbcExecutionRepository implements ExecutionRepository {
     private final JdbcTemplate jdbc;
     public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    public void lockRequestKey(UUID key) {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))","edgeai-run-create:"+key);
+    }
     public void saveVDInput(UUID taskId,UUID vdId,String document) {
         jdbc.update("INSERT INTO edgeai.vd_task_input(task_id,vd_id,document) VALUES (?,?,CAST(? AS jsonb))",taskId,vdId,document);
     }
