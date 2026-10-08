@@ -28,7 +28,7 @@ DRAINING/STARTING/CANCELLING 전환이 있으면 거절한다. 검사 뒤 새 �
 수정 전 실제 Remote 성공 파일을 TLS MinIO에 고정 version으로 등록한 뒤, STARTING
 대상의 Result 준비가 허용되는 문제를 재현했다. 수정 뒤 같은 재현을 포함한69개,
 전환 삽입 경쟁을 추가한 Result15개와 기존 실패15개가 통과했다.
-[검증 기록](../evidence/m9-recovery-remote-offload-outcomes.md).
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-offload-outcomes.md).
 
 공개 offload 요청·과거 시작 허가 journal·실제 외부 제공자·STREAM/group·전역 writer
 종료와 종합 활성화는 별도다. 복원 DB 격리와 기존 producer fence를 유지하며 새 실행을

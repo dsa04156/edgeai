@@ -2,7 +2,7 @@
 
 상태: 로컬 구현·검증. M5는 진행 중이며 실제 외부 계약 수용과 Kubernetes↔Remote 종단 검증은 남는다.
 ADR0011의 영속 실행/결과 경로를 공개 Run/Offload 요청과 Spring 스케줄러에 연결한다.
-검증 범위는 [M5 worker 증거](../evidence/m5-remote-worker.md)를 따른다.
+검증 범위는 [M5 worker 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-remote-worker.md)를 따른다.
 
 ## 제공자 고정
 

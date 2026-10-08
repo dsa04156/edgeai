@@ -28,7 +28,9 @@ Kubernetes·Argo CD·KubeEdge 공식 문서의 소개, 개념, 작업 가이드,
 
 API는 OpenAPI와 controller, 환경변수는 `application.yml`·`.env.example`·실행 스크립트,
 화면 동작은 실제 컴포넌트와 검증 결과를 대조합니다. 코드·기본 설정·현재 배포·과거 검증은 구분합니다.
-ADR·evidence·history를 현재 동작처럼 다시 쓰지 않습니다. 잘못된 기록을 발견하면 정정 근거를 별도로 남깁니다.
+기능 사용법은 기존 가이드에 반영합니다. 일회성 검증 로그·스크린샷·날짜별 보고서는 Git에서 제외한 `output/`에 보관하고 웹 문서 목록에 등록하지 않습니다. 중요한 프로젝트 결정은 Semantica에 기록합니다.
+과거 검증 보고서와 상태 문서 복사본은 Git 이력으로 확인합니다. 설계 결정을 현재 동작처럼 다시 쓰지 않습니다.
+일회성 보고서를 `docs/`에 추가하지 않으며, 기존 기록의 정정은 현재 관련 문서와 Semantica에 근거를 남깁니다.
 
 ## 웹 목록과 검증
 
@@ -39,11 +41,11 @@ ADR·evidence·history를 현재 동작처럼 다시 쓰지 않습니다. 잘못
 OpenAPI 관리 경로가 바뀌면 API 참고의 자동 생성 목록을 갱신한 뒤 검사합니다.
 
 ```bash
-node scripts/internal/check-docs.mjs --write-api-index
+rtk proxy node scripts/internal/check-docs.mjs --write-api-index
 ```
 
 ```bash
-bash scripts/test/test-docs.sh
+rtk proxy bash scripts/test/test-docs.sh
 ```
 
 링크·목차·등록 순서·API 참고 동기화를 확인합니다. 문서 화면을 바꿨으면 Dashboard의

@@ -1,7 +1,6 @@
 package io.edgeai.app.service;
 
 import io.edgeai.adapters.kubernetes.KubernetesInfrastructureInventory;
-import io.edgeai.adapters.metrics.EdgeXSensorInventory;
 import io.edgeai.domain.node.InfrastructureSource;
 import io.edgeai.domain.node.SensorInventorySource;
 import java.time.*;
@@ -31,25 +30,7 @@ class InfrastructureTest {
             assertEquals("UNKNOWN", KubernetesInfrastructureInventory.decodeNodes(List.of(node)).getFirst().kind());
         }
     }
-    @Test void readsOnlyEdgeXInventoryFieldsWithoutLeakingProtocolSecretsOrInventingOnline() {
-        var device = json.readTree("""
-          {"name":"sensor-a","profileName":"temperature-v1","serviceName":"device-serial","adminState":"LOCKED","operatingState":"DOWN",
-           "tags":{"nodeName":"edge-node","hardwareId":"private-hardware-id"},"protocols":{"mqtt":{"password":"do-not-expose"}}}
-          """);
-        var profile = json.readTree("""
-          {"name":"temperature-v1","deviceResources":[{"name":"temperature","properties":{"valueType":"Float64"}}]}
-          """);
-        var sensor = EdgeXSensorInventory.decode(List.of(device), List.of(profile)).getFirst();
-        assertEquals("edge-node", sensor.nodeName()); assertEquals("DOWN", sensor.operatingState());
-        assertEquals("LOCKED", sensor.adminState()); assertEquals(List.of("temperature"), sensor.properties());
-        String response = json.writeValueAsString(sensor);
-        assertFalse(response.contains("password")); assertFalse(response.contains("do-not-expose")); assertFalse(response.contains("private-hardware-id"));
-    }
-    @Test void duplicateSensorIdentityIsNotSilentlyMerged() {
-        var device = json.readTree("{\"name\":\"sensor-a\"}");
-        assertThrows(IllegalStateException.class, () -> EdgeXSensorInventory.decode(List.of(device, device), List.of()));
-    }
-    @Test void edgeXFailureDoesNotEraseNodesOrFallBackToKubeEdgeSensors() {
+    @Test void sensorCrdFailureDoesNotEraseNodeInventory() {
         @SuppressWarnings("unchecked") ObjectProvider<InfrastructureSource> sources = mock(ObjectProvider.class);
         @SuppressWarnings("unchecked") ObjectProvider<SensorInventorySource> sensors = mock(ObjectProvider.class);
         var source = mock(InfrastructureSource.class); var sensorSource = mock(SensorInventorySource.class);

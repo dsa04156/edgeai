@@ -49,4 +49,4 @@ MinIO 내부 복제·lifecycle·외부 IdP/STS·관리자의 동시 권한 변�
 복원 DB 상태와 참조의 일치·운영 활성화는 별도다. `globalQuiescenceProven=false`,
 `activated=false`를 유지한다. 외부에서 권한/설정을 변경한 뒤 과거 보고서를 재사용하면 안 된다.
 
-[운영 명령](../operations/recovery/recovery-storage-drain.md), [실제 검증](../evidence/m9-recovery-storage-drain.md).
+[운영 명령](../operations/recovery/recovery-storage-drain.md), [실제 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-storage-drain.md).

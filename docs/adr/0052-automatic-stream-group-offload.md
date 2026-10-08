@@ -42,7 +42,7 @@ producer 권한 거절은 스트리밍 계산과 최종 처리를 종료시킨�
 
 ## 검증 범위
 
-[실행 근거](../evidence/m7-stream-automatic-offload.md)에 DB 동시성/보호 조건, 실제
+[실행 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-automatic-offload.md)에 DB 동시성/보호 조건, 실제
 Runner·HTTPS 측정과 서버/S3/브로커의 체크포인트 인계, UI·계약 검증을 기록한다.
 서버 인계 시험의 Pod 신원·노드 배정·종료 관측과 workload 지연 입력은 명시적 fixture다.
 실제 메모리/CPU 부하에 따른 Kubernetes 이동, 새 이미지 CI/배포, VD/단계별 배치와 외부

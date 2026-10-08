@@ -33,4 +33,4 @@ API 인증서 검증을 끄지 않는다. 외부 장치 라우팅, 스트리밍�
 인증서 교체·전원 손실 복구·M8 부하·M9 전체 운영·M10 실장비는 각각 남은 수용 범위다.
 이미 존재하는 MQTT 간헐 실패의 원인 해결을 이 정상 데모로 판정하지 않는다.
 
-[실행 근거](../evidence/m7-deployed-multidevice-demo.md).
+[실행 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-deployed-multidevice-demo.md).

@@ -41,7 +41,7 @@ frontier를 갱신한다. 로컬보다 최신인 다른 내용이나 더 오래�
 
 ## 검증 경계
 
-[검증 기록](../evidence/m7-stream-checkpoint-publisher.md)을 따른다.
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-publisher.md)을 따른다.
 실제 HTTPS/MQTT Session 시험은 명시적 API/S3 응답 fixture이며, 실제 Spring·PostgreSQL·
 MinIO 시험은 Python publisher를 사용하되 Pod 신원/broker 활성화가 fixture다.
 두 결과를 실제 Kubernetes의 통합 STREAM 실행이라고 합쳐서 주장하지 않는다.

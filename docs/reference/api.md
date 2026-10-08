@@ -1,6 +1,7 @@
 # API 참고
 
-EdgeAI 관리 API의 기본 경로는 `/api/v1`입니다. Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
+프로필·UUID 앱 장치·VD·실행 관리 API는 `/api/v1`, KubeEdge Device Manager는 `/api/devices` 등 별도 경로를 사용합니다.
+Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 정의 원본은 `contracts/openapi/platform-api.yaml`이며 이 페이지의 목록은 해당 계약에서 생성합니다.
 
 ## 어떤 API를 사용할까
@@ -15,6 +16,22 @@ EdgeAI 관리 API의 기본 경로는 `/api/v1`입니다. Swagger에서 요청·
 | `remote-reference-api.yaml` | 참조 Remote 제공자 계약 |
 
 브라우저는 허용된 관리 프록시를 사용합니다. 내부 프로토콜은 해당 실행 주체용이며 화면 API로 취급하지 않습니다.
+
+## 장치 API 선택
+
+| 경로 | 관리하는 리소스 |
+|---|---|
+| `/api/devices`, `/api/devices/{id}` | CRD 이름으로 식별하는 Mapper 장치의 등록·조회·수정·삭제 |
+| `/api/devices/{id}/properties` | 기존 연결에 측정 항목 하나 추가 (`POST`) |
+| `/api/devices/{id}/properties/{property}` | 항목 하나 삭제 (`DELETE`); 마지막 항목이면 장치 등록도 삭제 |
+| `/api/device-profiles` | 프로토콜별 저장 Property 규격 |
+| `/api/device-connections/test`, `/api/protocols` | 대상 Mapper 연결 테스트, 지원 프로토콜 목록 |
+| `/api/v1/devices`, `/api/v1/profiles` | UUID 앱 Device·Session, 버전형 DEVICE/SERVICE/VD 프로필 |
+| `/api/v1/virtual-devices` | 원본·실행 이력을 유지하는 UUID VD |
+
+기존 `/api/v1/sensors/*`는 410 `SENSOR_API_REPLACED`로 종료됐습니다. 아래 생성 목록에는
+호환 응답을 위한 deprecated operation도 포함됩니다. 이전 이력·명령 기능이 유지된다는 뜻은 아닙니다.
+새 장치 경로와 기존 UUID 앱 등록은 자동으로 병합되지 않습니다.
 
 ## 요청 규칙
 
@@ -33,7 +50,8 @@ EdgeAI 관리 API의 기본 경로는 `/api/v1`입니다. Swagger에서 요청·
 | 400 | 입력·명령·규격 검사 실패 |
 | 403 | CSRF 또는 조회 전용 모드 등으로 변경 거절 |
 | 404 | 대상 없음 또는 비활성 워크플로 경로 |
-| 409 | 버전·revision 충돌, 사용 중인 등록, 잠긴 센서 등 |
+| 409 | 버전·revision/resourceVersion 충돌, 중복 장치·항목 이름, 사용 중인 등록 등 |
+| 410 | 종료된 센서 API; 새 Device Manager 경로로 전환 |
 | 502 / 503 | 원본 서비스 실패, 기능 비활성, 의존 서비스 또는 저장소 사용 불가 |
 
 정확한 오류 코드는 각 operation의 schema를 확인합니다. [Swagger 사용](../guides/swagger-ui.md)에 직접 호출 절차가 있습니다.
@@ -41,10 +59,22 @@ EdgeAI 관리 API의 기본 경로는 `/api/v1`입니다. Swagger에서 요청·
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **54개**입니다.
+계약에 정의된 operation은 **66개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
+| `GET` | `/api/devices` | `listManagedDevices` |
+| `POST` | `/api/devices` | `createManagedDevice` |
+| `GET` | `/api/devices/{id}` | `getManagedDevice` |
+| `PUT` | `/api/devices/{id}` | `updateManagedDevice` |
+| `DELETE` | `/api/devices/{id}` | `deleteManagedDevice` |
+| `POST` | `/api/devices/{id}/properties` | `addManagedDeviceProperty` |
+| `PUT` | `/api/devices/{id}/properties/{property}` | `updateManagedDeviceProperty` |
+| `DELETE` | `/api/devices/{id}/properties/{property}` | `deleteManagedDeviceProperty` |
+| `POST` | `/api/device-connections/test` | `testDeviceConnection` |
+| `GET` | `/api/device-profiles` | `listManagedDeviceProfiles` |
+| `POST` | `/api/device-profiles` | `createManagedDeviceProfile` |
+| `GET` | `/api/protocols` | `listDeviceProtocols` |
 | `GET` | `/api/v1/platform` | `getPlatform` |
 | `GET` | `/actuator/health/readiness` | `getReadiness` |
 | `GET` | `/api/v1/csrf` | `getCsrfToken` |

@@ -49,4 +49,4 @@ producer 프로세스 종료, 종합 STREAM 그룹 복구·새 Secret/grant·서
 
 검사는 기존 장치 결합 시험에 `--retire-routes`를 추가한다. 실제 PG·TLS broker·MinIO·age와
 공개 STREAM 데이터 및 별도 복원본을 사용한다. 상세 계약은 [ADR0091](../../adr/0091-recovery-stream-broker-retirement.md)을 따른다.
-[실제47개 검증 근거](../../evidence/m9-recovery-stream-retirement.md)를 참고한다.
+[실제47개 검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-retirement.md)를 참고한다.

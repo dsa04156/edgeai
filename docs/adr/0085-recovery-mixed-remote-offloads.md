@@ -35,4 +35,4 @@ intent에 남긴다. bearer나 작업 본문은 복사하지 않는다. 쓰기 �
 성공은 선택한 이력 조정을 뜻하며 전체 미해결 목록·결과·STREAM/group/journal와 전역
 writer 격리 및 종합 서비스 재개가 남는다. 기본 옵션은 Remote 전환을 계속 미해결로 남긴다.
 
-[실제 검증](../evidence/m9-recovery-mixed-remote-offloads.md)을 따른다.
+[실제 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-mixed-remote-offloads.md)을 따른다.

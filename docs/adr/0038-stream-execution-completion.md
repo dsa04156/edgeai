@@ -42,7 +42,7 @@ STREAM 간선을 무방향 연결로 묶고 같은 Device의 fanout도 한 그�
 
 내부 OpenAPI에 Runner 실행 배정·Runner 완료·Device 완료 3개 API를 추가한다.
 공개 Run 생성과 runtime dispatch의 STREAM_NOT_IMPLEMENTED는 유지한다.
-실제 검증의 범위는 [완료 처리 증거](../evidence/m7-stream-execution-completion.md)를 따른다.
+실제 검증의 범위는 [완료 처리 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-execution-completion.md)를 따른다.
 
 아직 연결해야 할 항목은 DeviceSource의 공동 완료 대기, Run 요청의 Device 입력·route/세대
 생성, 그룹별 Task 동시 시작과 BATCH 해제, peer journal 인계, 운영 TLS 구성, API/UI와 실제

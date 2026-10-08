@@ -16,7 +16,8 @@
 
 문서는 [문서 안내](docs/README.md)에서 찾는다. `PROGRESS.md`는 최신 상태만 교체하고,
 `PLAN.md`는 단계와 다음 순서만 유지한다. 과거 실행 이력을 두 파일이나 README에
-계속 덧붙이지 않는다. 상세 검증은 `docs/evidence/`, 설계 결정은 `docs/adr/`에 기록한다.
+계속 덧붙이지 않는다. 일회성 검증 로그·스크린샷·보고서는 Git에서 제외한 `output/verification/`에 저장한다.
+재사용할 사용법은 기존 가이드에 반영하고, 설계 결정은 Semantica와 `docs/adr/`에 기록한다.
 
 ## 경계
 

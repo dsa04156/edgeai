@@ -27,4 +27,4 @@ RemoteStart를 만든다. 전체 allocation/run/task/attempt/epoch, 예약 diges
 증거이며 계산 성공, 전환 완료 또는 전역 producer 종료 증명이 아니다. 복원 DB의 원래
 전환/기한/최신 Attempt·취소·결과와 대조해 원자적으로 반영하는 복구 경로는 다음 단계다.
 기존 복구의 미해결/격리 판정을 기록만으로 해제하지 않는다.
-[검증 근거](../evidence/m9-remote-start-authority.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-remote-start-authority.md)를 따른다.

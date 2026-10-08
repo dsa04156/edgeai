@@ -43,4 +43,4 @@ binding/전환 이력을 여러 PostgreSQL 복원본으로 검증한다. 한 tar
 실제 Kubernetes/PG16/TLS S3·MQTT의29개 결합 시험이 `163446Z-71726657`에서 통과했다.
 실제 검증의 전환 대상은 NODE/AUTO이며 VD/자동 정책은 원래 이력의 검사 계약을 유지한다.
 VD/자동 전환의 별도 복원 종단 시험, 기록된 target 실패·시작 성공 권한·finalization과 종합
-활성화 수용은 후속이다. [검증 근거](../evidence/m9-recovery-stream-offloads.md)를 따른다.
+활성화 수용은 후속이다. [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-offloads.md)를 따른다.

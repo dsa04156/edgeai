@@ -2,7 +2,7 @@
 
 상태: 구현·실제 HTTP/DB/TLS broker 연결 및 인증 경계 로컬 검증 완료. 공개 STREAM 실행 연결은 별도 게이트다.
 
-검증 범위·실행 ID·fixture 경계는 [인증 배정 검증](../evidence/m7-stream-bindings.md)을 따른다.
+검증 범위·실행 ID·fixture 경계는 [인증 배정 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-bindings.md)을 따른다.
 
 관리자는 기존 Device 세션을 연 뒤 해당 세션의 stream-token을 발급한다. 별도256-bit 서명 키로
 Device ID/session ID/epoch/boot ID에 HMAC을 적용하며 토큰은 DB에 저장하지 않는다.

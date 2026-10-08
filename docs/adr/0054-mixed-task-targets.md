@@ -1,7 +1,7 @@
 # ADR0054 — BATCH 작업별 VD·Remote 대상과 잠금 경계
 
 2026-10-04. 구현과 로컬·실제 Kubernetes VD 혼합 실행 검증을 통과했다.
-새 이미지·CI·배포와 M7 전체 수용 완료 기록은 아니다. [검증 범위](../evidence/m7-mixed-task-targets.md).
+새 이미지·CI·배포와 M7 전체 수용 완료 기록은 아니다. [검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-mixed-task-targets.md).
 
 `taskExecutions`를 AUTO/NODE/VD/REMOTE 정책으로 확장한다. Run의 execution은 기본값이며
 실제 각 Task의 최초 대상은 별도로 고정한다. VD는 해당 Task의 SERVICE 버전과 비교하고

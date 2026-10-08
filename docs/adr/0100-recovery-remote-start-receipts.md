@@ -33,4 +33,4 @@ UUID로 새 출력 디렉터리에 재실행한다. 완료된 전환은 다시 �
 전환 범위이며 실제 외부 제공자 계약·STREAM·Kubernetes 시작 권한·전역 writer 종료·
 새 권한 발급과 종합 활성화의 증거는 아니다. 합성 부모/자식은 실제 컨테이너이고 업무
 할당/전환은 명시적 DB fixture다. 시작 기록·계산·TLS·DB transaction·S3 파일은 실제다.
-[검증 근거](../evidence/m9-recovery-remote-start-receipts.md)를 따른다. 새 원격 CI·배포는 별도다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-start-receipts.md)를 따른다. 새 원격 CI·배포는 별도다.

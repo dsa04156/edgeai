@@ -1,7 +1,7 @@
 # ADR 0010: Remote 경계와 참조 프로토콜
 
 상태: 참조 구성 요소 로컬 검증. 플랫폼 연결·실제 외부 수용은 미완료다.
-2세부 실제 API를 대신하는 외부 계약이 아니다. 검증 근거는 ../evidence/m5-remote-adapter.md다.
+2세부 실제 API를 대신하는 외부 계약이 아니다. 검증 근거는 [당시 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-remote-adapter.md)다.
 
 원문은 RemoteAllocation과 remote runtime을 구분하며 외부 API를 추측해 확정하지 않도록 한다.
 domain.remote.RemoteGateway를 플랫폼 내부 포트로 정의하고 reference HTTP adapter와 합성 계산

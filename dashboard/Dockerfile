@@ -9,7 +9,7 @@ COPY dashboard dashboard
 COPY docs docs
 COPY README.md PLAN.md PROGRESS.md ./
 COPY scripts/README.md scripts/README.md
-COPY deploy/edgex/README.md deploy/edgex/README.md
+COPY deploy/kubeedge/README.md deploy/kubeedge/README.md
 COPY platform-service/README.md platform-service/README.md
 RUN mkdir -p dashboard/public && pnpm --filter @edgeai/dashboard build
 

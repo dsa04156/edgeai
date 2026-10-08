@@ -14,7 +14,7 @@ import { ConsoleIcon } from "./console-shell";
 import { infrastructureLabels, useInfrastructure, type InfrastructureKind } from "../../lib/infrastructure";
 
 type Schema = components["schemas"];
-type Snapshot = { nodes: Schema["ExecutionNode"][] | null; devices: Schema["Device"][] | null; vds: Schema["VirtualDevice"][] | null; profiles: Schema["ProfileVersion"][] | null; runs: Schema["RunPage"] | null; errors: string[]; at: Date };
+type Snapshot = { nodes: Schema["ExecutionNode"][] | null; devices: Schema["ManagedDevice"][] | null; vds: Schema["VirtualDevice"][] | null; profiles: Schema["ProfileVersion"][] | null; runs: Schema["RunPage"] | null; errors: string[]; at: Date };
 const time = (value: string) => new Date(value).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export function OperationsOverview({ workflows }: { workflows: boolean }) {
@@ -34,7 +34,7 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
     async function load() {
       const values = await Promise.allSettled([
         registryItems<Schema["ExecutionNode"]>("nodes", request),
-        registryItems<Schema["Device"]>("devices", request),
+        request("managed-devices").then(r => r.json()).then((page: Schema["ManagedDevicePage"]) => page.items),
         registryItems<Schema["VirtualDevice"]>("virtual-devices", request),
         workflows ? request("workflow-runs?limit=20&offset=0").then(r => r.json() as Promise<Schema["RunPage"]>) : Promise.resolve(null),
         profilesRequest,
@@ -55,8 +55,8 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
   const monitored = monitoredNodes(metrics, nodes || [], infrastructure.snapshot);
   const classified = infrastructure.snapshot?.nodesStatus === "AVAILABLE" ? infrastructure.snapshot.nodes : null;
   const sensors = infrastructure.snapshot?.sensorsStatus === "AVAILABLE" ? infrastructure.snapshot.sensors : null;
-  const activeDevices = devices?.filter(device => device.state === "ACTIVE");
-  const online = activeDevices?.filter(device => device.connectionStatus === "ONLINE").length;
+  const activeDevices = devices;
+  const online = activeDevices?.filter(device => device.state === "ONLINE").length;
   const registered = vds?.filter(vd => vd.state === "REGISTERED").length;
   return <>
     <PageHeading eyebrow="WORKSPACE / OVERVIEW" title="운영 현황" description="AI 서비스와 현장 장비의 상태를 한눈에 확인하세요."
@@ -66,7 +66,7 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
     <div className="metric-strip" data-count="4" aria-label="자원 현황" aria-busy={busy}>
       <Link href="/devices?view=servers" className="metric"><span className="metric-icon blue"><ConsoleIcon name="nodes" /></span><span className="metric-label">엣지 AI 서버</span><div><strong>{classified?.filter(node => node.kind === "EDGE_AI_SERVER").length ?? "—"}</strong></div></Link>
       <Link href="/devices?view=edge" className="metric"><span className="metric-icon purple"><ConsoleIcon name="nodes" /></span><span className="metric-label">엣지 디바이스</span><div><strong>{classified?.filter(node => node.kind === "EDGE_DEVICE").length ?? "—"}</strong></div></Link>
-      <Link href="/devices?view=sensors" className="metric"><span className="metric-icon purple"><ConsoleIcon name="virtual" /></span><span className="metric-label">센서 · EdgeX 장치</span><div><strong>{sensors?.length ?? "—"}</strong></div><small>EdgeX 등록 목록</small></Link>
+      <Link href="/devices?view=sensors" className="metric"><span className="metric-icon purple"><ConsoleIcon name="virtual" /></span><span className="metric-label">센서 · Mapper 장치</span><div><strong>{sensors?.length ?? "—"}</strong></div><small>KubeEdge 등록 목록</small></Link>
       <Link href="/virtual-devices" className="metric"><span className="metric-icon rose"><ConsoleIcon name="workflow" /></span><span className="metric-label">가상 장치</span><div><strong>{registered ?? "—"}</strong></div><small>등록된 VD<br />실행 상태는 상세에서 확인</small></Link>
     </div>
     <div className="overview-grid">
@@ -83,7 +83,7 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
         <ol className="pipeline-steps">{[
           ["/profiles", "Profile 등록", "장치 · 서비스 규격과 버전 정의"], ["/devices", "장치 연결", "실장치와 실행 노드 확인"], ["/virtual-devices", "가상 장치 구성", "원본 연결과 실행 준비"], ...(workflows ? [["/workflows", "워크플로 실행", "서비스 연결 → 발행 → 실행 요청"]] : []),
         ].map(([href, title, description], index) => <li key={href}><Link href={href}><span className="step-number mono">0{index + 1}</span><div><strong>{title}</strong><small>{description}</small></div><span aria-hidden="true">↗</span></Link></li>)}</ol>
-        <div className="device-summary"><h3>등록 장치 연결 상태</h3><div><span><i className="legend-dot good" />온라인</span><strong>{online ?? "—"}</strong></div><div><span><i className="legend-dot warning" />오프라인 · 관측 만료</span><strong>{activeDevices?.filter(d => ["OFFLINE", "STALE"].includes(d.connectionStatus)).length ?? "—"}</strong></div><div><span><i className="legend-dot neutral" />보고 없음</span><strong>{activeDevices?.filter(d => d.connectionStatus === "UNKNOWN").length ?? "—"}</strong></div></div>
+        <div className="device-summary"><h3>센서 디바이스 연결 상태</h3><div><span><i className="legend-dot good" />온라인</span><strong>{online ?? "—"}</strong></div><div><span><i className="legend-dot warning" />오프라인 · 관측 만료</span><strong>{activeDevices?.filter(d => ["OFFLINE", "STALE"].includes(d.state)).length ?? "—"}</strong></div><div><span><i className="legend-dot neutral" />보고 없음</span><strong>{activeDevices?.filter(d => d.state === "UNKNOWN").length ?? "—"}</strong></div></div>
       </section>
     </div>
     {workflows && <section className="console-panel recent-runs" aria-labelledby="recent-runs-title"><div className="panel-heading"><div><p className="small-label">RECENT EXECUTIONS</p><h2 id="recent-runs-title">최근 실행</h2></div><Link href="/runs">모든 실행 보기 ↗</Link></div>

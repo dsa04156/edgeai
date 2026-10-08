@@ -39,4 +39,4 @@ RUNNING 또는 전환 SUCCEEDED가 남을 수 있다. Runner는 claim 성공 응
 API 시계와 S3 관리 권한은 신뢰 경계다. 조건부 쓰기/versioning은 관리자 변조를 막는
 Object Lock이 아니며 복구에는 원본 writer 차단·요청 소진·별도 백업·실제 종료 증거가 필요하다.
 VD Result 독립 기록, 복원 DB의 기록 소비, STREAM 그룹의 권한 대조 및 전체 활성화는 후속이다.
-[검증 근거](../evidence/m9-vd-task-start-journal.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-vd-task-start-journal.md)를 따른다.

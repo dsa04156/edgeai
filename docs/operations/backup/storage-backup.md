@@ -86,4 +86,4 @@ bash scripts/collect-evidence.sh storage-backup bash scripts/test/test-storage-b
 binary는 `.tools/minio`이며 `--minio-binary`로 명시할 수 있다. 원본 종료, replica 재시작,
 기존 설정 거절과 검증 실패를 포함한다. 모든 소유 프로세스를 종료하고 파일은 비공개 `.tools`에
 남긴다. CI는 같은 job에서 빌드한 MinIO 이미지의 binary를 추출해 실행하며 요약만 업로드한다.
-[설계](../../adr/0060-version-preserving-storage-backup.md), [검증 근거](../../evidence/m9-storage-backup.md).
+[설계](../../adr/0060-version-preserving-storage-backup.md), [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-storage-backup.md).

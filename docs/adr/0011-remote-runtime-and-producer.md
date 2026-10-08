@@ -2,7 +2,7 @@
 
 상태: 영속 모델·producer fencing·결과 확정은 CI·배포 검증. 아래는 최초 결정이며 자동 worker와
 공개 REMOTE 실행 선택의 후속 구현은 [ADR0012](0012-remote-worker-and-selection.md)를 따른다.
-ADR0010의 참조 프로토콜을 플랫폼 실행에 연결한다. 검증 범위는 `docs/evidence/m5-remote-runtime.md`를 따른다.
+ADR0010의 참조 프로토콜을 플랫폼 실행에 연결한다. 검증 범위는 [당시 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-remote-runtime.md)를 따른다.
 
 RuntimeInstance와 RemoteAllocation을1:1로 연결하고 원격 실행에는 Job/Pod/Node 신원을 기록하지 않는다.
 namespace는 worker의 배포/조정 범위로만 남긴다. RemoteAllocation은 제공자 key·설정 digest·sourceMode,

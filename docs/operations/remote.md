@@ -60,4 +60,4 @@ SERVICE에 `recovery.mode=RESTART`가 필요하고 sourceAttemptId/drainTimeoutS
 기동해 공개 HTTP→스케줄러→Remote→S3→Result 경로, 장애·취소·재시도·동시 처리를 검증한다.
 기존 Kubernetes↔Remote 서비스 전환 시험의 Kubernetes 부분은 fixture다. 개별 kind·클러스터 시험의 결과는 해당 날짜의 evidence를 확인한다.
 참조 제공자 검증은 실제 외부 API 계약과 상태형 복원 수용을 대신하지 않는다.
-증거·실패 이력·남은 게이트는 [M5 worker 기록](../evidence/m5-remote-worker.md)을 따른다.
+증거·실패 이력·남은 게이트는 [M5 worker 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-remote-worker.md)을 따른다.

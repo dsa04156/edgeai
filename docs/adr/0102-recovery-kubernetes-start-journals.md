@@ -43,4 +43,4 @@ VD 독립 시작 기록, STREAM 그룹 및 Kubernetes Result 복구는 이 단�
 결합했다. 후속91개는 명시적 DB binding을 유지하고 실제 TLS API·Pod-bound TokenReview로
 시작 기록을 생성해 복구 CLI에 연결했다. 시험 클라이언트의 claim이며 실제 Runner 업무
 프로세스의 계산·Result·종합 복구는 별도다. ADR0101의 실제 정상 Runner claim 시험도 유지한다.
-[검증 근거](../evidence/m9-recovery-kubernetes-start-journals.md)를 따른다. 새 CI/배포는 후속이다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-start-journals.md)를 따른다. 새 CI/배포는 후속이다.

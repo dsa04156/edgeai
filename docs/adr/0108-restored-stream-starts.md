@@ -28,7 +28,7 @@ output으로 원래 증거를 다시 확인한다. 전환 성공은 업무 Resul
 실제 TLS API와 Pod-bound TokenReview로 NODE/VD 두 원래 시작 기록을 만들고, 원본 DB/저장소
 제거·복원 DB21개·실제 부모/자식 종료·MQTT 차단을 결합한55개가
 `20261005T010404Z-5743138b`에서 PASS다. 원래 Operation만 변경하고 타43테이블을 보존했다.
-기존 결과 복원20/24개와 시작 복구91개도 PASS다. [상세 근거](../evidence/m9-recovery-stream-starts.md).
+기존 결과 복원20/24개와 시작 복구91개도 PASS다. [상세 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-starts.md).
 시험 fixture의 저장소 클라이언트 수명 오류를 재현해 수정했으며 생산 관측 timeout은 유지했다.
 최초 HTTP/Pod/TLS fixture 기동 실패의 미확정 원인은 별도로 보존한다.
 STREAM 결과/finalization 권한, 백업 이후 새 실행 발견/회수, 전역 writer/API 차단·종합

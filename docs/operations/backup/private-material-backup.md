@@ -69,7 +69,7 @@ bash scripts/ops/restore-private-material.sh \
 
 ```bash
 bash scripts/collect-evidence.sh private-material \
-  bash scripts/test/test-private-material.sh --report docs/evidence/runs/private-material-report.json
+  bash scripts/test/test-private-material.sh --report output/verification/private-material-report.json
 ```
 
 시험은 별도0700 경로에 합성 키를 만들고 실제 age/OpenSSL을 사용한다. 진단용 합성 자료는

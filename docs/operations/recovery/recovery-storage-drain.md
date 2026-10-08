@@ -46,4 +46,4 @@ timeout은10–300초다.
 
 새 복구 사용자 자격·mc 설정·관리 응답은 비공개로 보관한다. `globalQuiescenceProven`과
 `activated`는 false다. 외부 IdP/STS·내부 복제/lifecycle·분산 MinIO·전체 복구 수용은 후속이다.
-[실제25개 결합 시험](../../evidence/m9-recovery-storage-drain.md)은 원래 root 차단18개에 요청 소진 검증을 더한다.
+[실제25개 결합 시험](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-storage-drain.md)은 원래 root 차단18개에 요청 소진 검증을 더한다.

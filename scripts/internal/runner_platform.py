@@ -137,7 +137,7 @@ def publish(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);commands=parser.add_subparsers(dest='action',required=True)
     record=commands.add_parser('native');record.add_argument('--architecture',choices=ARCHITECTURES,required=True)
-    record.add_argument('--image',default='edgeai-runner:verify');record.add_argument('--evidence',type=Path,default=Path('docs/evidence/runs'))
+    record.add_argument('--image',default='edgeai-runner:verify');record.add_argument('--evidence',type=Path,default=Path('output/verification'))
     record.add_argument('--published',action='store_true')
     index=commands.add_parser('publish');index.add_argument('--directory',type=Path,required=True)
     selection=commands.add_parser('plan');selection.add_argument('--force',action='store_true')

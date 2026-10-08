@@ -21,5 +21,5 @@ ADR0087의 snapshot 추출에 내부 전용 격리 읽기 옵션을 추가한다
 자동 활성화나 세션/경로의 재할당은 이 결정의 범위가 아니다.
 
 실제 공개 API/PG 복원 3개·암호화 journal 원본 삭제·43개 테이블 및 journal 파일 보존을
-[시험](../evidence/m9-recovery-device-journal.md)한다. 런타임/broker/checkpoint receipt는
+[시험](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-device-journal.md)한다. 런타임/broker/checkpoint receipt는
 제약조건을 유지한 SQL fixture임을 구분한다. V1–V34와 Java/Runner 실행 코드는 불변이다.

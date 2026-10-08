@@ -47,4 +47,4 @@ bash scripts/test/test-management-audit.sh
 ```
 
 이 검사는 격리 DB·API를 생성해 실패 주입과 정리를 수행합니다. 운영 DB에 적용하지 않습니다.
-환경 조건과 실제 결과는 [검증 기록](../evidence/m9-management-audit.md)을 확인합니다.
+환경 조건과 실제 결과는 [검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-management-audit.md)을 확인합니다.

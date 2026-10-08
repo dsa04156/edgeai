@@ -1,6 +1,6 @@
 # ADR0074: 복원 DB와 차단된 Remote 전체 이력 대조
 
-상태: 로컬 검증. [실제 검증 근거](../evidence/m9-recovery-remote-inventory.md)를 따른다.
+상태: 로컬 검증. [실제 검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-inventory.md)를 따른다.
 
 ADR0073은 단일 제공자의 새 요청과 계산을 멈춘다. 복원 DB에 없는 할당이나 원본 제공자에서
 누락된 할당까지 알아야 이후 복구 결정을 내릴 수 있으므로, 별도 읽기 전용 점검을 추가한다.

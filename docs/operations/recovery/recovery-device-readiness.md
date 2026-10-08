@@ -67,5 +67,5 @@ marker도 유지한다. `producerProcessQuiescenceProven`, `globalQuiescenceProv
 --verify-authority --minio-binary <실제 MinIO> --report <새 비공개 보고서>`로 실행한다.
 고정 age/mc/Paho와 Mosquitto Dynamic Security plugin·OpenSSL이 필요하다. 비표준
 Mosquitto 설치 변수는 기존 MQTT 차단 시험과 같다.
-[실제 27개 검증과 경계](../../evidence/m9-device-recovery-authority.md)를 참고한다.
-원본 소유권 검증을 포함한 후속 [33개 결합 검증](../../evidence/m9-device-source-retirement.md)도 제공한다.
+[실제 27개 검증과 경계](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-device-recovery-authority.md)를 참고한다.
+원본 소유권 검증을 포함한 후속 [33개 결합 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-device-source-retirement.md)도 제공한다.

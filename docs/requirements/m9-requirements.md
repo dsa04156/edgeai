@@ -12,7 +12,7 @@ Backup을 진행한다. 원문의 확인된 수정 시각은 [출처 목록](../
 ADR0110의 [STREAM 완료 허가 보존](../adr/0110-stream-completion-journal.md)을 추가한다.
 연결 그룹 전체의 원래 허가를 DB transaction과 독립 S3 기록에 보존하며, 저장 장애·
 응답 유실·재시작/producer 종료 뒤 재발행과 V37 기존 이력 보존을 검증한다.
-검증 수치는 [근거](../evidence/m9-stream-completion-journal.md)를 따른다.
+검증 수치는 [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-stream-completion-journal.md)를 따른다.
 [ADR0114](../adr/0114-restored-stream-completion-history.md)는 원래 실행 이력이 있는 V40
 격리 DB에 누락 허가와 checkpoint 선행 이력을 반영한다. 백업에 없는 실행 자체의 복원과
 전역 차단·종합 활성화는 남는다.
@@ -25,7 +25,7 @@ ADR0110의 [STREAM 완료 허가 보존](../adr/0110-stream-completion-journal.m
 | 전송 보호 | dev API·MinIO·MQTT TLS 및 CA 전달·인증서 오류 시험 | 실제 접근 경로 전체와 인증서 갱신·만료·키 유실 시 절차 |
 | DB 백업·복원 | ADR0059의 실제 archive·새 DB 복원 구성 요소 | 배포 환경 복원·별도 장애 영역 저장·암호화·보관 정책·주기 실행 |
 | 파일·상태·키 복원 | ADR0060 버전 보존·ADR0061 복원 DB 참조 대조·ADR0065 선택한 정적 키 파일의 암호화/새 경로 복원 | 배포 환경 결합 복원, 실제 Secret/CA 인벤토리·키 전달/회전, broker·장치 journal, 외부 producer 재조정·활성화 |
-| 종합 장애 수용 | 구성 요소별 실제 PostgreSQL/S3/TLS/Kubernetes 회귀 | `test-fault.sh`의 종합 장애 게이트·허용 데이터 유실과 복구 시간 측정 |
+| 종합 장애 수용 | 구성 요소별 실제 PostgreSQL/S3/TLS/Kubernetes 회귀 | 미구현 종합 장애 게이트·허용 데이터 유실과 복구 시간 측정 |
 
 ADR0063의 [Kubernetes 복구 점검](../operations/recovery/recovery-kubernetes.md)은 DB에 없는 실행까지 조회하고
 UID·소유 충돌을 구분한다. 실제 DB/클러스터 메타데이터 검증은 완료했으며 실행 회수는 후속이다.
@@ -73,16 +73,16 @@ ADR0080의 [복원 Kubernetes 실행 정리](../operations/recovery/recovery-kub
 종료 Pod와 복원 DB 신원을 재확인해 runtime·기존 명령·VD binding을 원자적으로 정리한다.
 실제16개에서 잠금/rollback·응답 유실·UID 미기록/404·이력 보존을 검증했다. 미관측 producer,
 VD Task allocation 결과·offload/STREAM/journal·종합 활성화는 별도다.
-ADR0081은 이 종료 확인을 [VD 내부 Task/할당 정리](../evidence/m9-recovery-vd-tasks.md)로 확장한다.
+ADR0081은 이 종료 확인을 [VD 내부 Task/할당 정리](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-vd-tasks.md)로 확장한다.
 실제23개에서 runtime/할당3개 종료, 기존 closure/성공 결과·미배정 이력 보존과 경쟁/원복을
 검증했다. Task/Run 업무 결과와 재시도/offload·종합 활성화는 후속이다.
 ADR0082–0084는 기록된 workflow 취소·재시도/전환 기한과 claim 전 Job의 보존 자식까지
-[실제56개](../evidence/m9-recovery-unclaimed-jobs.md)로 연결했다. ADR0085는 같은 복구 ID의
+[실제56개](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-unclaimed-jobs.md)로 연결했다. ADR0085는 같은 복구 ID의
 참조 Remote를 실제 TLS로 새로 대조해 혼합 전환을 조정한다.
-[실제64개](../evidence/m9-recovery-mixed-remote-offloads.md)에서 양방향 시작 만료/취소,
+[실제64개](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-mixed-remote-offloads.md)에서 양방향 시작 만료/취소,
 성공 결과 보존·접속/신원 거절·경쟁/원복/응답 유실을 검증했다. 전환 이력은 DB fixture이며
 Remote 성공/실패의 종합 결과 조정·STREAM/group/journal·활성화는 남는다.
-ADR0086은 [혼합69개/Result15개/실패15개](../evidence/m9-recovery-remote-offload-outcomes.md)로
+ADR0086은 [혼합69개/Result15개/실패15개](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-offload-outcomes.md)로
 실제 Remote 전환 대상 실패에 원래 재시도 예산을 적용하고 원자적 반영/원복을 확인했다.
 STARTING 성공 파일만으로 누락된 시작 권한을 대신하지 않으며 별도 Result 우회와
 검사 뒤 전환 삽입 경쟁도 거절한다. 성공의 시작 권한 복원·STREAM/group/journal·활성화는 남는다.
@@ -91,7 +91,7 @@ ADR0065의 [키 파일 백업](../operations/backup/private-material-backup.md)�
 운영 Secret 자동 수집·Kubernetes Secret 적용·동시 갱신 중인 journal 스냅샷·활성화는 별도다.
 ADR0087의 [장치 journal 백업](../operations/backup/device-journal-backup.md)은 동일 Device Session의 LOCAL
 상태·fanout·ACK·DATA/END를 한 읽기 transaction에서 추출해 암호화하고 새 볼륨에 격리 복원한다.
-[실제13개](../evidence/m9-device-journal-backup.md)에서 별도 writer·원본 유실·완료 파일 경쟁·
+[실제13개](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-device-journal-backup.md)에서 별도 writer·원본 유실·완료 파일 경쟁·
 SIGKILL·자동 재개 차단을 확인했다. 현재 DB/route/watermark 대조·원본 송신 차단·새 권한 적용과
 활성화는 별도이며 snapshot 이후 센서 데이터까지 보존한다고 주장하지 않는다.
 ADR0088의 [DB/journal 대조](../operations/recovery/recovery-device-journal.md)는 복원 신원·고정 Session/경로·
@@ -119,24 +119,24 @@ ADR0093은 같은 명령의 `--offloads`로 기록된 전환 취소와 원래 dr
 당시29개에서 source2→target2 종료·복원DB13개·checkpoint/배치/기한 보존과
 원복/응답 유실을 확인했다. VD/자동 전환의 복원 종단·기록된 target 실패·전환 성공의 시작
 권한·finalization·새 자격/종합 활성화는 여전히 남는다.
-ADR0094는 [기록된 STREAM target 실패](../evidence/m9-recorded-stream-target-failures.md)의
+ADR0094는 [기록된 STREAM target 실패](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recorded-stream-target-failures.md)의
 Operation/Attempt/runtime 일관성을 검사한다. 원래 실패 이력은 보존하고 남은 peer 취소와
 Run만 조정하며, 모순된 실패 사유/재시도/최신 시도는 미해결로 남긴다. 명시적 실패 fixture를
 포함한36개를 검증하며 미기록 실패·시작 권한·종합 재가동은 별도다.
-ADR0097은 [봉인된 최종 저장 재시도](../evidence/m9-restored-stream-finalizers.md)의 원래
+ADR0097은 [봉인된 최종 저장 재시도](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-restored-stream-finalizers.md)의 원래
 작업별 기한·grant/checkpoint·실패를 대조하고 만료/취소만 조정한다. 기존 전환을 포함한44개,
 복원DB18·고정S3version2·원복/COMMIT응답 유실·소유정리를 검증했다. 새 실행/권한은 별도다.
-ADR0098은 [명시적 소유 S3 resync](../evidence/m9-storage-explicit-resync.md)로 백업의
+ADR0098은 [명시적 소유 S3 resync](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-storage-explicit-resync.md)로 백업의
 배경 scanner 의존성을 제거했다. 느린 scanner의11개와 위44개 결합 회귀를 통과했다.
-ADR0099의 [Remote 시작 기록](../evidence/m9-remote-start-authority.md)은 계산 전에 원래
-권한과 실제 접수 시각을 영속화한다. ADR0100의 [시작 기록 복구](../evidence/m9-recovery-remote-start-receipts.md)는
+ADR0099의 [Remote 시작 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-remote-start-authority.md)은 계산 전에 원래
+권한과 실제 접수 시각을 영속화한다. ADR0100의 [시작 기록 복구](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-start-receipts.md)는
 실제79개에서 원래 전환/기한/최신 Attempt·종료 증거를 대조해 전환1개와 고정 S3 Result1개를
 순서대로 확정했다. 누락/변형/취소/새 시도·경쟁/원복/응답 유실·변경0 재실행을 검증했으며
 실제 외부 계약·Kubernetes/STREAM 시작 권한·종합 활성화와 새 CI/배포는 별도다.
-ADR0101의 [Kubernetes 시작 기록](../evidence/m9-kubernetes-start-journal.md)은 claim 성공 응답 전에
+ADR0101의 [Kubernetes 시작 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-kubernetes-start-journal.md)은 claim 성공 응답 전에
 최초 허가를 버전 관리 S3에 조건부 저장하고 고정 version으로 다시 검증한다.
 실제 저장소 동시 쓰기·충돌, API 응답 유실·저장소 복귀·취소와 STREAM 후속 peer/BATCH
-기록을 검증했다. ADR0102의 [복원 시작 기록 대조](../evidence/m9-recovery-kubernetes-start-journals.md)는
+기록을 검증했다. ADR0102의 [복원 시작 기록 대조](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-start-journals.md)는
 별도 S3 백업·원래 작업/기한·실제 종료를 대조해 BATCH 전환만 조정한다. 결합90개와
 Remote 결과/실패 각15개 회귀를 통과했으며 claim/Result·42테이블을 보존한다.
 최초90개의 시작 허가는 명시적 fixture다. 후속91개는 실제 TLS API·Pod-bound TokenReview로
@@ -147,7 +147,7 @@ ADR0066의 [관리 감사 기록](../operations/management-audit.md)은 변경 �
 현재 관리 인증으로 API/화면에서 조회하며 실제 PostgreSQL 오류 주입·API 재시작·불변/비밀값 배제를
 검증한다. 운영 사용자별 역할·외부 감사·보관 정책 및 전체 M9 수용은 포함하지 않는다.
 
-ADR0103의 [Kubernetes Result 기록](../evidence/m9-kubernetes-result-journal.md)은 DB seal과
+ADR0103의 [Kubernetes Result 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-kubernetes-result-journal.md)은 DB seal과
 영속 발행 큐를 한 transaction에 저장하고 확정 후 S3에 원래 결과 신원·출력 버전을 보존한다.
 새9개에서 응답 유실·실제 연결 실패·Pod 정리/lease 만료·동시 발행·DB rollback·업그레이드
 backfill을 검증했고, 실제 Kubernetes3개에서6개 결과 기록과 pending0을 확인했다.
@@ -158,13 +158,13 @@ ADR0104의 [Kubernetes Result 복원](../operations/recovery/recovery-kubernetes
 확인했다. 자식은 대기만 하며 새 실행 권한을 만들지 않는다. STREAM/VD 결과 권한 소비,
 원본 API/writer 차단과 종합 재활성화·실제 외부 계약 수용·새 CI/배포는 남는다.
 
-ADR0105의 [VD 자식 시작 기록](../evidence/m9-vd-task-start-journal.md)은 최초 claim 응답 전에
+ADR0105의 [VD 자식 시작 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-vd-task-start-journal.md)은 최초 claim 응답 전에
 배정 ID·세션/세대·슬롯·설정·허가 당시 lease와 원래 기한을 S3에 보존한다. 대상8개와
 실 Kubernetes7개에서27개 VD 기록·18개 고정 결과를 검증했다. 최종 개별 수트의
 단위122/PG232/runtime70/저장소11개 통과와 전체 명령의 간헐 실패를 구분한다.
 VD Result 기록은 아래 ADR0106으로 확장했으며 복원 DB 소비·STREAM 권한/종합 활성화는 남는다.
 
-ADR0106의 [VD 확정 결과 기록](../evidence/m9-vd-task-result-journal.md)은 V36에서 기존 독립
+ADR0106의 [VD 확정 결과 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-vd-task-result-journal.md)은 V36에서 기존 독립
 발행 큐를 확장하고 DB commit 뒤 원래 배정·세션/세대·결과 신원과 고정 출력을 S3에 보존한다.
 대상9개 포함 runtime79/PG232/저장소11·단위122 개별 수트와 실제 Kubernetes7개를 통과했다.
 VD 결과16개/Node2개·시작27개/Node2개·출력18개·발행 대기0·소유 정리를 확인했다.
@@ -182,16 +182,16 @@ RPO/RTO, 보관 기간·저장 위치, 사용자/역할 정책과 외부 신원 
 
 현재 DB 명령은 백업 시 원본을 유지하고 새 DB로만 복원한다. 실제 업무 데이터 대신 공개
 API로 만든 합성 데이터를 사용한다. 상세 동작은 [ADR0059](../adr/0059-postgres-backup-restore.md),
-실행법은 [백업 문서](../operations/backup/postgres-backup.md), 근거는 [DB 복원 시험](../evidence/m9-postgres-backup.md)을 따른다.
+실행법은 [백업 문서](../operations/backup/postgres-backup.md), 근거는 [DB 복원 시험](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-postgres-backup.md)을 따른다.
 전체 단계의 판정은 [PLAN](../../PLAN.md)과 [검증 목록](../testing/verification-matrix.md)을 유지한다.
 
 ADR0107은 [VD BATCH 결과 복원](../operations/recovery/recovery-vd-results.md)을 연결한다. 실제 TLS claim/commit과
 원래 배정/세션/슬롯·설정·물리 종료·고정 출력을 대조하여 격리 DB에 원래 Result를 반영한다.
 복원 DB5개·새24개에서 경쟁/원복/응답 유실·무변경 재실행·타38테이블/소유 정리를 확인했다.
-[근거](../evidence/m9-recovery-vd-results.md). STREAM·진행 중 VD 전환의 시작 허가 소비,
+[근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-vd-results.md). STREAM·진행 중 VD 전환의 시작 허가 소비,
 전역 writer/API 차단과 종합 활성화는 남으며 전체 M9 수용 완료가 아니다.
 
-ADR0108의 [STREAM 원래 그룹 시작 복원](../evidence/m9-recovery-stream-starts.md)은 NODE/VD
+ADR0108의 [STREAM 원래 그룹 시작 복원](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-starts.md)은 NODE/VD
 전체 member의 독립 시작 기록·원래 전환/배정/기한과 실제 종료를 대조한다. 실제 TLS API와
 Pod-bound TokenReview·원본 제거·복원DB21개를 포함한55개에서 전환1개/새claim·Result0,
 타43테이블·취소/더 최신 시도·경쟁/원복/응답 유실·소유 정리를 확인했다.
@@ -202,14 +202,14 @@ PASS다. STREAM Result/finalization 권한, 백업 후 새 실행 발견/회수,
 ADR0109의 [STREAM 결과 복원](../operations/recovery/recovery-stream-results.md)은 원래 연결 그룹의 완료 허가·
 checkpoint 실제 bytes·실행 계약·경로/END와 현재 producer/broker 차단을 대조한다.
 Kubernetes30개/VD34개에서 각각 복원DB6·원래 Result ID/시각·타38테이블·경쟁/원복/응답
-유실·소유 정리를 확인했다. [근거](../evidence/m9-recovery-stream-results.md).
+유실·소유 정리를 확인했다. [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-results.md).
 그룹 전체의 BATCH 부모가 확정됐을 때만 후속 member를 함께 준비시킨다. 같은 Run의
 별도 후속 runtime은 부모 완료 장벽에 포함하지 않고 기존 이력을 유지한다.
-후속 [상속 finalizer 검증](../evidence/m9-recovery-stream-finalizer-results.md)은 실제 실패2회·
+후속 [상속 finalizer 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-finalizer-results.md)은 실제 실패2회·
 원래 시작 기록3개·완료 허가1개·종료 Pod3개를 연결했다. Kubernetes35개/VD39개에서
 원래 결과/실패 이력 보존·재시도 정책 모순 거절·응답 유실 후 무변경 재검사를 확인했다.
 재시도 배정/VD readiness는 명시적 fixture이며 자동 스케줄러 수용과 구분한다.
-[혼합 NODE/VD 그룹](../evidence/m9-recovery-stream-group-results.md)의 전체 CLI는 실제
+[혼합 NODE/VD 그룹](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-group-results.md)의 전체 CLI는 실제
 checkpoint API·그룹 완료 허가·각 Result와 독립 백업/복원을 연결한다. 서로 다른 복원
 순서에서 후속 작업 대기·한 번만 준비, peer 증거 누락/경쟁·원복/응답 유실과 원래 이력을
 검증한다. Device END·경로·배정/readiness는 fixture이며 상속 finalizer와의 결합은 별도다.

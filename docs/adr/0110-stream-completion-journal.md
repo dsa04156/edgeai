@@ -43,7 +43,7 @@ V33–V36 복원과 호환되며 STREAM 결과 복원 transaction은 새 테이�
 
 ## 검증과 남은 범위
 
-[검증 기록](../evidence/m9-stream-completion-journal.md)을 따른다. 실제 PostgreSQL·HTTP·
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-stream-completion-journal.md)을 따른다. 실제 PostgreSQL·HTTP·
 버전 관리 S3를 사용하는 보존 시험과 명시적 Pod/broker/checkpoint metadata fixture의
 범위를 구분한다. 기존 V36→V37 업무 데이터 보존, 기존 완료 그룹 backfill, 동시 쓰기,
 응답 유실, 취소, transaction rollback, producer 종료 뒤 lease 인계와 재발행을 검증한다.

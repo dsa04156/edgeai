@@ -87,4 +87,4 @@ corepack pnpm contract:generate
 ```
 
 브라우저 검증 범위와 실제 환경의 남은 확인은
-[검증 기록](../docs/evidence/platform-service-integration-2026-10-06.md)에 정리했다.
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/platform-service-integration-2026-10-06.md)에 정리했다.

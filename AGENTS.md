@@ -1,3 +1,12 @@
+## Skills & Tools
+
+- 새로운 기능 개발 시 Context7과 GitHub MCP를 활용해 최신 공식 문서와 유사 구현을 우선 확인한다.
+- 기술 조사가 필요하면 research Skill을 사용한다.
+- 복잡한 오류는 diagnosing-bugs Skill을 활용한다.
+- 테스트가 필요한 기능은 tdd Skill을 활용한다.
+- 주요 코드 변경 후 code-review Skill을 활용한다.
+- 불필요한 Skill과 MCP 호출은 피한다.
+
 ## Semantica 영속 기억
 
 - 중요한 작업을 시작할 때 Semantica 그래프 요약을 확인하고, 현재 작업과 관련된 과거 결정 및 미해결 위험을 조회한 뒤 계획한다.

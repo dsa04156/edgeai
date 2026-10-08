@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InfrastructureControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean InfrastructureService service;
-    @Test void exposesIndependentNodeAndEdgeXInventoryWithoutCaching() throws Exception {
+    @Test void exposesNodeAndDeviceCrdInventoryWithoutCaching() throws Exception {
         when(service.snapshot()).thenReturn(new Snapshot("AVAILABLE", "AVAILABLE", Instant.now(),
             List.of(new Node("server", "EDGE_AI_SERVER", "arm64", "linux", "READY")),
             List.of(new Sensor("sensor", "edge", "temperature", "serial", "UNLOCKED", "UP", List.of("temp")))));

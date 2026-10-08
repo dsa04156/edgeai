@@ -64,4 +64,4 @@ bash scripts/test/test-recovery-database-fence.sh --transport compose
 
 시험은 별도로 만든 DB·API·쓰기 연결을 사용하고 다른 DB의 연결/데이터 보존도 확인한다.
 검증 후 시험 소유 프로세스와 DB만 정리한다.
-[설계](../../adr/0069-recovery-source-database-fence.md), [검증 근거](../../evidence/m9-recovery-database-fence.md).
+[설계](../../adr/0069-recovery-source-database-fence.md), [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-database-fence.md).

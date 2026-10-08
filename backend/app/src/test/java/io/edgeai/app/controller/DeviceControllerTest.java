@@ -46,4 +46,10 @@ class DeviceControllerTest {
         mvc.perform(get("/api/v1/devices/not-a-uuid")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/nodes?limit=abc")).andExpect(status().isBadRequest());
     }
+    @Test void separateAppRegistrationIsRetired() throws Exception {
+        mvc.perform(post("/api/v1/devices").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isGone()).andExpect(jsonPath("$.code").value("DEVICE_REGISTRY_RETIRED"));
+        verifyNoInteractions(devices);
+    }
+
 }

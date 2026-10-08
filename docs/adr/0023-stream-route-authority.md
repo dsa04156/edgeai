@@ -32,4 +32,4 @@ route 변경 시 재생 위치/일관성은 별도 구현이며 이 제어 상�
 V19는 논리 경로/주체 FK·불변 세대·상태 전이·현재 실행 주체 검사를 추가한다. 서비스의 잠금이
 장치/실행 상태 변경과 직렬화하며, 직접 SQL 사용자는 같은 잠금 계약을 지켜야 한다.
 브로커 응답과 Task RUNNING을 명시적 fixture로 둔 실제 DB12개 및 기존 회귀는
-[검증 기록](../evidence/m7-stream-routes.md)을 따른다. 주기적인 reconciliation worker는 아직 없다.
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-routes.md)을 따른다. 주기적인 reconciliation worker는 아직 없다.

@@ -30,4 +30,4 @@ Runner는 **자신이 방금 새로 만든** stream 디렉터리에0700을 명�
 권한을 임의로 바꾸지 않으며 Session/Journal/Processor의 기존 소유자·mode 검사를 유지한다.
 SDK 사용자인 시험 DeviceSource도 자신이 만든 폴더를 같은 방법으로 준비한다.
 
-검증 및 현재 Kubernetes 수용 상태는 [검증 기록](../evidence/m7-kubernetes-stream.md)을 따른다.
+검증 및 현재 Kubernetes 수용 상태는 [검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-kubernetes-stream.md)을 따른다.

@@ -26,12 +26,13 @@ public class ExecutionService {
     private final String runtimeNamespace;
     private final RemoteProvider remoteProvider;
     private final StreamRunService streams;
+    private final ManagedDeviceService managedDevices;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;
+        this.streams=streams;this.managedDevices=managedDevices;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -56,9 +57,20 @@ public class ExecutionService {
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         if(!streamInputs.isEmpty())normalized.put("streamInputs",streamInputs.stream().map(StreamRunInput::document).toList());
         if(!taskExecutions.isEmpty())normalized.put("taskExecutions",taskExecutions);
+        if(input.containsKey("device")) {
+            var ref=io.edgeai.app.support.DeviceProfileCompiler.map(input.get("device"));
+            io.edgeai.app.support.DeviceProfileCompiler.fields(ref,Set.of("id","outputs"),Set.of("id","outputs"));
+            if(parameters.containsKey("device"))throw new IllegalArgumentException("device input conflicts with parameters.device");
+            normalized.put("device",ref);
+        }
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
+        // Resolve protocol-independent references only after idempotency replay checks.
+        if(input.containsKey("device")) {
+            var resolved=new TreeMap<String,Object>();parameters.forEach((k,v)->resolved.put((String)k,v));
+            resolved.put("device",managedDevices.workflowDevice(input.get("device")));parameters=resolved;
+        }
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         if(vdId!=null && offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 자원 측정은 공유 컨테이너 값이므로 작업별 자동 전환을 설정할 수 없습니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));

@@ -44,6 +44,7 @@ class VDLifecycleIntegrationTest {
     @Autowired VirtualDeviceService vds;
     @Autowired VDLifecycleService lifecycle;
     @Autowired VDTaskService taskService;
+    @Autowired ManagedDeviceService managed;
     @Autowired DeviceService devices;
     @Autowired ProfileService profiles;
     @Autowired VDRuntimeRepository runtimes;
@@ -133,7 +134,7 @@ class VDLifecycleIntegrationTest {
         assertThatThrownBy(()->jdbc.update("UPDATE edgeai.device SET state='RELEASED',revision=revision+1 WHERE id=?",f.a().id())).isInstanceOf(DataIntegrityViolationException.class);
         update(f,"진행 중 이름 수정",f.b());assertThat(runtimes.pending(f.vd().id()).orElseThrow().id()).isEqualTo(replacement.id());
         lifecycle.drained(old.id(),old.sessionId());
-        var recreated=new VDLifecycleService(vdRepository,runtimes,profileRepository,nodes,clock,taskService);
+        var recreated=new VDLifecycleService(vdRepository,runtimes,profileRepository,nodes,clock,taskService,managed);
         new TransactionTemplate(transactions).executeWithoutResult(s->recreated.confirmStopped(old.id()));
         var op=runtimes.operation(replacement.id()).orElseThrow();var fresh=lifecycle.get(op.targetRuntimeId());
         assertThat(fresh.id()).isNotEqualTo(old.id());assertThat(fresh.vdId()).isEqualTo(old.vdId());assertThat(fresh.generation()).isEqualTo(2);

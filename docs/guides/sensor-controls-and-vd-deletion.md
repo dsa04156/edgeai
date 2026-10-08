@@ -1,56 +1,11 @@
-# 센서 측정값 조회와 명령 실행
+# 센서 최신값과 Virtual Device 정리
 
-EdgeX 센서의 저장된 측정 이력을 읽고 장치가 제공하는 명령을 실행합니다.
-가상 장치 정리는 [가상 장치 관리](virtual-devices.md#4-미사용-등록-영구-삭제)에서 설명합니다.
+인프라 관리 → 센서에서 장치별 이름·상태·측정 항목 수·대상 노드를 먼저 확인합니다. 장치를 누르면 펼쳐지는 측정 property별 행에서 연결 상태, 최신값, 마지막 수집 시각을 확인합니다. 펼친 영역의 **항목 추가·장치 삭제**와 각 행의 **항목 수정·항목 삭제**를 사용합니다. **항목 수정 → 항목 저장**은 선택한 측정 항목 하나만 변경하며 다른 항목과 장치 연결 설정을 유지합니다. 상태/최신값은 KubeEdge DeviceStatus의 DMI 보고를 사용하며, 고주기 데이터는 별도 MQTT data plane으로 전달합니다.
 
-## 준비 사항
+**연결 테스트**는 대상 Edge Node에서 실제 property 하나를 읽습니다. 현재 드라이버는 읽기 전용이며 장치 명령 쓰기와 영속 측정 이력 조회는 제공하지 않습니다. 과거 센서 history/command API는 410 `SENSOR_API_REPLACED`를 반환합니다. 이전 검증 문서는 당시 구현의 역사적 증거입니다.
 
-EdgeX Core Metadata·Data·Command를 연결하고 인프라 관리의 센서 목록을 확인합니다.
-설정은 [노드와 센서 연결](infrastructure-inventory.md)을 따릅니다.
-새 센서를 추가하는 순서와 지원 수집기는 [센서 등록](sensor-registration.md)을 확인합니다.
-명령을 실행할 장치가 잠겨 있지 않고 해당 읽기·쓰기 명령을 지원해야 합니다.
+장치 장애 시 마지막 값과 시각은 보존하지만 OFFLINE으로 표시합니다. Mapper 준비 실패 및 오래된 DMI 관측도 OFFLINE으로 처리합니다. DeviceTwin의 관측과 Workflow 입력 형식은 [Mapper 실행 안내](../../deploy/kubeedge/README.md)를 참조하세요.
 
-## 1. 측정 이력 조회
+새 Virtual Device는 HTTP JSON property endpoint를 제공하는 런타임을 `protocol: virtual`, `kind: virtual`로 등록합니다. Physical Device와 같은 CRD/property 인터페이스를 사용합니다. 센서 목록의 삭제는 CRD 수집 설정만 제거하며 외부 런타임 컨테이너를 자동 삭제하지 않습니다.
 
-1. **인프라 관리 → 센서**에서 센서 이름을 누릅니다.
-2. 측정 항목과 최근 50·100·500개 중 조회 범위를 선택합니다.
-3. 그래프의 실제 시각과 원본 표의 값·단위를 확인합니다.
-
-이력은 5초마다 조회합니다. 0, 빈 이력, 조회 실패, 90초를 넘긴 측정값을 구분합니다.
-실패 시 남아 있는 값은 마지막 조회 데이터입니다. 큰 정수는 원본 문자열을 보존하며
-안전한 숫자 표현 범위를 벗어나면 그래프에 반올림한 값으로 그리지 않습니다.
-
-## 2. 장치에서 직접 읽기
-
-지원 명령을 선택하고 **지금 읽기**를 누릅니다. 이 버튼은 Core Command를 통해 실제 장치 읽기를 요청합니다.
-Core Data의 저장 이력과 별도 결과로 표시하며 `ds-pushevent=false`로 이벤트 저장을 요청하지 않습니다.
-주기적 화면 조회가 읽기 명령을 자동으로 실행하지는 않습니다.
-
-## 3. 쓰기 명령
-
-Core Command가 `set=true`로 제공한 명령에만 쓰기 입력을 표시합니다.
-항목별 값을 입력하고 **쓰기 명령 검토**에서 대상·명령·값을 확인한 뒤 전송합니다.
-서버는 최신 지원 명령과 장치 잠금 상태를 다시 확인합니다.
-
-현재 저장소의 Arduino·Sense HAT 프로필은 읽기 전용이므로 쓰기 버튼이 없는 것이 정상입니다.
-EdgeX 성공 응답은 요청 처리 결과이며 물리 장치가 기대대로 바뀌었는지는 장치 상태·측정값으로 확인합니다.
-명령은 자동 재시도하지 않습니다. 통신 실패 시 실제 결과를 확인한 뒤 재요청 여부를 결정합니다.
-
-## API와 오류
-
-| API | 역할 |
-|---|---|
-| `GET /api/v1/sensors/readings` | 장치·항목별 최근 저장 측정값 |
-| `GET /api/v1/sensors/commands` | 장치 상태와 지원 명령 |
-| `POST /api/v1/sensors/command` | 직접 읽기 또는 쓰기 요청 |
-
-POST에는 CSRF가 필요하고 `executeSensorCommand` 감사 작업으로 기록됩니다.
-정상 GET 폴링은 감사 기록을 생성하지 않습니다. 비활성은 503, 원본 조회 실패는 502,
-잠금은 409 등으로 구분하며 정확한 입력·오류 코드는 [API 참고](../reference/api.md)를 확인합니다.
-
-## 관련 문서
-
-- [관측값과 상태](../concepts/observability.md)
-- [EdgeX Reading 조회](https://docs.edgexfoundry.org/4.1/walk-through/Ch-WalkthroughReading/)
-- [EdgeX Core Command](https://docs.edgexfoundry.org/4.0.2/microservices/core/command/GettingStarted/)
-- [해당 기능의 검증 범위](../evidence/sensor-controls-and-vd-deletion-2026-10-06.md)
+기존 앱 UUID VD의 미사용 등록 영구 삭제 규칙은 [가상 장치 관리](virtual-devices.md#4-미사용-등록-영구-삭제)에 따릅니다. 이 기능과 Mapper Virtual Device CRD는 서로 다른 등록이며 암묵적으로 합치지 않습니다.

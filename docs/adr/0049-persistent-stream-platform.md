@@ -52,4 +52,4 @@ data PVC는 유지하고 TLS 인증서 마운트와 probe scheme만 변경한다
 활성 실행/VD를 확인하고 연결하며, 기존 데이터 보존·API/MinIO TLS·실제 다중 장치 데모를 검증한다.
 현재 영속 브로커와 신원 준비는 해당 API 활성화를 대신하지 않는다.
 
-[검증 결과와 작업 중 오류](../evidence/m7-persistent-stream-platform.md).
+[검증 결과와 작업 중 오류](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-persistent-stream-platform.md).

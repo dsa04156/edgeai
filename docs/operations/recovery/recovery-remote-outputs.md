@@ -51,4 +51,4 @@ manifest가 없는 경로는 완료된 묶음이 아니다. 실패 후에는 같
 수정하거나 S3에 올리지 않으며 Task/Run 성공 확정·재시도·서비스 재개를 실행하지 않는다.
 독립 검증은 개인 묶음의 내부 일치이며 외부 서명/원본 인증은 아니다. 신뢰하는 보관 경로에서
 전체 묶음과 manifest SHA256을 함께 관리한다. [ADR0076](../../adr/0076-recovery-remote-outputs.md),
-[실제 검증](../../evidence/m9-recovery-remote-outputs.md)을 참고한다.
+[실제 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-outputs.md)을 참고한다.

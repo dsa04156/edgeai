@@ -3,7 +3,7 @@
 상태: 검증 중. 2026-10-05.
 
 두 native 호스트의 Runner111/MQTT97 시험과 원시 artifact 감사는
-[통과했다](../evidence/m10-native-runner-ci.md). index 발행·새 이미지 배포는 후속 검증한다.
+[통과했다](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m10-native-runner-ci.md). index 발행·새 이미지 배포는 후속 검증한다.
 
 실제 클러스터에 ARM64와 x86 노드가 있지만 기존 Runner 배포 pin은 linux/amd64 단일
 manifest였다. 같은 소스를 각 architecture의 native GitHub runner에서 빌드하고 기존

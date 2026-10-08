@@ -1,57 +1,48 @@
-# 웹에서 센서 등록
+# 웹에서 센서와 Virtual Device 등록
 
-인프라 관리 → 센서 → **센서 등록**에서 지원 종류를 선택하고 연결 정보를 입력합니다.
-실행 중인 Spring이 새 등록 API를 포함한 버전이어야 합니다. API가 없으면 화면에 백엔드
-실행 버전을 확인하라는 안내가 나옵니다. 앱 실행·재실행은 사용자가 수행합니다.
+인프라 관리 → 센서에서 기존 장치의 측정 항목 추가와 새 장치 연결을 구분합니다. **새 장치 등록**에서 프로토콜, 네트워크 Host/Port 또는 로컬 장치 경로, 대상 Edge Node, 수집 간격과 측정 properties를 입력합니다. 장치 종류는 프로토콜에 따라 Physical 또는 Virtual입니다. 설치된 KubeEdge EdgeCore DMI와 아키텍처별 Mapper 이미지가 필요합니다.
 
-## 준비와 입력
+센서 목록은 장치별로 접혀 있습니다. 장치 이름을 누르면 측정 항목별 최신값·상태·수집 시각과 관리 기능이 펼쳐지며, 다시 누르면 접힙니다. 5초마다 갱신돼도 펼친 상태는 유지됩니다.
 
-- Arduino Serial: `etri-dev0001-jetorn`의 `device-serial-jetson`과 기존 Arduino 데이터 형식을
-  사용합니다. 온도·조도·자기·가속도 X/Y/Z를 각각 한 행으로 등록합니다.
-- Sense HAT: `etri-dev0003-raspi5`의 `device-sensehat-raspi`, `/dev/i2c-1`을 사용합니다.
-  온도·습도·기압·방향·자세·자이로의 기존6개 그룹을 지원합니다. 이미 등록된 그룹은 중복 등록할 수 없습니다.
-- 목록에는 서버가 지원하는 항목 중 EdgeX에 서비스·호환 프로필이 실제 등록된 것만 나옵니다.
-  목록에 나온다는 사실은 장비 연결이나 실측 수신 성공을 보장하지 않습니다.
+기존 Arduino에서 측정 항목 하나를 지웠다면 장치를 펼친 뒤 **항목 추가 → 측정 항목 선택 → 항목 추가**를 사용합니다. 예를 들어 `acceleration_x_raw`를 선택하면 자료형·프레임 sensor·JSON 경로·단위가 저장 규격에서 채워집니다. 노드·장치 경로·baud rate·수집 간격은 기존 연결 설정을 그대로 사용합니다. **항목 설정 확인·수정**에서 값의 위치를 확인하거나 수정할 수 있으며, 새로운 항목은 **직접 입력**으로 추가합니다. 이미 등록된 이름은 선택 목록에서 제외되고 서버에서도409로 거절합니다. 오류가 발생하면 입력을 유지합니다.
 
-| 입력 | 의미 |
-|---|---|
-| 센서 종류 | 사용할 수집기·프로필·측정 항목. 연결 노드는 선택 결과에 표시됩니다. |
-| 센서 이름 | 각 행을 구별하는 고유 이름. 영문·숫자·하이픈·밑줄, 최대64자입니다. |
-| 물리 장치 ID | 같은 보드의 채널들은 동일한 ID를 사용합니다. 실제 장치와 수집기의 식별 규약에 맞춥니다. |
-| 연결 경로 | Arduino는 수집기 컨테이너에서 접근 가능한 `/dev/edgeai/장치명`, Sense HAT는 고정 I²C 버스입니다. |
-| 통신 속도 | Arduino 펌웨어의 속도와 맞춥니다. 현재 구성은115200입니다. |
+운영 중인 Arduino/Sense HAT의 항목 규격은 `arduino-serial-json`, `sensehat-v1`으로 저장했습니다. 새 설치에서는 `deploy/kubeedge/physical/*.json`의 `protocol`과 `properties`를 `POST /api/device-profiles`로 저장해 같은 선택 목록을 준비할 수 있습니다. 저장 규격은 자동 발견 결과가 아니므로 실제 보드의 출력 규격과 일치해야 합니다. 장치가 통째로 삭제되어 목록에 없으면 **새 장치 등록**에서 저장 규격과 연결 정보를 입력합니다.
 
-추가 Arduino USB 장치는 호스트 `/run/edgeai/devices` 아래에서 수집기에 노출되도록 연결 경로를
-먼저 준비해야 합니다. 등록 폼은 USB 경로 생성·펌웨어 배포·새 드라이버 설치를 수행하지 않습니다.
-다른 노드나 통신 규격을 지원하려면 Device Service 배포와 서버의 지원 항목을 함께 확장해야 합니다.
-임의 프로필·주소·protocol JSON을 웹에서 입력하는 기능은 제공하지 않습니다.
+| 프로토콜 | 장치 설정 | property 매핑 |
+|---|---|---|
+| Modbus TCP | Unit ID, timeout | Register, 자료형, 함수, 바이트 순서 |
+| OPC-UA | endpoint path, timeout; Anonymous / SecurityMode None | NodeId, 자료형 |
+| MQTT 입력 | broker Host/Port, 메시지 유효 시간 | 정확한 topic, JSON 경로, 자료형 |
+| Virtual | Container/Emulator/AI Service의 HTTP JSON endpoint path | JSON 경로, 자료형 |
+| Serial JSON | `/dev/edgeai/<endpoint>`, source Device ID, baud rate | 프레임 `sensor`, JSON 경로, 자료형 |
+| Sense HAT v1 | ARM64 Raspberry Pi, `/dev/i2c-1`, source Device ID | `temp_humidity`, `humidity`, `pitch` 등의 JSON 경로 |
 
-## 등록과 수신 확인
+Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQTT 입력에는 wildcard 및 출력용 `edgeai/devices/` topic을 사용할 수 없습니다. JSON 경로는 `values.temperature`처럼 객체 키를 점으로 연결합니다. 인증정보를 Profile에 넣는 기능은 현재 지원하지 않습니다.
 
-등록하기를 누르면 Spring이 EdgeX Metadata에 장치 하나를 생성하고 저장된 설정을 다시 조회합니다.
-장치의 초기 운영 상태는 DOWN입니다. 드라이버가 운영 상태를 갱신하며, 실제 측정값은 목록의
-센서 이름을 눌러 수신 시각과 값으로 확인합니다. 등록 성공을 측정값 수신 성공으로 표시하지 않습니다.
+**연결 테스트**는 대상 노드의 Mapper에서 실제 property를 읽습니다. 처음 Mapper가 배포되는 동안에는 준비를 기다린 뒤 다시 시도하세요. **장치 등록**은 Profile을 검증하고 인터페이스가 같은 DeviceModel을 재사용하거나 생성한 뒤 Device CRD를 생성합니다. 노드/프로토콜마다 하나의 Mapper를 공유합니다. 두 번째 같은 프로토콜 장치는 설정만 추가하면 됩니다.
 
-동일 이름·동일 설정은 기존 등록을 반환합니다. 같은 이름의 다른 설정, 동일 포트·측정 항목 중복,
-같은 포트의 서로 다른 장치 ID·통신 설정은409로 거절합니다. 기존 장치를 덮어쓰지 않습니다.
-응답 유실 시 입력을 유지하고 결과 미확인을 안내합니다. 목록을 확인한 뒤 같은 이름과 설정으로
-재요청하세요. 서버와 브라우저는 등록 요청을 자동 재시도하지 않습니다.
+등록 성공은 연결 성공을 뜻하지 않습니다. 화면의 ONLINE/OFFLINE, 마지막 수집 시각과 값을 확인하세요. 값이 0인 경우에도 정상 측정값으로 표시합니다. 같은 이름의 새 등록은 409이며 수정은 각 측정 행의 **항목 수정 → 항목 저장**을 사용합니다. Property 규격을 저장하고 같은 프로토콜의 새 등록과 항목 추가에서 선택할 수 있습니다. 항목 추가 API는 `POST /api/devices/{id}/properties`이며 본문에는 측정 항목 하나의 설정만 보냅니다. 서버가 최신 Profile에 병합하고 동시 변경은 resourceVersion으로 보호합니다. 공유 Mapper Pod를 새로 만들지 않습니다.
 
-## 저장 위치와 API
+각 측정 행의 **항목 수정**은 해당 항목 하나의 자료형·값 위치·단위·배율·보정값을 편집합니다. 항목 이름은 Workflow 참조를 유지하기 위해 변경하지 않습니다. `PUT /api/devices/{id}/properties/{property}`에 항목 하나의 설정만 보내며 서버가 최신 Profile에 반영합니다. 다른 항목과 연결 설정·노드·수집 간격은 유지하고 공유 Mapper Pod를 다시 만들지 않습니다. 5초 갱신과 검색 중에도 입력을 유지하며 저장 충돌이면 입력을 보존하고 오류를 표시합니다. 기존 장치의 전체 properties를 한꺼번에 편집하는 버튼은 제공하지 않습니다.
 
-등록의 원본은 EdgeX Metadata DB입니다. DB를 유지한 재시작에서는 등록을 유지하며, 레포의
-`devices.yaml`로 자동 역반영하지 않습니다. DB 초기화 후 복원할 구성은 백업하거나 배포 설정에
-별도로 반영해야 합니다. 앱 Device·VD 등록이나 AI 워크플로 연결은 자동으로 만들지 않습니다.
+각 측정 행의 **항목 삭제 → 삭제 확인**은 해당 항목만 수집 설정에서 제거합니다. 다른 항목과 공유 Mapper는 유지하며 삭제한 항목은 Workflow 입력에서도 제외됩니다. 마지막 항목이면 장치 등록도 삭제된다는 안내를 확인하고 진행합니다. 펼친 장치의 **장치 삭제 → 삭제 확인**은 모든 측정 항목을 함께 제거합니다. API의 개별 삭제 경로는 `DELETE /api/devices/{id}/properties/{property}`입니다. 저장한 Property 규격은 삭제하지 않으므로 재등록 때 불러올 수 있습니다.
 
-- `GET /api/v1/sensors/registration-options`: 지원 항목 조회.
-- `POST /api/v1/sensors/registrations`: 등록. CSRF 쿠키·토큰 필요.
-- 201: 새 등록과 설정 확인 완료,200: 동일 등록 재조회,400: 잘못된 설정,409: 충돌,
-  502: EdgeX 조회 실패 또는 등록 결과 미확인,503: EdgeX 연결 비활성.
+실행 상태의 기준은 Device/DeviceStatus CRD입니다. 앱 DB나 레포 YAML을 별도 상태 원본으로 만들지 않습니다. 등록 API는 `/api/devices`, Profile API는 `/api/device-profiles`, 지원 프로토콜은 `/api/protocols`입니다. 브라우저는 같은 출처 프록시와 기존 CSRF 토큰을 사용합니다.
 
-브라우저는 동일 출처의 `/api/control-plane/` 프록시를 사용합니다. 서버는 설정된 Metadata
-주소로만 요청합니다. 지원 목록은1000개 한도 안에서 전체 조회를 검증하고, 초과·누락 응답에서는
-등록을 중단합니다. 한 Spring 인스턴스 안에서는 등록 요청을 순차 처리합니다. 다른 관리 도구나
-복수 인스턴스와 동시에 동일 물리 채널을 등록하는 분산 조정은 제공하지 않습니다.
+기존 `/api/v1/sensors/*` 경로는 410 `SENSOR_API_REPLACED`로 종료됐습니다. Arduino와 Sense HAT은 현재 실제 보드를 새 Mapper에 연결했습니다. Arduino의 `*_raw` 값은 환산 전 ADC/디지털 값이며 °C 또는 가속도 물리 단위로 표시하지 않습니다. 시리얼 endpoint는 노드의 `/run/edgeai/devices`에 존재해야 합니다. Sense HAT 지원은 v1 보드로 한정됩니다. 기존 UUID 앱 Device/VD 등록과 CRD 이름도 자동으로 같은 ID가 되지 않습니다.
 
-EdgeX 생성 요청은 [공식 Device 등록 예제](https://docs.edgexfoundry.org/4.0/microservices/device/services/device-s7/GettingStarted/)의
-`POST /api/v3/device` 계약을 따릅니다. 공개 API 계약은 `contracts/openapi/platform-api.yaml`입니다.
+[실행 구조·환경·데이터 경로](../../deploy/kubeedge/README.md)
+
+기존 웹 `http://192.168.0.56:13080/devices`의 **센서** 탭에서 등록된 측정 항목을 각각 한 행으로 확인합니다. 기본 저장 규격은 Arduino 6개와 Sense HAT 11개이며 실제 등록 목록은 항목 추가·삭제 결과를 따릅니다. 값은 실제 센서에서 읽고, 최신 상태는 DeviceTwin/DMI, 매 수집 데이터는 해당 노드의 MQTT broker로 전달합니다. Twin 갱신 간격은 DMI 예산과 항목 수에 따라 달라집니다. 동일 값이면 KubeEdge가 값을 다시 갱신하지 않을 수 있으며 수집 지속 여부는 DMI heartbeat와 별도 MQTT 수신으로 검증합니다.
+
+## Modbus 모의 장치로 등록 연습
+
+현재 준비한 `modbus-fixture` 서버로 웹 등록을 연습할 수 있습니다. 서버를 실행한 환경에서
+**새 장치 등록**에 이름 `practice-modbus-01`, 프로토콜 `modbus-tcp`, 저장 규격 `modbus-practice`,
+Host `10.77.0.5`, Port `1502`, Unit ID `1`, 대상 노드 `etri-dev0002-raspi5`, 수집 간격·제한 시간
+각 `1000` ms를 입력합니다. 다른 환경에서는 서버 주소와 대상 노드를 바꿉니다.
+
+**연결 테스트 → 장치 등록** 후 `temperature=23.5`, `vibration_x=0.125`, `vibration_y=0.25`를
+확인합니다. Holding Register는 각각 `40001`, `40003`, `40005`이며 자료형은 `float32`,
+바이트 순서는 `ABCD`입니다. 두 번째 장치는 이름 `practice-modbus-02`, Unit ID `2`를 사용하며
+값은 각각 `33.5`, `0.25`, `0.5`입니다. 이 서버는 실제 생산 센서가 아닌 고정값 모의 장치입니다.

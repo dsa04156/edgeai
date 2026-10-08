@@ -38,4 +38,4 @@ SDK `BindingClient.device_routes`는 응답의 정확한 필드·주체·타입�
 실제 장치 송신기는 이 응답에서 route/generation을 얻는다. 관리 경로 조회는 시험의 독립 대조에만 쓴다.
 
 DB schema 변경은 없고 V1–V25 bytes와 기존 공개 STREAM opt-in·AUTO/NODE 제한을 유지한다.
-검증 범위는 [진행 기록](../evidence/m7-device-route-discovery.md)을 따른다.
+검증 범위는 [진행 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-route-discovery.md)을 따른다.

@@ -46,7 +46,7 @@ claim 전 target은 실행 정리와 이 명령에 모두 `--unclaimed-jobs`를 
 보존 Pod 전체의 종료를 새로 대조할 수 있다. 실제 STARTING 기한 만료 시험은 target만
 실패 처리하고 source OFFLOADED·원래 배치/기한·빈 claim을 보존한다. 미관측 Job과
 Remote/STREAM/group은 여전히 별도다. [ADR0083](../../adr/0083-recovery-batch-offloads.md),
-[ADR0084 검증](../../evidence/m9-recovery-unclaimed-jobs.md).
+[ADR0084 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-unclaimed-jobs.md).
 
 참조 Remote를 포함한 전환은 먼저 [Remote 실행 정리](recovery-remote-retirement.md)를
 완료한 뒤 `--offloads --remote-connection /private/remote-connection.json`을 추가한다.
@@ -121,4 +121,4 @@ exit0은 커밋 후 재검증 일치, exit2는 관측/신원 충돌 등 BLOCKED,
 시험: `bash scripts/test/test-recovery-kubernetes-retire.sh --context <시험-context> --vd-tasks --workflows`.
 실제 합성 컨테이너와 별도 DB를 생성하며 소유 자원만 정리한다. 업무 상태·할당·Result 일부는
 명시적인 DB fixture다. [ADR0082](../../adr/0082-recovery-kubernetes-workflows.md),
-[검증 근거](../../evidence/m9-recovery-kubernetes-workflows.md).
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-workflows.md).

@@ -4,6 +4,137 @@
  */
 
 export interface paths {
+    "/api/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listManagedDevices"];
+        put?: never;
+        post: operations["createManagedDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getManagedDevice"];
+        put: operations["updateManagedDevice"];
+        post?: never;
+        delete: operations["deleteManagedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/{id}/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 기존 장치에 측정 항목 하나 추가
+         * @description 최신 Device Profile에 항목 하나만 추가하고 DeviceModel과 Device CRD를 갱신한다. 기존 연결 설정, 다른 측정 항목과 공유 Mapper는 유지한다. 중복 이름과 동시 변경은409로 거절한다.
+         */
+        post: operations["addManagedDeviceProperty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/{id}/properties/{property}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 측정 항목 하나의 수집 설정 수정
+         * @description 본문의 name은 경로의 property와 같아야 한다. 최신 Device Profile에서 해당 항목만 교체하고 DeviceModel과 Device CRD를 갱신한다. 다른 측정 항목, 연결 설정, 대상 노드, 수집 간격과 공유 Mapper는 유지한다. 동시 변경은 resourceVersion으로 보호한다.
+         */
+        put: operations["updateManagedDeviceProperty"];
+        post?: never;
+        /**
+         * 측정 항목 하나의 수집 설정 삭제
+         * @description 최신 Device Profile에서 지정 항목만 제거하고 DeviceModel과 Device CRD를 갱신한다. 마지막 측정 항목이면 Device 등록을 삭제한다. 공유 Mapper와 저장한 property 규격은 유지한다. 동시 변경은 resourceVersion으로 보호한다. 삭제한 항목은 Workflow 입력에서도 제외한다.
+         */
+        delete: operations["deleteManagedDeviceProperty"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/device-connections/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testDeviceConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/device-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listManagedDeviceProfiles"];
+        put?: never;
+        post: operations["createManagedDeviceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/protocols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDeviceProtocols"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform": {
         parameters: {
             query?: never;
@@ -156,14 +287,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 장치 목록과 연결 상태 조회
+         * 이전 앱 장치 이력 조회
+         * @deprecated
          * @description key 문자열 오름차순으로 조회합니다. 해제된 장치도 이력 조회를 위해 포함합니다. 활성 세션의 최근 보고가 60초보다 오래되면 STALE이며, 보고 전에는 UNKNOWN입니다.
          */
         get: operations["listDevices"];
         put?: never;
         /**
-         * 물리 장치 등록
-         * @description DEVICE Profile의 발행 UUID를 참조해 장치를 등록합니다. 같은 key와 동일 생성 입력은 200, 새로운 장치는 201, 다른 생성 입력은 409입니다. LIVE/REPLAY/SYNTHETIC으로 데이터 출처를 구분합니다. 등록만으로 실제 연결을 ONLINE으로 표시하지 않습니다. 요청 최대 16 KiB.
+         * 종료된 앱 장치 등록
+         * @deprecated
+         * @description 별도 앱 장치 등록은 종료됐습니다. /api/devices의 센서 디바이스를 VD 원본으로 선택하세요.
          */
         post: operations["registerDevice"];
         delete?: never;
@@ -298,7 +431,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 엣지 AI 서버·엣지 디바이스 및 EdgeX 센서 목록 조회 */
+        /** 엣지 AI 서버·엣지 디바이스 및 KubeEdge 센서 목록 조회 */
         get: operations["getInfrastructure"];
         put?: never;
         post?: never;
@@ -704,7 +837,7 @@ export interface paths {
         head?: never;
         /**
          * revision을 확인하여 VD 이름·원본·배치 의도 수정
-         * @description 이름·sources 전체 집합·placement를 함께 보내세요. Profile 참조와 vdId는 유지합니다. 변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다. 오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다. 관리 중인 실행이 있으면 원본·배치 변경과 교체 Operation을 같은 트랜잭션에 기록합니다. 이름만 바꾸면 실행을 교체하지 않습니다.
+         * @description 이름·sources 전체 집합·placement를 함께 보내세요. profileVersionId로 새 템플릿으로 전환할 수 있으며 vdId와 연결 이력은 유지합니다. 변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다. 오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다. 관리 중인 실행이 있으면 원본·배치 변경과 교체 Operation을 같은 트랜잭션에 기록합니다. 이름만 바꾸면 실행을 교체하지 않습니다.
          */
         patch: operations["updateVirtualDevice"];
         trace?: never;
@@ -859,7 +992,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 배포된 수집기의 지원 센서 등록 항목 조회 */
+        /**
+         * 종료된 센서 API
+         * @deprecated
+         * @description 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
+         */
         get: operations["getSensorRegistrationOptions"];
         put?: never;
         post?: never;
@@ -879,8 +1016,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 지원하는 센서를 EdgeX에 수동 등록
-         * @description 배포된 Arduino Serial 또는 Sense HAT I2C 프로필을 사용한다. 새 드라이버나 프로필을 설치하지 않는다. 동일 이름·연결 정보는 기존 등록을 반환하고 이름 또는 동일 포트의 측정 항목 충돌은409다. 등록은 EdgeX DB에 저장되며 레포 YAML에는 자동 반영되지 않는다. 결과 미확인 시 자동 재시도하지 않는다. 같은 이름·입력값을 유지한 재요청으로 확인할 수 있다. 등록 완료는 실측 수신 확인과 다르다.
+         * 종료된 센서 API
+         * @deprecated
+         * @description 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
          */
         post: operations["registerSensor"];
         delete?: never;
@@ -896,7 +1034,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** EdgeX 센서의 최근 측정값 조회 */
+        /**
+         * 종료된 센서 API
+         * @deprecated
+         * @description 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
+         */
         get: operations["getSensorReadings"];
         put?: never;
         post?: never;
@@ -913,7 +1055,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 센서가 실제 지원하는 읽기·쓰기 명령 조회 */
+        /**
+         * 종료된 센서 API
+         * @deprecated
+         * @description 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
+         */
         get: operations["getSensorCommands"];
         put?: never;
         post?: never;
@@ -933,8 +1079,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * EdgeX에 등록된 센서 명령 실행
-         * @description CSRF가 필요하다. 명령 지원 여부와 adminState를 실행 전에 재조회한다. GET은 ds-pushevent=false로 직접 읽으며 PUT은 지정된 항목의 문자열 값을 전달한다. 자동 재시도하지 않으며 시간 초과 시 실제 장치 결과를 확인해야 한다.
+         * 종료된 센서 API
+         * @deprecated
+         * @description 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
          */
         post: operations["executeSensorCommand"];
         delete?: never;
@@ -967,6 +1114,130 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ManagedDeviceProperty: {
+            name: string;
+            /** @description Holding 40001/input 30001/coil 1 maps to wire address 0. */
+            register?: number;
+            /** @enum {string} */
+            dataType: "float32" | "float64" | "int16" | "uint16" | "int32" | "uint32" | "bool" | "string";
+            /** @description OPC-UA NodeId */
+            nodeId?: string;
+            /** @description Exact MQTT input topic. Wildcards and edgeai/devices/ output topics are rejected. */
+            topic?: string;
+            /** @description Dot-separated JSON object path. Required for Serial JSON and Sense HAT. */
+            jsonPath?: string;
+            /** @description Serial JSON frame sensor selector */
+            sensor?: string;
+            /**
+             * @description Modbus default holding.
+             * @enum {string}
+             */
+            function?: "holding" | "input" | "coil";
+            /**
+             * @description Modbus default ABCD.
+             * @enum {string}
+             */
+            byteOrder?: "ABCD" | "BADC" | "CDAB" | "DCBA";
+            /** @default 1 */
+            scale: number;
+            /** @default 0 */
+            offset: number;
+            unit?: string;
+        };
+        ManagedDeviceInput: {
+            name: string;
+            /**
+             * @default physical
+             * @enum {string}
+             */
+            kind: "physical" | "virtual";
+            /** @enum {string} */
+            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat";
+            /** @description Required for network protocols; omitted for local hardware. */
+            host?: string;
+            /** @description Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080. */
+            port?: number;
+            targetNode: string;
+            /** @default 1000 */
+            collectionInterval: number;
+            protocolConfig?: {
+                /** @description Serial JSON /dev/edgeai/<endpoint> or Sense HAT /dev/i2c-1. */
+                devicePath?: string;
+                /** @description Expected physical source device_id in JSON frames. */
+                deviceId?: string;
+                /**
+                 * @description Serial JSON defaults to 115200.
+                 * @enum {integer}
+                 */
+                baudRate?: 9600 | 19200 | 38400 | 57600 | 115200;
+                /** @description Modbus unit ID (default 1). */
+                unitId?: number;
+                /** @default 1000 */
+                timeoutMs: number;
+                /**
+                 * @description Initial OPC-UA driver supports anonymous SecurityMode None only.
+                 * @enum {string}
+                 */
+                securityMode?: "None";
+                /** @description OPC-UA endpoint path or Virtual runtime JSON path (default /properties). */
+                path?: string;
+                /** @description MQTT input message freshness limit. */
+                staleMs?: number;
+            };
+            properties: components["schemas"]["ManagedDeviceProperty"][];
+        };
+        ManagedDevice: {
+            id: string;
+            /** Format: uuid */
+            uid: string;
+            profile: components["schemas"]["ManagedDeviceInput"];
+            model: string;
+            targetNode: string;
+            state: string;
+            /** @description Raw DeviceStatus state */
+            observedState?: string;
+            /** @enum {string} */
+            stateReason?: "DMI" | "STALE_DMI_REPORT" | "MAPPER_NOT_READY";
+            /** Format: int64 */
+            lastSeen: number;
+            resourceVersion: string;
+            mapper: {
+                name: string;
+                ready: boolean;
+            };
+            properties: {
+                [key: string]: {
+                    value: string;
+                    /** Format: int64 */
+                    timestamp: number;
+                };
+            };
+        };
+        ManagedDevicePage: {
+            items: components["schemas"]["ManagedDevice"][];
+        };
+        ManagedDeviceProfile: {
+            name: string;
+            /** @enum {string} */
+            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat";
+            properties: components["schemas"]["ManagedDeviceProperty"][];
+        };
+        ManagedDeviceProfilePage: {
+            items: components["schemas"]["ManagedDeviceProfile"][];
+        };
+        DeviceConnectionResult: {
+            connected: boolean;
+            value?: string;
+            error?: string;
+        };
+        DeviceProtocolPage: {
+            items: {
+                id: string;
+                available: boolean;
+                /** @enum {string} */
+                kind: "physical" | "virtual";
+            }[];
+        };
         SensorRegistrationTemplate: {
             id: string;
             label: string;
@@ -1565,6 +1836,11 @@ export interface components {
             [key: string]: components["schemas"]["ExecutionPolicy"];
         };
         RunCreate: {
+            /** @description CRD device reference; resolved to parameters.device values at Run admission. No protocol settings. */
+            device?: {
+                id: string;
+                outputs: string[];
+            };
             /** Format: uuid */
             workflowVersionId: string;
             /** @description 장치의 현재 활성 세션을 실행 생성 시 고정하는 입력 목록입니다. 같은 toTask/toPort는 한 번만 지정하며 발행된 Task 의존 입력을 대체할 수 없습니다. 항목 순서는 멱등 요청의 의미를 바꾸지 않습니다. 모든 SERVICE stream 입력/출력은 장치 입력 또는 STREAM 의존 경로로 연결되어야 합니다. */
@@ -2023,7 +2299,7 @@ export interface components {
         /** @description Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다. */
         VirtualDeviceSources: {
             sourceKey: components["schemas"]["ProfileKey"];
-            /** Format: uuid */
+            /** @description KubeEdge 센서 Device 이름 */
             deviceId: string;
         }[];
         /** @description 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다. */
@@ -2041,13 +2317,18 @@ export interface components {
             displayName: string;
             /**
              * Format: uuid
-             * @description edgeai.vd/v1 규격의 발행된 VD Profile UUID
+             * @description edgeai.vd/v2 센서 원본 템플릿 UUID
              */
             profileVersionId: string;
             sources: components["schemas"]["VirtualDeviceSources"];
             placement: components["schemas"]["VirtualDevicePlacement"];
         };
         VirtualDeviceUpdate: {
+            /**
+             * Format: uuid
+             * @description 새 VD 템플릿 버전. 생략하면 현재 버전을 유지합니다.
+             */
+            profileVersionId?: string;
             /** Format: int64 */
             revision: number;
             displayName: string;
@@ -2082,12 +2363,13 @@ export interface components {
             /** Format: uuid */
             vdId: string;
             sourceKey: string;
-            /** Format: uuid */
+            /** @description 센서 Device 이름. legacy 이력은 이전 앱 UUID. */
             deviceId: string;
             /** Format: uuid */
-            deviceProfileVersionId: string;
+            deviceUid: string | null;
+            deviceModel: string | null;
             /** @enum {string} */
-            sourceMode: "LIVE" | "REPLAY" | "SYNTHETIC";
+            sourceKind: "physical" | "virtual" | "legacy";
             /** Format: int64 */
             openedRevision: number;
             /** Format: int64 */
@@ -2215,6 +2497,336 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listManagedDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevicePage"];
+                };
+            };
+        };
+    };
+    createManagedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceInput"];
+            };
+        };
+        responses: {
+            /** @description KubeEdge device control result */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevice"];
+                };
+            };
+        };
+    };
+    getManagedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevice"];
+                };
+            };
+        };
+    };
+    updateManagedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceInput"];
+            };
+        };
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevice"];
+                };
+            };
+        };
+    };
+    deleteManagedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KubeEdge device control result */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    addManagedDeviceProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceProperty"];
+            };
+        };
+        responses: {
+            /** @description 측정 항목 추가 완료. 갱신된 장치를 반환하며 첫 수집값은 아직 없을 수 있다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevice"];
+                };
+            };
+            /** @description 지원하지 않는 항목 설정 또는 항목 수 제한 초과 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 중복 항목, 다른 시스템 소유 또는 동시 변경 충돌 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateManagedDeviceProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceProperty"];
+            };
+        };
+        responses: {
+            /** @description 측정 항목 수정 완료. 갱신된 장치를 반환한다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDevice"];
+                };
+            };
+            /** @description 지원하지 않는 항목 설정 또는 이름 변경 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치 또는 측정 항목 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 다른 시스템 소유 또는 동시 변경 충돌 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteManagedDeviceProperty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 측정 항목 삭제 완료 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 장치 또는 측정 항목 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 다른 시스템 소유 또는 동시 변경 충돌 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    testDeviceConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceInput"];
+            };
+        };
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceConnectionResult"];
+                };
+            };
+        };
+    };
+    listManagedDeviceProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDeviceProfilePage"];
+                };
+            };
+        };
+    };
+    createManagedDeviceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedDeviceProfile"];
+            };
+        };
+        responses: {
+            /** @description KubeEdge device control result */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedDeviceProfile"];
+                };
+            };
+        };
+    };
+    listDeviceProtocols: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KubeEdge device control result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceProtocolPage"];
+                };
+            };
+        };
+    };
     getPlatform: {
         parameters: {
             query?: never;
@@ -2557,33 +3169,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 요청 성공. 재전송은 기존 객체를 반환합니다. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Device"];
-                };
-            };
-            /** @description 새 객체 생성. 기존 객체의 ID는 바뀌지 않습니다. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Device"];
-                };
-            };
-            /** @description 필드·UUID·페이지·JSON 형식을 확인하세요. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
             /** @description CSRF 토큰·세션 쿠키 누락/불일치 */
             403: {
                 headers: {
@@ -2591,35 +3176,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 장치·노드·참조 Profile이 없습니다. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description 요청 크기 제한을 초과했습니다. */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description DB 연결 장애. 복구 후 재시도하세요. */
-            503: {
+            /** @description 앱 장치 등록 종료 */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3131,7 +3689,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Kubernetes 노드와 EdgeX Core Metadata 목록. EdgeX operatingState는 실측값의 신선도를 의미하지 않는다. */
+            /** @description Kubernetes 노드와 소유 KubeEdge Device/DeviceStatus 관측 목록. 최신값과 유효 연결 상태는 /api/devices에서 조회한다. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4732,28 +5290,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 현재 EdgeX 서비스와 프로필이 확인된 지원 항목. 연결 가능 여부나 실측 수신을 보장하지 않는다. */
-            200: {
+            /** @description SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SensorRegistrationCatalog"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description EdgeX 목록 조회 실패 또는 조회 한도 초과 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 비활성화 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -4764,160 +5308,56 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SensorRegistrationRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description 같은 이름·설정으로 이미 등록됨 */
-            200: {
+            /** @description SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SensorRegistrationResult"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description 새 등록 저장과 읽기 확인 완료 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SensorRegistrationResult"];
-                };
-            };
-            /** @description 지원하지 않는 센서 또는 연결 설정 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description CSRF 검증 실패 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 등록 충돌 또는 수집기·프로필 없음 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 조회 실패 또는 등록 결과 미확인 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 비활성화 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
     getSensorReadings: {
         parameters: {
-            query: {
-                device: string;
-                /** @description 특정 측정 항목으로 제한 */
-                resource?: string;
-                limit?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 최근 N개 측정값을 측정 시각 오름차순으로 반환. 미수집은 빈 배열이며 0과 구분한다. */
-            200: {
+            /** @description SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SensorReadings"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description 잘못된 조회 조건 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 센서 없음 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 조회 실패 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 비활성화 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
     getSensorCommands: {
         parameters: {
-            query: {
-                device: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Core Command에서 조회한 명령. 외부 URL이나 프로토콜 인증 정보는 반환하지 않는다. */
-            200: {
+            /** @description SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SensorCommands"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description 센서 없음 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 조회 실패 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 비활성화 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -4928,62 +5368,16 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SensorCommandRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description EdgeX 명령 응답. PUT 응답은 물리 장치 변경 검증을 뜻하지 않는다. */
-            200: {
+            /** @description SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요. */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SensorCommandResult"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
-            };
-            /** @description 지원하지 않는 명령 또는 잘못된 값 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description CSRF 검증 실패 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 센서 또는 명령 없음 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 장치 잠김 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 명령 응답 실패 또는 결과 미확인 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description EdgeX 비활성화 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };

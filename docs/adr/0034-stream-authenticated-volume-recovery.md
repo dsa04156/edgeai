@@ -40,4 +40,4 @@ manifest로 과거 상태를 임의 변경하는 기능은 없다. 서버도 해
 `_reset_sockets()`를 호출해 broker 연결과 내부 두 소켓을 즉시 정리한다. 참조를 유지한 채
 실제 `/proc/self/fd` 소켓 수가 정상/강제 종료 모두 기준값으로 돌아오는 회귀시험을 추가했다.
 
-[검증 범위와 남은 연결](../evidence/m7-stream-checkpoint-recovery.md)을 따른다.
+[검증 범위와 남은 연결](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-recovery.md)을 따른다.

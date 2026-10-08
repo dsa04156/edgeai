@@ -14,7 +14,7 @@
 | M7 | 진행 중 — 다중 장치 BATCH/STREAM DAG·전환·복구 구현/시험, 외부 계약·전체 수용 잔여 |
 | M8 | 부분 검증 — 100→300→1,000 장치 관리 부하·인증 병목 개선, 합의 성능 수용 기준 잔여 |
 | M9 | 일부 구현 — TLS·재시작 복구·DB/S3/키 백업·관리 HTTP 감사, identity/RBAC·외부 감사/보관·종합 복구 잔여 |
-| M10 | 미완료 — 실제 KubeEdge·ARM/x86·GPU/NPU, 실제 모델/2세부 연동, 합의한 성능 수용 기준 충족 |
+| M10 | 부분 검증 — KubeEdge Mapper·ARM/x86 Runner·CUDA 계산/NPU 접근·실제 센서 2개 연결 확인. 실제 학습 모델·2세부 연동과 합의한 성능 수용 기준은 남음 |
 
 ## 진행 순서
 
@@ -27,6 +27,8 @@
 
 검증된 구성 요소와 전체 플랫폼 수용 완료는 구분합니다.
 실제 외부 시스템 계약·GPU/NPU·성능 수치는 확인 없이 가정하지 않습니다.
+Mapper 최신값을 사용하는 BATCH 입력은 구현돼 있으며, 새 MQTT 데이터의 영속 소비·재전송과
+기존 STREAM/VD 원본으로의 자동 연결은 남아 있습니다. 기술 업그레이드는 현재 구현 우선순위를 변경하지 않습니다.
 
 ## 상세 범위
 
@@ -35,5 +37,3 @@
 - [M6 가상 장치](docs/requirements/m6-requirements.md)
 - [M7 다중 장치·스트리밍](docs/requirements/m7-requirements.md)
 - [M9 운영·복구](docs/requirements/m9-requirements.md)
-
-이전 세부 계획과 검증 이력은 [보관 기록](docs/history/plan-through-2026-10-06.md)에 있습니다.

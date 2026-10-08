@@ -13,7 +13,7 @@
   ],
   "properties": {
     "apiVersion": {
-      "const": "edgeai.vd/v1"
+      "const": "edgeai.vd/v2"
     },
     "type": {
       "enum": [
@@ -37,30 +37,18 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "deviceProfileVersionId",
-          "required",
-          "sourceModes"
+          "deviceModel",
+          "required"
         ],
         "properties": {
-          "deviceProfileVersionId": {
+          "deviceModel": {
             "type": "string",
-            "format": "uuid"
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$"
           },
           "required": {
             "type": "boolean"
-          },
-          "sourceModes": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 3,
-            "uniqueItems": true,
-            "items": {
-              "enum": [
-                "LIVE",
-                "REPLAY",
-                "SYNTHETIC"
-              ]
-            }
           }
         }
       }

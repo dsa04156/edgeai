@@ -39,7 +39,7 @@ Task·Run·실행 digest·포트·메모리 한도·종료 커서·크기·SHA·
 
 PG 동시 worker·반복 재시도·peer Result 보존·취소/예산·위조 인계/물리 종료/CREATE/권한 회수 장벽,
 실제 Runner 종료/빈 폴더/정지한 broker, 실제 Spring/PG/S3/TLS MQTT에서 새 Attempt의 결과14를 검사한다.
-상세 실행 결과와 fixture 경계는 [검증 기록](../evidence/m7-finalizer-attempt-recovery.md)을 따른다.
+상세 실행 결과와 fixture 경계는 [검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-finalizer-attempt-recovery.md)을 따른다.
 
 공개 STREAM retry는 Device 자동 재연결과 전체 장애 수용까지 계속 거절한다. Kubernetes에서
 이 새 복구를 수행하는 시험, 운영 STREAM 활성화, M5 잔여·M7 전체·M8–M10은 남는다.

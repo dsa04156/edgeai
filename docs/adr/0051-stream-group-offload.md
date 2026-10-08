@@ -46,7 +46,7 @@ SUCCEEDED는 실행 위치 전환 완료이며 최종 계산 결과의 성공은
 
 ## 검증과 남은 범위
 
-[실행 근거](../evidence/m7-stream-group-offload.md)에 공개 API/동시성/DB 제약, 실제 독립
+[실행 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-group-offload.md)에 공개 API/동시성/DB 제약, 실제 독립
 Runner 두 개의 체크포인트 인계와14/23/BATCH37, PC·모바일 표시를 기록한다. 이 서버 시험의
 Pod 생성·신원·노드 배치·종료 관측은 명시적 fixture다. 후속 실제 Kubernetes 시험에서는
 다른 실제 Node로의 이동·peer 배치 유지, 전체 종료/경로 회수·고정 checkpoint 인계,

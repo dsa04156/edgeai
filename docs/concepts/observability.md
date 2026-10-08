@@ -10,8 +10,9 @@
 | 서버·엣지 분류 | Kubernetes 노드 라벨 | 장비 역할 |
 | 노드 Ready | Kubernetes Ready 조건 또는 이를 수집한 메트릭 | Kubernetes 관점의 준비 상태 |
 | CPU·메모리·GPU·NPU | Prometheus exporter | 수집 시각의 자원 측정 |
-| 센서 UP/DOWN | EdgeX operatingState | EdgeX가 보고한 장치 운영 상태 |
-| 센서 측정값 | EdgeX Core Data | 저장된 Reading과 원본 시각 |
+| 센서 ONLINE/OFFLINE | KubeEdge DeviceStatus + Mapper 준비 여부 | DMI 연결 보고와 heartbeat 만료 |
+| 센서 최신값 | KubeEdge DeviceStatus twins | 마지막 DMI 반영값과 원본 시각 |
+| 고주기 센서 데이터 | 별도 MQTT topic | 매 수집의 DataModel 값과 시각 |
 | 앱 장치 연결 | 현재 Device Session의 Observation | 해당 에이전트가 보고한 연결 상태 |
 | VD Ready | Pod 관측과 인증된 supervisor 상태 | VD 작업을 받을 실행의 준비 상태 |
 | 작업 성공 | Task·Attempt 및 검증된 Result | 플랫폼 실행 계약의 완료 상태 |
@@ -34,12 +35,16 @@ GPU 메모리와 호스트 메모리는 서로 다른 지표입니다. 장착 �
 - `UNAVAILABLE`: 원본 서비스 조회가 실패했습니다.
 - 정상 빈 목록: 조회에는 성공했지만 표시할 항목이 없습니다.
 
-메트릭은 원본 시각과 exporter 상태를 검사합니다. 센서 상세는 조회 실패 시 마지막 데이터를
-오류 안내와 함께 남길 수 있으므로 이를 새 측정값으로 해석하지 않습니다.
+메트릭은 원본 시각과 exporter 상태를 검사합니다. 센서 목록은 조회 실패 시 마지막 데이터를
+오류 안내와 UNKNOWN 상태로 남길 수 있으므로 이를 새 측정값으로 해석하지 않습니다.
+
+센서 heartbeat가 최신이면 값이 동일해 Twin 시각이 오래돼도 ONLINE을 유지할 수 있습니다.
+항목별 수집 지속 여부가 필요하면 별도 MQTT의 DataModel 시각과 수신을 확인합니다.
+MQTT 발행 성공은 영속 저장이나 상위 Workflow 처리 완료를 의미하지 않습니다.
 
 ## 비동기 작업
 
 HTTP 202, Argo 요청 수락, Operation 성공, Result 확정은 같은 상태가 아닙니다.
-배포는 Argo와 Pod, Spring 작업은 Run·Task·Result, 센서 쓰기는 실제 장치 결과를 확인합니다.
+배포는 Argo와 Pod, Spring 작업은 Run·Task·Result, 현재 Mapper 드라이버는 센서 읽기 전용입니다.
 
 다음 단계: [메트릭 연결](../guides/node-metrics.md), [문제 해결](../operations/troubleshooting.md).

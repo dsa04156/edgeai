@@ -4,7 +4,14 @@
 |---|---|
 | ProfileVersion | 종류·키·버전으로 식별하는 발행 규격 |
 | Device | EdgeAI 앱에 등록한 입력 장치의 신원 |
-| EdgeX Device | EdgeX에 등록된 논리 장치; 앱 Device와 별도 |
+| Mapper Device | KubeEdge Device CRD 이름으로 식별하는 수집 장치; UUID 앱 Device와 별도 |
+| DeviceModel | 장치 property 인터페이스를 정의하는 KubeEdge CRD; 연결 정보는 Device별 설정 |
+| DeviceStatus / DeviceTwin | KubeEdge가 보고하는 장치 연결 상태·heartbeat·최신 property 값 |
+| DMI | EdgeCore와 Mapper 사이의 장치 설정·상태 보고 인터페이스 |
+| Mapper | 특정 프로토콜의 장치를 읽는 실행체; 노드·프로토콜별로 여러 장치가 공유 |
+| Property | 장치의 측정 항목 하나와 자료형·단위·읽기 위치 규격 |
+| Data plane | 매 수집 데이터를 별도 MQTT topic으로 소비자에게 전달하는 경로 |
+| EdgeX Device (과거) | 제거된 EdgeX 실행 계층의 논리 장치; 과거 설계·검증 기록에서 사용하는 용어 |
 | ExecutionNode | 실행과 연결하는 Kubernetes 노드 관측 |
 | VD / VirtualDevice | 원본 장치 연결과 SERVICE 규격을 묶은 가상 장치 등록 |
 | Binding | 장치·원본·실행 간 연결과 그 수명 기록 |

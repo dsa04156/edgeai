@@ -27,13 +27,17 @@ IDE·직접 Java 실행·컨테이너는 각 실행 환경에 같은 값을 전�
 | `EDGEAI_KUBE_ENABLED` | Kubernetes observer 연결, 기본 `false` |
 | `EDGEAI_KUBE_API_URL` / `TOKEN_FILE` / `CA_FILE` | Kubernetes API 연결·인증 |
 | `EDGEAI_PROMETHEUS_ENABLED` / `URL` | 메트릭 조회; 기본 비활성 |
-| `EDGEAI_EDGEX_ENABLED` | EdgeX 목록·측정·명령, 기본 `false` |
-| `EDGEAI_EDGEX_METADATA_URL` | Core Metadata, 클러스터 기본 포트 `59881` |
-| `EDGEAI_EDGEX_DATA_URL` | Core Data, 기본 포트 `59880` |
-| `EDGEAI_EDGEX_COMMAND_URL` | Core Command, 기본 포트 `59882` |
+| `EDGEAI_DEVICE_NAMESPACE` | Device Manager의 소유 namespace, 기본 `edgeai-devices` |
+| `EDGEAI_DEVICE_DATA_BROKER` | Mapper의 MQTT 출력 주소, 현재 기본 `tcp://127.0.0.1:1883`; 노드에서 접근해야 함 |
+| `EDGEAI_MAPPER_ARM64` / `EDGEAI_MAPPER_AMD64` | 대상 노드 아키텍처별 Mapper `image@sha256:...` |
+| `EDGEAI_MAPPER_SENSEHAT_ARM64` | ARM64 Sense HAT v1의 Python/RTIMULib 포함 Mapper digest |
 
-개발 시작 스크립트는 미지정 인프라 설정에 대해 현재 context와 EdgeX Service IP를 탐색할 수 있습니다.
+개발 시작 스크립트는 미지정 인프라 설정에 대해 현재 Kubernetes context를 프로세스에 고정합니다.
 직접 앱 실행에는 이 탐색이 없습니다. [인프라 연결](../guides/infrastructure-inventory.md)을 확인합니다.
+
+Mapper 이미지의 저장소 기본값은 현재 개발 registry를 사용합니다. 다른 설치에서는
+해당 노드에서 pull 가능한 digest를 지정하고 소유 namespace·DMI·ServiceAccount 권한을 준비합니다.
+현재 지원 드라이버의 인증·TLS 설정과 임의 프로토콜의 자동 구성은 제공하지 않습니다.
 
 ## 실행 기능
 
@@ -64,3 +68,5 @@ Gitea·Argo CD·Buildx의 `PLATFORM_*` 변수는 [연동 설정](../../platform-
 JDK 21, Node.js 22, pnpm 10.34.6을 사용합니다. Gradle은 저장소 wrapper를 실행합니다.
 실제 라이브러리 버전은 Gradle 설정과 `pnpm-lock.yaml`, 이미지 digest는 배포 manifest가 기준입니다.
 `docs/compatibility.yaml`은 기록 날짜의 환경 시험 결과이며 현재 배포 인증표가 아닙니다.
+
+KubeEdge Device Manager 설정은 [Mapper 실행 안내](../../deploy/kubeedge/README.md#환경과-권한)를 참조하세요. EdgeX 환경 변수는 제거됐습니다.

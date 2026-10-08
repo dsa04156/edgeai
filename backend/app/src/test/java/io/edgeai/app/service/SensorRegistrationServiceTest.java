@@ -12,7 +12,7 @@ class SensorRegistrationServiceTest {
     @Test void disabledSourceIsExplicit() {
         ObjectProvider<SensorRegistrationSource> provider = mock(ObjectProvider.class);
         var service = new SensorRegistrationService(provider, mock(InfrastructureService.class));
-        assertEquals(503, assertThrows(ControlPlaneException.class, service::catalog).status());
+        assertEquals(410, assertThrows(ControlPlaneException.class, service::catalog).status());
     }
     @Test void successAndUncertainOutcomeBothInvalidateInventory() {
         ObjectProvider<SensorRegistrationSource> provider = mock(ObjectProvider.class);

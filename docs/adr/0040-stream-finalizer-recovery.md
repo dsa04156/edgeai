@@ -34,7 +34,7 @@ commit을 실행하며, Result API도 현재 producer와 완료 허가를 다시
 
 ## 수용 범위
 
-[검증 기록](../evidence/m7-finalizer-recovery.md)은 실제 TLS Spring/MinIO·PG·MQTT·장치 SDK·
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-finalizer-recovery.md)은 실제 TLS Spring/MinIO·PG·MQTT·장치 SDK·
 모델·Runner 최종 파일 실행을 연결한다. Pod 생성/신원과 완료 후 peer 경로 회수의 시작은
 시험 fixture이며 broker 권한 회수는 실제 worker가 수행한다. 운영 TLS/Kubernetes 수용은 별도다.
 

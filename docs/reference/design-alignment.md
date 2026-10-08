@@ -8,7 +8,7 @@
 
 ```mermaid
 flowchart LR
-  DP[DEVICE 규격] --> D[물리 장치 등록]
+  DP[DEVICE 규격] --> D[UUID 앱 장치 등록]
   SP[SERVICE 실행 모듈] --> VP[VD 템플릿]
   VP --> V[영속 VirtualDevice]
   D --> SB[SourceBinding 이력]
@@ -29,7 +29,7 @@ SERVICE를 등록하거나 DDS 배포를 저장하는 작업 자체가 VD를 만
 
 ## 화면·API 연결
 
-| 원 설계의 원칙 | 현재 연결 | 이번 정렬 내용 |
+| 원 설계의 원칙 | 현재 연결 | 구현 내용 |
 |---|---|---|
 | DEVICE / SERVICE / VD 규격 구분 | `/profiles`, Profile API | 장치 규격·실행 모듈·가상 디바이스 템플릿 명칭과 입력 구분 |
 | VD 템플릿의 종류·원본·SERVICE·상태·실행 정책 | VD 프로필 양식, VD 소비 계약 | 기본 `sensorMirror`·필수 LIVE 원본, 규격 참조 선택과 동시 작업/시작·종료 제한 입력 |
@@ -51,20 +51,22 @@ SERVICE를 등록하거나 DDS 배포를 저장하는 작업 자체가 VD를 만
 - **로그인 없는 관리 화면:** 원 설계의 사용자 신원·권한 수용을 완료한 상태는 아닙니다.
   현재 사용자 요청에 따른 접근 정책과 CSRF·내부 실행 인증은 [접근 정책](access.md)을 따릅니다.
 - **미사용 등록 삭제:** 해제·영구 삭제를 구분하고, 사용 중인 장치·프로필·VD는 참조 검사로 삭제를 막습니다.
-- **실제 장비 관측:** Kubernetes 노드, Prometheus 메트릭, EdgeX 센서 목록·측정·명령·수동 등록 연결을 유지합니다.
-  EdgeX 센서 등록은 앱 Device/Session 등록이나 VD 실행 입력 adapter의 자동 생성을 의미하지 않습니다.
+- **실제 장비 관측:** Kubernetes 노드, Prometheus 메트릭, KubeEdge Device/DeviceStatus와 공유 Mapper를 사용합니다.
+  센서 등록·항목 추가/삭제·연결 테스트와 항목별 최신값 조회를 제공합니다. 영속 센서 이력과 장치 명령 쓰기는 제공하지 않습니다.
+  Mapper 장치 이름과 UUID 앱 Device/Session·VD는 별도 신원이며 자동으로 연결하지 않습니다.
 
 ## 남아 있는 수용 범위
 
 | 항목 | 현재 경계와 다음 확인 |
 |---|---|
-| EdgeX → 실행 데이터 경로 | 센서 관리 API와 앱 Device/Session·source binding은 별개. 실제 입력 adapter의 데이터·session·순번 계약과 수용 필요 |
+| Mapper → 실행 데이터 경로 | CRD 최신값을 Run 접수 때 BATCH 입력으로 고정. 별도 MQTT 데이터의 영속 소비·재전송·UUID source binding·자동 STREAM 연결은 잔여 범위 |
 | 외부 Remote·2세부 연동 | 참조 제공자 구현과 실제 외부 시스템 API·오류·종료·결과 계약 수용을 구분 |
-| 상태형 복원·STREAM 전체 조합 | 구현된 경로와 지원 조합 확인 필요; 이번 작업에서 Runner/STREAM 고도화·전체 수용을 수행하지 않음 |
+| 상태형 복원·STREAM 전체 조합 | 구현된 경로와 지원 조합 확인 필요; Runner/STREAM 고도화와 전체 수용은 보류 |
 | GPU/NPU·실모델 | 장착·자원 관측과 실제 모델의 이미지·라이브러리·실행·성능 검증은 별개 |
 | 운영 identity/RBAC·성능·종합 복구 | 사용자별 권한, 합의된 성능 수치, 전체 재가동 수용은 [개발 단계](../../PLAN.md)의 잔여 항목 |
-| 현재 실행 환경 반영 | 소스 수정과 현재 프로세스·DB·배포 반영은 별개; 앱 실행·재시작·배포는 사용자가 진행 |
+| 현재 실행 환경 반영 | 기존 웹/API의 Mapper·실센서 반영은 검증 기록에 확인됨. 이후 소스·DB·배포 변경의 적용 여부는 별도로 확인 |
 
 세부 사용법: [VD 관리](../guides/virtual-devices.md), [DAG 실행](../guides/dag-execution.md),
 [DDS·GitOps 배포](../guides/workflow-editor-integration.md).
-이번 변경의 확인 조건은 [설계 정렬 검증](../evidence/design-alignment-2026-10-06.md)을 따릅니다.
+원 설계 정렬은 [2026-10-06 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/design-alignment-2026-10-06.md), Mapper 전환과
+실센서 연결과 항목 관리는 [센서 등록 가이드](../guides/sensor-registration.md)를 확인합니다.

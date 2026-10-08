@@ -1,0 +1,102 @@
+{
+  "name": "sensehat-001",
+  "kind": "physical",
+  "protocol": "sensehat",
+  "targetNode": "etri-dev0003-raspi5",
+  "collectionInterval": 1000,
+  "protocolConfig": {
+    "devicePath": "/dev/i2c-1",
+    "deviceId": "sensehat-001",
+    "timeoutMs": 4000
+  },
+  "properties": [
+    {
+      "name": "temp_humidity",
+      "jsonPath": "temp_humidity",
+      "dataType": "float64",
+      "unit": "°C",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "temp_pressure",
+      "jsonPath": "temp_pressure",
+      "dataType": "float64",
+      "unit": "°C",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "humidity",
+      "jsonPath": "humidity",
+      "dataType": "float64",
+      "unit": "%RH",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "pressure",
+      "jsonPath": "pressure",
+      "dataType": "float64",
+      "unit": "hPa",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "compass",
+      "jsonPath": "compass",
+      "dataType": "float64",
+      "unit": "°",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "pitch",
+      "jsonPath": "pitch",
+      "dataType": "float64",
+      "unit": "°",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "roll",
+      "jsonPath": "roll",
+      "dataType": "float64",
+      "unit": "°",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "yaw",
+      "jsonPath": "yaw",
+      "dataType": "float64",
+      "unit": "°",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "gyro_x",
+      "jsonPath": "gyro_x",
+      "dataType": "float64",
+      "unit": "rad/s",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "gyro_y",
+      "jsonPath": "gyro_y",
+      "dataType": "float64",
+      "unit": "rad/s",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "gyro_z",
+      "jsonPath": "gyro_z",
+      "dataType": "float64",
+      "unit": "rad/s",
+      "scale": 1,
+      "offset": 0
+    }
+  ]
+}

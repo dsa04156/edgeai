@@ -20,10 +20,10 @@ JAR 복사와 `compose up -d --wait postgres`를 담당한다. 필수 파일/DB�
 전에 BLOCKED로 끝난다. 이후 실제 종료 Pod·quota와 복원 runtime/VD/명령/binding을
 대조하고 기록된 취소·재시도·후속 작업·전환 기한을 정리하는46개 시험(`--vd-tasks --workflows --offloads`)과
 소유 자원 정리를 수행한다.
-[기본 복구 검증](../../docs/evidence/m9-recovery-kubernetes-retirement.md),
-[VD 내부 할당 검증](../../docs/evidence/m9-recovery-vd-tasks.md),
-[작업 상태 복구](../../docs/evidence/m9-recovery-kubernetes-workflows.md),
-[전환 복구](../../docs/evidence/m9-recovery-batch-offloads.md).
+[기본 복구 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-retirement.md),
+[VD 내부 할당 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-vd-tasks.md),
+[작업 상태 복구](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-workflows.md),
+[전환 복구](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-batch-offloads.md).
 
 GitHub Actions는 이미지 job에서 API/화면 발행 전에 이 시험을 수행한다. kind v0.33.0 바이너리의
 SHA-256과 해당 릴리스의 Kubernetes1.35.8 node image digest를 고정한다. 노드는 control-plane1개와
@@ -56,9 +56,9 @@ API에는 CA·bearer만, 제공자에는 별도 Secret의 TLS key·bearer를 마
 제공자 SQLite에서 시험 Run의 신원/상태/계산 횟수/파일 metadata만 추출하며 자격·전체 요청은 기록하지 않는다.
 두 실행 방식은 같은 `linear.py` 계약과 합성 입력을 사용한다. `simulationDelayMillis`는0~60000의
 제어 시험 대기이며 성능 측정값이 아니다. Result의 실제 S3 version/bytes/SHA와 예상 계산값을 검사한다.
-추가 게이트의 성공 여부는 [Remote kind 증거](../../docs/evidence/m5-remote-kind.md)를 따른다.
+추가 게이트의 성공 여부는 [Remote kind 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-remote-kind.md)를 따른다.
 
-현재 실제 kind 성공 여부는 [M4 증거](../../docs/evidence/m4-runtime.md)를 따른다.
+현재 실제 kind 성공 여부는 [M4 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m4-runtime.md)를 따른다.
 기존 실제 클러스터의 Kubernetes1.31.14 및 실장비 성능 수용시험과는 별도 환경이다.
 [kind 공식 사용법](https://kind.sigs.k8s.io/docs/user/quick-start/)과
 [v0.33.0 릴리스](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0)를 기준으로 구성했다.
@@ -91,5 +91,5 @@ VD 노드 전환4개는 같은/다른 VD에서 다른 Node로 이동, 완료 뒤
 이 장벽은 동시에 여러 poll/자식 요청을 막으므로 해당 시나리오의 시험 API pool은20개다.
 기본 pool5 환경의 정상 전환 검증과 이 장애 주입 환경의 검증을 구분한다.
 
-이 새 게이트의 실제 kind 통과 여부는 [M7 증거](../../docs/evidence/m7-kubernetes-stream.md)를 따른다.
+이 새 게이트의 실제 kind 통과 여부는 [M7 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-kubernetes-stream.md)를 따른다.
 현재 JAR를 사용한 기존 클러스터 시험 성공이 새 빌드 이미지/CI의 완료를 대신하지 않는다.

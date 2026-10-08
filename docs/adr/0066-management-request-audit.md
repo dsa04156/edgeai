@@ -1,6 +1,6 @@
 # ADR0066 — 관리 요청의 영속 접수 기록과 관측 결과
 
-상태: 채택, 2026-10-04. M9 감사의 관리 HTTP 경계다. [검증 근거](../evidence/m9-management-audit.md).
+상태: 채택, 2026-10-04. M9 감사의 관리 HTTP 경계다. [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-management-audit.md).
 
 관리 `/api/v1/**` 변경 요청은 인증/CSRF/핸들러 실행 전에 별도 트랜잭션으로 접수 기록을
 저장한다. 저장 실패는503이며 핸들러를 호출하지 않는다. 서버가 생성한 UUID를

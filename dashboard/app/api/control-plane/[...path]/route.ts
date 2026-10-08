@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic";
 async function forward(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const target = path.join("/");
+  const managedProperties = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties$/.test(target);
+  const managedProperty = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties\/[a-z][a-z0-9_]*$/.test(target);
+  const managed = /^managed-devices(\/[a-z0-9][a-z0-9.-]*)?$/.test(target) || ["device-profiles", "protocols", "device-connections/test"].includes(target);
   if (!workflowsEnabled() && /^(workflows|workflow-runs)(\/|$)/.test(target))
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
@@ -23,7 +26,8 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     : request.method === "DELETE" ? new RegExp(`^(devices|virtual-devices)/${uuid}(/registration)?$`).test(target)
       || /^profiles\/(DEVICE|SERVICE|VD)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)
     : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices|virtual-devices)/${uuid}$`).test(target);
-  if (!allowed)
+  const managedAllowed = request.method === "POST" && managedProperties || ["PUT", "DELETE"].includes(request.method) && managedProperty || managed && (request.method === "GET" && target !== "device-connections/test" || request.method === "POST" && ["managed-devices", "device-profiles", "device-connections/test"].includes(target) || ["PUT", "DELETE"].includes(request.method) && /^managed-devices\/[a-z0-9][a-z0-9.-]*$/.test(target));
+  if (!allowed && !managedAllowed)
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   // The open dashboard may mutate through its own origin only. Spring still verifies CSRF.
   const origin = request.headers.get("origin");
@@ -61,8 +65,9 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     headers.set("Content-Type", "application/json");
   }
   try {
-    const response = await fetch(`${controlPlaneOrigin()}/api/v1/${target}${request.nextUrl.search}`, {
-      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(target.startsWith("sensors/") ? 20000 : 8000),
+    const backendPath = managedAllowed ? `/api/${target.replace(/^managed-devices/, "devices")}` : `/api/v1/${target}`;
+    const response = await fetch(`${controlPlaneOrigin()}${backendPath}${request.nextUrl.search}`, {
+      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(managedAllowed || target.startsWith("sensors/") ? 20000 : 8000),
     });
     const outgoing = new Headers({ "Content-Type": response.headers.get("content-type") || "application/json", "Cache-Control": "no-store" });
     const cookie = response.headers.get("set-cookie");

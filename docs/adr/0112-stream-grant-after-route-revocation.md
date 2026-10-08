@@ -23,5 +23,5 @@ DB에 새로 복원하는 기능이 아니며, 별도 최종 처리 재시도와
 그 사이 취소·완료 API의 신원 거절·WAITING 중 기한 만료·다른 checkpoint 허가에서는
 finalizer 상태 파일·출력·Result를 생성하면 안 된다.
 
-[검증 기록](../evidence/m7-stream-delayed-completion.md)에 재현 실패와 수정 뒤 결과를
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-delayed-completion.md)에 재현 실패와 수정 뒤 결과를
 분리해 기록한다. 이 경합을 고친 것으로 별도 DB/WAL 대기 원인까지 해결했다고 판정하지 않는다.

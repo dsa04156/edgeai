@@ -1,7 +1,7 @@
 # ADR0036 — 같은 Device 세션의 송신 journal과 경로 인계
 
 상태: 구성 요소 구현·로컬 검증 완료. ADR0035의 Task 체크포인트 인계 다음 데이터 경계다.
-[시험 근거와 한계](../evidence/m7-device-source-handover.md)를 따른다.
+[시험 근거와 한계](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-source-handover.md)를 따른다.
 
 ## 소유와 보존 범위
 

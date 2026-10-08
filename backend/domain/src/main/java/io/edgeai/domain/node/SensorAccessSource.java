@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-/** Bounded sensor history and commands through EdgeX Core Data/Core Command. */
+/** Retired sensor history/command port retained for the legacy API tombstone. */
 public interface SensorAccessSource {
     record Reading(String resource, String valueType, String value, String units, Instant observedAt) {}
     record Readings(String device, Instant fetchedAt, List<Reading> readings) {}

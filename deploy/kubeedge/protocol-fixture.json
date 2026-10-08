@@ -1,0 +1,83 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "protocol-fixture",
+    "namespace": "edgeai-devices",
+    "labels": {
+      "app.kubernetes.io/part-of": "edgeai",
+      "app.kubernetes.io/managed-by": "edgeai-device-manager",
+      "edgeai.io/test-only": "true"
+    }
+  },
+  "spec": {
+    "replicas": 1,
+    "strategy": {"type": "Recreate"},
+    "selector": {
+      "matchLabels": {
+        "app": "protocol-fixture"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/part-of": "edgeai",
+          "app.kubernetes.io/managed-by": "edgeai-device-manager",
+          "app": "protocol-fixture"
+        }
+      },
+      "spec": {
+        "nodeName": "etri-ser0002-cgnmsb",
+        "hostNetwork": true,
+        "dnsPolicy": "ClusterFirstWithHostNet",
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "name": "fixture",
+            "image": "192.168.0.56:5000/edgeai/protocol-fixture@sha256:422ff95381a72fe965927cc6f2ff299b8fbd22f3353ad70024271f116a147b3a",
+            "ports": [
+              {
+                "containerPort": 4841
+              },
+              {
+                "containerPort": 18090
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "10m",
+                "memory": "16Mi"
+              },
+              "limits": {
+                "cpu": "250m",
+                "memory": "96Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "readOnlyRootFilesystem": true,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/properties",
+                "port": 18090
+              },
+              "periodSeconds": 3
+            },
+            "env": [
+              {
+                "name": "MQTT_BROKER",
+                "value": "tcp://10.77.0.4:1883"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

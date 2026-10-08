@@ -56,4 +56,4 @@ Dynamic Security는 세대 lease의 자동 만료 기능을 제공하지 않는�
 만료를 거절하지만, 실제 수신/계산은 Runner/Device의 lease deadline과 제어 서버의 회수 worker로
 연결해야 한다. stock broker가 DB lease 만료 즉시 권한을 회수한다고 주장하지 않는다.
 영속 상태→worker→broker→인증 배정→실제 STREAM workload의 종단 시험 전에는 공개 STREAM501을 유지한다.
-검증 범위와 명령은 [증거](../evidence/m7-stream-broker.md)를 따른다.
+검증 범위와 명령은 [증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-broker.md)를 따른다.

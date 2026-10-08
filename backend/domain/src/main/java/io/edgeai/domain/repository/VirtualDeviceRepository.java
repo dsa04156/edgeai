@@ -10,10 +10,13 @@ public interface VirtualDeviceRepository {
     Optional<VirtualDevice> findByKey(String key);
     List<VirtualDevice> list(int limit, int offset);
     void update(UUID id, String name, VirtualDevice.Placement placement, VirtualDevice.State state, Instant now);
+    void reconfigure(UUID id, String name, UUID profileId, UUID serviceId, VirtualDevice.Placement placement, Instant now);
     List<VDSourceBinding> activeSources(UUID id);
     List<VDSourceBinding> sourceHistory(UUID id, int limit);
     void bind(VDSourceBinding binding);
     void close(UUID bindingId, long revision, Instant now);
+    void lockManagedSources(Collection<String> deviceIds);
+    boolean managedSourceInUse(String deviceId);
     boolean canDeleteRegistration(UUID id);
     void deleteRegistration(UUID id);
     record Creation(VirtualDevice value, boolean created) {}

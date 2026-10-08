@@ -1,7 +1,7 @@
 # ADR 0107: 원래 VD 배정·시작·확정 결과로 격리 DB를 복원한다
 
 상태: 구현·실제 복원24개와 기존 Kube20/Remote15/시작 복구91개 검증 통과. 2026-10-05.
-[검증 근거](../evidence/m9-recovery-vd-results.md).
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-vd-results.md).
 
 ADR0105/0106의 독립 S3 시작·결과 기록을 ADR0104의 BATCH 결과 복원에 연결한다.
 기존 명령의 `--vd-tasks` 옵션으로 VD 자식 runtime을 명시적으로 선택한다.

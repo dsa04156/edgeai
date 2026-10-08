@@ -48,5 +48,5 @@ bash scripts/ops/inspect-recovery-remote.sh \
 복구는 별도이며 상세 분류는 [ADR0074](../../adr/0074-recovery-remote-inventory.md)를 따른다.
 
 검증 명령은 `bash scripts/test/test-recovery-remote-inventory.sh [--transport compose]`다.
-실제 API/DB 백업·복원·TLS 제공자 시험을 사용하며 [근거](../../evidence/m9-recovery-remote-inventory.md)에
+실제 API/DB 백업·복원·TLS 제공자 시험을 사용하며 [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-inventory.md)에
 부분 fixture와 완료 범위를 명시한다.

@@ -66,7 +66,7 @@ OpenSSL·JDK keytool·mosquitto_ctrl이 필요하며 기존 소유 namespace/RBA
 Paho가 설치된 Python으로 `scripts/internal/test-stream-platform-broker.py --context <context>`를 실행한다.
 후자는 실제 broker Pod를 한 번 교체하므로 실행 중인 스트림이 없는 전용 검증 시점에 사용한다.
 [신원·영속성 계약](../../docs/adr/0049-persistent-stream-platform.md),
-[검증 범위](../../docs/evidence/m7-persistent-stream-platform.md).
+[검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-persistent-stream-platform.md).
 
 활성화 후 `bash scripts/demo/demo-multidevice.sh <context>`는 배포된 API/DB/MinIO/broker를 사용해
 합성 장치2개 → STREAM 작업2개 → BATCH 결과의 AUTO·NODE·취소3개 시나리오를 실행한다.
@@ -77,7 +77,7 @@ S3 고정 버전6개를 확인하며, Run 생성 전에 정한 멱등 UUID로 �
 MinIO TLS 설정을 임시 데이터·자격으로 검사하며 기존 데이터에는 접근하지 않는다.
 
 `bash scripts/test/test-stream-kubernetes.sh <context>`는 별도 TLS API/DB/MinIO/MQTT 환경에서 현재 JAR와
-검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](../../docs/evidence/m7-kubernetes-stream.md)을 따른다.
+검증 Runner 이미지를 연결한다. 실제 통과 여부와 전체 M7 잔여 범위는 [검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-kubernetes-stream.md)을 따른다.
 빌드 이미지 자체는 `python3 scripts/internal/test-stream-kubernetes.py --context <context> --api-image <API digest 또는 소스 commit tag>
 --api-source <40자리 commit> --runner-image <Runner digest> --runner-source <40자리 commit>`로 검증한다.
 이 모드는 이미지의 `/app/app.jar`를 사용하고 API Pod의 imageID와 JAR SHA를 확인한다.

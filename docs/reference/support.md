@@ -8,18 +8,27 @@
 | 프로필·앱 장치 관리 | API와 PostgreSQL | 등록만으로 실제 장치가 연결되지 않음 |
 | 서버·엣지 노드 목록 | Kubernetes 관측과 역할 라벨 | 라벨이 모호하면 분류 불명 |
 | 자원 측정 | Prometheus와 해당 exporter | 장착 정보와 사용량 지원이 다름 |
-| 센서 목록·이력 | EdgeX Metadata·Data | UP과 최근 측정 수신은 다름 |
-| 센서 등록 | 지원 Device Service·호환 프로필과 Metadata | 지원 목록에 표시된 종류만 등록, 실제 수신은 별도 확인 |
-| 센서 명령 | Core Command가 제공하는 명령 | 읽기 전용 프로필에는 쓰기 없음 |
+| 센서 목록·최신값 | KubeEdge Device/DeviceStatus CRD·DMI·Mapper | ONLINE과 개별 값의 갱신 시각은 다름; 영속 이력 조회는 없음 |
+| 센서 등록·연결 확인 | 지원 프로토콜·대상 Edge Node·DMI·아키텍처별 Mapper 이미지 | 등록과 실제 연결 성공은 다름; 연결 테스트는 대상 Mapper에서 항목 하나를 읽음 |
+| 측정 항목 추가·삭제 | 기존 Mapper 장치와 호환 항목 규격 | 연결 설정을 재사용; 마지막 항목 삭제는 장치 등록도 삭제 |
+| 매 수집 데이터 전달 | Mapper에서 접근할 MQTT broker | QoS 1 발행; 영속 재전송·이력 consumer는 별도 구현 필요 |
+| Mapper 장치의 BATCH 입력 | ONLINE 장치와 존재하는 property, 활성 Workflow API | Run 접수 시 최신값 고정; 연속 STREAM 입력으로 자동 연결하지 않음 |
 | VD 등록 | VD·SERVICE 프로필과 필수 원본 | 등록과 실행 Ready는 다름 |
 | VD 실제 실행 | VD·Runtime·클러스터·키·저장소 | 실행 이력은 등록 영구 삭제를 제한 |
 | DDS 배포 | Platform-Service·Gitea·Argo CD·이미지 | 캔버스 연결선은 실행 의존성이 아님 |
 | Spring DAG 실행 | Runtime·Runner·저장소·클러스터 | 요청 접수와 검증된 Result는 다름 |
 | Remote | 설정된 참조 제공자와 고정 계약 | 실제 외부 업체 API·상태형 복원 수용 별도 |
-| STREAM | 별도 broker·권한·연결·실행 활성화 | 기본 비활성, 지원 대상과 조합 확인 필요 |
+| STREAM | 별도 broker·권한·연결·실행 활성화 | 기본 비활성; 새 Mapper MQTT 경로의 자동 source binding은 없음 |
 | 백업·복구 도구 | 도구별 버전·신원·격리 조건 | 개별 단계 성공은 전체 재가동이 아님 |
 
 설계 원칙과 화면·API의 대응은 [원 설계 대조](design-alignment.md)를 확인합니다.
+
+지원 프로토콜은 Modbus TCP, OPC-UA, MQTT 입력, HTTP Virtual, Serial JSON, Sense HAT v1입니다.
+OPC-UA는 Anonymous/None, MQTT 입력은 인증 없는 TCP broker, Virtual은 HTTP JSON endpoint를 사용합니다.
+Serial JSON은 정해진 프레임 규격을, Sense HAT은 ARM64 Raspberry Pi의 v1 보드를 요구합니다.
+임의 프로토콜·보드의 자동 발견, 장치 명령 쓰기, 인증·TLS 확장은 구현되지 않았습니다.
+기존 `/api/v1/sensors/*` API는 410 `SENSOR_API_REPLACED`로 종료됐습니다.
+세부 설정은 [센서 등록](../guides/sensor-registration.md)과 [Mapper 안내](../../deploy/kubeedge/README.md)를 따릅니다.
 
 ## 현재 개발 경계
 
@@ -27,5 +36,5 @@
 실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
 [개발 단계](../../PLAN.md)와 [현재 상태](../../PROGRESS.md)에서 남은 범위를 확인합니다.
 
-특정 날짜의 장비 수, 시험 개수, CI 성공, 배포 digest는 해당 [검증 기록](../evidence/)의 조건에만 적용합니다.
+특정 날짜의 장비 수, 시험 개수, CI 성공, 배포 digest는 해당 Git 이력의 검증 기록 조건에만 적용합니다.
 이 프로젝트를 CNCF 소속·인증 프로젝트로 주장하지 않습니다. 문서 구성만 공개 프로젝트의 안내 방식을 참고합니다.

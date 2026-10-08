@@ -35,4 +35,4 @@ CSRF 없는 쓰기403과 내부 경로 접근 거절을 확인한다. 신뢰하�
 실제 handshake에서 실패해야 한다. 기본 비활성·누락 파일/잘못된 포트와 실제 잘못된 PEM 시작도 검사한다.
 Kubernetes 스트림5개 시나리오의 TLS API도 이 추가 connector를 사용하도록 연결한다.
 
-[실행 결과](../evidence/m7-native-api-tls.md). 의존성과 Flyway V1–V26은 변경하지 않는다.
+[실행 결과](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-native-api-tls.md). 의존성과 Flyway V1–V26은 변경하지 않는다.

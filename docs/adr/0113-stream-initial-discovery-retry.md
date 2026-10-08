@@ -21,4 +21,4 @@ journal·MQTT 연결·계산 프로세스를 만들기 전에 같은 경로 조�
 실패 경계에서는 journal과 모델을 시작하면 안 된다. native 이미지 발행은 양쪽
 아키텍처에서 Runner 111개와 새 사례를 포함한 MQTT 107개 통과를 요구한다.
 
-[검증 기록](../evidence/m7-stream-initial-discovery.md)에 재현·수정 결과와 남은 실패를 기록한다.
+[검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-initial-discovery.md)에 재현·수정 결과와 남은 실패를 기록한다.

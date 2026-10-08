@@ -16,5 +16,7 @@ __pycache__/
 *.log
 test-results/
 playwright-report/
-docs/evidence/runs/
 deploy/compose/secrets/
+
+# Local verification records, screenshots and temporary reviews
+/output/

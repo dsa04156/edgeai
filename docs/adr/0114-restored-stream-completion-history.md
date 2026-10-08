@@ -1,6 +1,6 @@
 # ADR 0114: 독립 기록에서 STREAM 완료 이력 복원
 
-2026-10-05. [실제 복원·업그레이드·회귀 근거](../evidence/m9-stream-completion-recovery.md)에
+2026-10-05. [실제 복원·업그레이드·회귀 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-stream-completion-recovery.md)에
 통과한 범위와 남은 실패를 구분한다.
 
 ## 문제

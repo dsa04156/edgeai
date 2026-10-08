@@ -56,14 +56,14 @@ STREAM REMOTE는 남는다. 후속 ADR0056/V33은 VD 그룹의 수동 NODE 전�
 전체 종료/회수 장벽을 연결했다. PG223·실제 저장소47·UI46·실API/Swagger10·기존 Task9,371개
 보존, 실제 Kubernetes 전환3개/Node3Pods·VD7Pods/S36개를 통과했다. 후속 대기 중 API 교체·
 전환 취소2개/Node1Pod·VD5Pods/S33개도 PASS다. 새 CI·배포는
-[VD 그룹 전환 근거](../evidence/m7-vd-stream-group-offload.md)의 후속 판정을 따른다.
+[VD 그룹 전환 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-vd-stream-group-offload.md)의 후속 판정을 따른다.
 선행415a1ce CI37159106124의20개 스트림 게이트·5jobs/원시17개와 GitOps2227a91의 실제
 이미지·Ready/PVC·ArgoSynced·기존 파일10개/두PVC 보존은 확인했다. 이는 V31–V32 판정이다.
-[VD 스트리밍 근거](../evidence/m7-vd-stream-execution.md)를 따른다.
-[작업별 배치 근거](../evidence/m7-task-initial-placement.md)와
-[혼합 배치 근거](../evidence/m7-mixed-task-targets.md)를 따른다.
-실제 검증 범위는 [공개 재시도 근거](../evidence/m7-public-stream-retry.md)와
-[그룹 전환 근거](../evidence/m7-stream-group-offload.md), [자동 전환 근거](../evidence/m7-stream-automatic-offload.md)를 따른다.
+[VD 스트리밍 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-vd-stream-execution.md)를 따른다.
+[작업별 배치 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-task-initial-placement.md)와
+[혼합 배치 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-mixed-task-targets.md)를 따른다.
+실제 검증 범위는 [공개 재시도 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-public-stream-retry.md)와
+[그룹 전환 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-group-offload.md), [자동 전환 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-automatic-offload.md)를 따른다.
 따라서 현재 BATCH 또는 VD 수용 성공을 다중 물리 장치 데이터 경로의 완료로 해석하지 않는다.
 
 ## 구현 전에 정할 계약과 검증
@@ -123,7 +123,7 @@ dev TLS broker·실제 Kubernetes 다중 작업 종단과 그룹/최종 처리 �
 그룹 노드 전환은 실제 Kubernetes의 다른 Node·체크포인트 인계·대기 중 API 교체/취소까지
 검증했고 전체7개 회귀와 해당 이미지 CI를 통과했다. 자동 정책의 실제 모델 메모리 부하·다른 노드 전환·checkpoint/결과·동료의 전환 한도·취소도
 현재 JAR 전체9개/Pod31개/S318에서 통과했다. 이미지/CI별 범위는
-[자동 전환 근거](../evidence/m7-stream-automatic-offload.md)를 따른다.
+[자동 전환 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-automatic-offload.md)를 따른다.
 AUTO/NODE 작업별 배치는 ADR0053, BATCH VD/REMOTE 혼합은 ADR0054의 위 범위로 검증했다.
 혼합 Remote의 실제 Kubernetes 종단3개와 VD STREAM은 위 범위로 검증했으며,
 STREAM REMOTE·VD 자동 전환·실장비 수용은 남는다.

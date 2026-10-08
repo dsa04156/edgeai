@@ -1,7 +1,7 @@
 # ADR0025 — 영속 세대 상태에서 broker 권한을 조정하는 worker
 
 상태: 구현·실제 PostgreSQL/TLS broker 통합14개 검증 완료. 새 CI·운영 배포 검증은 별도 후속이다.
-[검증 범위와 근거](../evidence/m7-stream-worker.md)를 따른다.
+[검증 범위와 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-worker.md)를 따른다.
 
 ADR0023의 PREPARING/FENCED 상태 자체를 영속 명령으로 사용한다. 발급은 정확한
 BrokerReceipt 확인 뒤 ACTIVE, 회수는 확인 뒤 CLOSED로 전환한다. 별도 메모리 큐의 유실이나

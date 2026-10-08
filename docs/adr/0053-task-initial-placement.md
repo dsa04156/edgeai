@@ -28,4 +28,4 @@ Task 조회의 `initialMode`/`initialNodeId`와 Attempt의 현재 배치를 구�
 BATCH 후속/STREAM 그룹/재시도 배치, Swagger/화면, 실제 Kubernetes의 다른 초기 노드·복구·
 고정 결과·CI/배포를 검증한다. 구현 파일이나 fixture 성공만으로 전체 수용을 판정하지 않는다.
 
-현재 결과와 남은 범위는 [배치 검증 기록](../evidence/m7-task-initial-placement.md)을 따른다.
+현재 결과와 남은 범위는 [배치 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-task-initial-placement.md)을 따른다.

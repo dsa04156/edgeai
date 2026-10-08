@@ -17,4 +17,4 @@ branch CI37221887410의 실제 Mosquitto 권한 경합 시험이 REVOKED 대신 
 실제 grant/revoke 경합 회귀는 독립 세대12회로 늘리고 실패 시 enum과 코드 위치만 남긴다.
 임시 콜백 진단 출력은 최종 코드에서 제거한다.
 
-[재현·검증 근거](../evidence/m9-broker-response-correlation.md). 새 CI/배포는 후속 검증한다.
+[재현·검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-broker-response-correlation.md). 새 CI/배포는 후속 검증한다.
