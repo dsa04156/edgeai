@@ -11,6 +11,7 @@ import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.storage.*;
 import io.edgeai.domain.vd.*;
+import io.edgeai.domain.device.DeviceResourceGateway;
 import java.net.URI;
 import java.nio.file.*;
 import java.time.*;
@@ -75,11 +76,28 @@ class VDTaskIntegrationTest {
     @MockitoBean VDGateway gateway;
     @MockitoBean RuntimeGateway jobs;
     @MockitoBean S3ArtifactStore storage;
+    @MockitoBean DeviceResourceGateway sensors;
+    private final UUID sensorUid=UUID.randomUUID();
+    private String sensorValue="26.5";
+    private long sensorObservedAt;
+    private String sensorState="ONLINE";
+    private boolean sensorMissing;
     private final JsonDocuments json=new JsonDocuments();
     private final Map<UUID,VDGateway.PodIdentity> identities=new ConcurrentHashMap<>();
     private record Fixture(VirtualDevice vd,VDRuntime supervisor,UUID session,WorkflowRun run,List<RuntimeInstance> work){}
     @BeforeEach void boundaries() {
         clock.offset.set(0);identities.clear();
+        sensorValue="26.5";sensorObservedAt=clock.millis();sensorState="ONLINE";sensorMissing=false;
+        when(sensors.request(eq("GET"),anyString(),isNull())).thenAnswer(call->{
+            String path=call.getArgument(1);Object document;
+            if(path.endsWith("/devices/sensehat-001"))document=Map.of("metadata",Map.of("name","sensehat-001","uid",sensorUid.toString(),"resourceVersion","1","labels",Map.of("app.kubernetes.io/part-of","edgeai"),
+                "annotations",Map.of("edgeai.io/device-profile",encode(Map.of("kind","physical","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")))))),
+                "spec",Map.of("nodeName","edge-node","deviceModelRef",Map.of("name","edgeai-model-sensehat"),"protocol",Map.of("protocolName","edgeai-sensehat"),"properties",List.of(Map.of("name","temperature"))));
+            else if(path.endsWith("/devicestatuses/sensehat-001"))document=Map.of("status",Map.of("state",sensorState,"lastOnlineTime",clock.instant().toString(),"twins",sensorMissing?List.of():List.of(Map.of("propertyName","temperature","reported",Map.of("value",sensorValue,"metadata",Map.of("timestamp",Long.toString(sensorObservedAt)))))));
+            else if(path.contains("/deployments/"))document=Map.of("status",Map.of("readyReplicas",1));
+            else return new DeviceResourceGateway.Reply(404,"{}");
+            return new DeviceResourceGateway.Reply(200,encode(document));
+        });
         when(gateway.authenticatePod(any(),any())).thenAnswer(call->{
             VDRuntime r=call.getArgument(0);var p=identities.get(r.id());
             if(!"vd-task-pod-fixture".equals(call.getArgument(1)) || p==null)throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);return p;
@@ -93,12 +111,15 @@ class VDTaskIntegrationTest {
     private Fixture fixture(int count,int capacity)throws Exception{return fixture(count,capacity,false);}
     private Fixture fixture(int count,int capacity,boolean retry)throws Exception {return fixture(count,capacity,retry,false);}
     private Fixture fixture(int count,int capacity,boolean retry,boolean consumer)throws Exception {
+        return fixture(count,capacity,retry,consumer,false);
+    }
+    private Fixture fixture(int count,int capacity,boolean retry,boolean consumer,boolean sensor)throws Exception {
         var spec=new LinkedHashMap<String,Object>((Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json"))));
         if(consumer)spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));
         UUID sp=publish(ProfileIdentity.Kind.SERVICE,spec);
-        UUID vp=publish(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v1","type","emulation","serviceProfileVersionId",sp.toString(),"sources",Map.of(),"state",Map.of("mode","STATELESS"),
+        UUID vp=publish(ProfileIdentity.Kind.VD,Map.of("apiVersion",sensor?"edgeai.vd/v2":"edgeai.vd/v1","type",sensor?"sensorMirror":"emulation","serviceProfileVersionId",sp.toString(),"sources",sensor?Map.of("input",Map.of("deviceModel","edgeai-model-sensehat","required",true)):Map.of(),"state",Map.of("mode","STATELESS"),
             "runtime",Map.of("maxConcurrentTasks",capacity,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
-        var vd=devices.create(encode(Map.of("key","vd-exchange-"+UUID.randomUUID(),"displayName","VD exchange fixture","profileVersionId",vp.toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value();
+        var vd=devices.create(encode(Map.of("key","vd-exchange-"+UUID.randomUUID(),"displayName","VD exchange fixture","profileVersionId",vp.toString(),"sources",sensor?List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temperature"),"maxAgeSeconds",30)):List.of(),"placement",Map.of("mode","AUTO")))).value();
         String ns="vd-task-http";
         var op=vdLifecycle.provision(vd.id(),0,"provision",new RuntimeSettings(ns,"edgeai-runner",URI.create("http://fixture.invalid"),120),false);
         var vr=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());var session=UUID.randomUUID();
@@ -137,6 +158,65 @@ class VDTaskIntegrationTest {
     }
     private Map<String,Object> resultBody(Fixture f,RuntimeInstance r){var b=runnerBody(f,r);b.put("outputs",List.of(Map.of("port","output","bytes",2,"sha256","a".repeat(64),"mediaType","application/json","versionId","fixture-version")));return b;}
     private RuntimeInstance current(RuntimeInstance r){return runtimes.runtime(r.id()).orElseThrow();}
+    @Test void sensorVdRunPinsReadingsAndReplayKeepsTheOriginalTaskInput() throws Exception {
+        var f=fixture(1,1,false,false,true);var task=executions.tasks(f.run().id()).getFirst();
+        mvc.perform(get("/api/v1/tasks/"+task.id())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.vdInputs.sources.input.properties.temperature.value").value(26.5))
+            .andExpect(jsonPath("$.vdInputs.sources.input.deviceUid").value(sensorUid.toString()));
+        devices.reconfigure(f.vd().id(),encode(Map.of("revision",0,"displayName",f.vd().displayName(),"profileVersionId",f.vd().profileVersionId().toString(),"sources",List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temperature"),"maxAgeSeconds",45)),"placement",Map.of("mode","AUTO"))));
+        sensorValue="41.5";clock.offset.set(45);
+        var request=Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of());
+        mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",f.run().idempotencyKey()).contentType("application/json").content(encode(request)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(f.run().id().toString()));
+        mvc.perform(get("/api/v1/tasks/"+task.id())).andExpect(jsonPath("$.vdInputs.sources.input.properties.temperature.value").value(26.5));
+    }
+    @Test void runnerClaimAndRetryUseThePinnedInputAndStorageForbidsMutation() throws Exception {
+        var f=fixture(1,1,true,false,true);var task=executions.tasks(f.run().id()).getFirst();
+        var fixed=executions.vdInput(task.id()).orElseThrow();
+        sensorValue="99";
+        var work=assigned(f,poll(f,body(f,1,List.of(),List.of()),200)).getFirst();
+        mvc.perform(post("/internal/v1/attempts/"+work.attemptId()+"/claim").header("Authorization","Bearer "+taskTokens.issue(work)).header("X-EdgeAI-Pod-Token","vd-task-pod-fixture")
+            .contentType("application/json").content(encode(runnerBody(f,work)))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.parameters.vdInputs.sources.input.properties.temperature.value").value(26.5));
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.vd_task_input SET document='{}' WHERE task_id=?",task.id())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(()->jdbc.update("DELETE FROM edgeai.vd_task_input WHERE task_id=?",task.id())).isInstanceOf(DataIntegrityViolationException.class);
+        vdLifecycle.fail(f.supervisor().id(),"RUNTIME_LOST");taskService.reconcile(work.id());clock.offset.set(2);
+        jdbc.update("UPDATE edgeai.vd_runtime_command SET completed=true,lease_owner=NULL,lease_until=NULL WHERE runtime_id=? AND kind='CREATE'",f.supervisor().id());
+        vdLifecycle.confirmStopped(f.supervisor().id());assertThat(lifecycle.retryTask(task.id())).isTrue();
+        assertThat(executions.attempts(task.id())).hasSize(2);assertThat(executions.vdInput(task.id()).orElseThrow()).isEqualTo(fixed);
+    }
+    @Test void invalidMeasurementsAndReservedParametersNeverCreateARun() throws Exception {
+        var f=fixture(1,1,false,false,true);
+        var request=new LinkedHashMap<String,Object>(Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of()));
+        int before=jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run",Integer.class);
+        sensorObservedAt=clock.millis()-31000;rejectSensorRun(request,"VD_SOURCE_VALUE_STALE");
+        sensorObservedAt=clock.millis()+60000;rejectSensorRun(request,"VD_SOURCE_VALUE_STALE");
+        sensorObservedAt=clock.millis();sensorMissing=true;rejectSensorRun(request,"VD_SOURCE_VALUE_MISSING");
+        sensorMissing=false;sensorState="OFFLINE";rejectSensorRun(request,"VD_SOURCE_OFFLINE");
+        sensorState="ONLINE";sensorValue="NaN";rejectSensorRun(request,"VD_SOURCE_VALUE_INVALID");
+        sensorValue="26.5";request.put("parameters",Map.of("vdInputs",Map.of("forged",true)));
+        mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(encode(request))).andExpect(status().isBadRequest());
+        var wf=workflows.create(encode(Map.of("key","forged-input-"+UUID.randomUUID(),"displayName","Reserved task input"))).value();
+        var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","task","serviceProfileVersionId",f.vd().serviceProfileVersionId().toString(),"parameters",Map.of("vdInputs",Map.of("forged",true)))),"dependencies",List.of()))).value();
+        request.put("workflowVersionId",version.id().toString());request.put("parameters",Map.of());
+        mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(encode(request))).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run",Integer.class)).isEqualTo(before);
+    }
+    private void rejectSensorRun(Object request,String code)throws Exception {
+        mvc.perform(post("/api/v1/workflow-runs").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(encode(request)))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(code));
+    }
+    @Test void eachTaskKeepsItsOwnVdAndBindingWhenMultipleVdsShareASensor() throws Exception {
+        var a=fixture(1,1,false,false,true);var b=fixture(1,1,false,false,true);
+        var run=executionApi.create(UUID.randomUUID().toString(),encode(mixedRequest(a,b,false))).value();
+        for(var task:executions.tasks(run.id())) {
+            var frame=(Map<?,?>)json.decode(executions.vdInput(task.id()).orElseThrow());
+            var vd=task.key().equals("first")?a.vd():b.vd();
+            assertThat(frame.get("vdId")).isEqualTo(vd.id().toString());
+            var source=(Map<?,?>)((Map<?,?>)frame.get("sources")).get("input");
+            assertThat(source.get("bindingId")).isEqualTo(vds.activeSources(vd.id()).getFirst().id().toString());
+        }
+    }
     private void fenced(org.assertj.core.api.ThrowableAssert.ThrowingCallable action){assertThatThrownBy(action).isInstanceOf(ControlPlaneException.class);}
 
     private Map<String,Object> mixedRequest(Fixture a,Fixture b,boolean dependency) {
@@ -222,10 +302,10 @@ class VDTaskIntegrationTest {
         assertThat(executions.task(first.taskId()).orElseThrow().state()).isEqualTo("CANCELLED");
     }
 
-    @Test void publicVdRunIsAuthenticatedPinnedIdempotentAndRequiresReadyCompatibleService()throws Exception {
+    @Test void publicVdRunIsCsrfProtectedPinnedIdempotentAndRequiresReadyCompatibleService()throws Exception {
         var f=fixture(1,1);var request=Map.of("workflowVersionId",f.run().workflowVersionId().toString(),"execution",Map.of("mode","VD","vdId",f.vd().id().toString()),"parameters",Map.of());
         String path="/api/v1/workflow-runs";
-        mvc.perform(post(path).with(csrf()).contentType("application/json").content(encode(request))).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).with(csrf()).contentType("application/json").content(encode(request))).andExpect(status().isBadRequest());
         mvc.perform(post(path).with(user("fixture")).contentType("application/json").content(encode(request))).andExpect(status().isForbidden());
         mvc.perform(post(path).with(user("fixture")).with(csrf()).header("Idempotency-Key",f.run().idempotencyKey()).contentType("application/json").content(encode(request)))
             .andExpect(status().isOk()).andExpect(jsonPath("$.vdId").value(f.vd().id().toString())).andExpect(jsonPath("$.mode").value("VD"));

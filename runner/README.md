@@ -263,3 +263,16 @@ offload/REMOTE/VD는 계속 거절한다. 최종 처리도 실제 Job 유실·�
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-execution-completion.md)을 따른다.
+
+## VD 센서 BATCH 입력
+
+센서 VD를 대상으로 Run을 생성하면 서버가 선택한 항목을 `EDGEAI_PARAMETERS_FILE`의
+예약 필드 `vdInputs`로 전달합니다. 값·항목별 수신 시각·센서 UID/DeviceModel·binding ID·
+VD revision·고정 시각이 함께 들어갑니다. 같은 Run의 재요청과 재시도에서 센서를 다시 읽지 않습니다.
+사용자 Run/Task 매개변수에 `vdInputs`를 넣으면 실행 생성이 거절됩니다.
+
+`examples/temperature.py`는 Sense HAT `input.temp_humidity`의 고정 섭씨 값을 읽어 화씨로
+변환하고 원본 신원과 시각을 JSON output에 남기는 참조 SERVICE입니다. 기존 Runner 실행 계약을
+사용합니다. 실제 입력과 처리·Result 검증은 `bash scripts/test/test-vd-sensor.sh`이며,
+이 시험의 supervisor/Runner는 호스트 프로세스이고 Pod 인증은 fixture입니다.
+[사용 흐름](../docs/guides/vd-sensor-batch.md)과 [설계](../docs/adr/0117-vd-sensor-batch-inputs.md)를 확인하세요.

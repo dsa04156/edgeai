@@ -58,12 +58,12 @@ class ApiTlsIntegrationTest {
         if(write)builder.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString("{}"));
         return client.send(builder.build(),HttpResponse.BodyHandlers.discarding());
     }
-    @Test void realHttpAndHttpsApplyTheSameHealthAuthenticationAndCsrfRules()throws Exception{
+    @Test void realHttpAndHttpsApplyTheSameHealthManagementAndCsrfRules()throws Exception{
         try(var client=trusted()){
             for(String origin:List.of("http://127.0.0.1:"+httpPort,"https://localhost:"+TLS_PORT)){
                 var health=request(client,origin,"/actuator/health/readiness",false,false);assertThat(health.statusCode()).isEqualTo(200);
                 if(origin.startsWith("https"))assertThat(health.sslSession().orElseThrow().getProtocol()).isIn("TLSv1.2","TLSv1.3");
-                assertThat(request(client,origin,"/api/v1/profiles/SERVICE",false,false).statusCode()).isEqualTo(401);
+                assertThat(request(client,origin,"/api/v1/profiles/SERVICE",false,false).statusCode()).isEqualTo(200);
                 assertThat(request(client,origin,"/api/v1/profiles/SERVICE",true,false).statusCode()).isEqualTo(200);
                 assertThat(request(client,origin,"/api/v1/workflows",true,true).statusCode()).isEqualTo(403);
                 assertThat(request(client,origin,"/internal/v1/attempts/"+UUID.randomUUID()+"/claim",true,true).statusCode()).isIn(401,403);

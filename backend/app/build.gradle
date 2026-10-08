@@ -63,6 +63,7 @@ tasks.register('runtimeArtifactIntegrationTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     include '**/RuntimeArtifactIntegrationTest.class'
     include '**/VDTaskArtifactIntegrationTest.class'
+    useJUnitPlatform { excludeTags 'sensor-hardware' }
     include '**/RemoteWorkerIntegrationTest.class'
     include '**/StreamCheckpointIntegrationTest.class'
     include '**/StreamSourceCompletionIntegrationTest.class'
@@ -107,4 +108,13 @@ tasks.named('processResources') {
         into 'static'
         rename { 'openapi.yaml' }
     }
+}
+
+// Opt-in acceptance: real read-only Sense HAT inventory and actual host Runner/S3.
+tasks.register('vdSensorAcceptanceTest', Test) {
+    description = 'Requires live Sense HAT CRDs, isolated PostgreSQL and versioned S3; Pod attestation remains an explicit fixture.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/VDTaskArtifactIntegrationTest.class'
+    useJUnitPlatform { includeTags 'sensor-hardware' }
 }

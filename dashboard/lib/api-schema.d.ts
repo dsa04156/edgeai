@@ -2027,6 +2027,8 @@ export interface components {
             tasks: components["schemas"]["Task"][];
         };
         TaskDetail: {
+            /** @description 실행 생성 시 고정한 VD 센서 입력. 같은 요청의 재호출·재시도에 유지됩니다. */
+            vdInputs: components["schemas"]["VDSensorInput"] | null;
             /** @description 최신 Attempt의 최신 측정. 미수집은 null이며 과거 Attempt의 값으로 대체하지 않습니다. */
             telemetry: components["schemas"]["RuntimeTelemetry"] | null;
             offloads: components["schemas"]["OffloadOperation"][];
@@ -2301,7 +2303,45 @@ export interface components {
             sourceKey: components["schemas"]["ProfileKey"];
             /** @description KubeEdge 센서 Device 이름 */
             deviceId: string;
+            /** @description BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다. */
+            properties?: string[];
+            /**
+             * @description 항목별 최신 수신값의 최대 허용 경과 시간(초)
+             * @default 30
+             */
+            maxAgeSeconds: number;
         }[];
+        VDSensorInput: {
+            /** @constant */
+            apiVersion: "edgeai.vd-input/v1";
+            /** Format: uuid */
+            vdId: string;
+            /** Format: int64 */
+            vdRevision: number;
+            /** Format: date-time */
+            capturedAt: string;
+            sources: {
+                [key: string]: components["schemas"]["VDSensorSourceReading"];
+            };
+        };
+        VDSensorSourceReading: {
+            /** Format: uuid */
+            bindingId: string;
+            deviceId: string;
+            /** Format: uuid */
+            deviceUid: string;
+            deviceModel: string;
+            maxAgeSeconds: number;
+            properties: {
+                [key: string]: {
+                    value: string | number | boolean;
+                    dataType: string;
+                    unit: string;
+                    /** Format: date-time */
+                    observedAt: string;
+                };
+            };
+        };
         /** @description 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다. */
         VirtualDevicePlacement: {
             /** @constant */
@@ -2370,6 +2410,8 @@ export interface components {
             deviceModel: string | null;
             /** @enum {string} */
             sourceKind: "physical" | "virtual" | "legacy";
+            properties: string[];
+            maxAgeSeconds: number;
             /** Format: int64 */
             openedRevision: number;
             /** Format: int64 */

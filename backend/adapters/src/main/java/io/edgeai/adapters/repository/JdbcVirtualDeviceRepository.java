@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepository {
+    private static final tools.jackson.databind.json.JsonMapper JSON=new tools.jackson.databind.json.JsonMapper();
     private final JdbcTemplate jdbc;
     public JdbcVirtualDeviceRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
     private static Instant time(ResultSet r,String field) throws SQLException {
@@ -23,7 +24,7 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     private static final RowMapper<VDSourceBinding> SOURCE=(r,n)->new VDSourceBinding(r.getObject("id",UUID.class),
         r.getObject("vd_id",UUID.class),r.getString("source_key"),r.getObject("device_id",UUID.class),
         r.getObject("device_profile_version_id",UUID.class),Device.SourceMode.valueOf(r.getString("source_mode")),
-        r.getLong("opened_revision"),r.getObject("closed_revision",Long.class),time(r,"opened_at"),time(r,"closed_at"),r.getString("managed_device_id"),r.getObject("device_uid",UUID.class),r.getString("device_model"));
+        r.getLong("opened_revision"),r.getObject("closed_revision",Long.class),time(r,"opened_at"),time(r,"closed_at"),r.getString("managed_device_id"),r.getObject("device_uid",UUID.class),r.getString("device_model"),Arrays.asList(JSON.readValue(r.getString("properties"),String[].class)),r.getInt("max_age_seconds"));
     public boolean create(String key,String name,UUID profileId,UUID serviceId,VirtualDevice.Placement placement,String digest) {
         return jdbc.update("""
             INSERT INTO edgeai.virtual_device(id,vd_key,display_name,profile_version_id,service_profile_version_id,placement_mode,node_id,creation_digest)
@@ -55,9 +56,9 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     }
     public void bind(VDSourceBinding b) {
         jdbc.update("""
-            INSERT INTO edgeai.vd_source_binding(id,vd_id,source_key,device_id,device_profile_version_id,source_mode,opened_revision,opened_at,managed_device_id,device_uid,device_model)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-            """,b.id(),b.vdId(),b.sourceKey(),b.deviceId(),b.deviceProfileVersionId(),b.sourceMode().name(),b.openedRevision(),Timestamp.from(b.openedAt()),b.managedDeviceId(),b.deviceUid(),b.deviceModel());
+            INSERT INTO edgeai.vd_source_binding(id,vd_id,source_key,device_id,device_profile_version_id,source_mode,opened_revision,opened_at,managed_device_id,device_uid,device_model,properties,max_age_seconds)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,CAST(? AS jsonb),?)
+            """,b.id(),b.vdId(),b.sourceKey(),b.deviceId(),b.deviceProfileVersionId(),b.sourceMode().name(),b.openedRevision(),Timestamp.from(b.openedAt()),b.managedDeviceId(),b.deviceUid(),b.deviceModel(),JSON.writeValueAsString(b.properties()),b.maxAgeSeconds());
     }
     public void close(UUID bindingId,long revision,Instant now) {
         jdbc.update("UPDATE edgeai.vd_source_binding SET closed_revision=?,closed_at=? WHERE id=? AND closed_at IS NULL",revision,Timestamp.from(now),bindingId);

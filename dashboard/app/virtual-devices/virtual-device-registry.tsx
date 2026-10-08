@@ -15,28 +15,43 @@ import { readProfilePage } from "../../lib/profile-version";
 type Schema = components["schemas"];
 type VD = Schema["VirtualDevice"];
 type Detail = Schema["VirtualDeviceDetail"];
-type Source = Schema["VirtualDeviceSources"][number];
+type Source = Omit<Schema["VirtualDeviceSources"][number], "maxAgeSeconds"> & { maxAgeSeconds?: number };
 type SaveFeedback = { scope: "register" | "update"; state: "pending" | "error" | "success"; message: string; displayName?: string; refreshError?: string };
 const stateNames = { REGISTERED: "등록됨", RELEASED: "해제됨" };
 const sourceNames = { physical: "실제 센서", virtual: "Virtual 디바이스", legacy: "기존 원본 · 전환 필요" };
 
 function SourceFields({ initial = [], devices, spec, onSelect }: { initial?: Source[]; devices: Schema["ManagedDevice"][]; spec: unknown; onSelect?: (sourceKey: string, deviceId: string) => void }) {
   const requirements = sourceRequirements(spec);
-  const selected = new Map(initial.map(source => [source.sourceKey, source.deviceId]));
+  const selected = new Map(initial.map(source => [source.sourceKey, source]));
   return <fieldset className="publish-fields"><legend>원본 연결 · Source Binding</legend>
-    {Object.entries(requirements).map(([key, condition]) => <SourceSlot key={key} sourceKey={key} condition={condition} devices={devices} initialDevice={selected.get(key) || ""} onSelect={onSelect} />)}
+    {Object.entries(requirements).map(([key, condition]) => <SourceSlot key={key} sourceKey={key} condition={condition} devices={devices} initial={selected.get(key)} onSelect={onSelect} />)}
     {!Object.keys(requirements).length && <p className="muted">이 템플릿은 원본 연결을 선언하지 않습니다.</p>}
     <p className="hint">템플릿의 DeviceModel과 일치하는 센서 디바이스를 선택합니다. 오프라인 장치도 연결할 수 있으며 수신 상태는 센서 화면에서 확인합니다. <a href="/devices?view=sensors">센서 디바이스 관리 →</a></p>
   </fieldset>;
 }
-function SourceSlot({ sourceKey, condition, devices, initialDevice, onSelect }: { sourceKey: string; condition: VDSourceRequirement; devices: Schema["ManagedDevice"][]; initialDevice: string; onSelect?: (sourceKey: string, deviceId: string) => void }) {
+function SourceSlot({ sourceKey, condition, devices, initial, onSelect }: { sourceKey: string; condition: VDSourceRequirement; devices: Schema["ManagedDevice"][]; initial?: Source; onSelect?: (sourceKey: string, deviceId: string) => void }) {
   const choices = devices.filter(device => compatibleSource(device, condition));
-  const [deviceId, setDeviceId] = useState(choices.some(device => device.id === initialDevice) ? initialDevice : "");
+  const [deviceId, setDeviceId] = useState(choices.some(device => device.id === initial?.deviceId) ? initial!.deviceId : "");
+  const device = choices.find(item => item.id === deviceId);
+  const [properties, setProperties] = useState(initial?.properties || []);
+  const [maxAge, setMaxAge] = useState(initial?.maxAgeSeconds ?? 30);
   return <div className="publish-fields"><label>{sourceKey} · {condition.required ? "필수 원본" : "선택 원본"}
     {deviceId && <input type="hidden" name="sourceKey" value={sourceKey} />}
-    <select aria-label={`${sourceKey} · ${condition.required ? "필수" : "선택"} 원본`} name={deviceId ? "deviceId" : undefined} required={condition.required} value={deviceId} onChange={event => { setDeviceId(event.target.value); onSelect?.(sourceKey, event.target.value); }}>
+    <select aria-label={`${sourceKey} · ${condition.required ? "필수" : "선택"} 원본`} name={deviceId ? "deviceId" : undefined} required={condition.required} value={deviceId} onChange={event => { setDeviceId(event.target.value); setProperties([]); onSelect?.(sourceKey, event.target.value); }}>
       <option value="">{condition.required ? "호환 장치 선택" : "연결하지 않음"}</option>{choices.map(device => <option key={device.id} value={device.id}>{device.id} · {device.state}</option>)}
     </select></label>
+    {device && <>
+      <input type="hidden" name="properties" value={JSON.stringify(properties)} />
+      <fieldset className="retry-errors"><legend>{sourceKey} · BATCH 측정 항목</legend>
+        {(device.profile.properties || []).map(property => <label key={property.name}>
+          <input type="checkbox" aria-label={`${sourceKey} · ${property.name} 선택`} checked={properties.includes(property.name)} onChange={event => setProperties(previous => event.target.checked ? [...previous, property.name] : previous.filter(name => name !== property.name))} />
+          {property.name}{property.unit ? ` (${property.unit})` : ""}
+          <span className="muted"> · {device.properties[property.name] ? `${device.properties[property.name].value} · ${new Date(device.properties[property.name].timestamp).toLocaleString()}` : "미수집"}</span>
+        </label>)}
+      </fieldset>
+      <label>{sourceKey} · 최대 수신 경과 시간(초)<input aria-label={`${sourceKey} · 최대 수신 경과 시간(초)`} name="maxAgeSeconds" type="number" min={1} max={300} required value={maxAge} onChange={event => setMaxAge(Number(event.target.value))} /></label>
+      <p className="hint">실행 요청 시 선택 항목의 최신값을 고정합니다. 항목을 선택하지 않았거나 값이 오래됐으면 실행 요청이 거절됩니다. 표시된 값은 마지막 조회 값입니다.</p>
+    </>}
     {!choices.length && <p className="hint">이 DeviceModel과 일치하는 센서 디바이스가 없습니다. 센서 관리에서 장치를 등록하거나 템플릿의 모델을 바꾸세요.</p>}
   </div>;
 }
@@ -47,8 +62,8 @@ function PlacementFields({ initial = { mode: "AUTO" }, nodes }: { initial?: VD["
     <p className="hint">새 VD는 등록 후 실행을 시작할 수 있습니다. 실행 중인 VD의 원본·배치를 바꾸면 이전 실행 종료 후 교체합니다.</p></>;
 }
 function configuration(form: FormData) {
-  const keys = form.getAll("sourceKey"), devices = form.getAll("deviceId");
-  return { displayName: String(form.get("displayName")), sources: keys.map((key, index) => ({ sourceKey: String(key), deviceId: String(devices[index]) })),
+  const keys = form.getAll("sourceKey"), devices = form.getAll("deviceId"), selections = form.getAll("properties"), ages = form.getAll("maxAgeSeconds");
+  return { displayName: String(form.get("displayName")), sources: keys.map((key, index) => ({ sourceKey: String(key), deviceId: String(devices[index]), properties: JSON.parse(String(selections[index] || "[]")) as string[], maxAgeSeconds: Number(ages[index] || 30) })),
     placement: form.get("mode") === "NODE" ? { mode: "NODE", nodeId: String(form.get("nodeId")) } : { mode: "AUTO" } };
 }
 
@@ -199,11 +214,11 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         <dl><div><dt>VD 템플릿</dt><dd>{profileName(detail.vd.profileVersionId)}</dd></div><div><dt>처리 SERVICE 모듈</dt><dd>{profileName(detail.vd.serviceProfileVersionId, serviceProfiles)}</dd></div></dl>
         {record(profiles.find(p=>p.id===detail.vd.profileVersionId)?.spec).apiVersion==="edgeai.vd/v2" ? <VirtualDeviceExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} /> : <p className="notice">기존 앱 등록 장치를 참조하는 VD입니다. 센서용 템플릿의 새 버전을 발행하고 아래에서 템플릿과 원본 센서를 선택해 저장하세요. VD ID와 연결 이력은 유지됩니다.</p>}
         {workflows && <p><a href={`/workflows?service=${detail.vd.serviceProfileVersionId}&vd=${detail.vd.id}`}>이 VD의 활성 Runtime으로 DAG 실행 구성 →</a></p>}
-        <h3>현재 원본 연결 · Source Binding</h3>{detail.activeSources.length ? <ul className="history-list">{detail.activeSources.map(source => <li key={source.id}><strong>{source.sourceKey}</strong> · {sourceNames[source.sourceKind]}<span className="block">{deviceName(source.deviceId)}</span></li>)}</ul> : <p className="muted">활성 원본 연결이 없습니다.</p>}
+        <h3>현재 원본 연결 · Source Binding</h3>{detail.activeSources.length ? <ul className="history-list">{detail.activeSources.map(source => <li key={source.id}><strong>{source.sourceKey}</strong> · {sourceNames[source.sourceKind]}<span className="block">{deviceName(source.deviceId)}</span><span className="block muted">{source.properties.length ? source.properties.join(", ") : "측정 항목 미선택"} · 최대 {source.maxAgeSeconds}초</span></li>)}</ul> : <p className="muted">활성 원본 연결이 없습니다.</p>}
         {detail.vd.state === "REGISTERED" && <form ref={updateForm} key={`${detail.vd.id}-${detail.vd.revision}`} aria-label="VD 설정 수정" onSubmit={event => void save(event, "update")} onInvalid={() => invalid("update")}><fieldset disabled={busy} className="publish-fields"><legend>설정 수정</legend>
           <label>표시 이름<input name="displayName" required maxLength={128} defaultValue={detail.vd.displayName} /></label>
           <label>VD 템플릿 버전<select aria-label="수정 VD 템플릿 버전" name="profileVersionId" required value={updateProfile} onChange={e=>setUpdateProfile(e.target.value)}><option value="">센서용 템플릿 선택</option>{profiles.filter(p=>record(p.spec).apiVersion==="edgeai.vd/v2").map(p=><option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</select></label>
-          <SourceFields key={updateProfile} devices={devices} spec={detailTemplate?.spec} initial={detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId }))} />
+          <SourceFields key={updateProfile} devices={devices} spec={detailTemplate?.spec} initial={detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId, properties: source.properties, maxAgeSeconds: source.maxAgeSeconds }))} />
           <PlacementFields nodes={nodes} initial={detail.vd.placement} />
           {updateFeedback && <p ref={updateResult} tabIndex={-1} role={updateFeedback.state === "error" ? "alert" : "status"} className={updateFeedback.state === "error" ? "error" : updateFeedback.state === "success" ? "notice" : "hint"}>{updateFeedback.message}</p>}
           {updateFeedback?.refreshError && <p className="error" role="alert">{updateFeedback.refreshError}</p>}
@@ -211,7 +226,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         </fieldset></form>}
         <h3>원본 연결 이력</h3>
         {detail.sourceHistoryTruncated && <p className="hint">최근 연결 100개를 표시합니다. 현재 활성 연결은 위에서 모두 확인할 수 있습니다.</p>}
-        {detail.sourceHistory.length ? <div className="table-scroll"><table className="vd-table"><caption className="sr-only">VD 원본 연결 이력</caption><thead><tr><th>원본 / Device</th><th>출처</th><th>변경 버전</th><th>연결 상태</th></tr></thead><tbody>{detail.sourceHistory.map(source => <tr key={source.id}><td>{source.sourceKey}<span className="block">{deviceName(source.deviceId)}</span></td><td>{sourceNames[source.sourceKind]}</td><td>{source.openedRevision} → {source.closedRevision ?? "현재"}</td><td>{source.closedAt ? "종료됨" : "활성"}</td></tr>)}</tbody></table></div> : <p className="muted">원본 연결 이력이 없습니다.</p>}
+        {detail.sourceHistory.length ? <div className="table-scroll"><table className="vd-table"><caption className="sr-only">VD 원본 연결 이력</caption><thead><tr><th>원본 / Device</th><th>출처</th><th>변경 버전</th><th>연결 상태</th></tr></thead><tbody>{detail.sourceHistory.map(source => <tr key={source.id}><td>{source.sourceKey}<span className="block">{deviceName(source.deviceId)}</span><span className="block muted">{source.properties.length ? source.properties.join(", ") : "측정 항목 미선택"} · 최대 {source.maxAgeSeconds}초</span></td><td>{sourceNames[source.sourceKind]}</td><td>{source.openedRevision} → {source.closedRevision ?? "현재"}</td><td>{source.closedAt ? "종료됨" : "활성"}</td></tr>)}</tbody></table></div> : <p className="muted">원본 연결 이력이 없습니다.</p>}
         <details><summary>가상 장치 상세 데이터</summary><pre aria-label="VD 상세 JSON">{JSON.stringify(detail, null, 2)}</pre></details>
         {detail.vd.state === "REGISTERED" && <div className="release-controls">{confirmRelease ? <><p>이 VD의 원본 연결을 종료합니다. VD ID와 연결 이력, 원본 장치는 보존됩니다.</p><div className="toolbar"><button disabled={busy} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); setNotice("가상 장치를 해제했습니다."); })}>VD 해제 확정</button><button disabled={busy} onClick={() => setConfirmRelease(false)}>계속 사용</button></div></> : <button disabled={busy} onClick={() => setConfirmRelease(true)}>VD 해제</button>}</div>}
       </section>}

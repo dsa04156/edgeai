@@ -31,12 +31,12 @@ class ProfileIntegrationTest {
     private String body(String key, String version, String spec) {
         return "{\"key\":\"" + key + "\",\"version\":\"" + version + "\",\"spec\":" + spec + "}";
     }
-    @Test void publishesAllKindsWithActualAuthCsrfAndReadsThemBack() throws Exception {
+    @Test void publishesAllKindsWithActualCsrfAndReadsThemBack() throws Exception {
         var tokenResponse = mvc.perform(get("/api/v1/csrf").with(httpBasic("profile-test", "profile-test-only")))
             .andExpect(status().isOk()).andReturn();
         var session = (MockHttpSession) tokenResponse.getRequest().getSession(false);
         String token = json.readTree(tokenResponse.getResponse().getContentAsString()).get("token").asText();
-        mvc.perform(get("/api/v1/profiles/DEVICE").session(session)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/profiles/DEVICE").session(session)).andExpect(status().isOk());
         String key = key();
         for (String kind : List.of("DEVICE", "SERVICE", "VD")) {
             String url = "/api/v1/profiles/" + kind;

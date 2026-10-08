@@ -38,3 +38,6 @@ Python 구현과 `.sh` 진입점은 서로 다른 기능 두 개가 아닙니다
 일상 개발의 기본 명령으로 실행하지 않습니다. 검증 로그는 Git에서 제외한 `output/verification/`에 생성합니다.
 
 기존 `scripts/<파일>` 경로는 위 폴더로 옮겼습니다. CI·저장소 내부 호출도 새 경로를 사용합니다.
+
+- `test/test-vd-sensor.sh`: Sense HAT 온도를 실제로 읽어 기존 Python Runner와 S3 Result까지 검증합니다. 센서 쓰기 없이 별도 DB·시험 bucket을 정리하며 Pod 인증은 fixture입니다.
+- `test/isolated-db.sh`: 통합 시험이 개발 DB에 데이터를 남기지 않도록 createdb/dropdb와 종료 trap을 제공하는 내부 helper입니다. 직접 실행하지 않습니다.

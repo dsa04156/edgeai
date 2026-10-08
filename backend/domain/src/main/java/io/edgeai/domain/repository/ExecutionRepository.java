@@ -12,6 +12,8 @@ public interface ExecutionRepository {
     List<WorkflowRun> runs(int limit, int offset);
     List<Task> tasks(UUID runId);
     Optional<Task> task(UUID id);
+    void saveVDInput(UUID taskId,UUID vdId,String document);
+    Optional<String> vdInput(UUID taskId);
     List<TaskAttempt> attempts(UUID taskId);
     Optional<TaskAttempt> attempt(UUID id);
     void scheduleRetry(TaskRetry retry,Instant now);

@@ -18,26 +18,28 @@ test("VD workflow selection preserves retries and displays its actual result gen
     }
     let body: unknown;
     if (path === "csrf") body = { token: "fixture" };
+    else if (path === "virtual-devices") body={items:[{id:vdId,key:"sensor-vd",displayName:"Sensor VD",state:"REGISTERED",serviceProfileVersionId:versionId}],nextOffset:null};
     else if (path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflows") body = { items: [{ id: workflowId, key: "vd-fixture", displayName: "VD 실행 시험", createdAt: now }], nextOffset: null };
-    else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "vd-fixture", displayName: "VD 실행 시험" }, versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag: { tasks: [], dependencies: [] }, createdAt: now }], nextOffset: null };
+    else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "vd-fixture", displayName: "VD 실행 시험" }, versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag: { tasks: [{key:"analyze",serviceProfileVersionId:versionId,parameters:{}}], dependencies: [] }, createdAt: now }], nextOffset: null };
     else if (path === "workflow-runs") body = { items: posts > 1 ? [run] : [], nextOffset: null };
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
-    else if (path === `tasks/${taskId}`) body = { task, telemetry: null, offloads: [], attempts: [{ id: taskId, taskId, state: "SUCCEEDED", mode: "VD", vdId, nodeId: null, remoteTarget: null, cause: "INITIAL", number: 1, epoch: 1 }] };
+    else if (path === `workflow-runs/${runId}/placements`) body=[];
+    else if (path === `workflow-runs/${runId}/streams`) body={items:[],nextOffset:null};
+    else if (path === `tasks/${taskId}`) body = { task, telemetry: null, offloads: [], vdInputs: {apiVersion:"edgeai.vd-input/v1",vdId,vdRevision:2,capturedAt:now,sources:{input:{bindingId:taskId,deviceId:"sensehat-001",deviceUid:pod,deviceModel:"edgeai-model-sensehat",maxAgeSeconds:30,properties:{temp_humidity:{value:26.5,unit:"°C",dataType:"float64",observedAt:now}}}}}, attempts: [{ id: taskId, taskId, state: "SUCCEEDED", mode: "VD", vdId, nodeId: null, remoteTarget: null, cause: "INITIAL", number: 1, epoch: 1 }] };
     else if (path === `tasks/${taskId}/results`) body = { taskId, items: [{ id: runId, taskId, attemptId: taskId, runtimeId, epoch: 1, producerPodUid: pod, vdRuntimeId: runtimeId, remoteAllocationId: null, remoteSourceMode: null, manifestDigest: "sha256:" + "a".repeat(64), createdAt: now,
       artifacts: [{ port: "output", bucket: "fixture", objectKey: "output", objectVersion: "fixed-version", sha256: "a".repeat(64), bytes: 32, mediaType: "application/json" }] }] };
     else return route.fulfill({ status: 404, json: {} });
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture"); await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
   await page.getByRole("button", { name: "VD 실행 시험 vd-fixture", exact: true }).click();
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
+  await page.getByText("고급 설정 · 재시도 및 위치 전환", {exact:true}).click();
   await page.getByLabel("자동 노드 전환 사용", { exact: true }).check();
   await page.getByRole("combobox", { name: /실행 위치 정책/ }).selectOption("VD");
   await expect(page.getByLabel("자동 노드 전환 사용", { exact: true })).toHaveCount(0);
-  await page.getByLabel("실행할 가상 장치 ID", { exact: true }).fill(vdId);
+  await page.getByRole("combobox", { name: /^실행할 가상 장치/ }).selectOption(vdId);
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: /.+/ })).toContainText("Ready VD");
   await page.getByRole("button", { name: "실행 요청 저장", exact: true }).click();
@@ -45,6 +47,12 @@ test("VD workflow selection preserves retries and displays its actual result gen
   await expect(selected).toContainText(`실행 대상 VD ${vdId}`);
   await selected.getByRole("button", { name: "analyze", exact: true }).click();
   await expect(selected).toContainText("CPU·메모리는 VD 컨테이너 전체의 공유 측정값입니다.");
+  const sensorInput = page.getByRole("region", { name: "실행에 사용한 센서 입력", exact: true });
+  await expect(sensorInput).toContainText("26.5 °C");
+  await expect(sensorInput).toContainText("temp_humidity");
+  await sensorInput.getByText("input · 원본 신원과 연결 이력", {exact:true}).click();
+  await expect(sensorInput).toContainText(pod);
+  await expect(sensorInput).toContainText("revision 2");
   const result = page.getByRole("region", { name: "검증된 결과 · analyze", exact: true });
   await expect(result).toContainText(`VD Runtime ${runtimeId}`); await expect(result).toContainText(`Pod ${pod}`);
   expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);

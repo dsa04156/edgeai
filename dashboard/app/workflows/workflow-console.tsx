@@ -1,4 +1,5 @@
 "use client";
+import { VDSensorInputs } from "./vd-sensor-inputs";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { registryItems } from "../../lib/registry";
@@ -198,7 +199,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
           <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
           {mode === "NODE" && <label>실행 노드<select name="nodeId" required defaultValue=""><option value="">실제 실행 노드 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {n.architecture} · {hardwareLabel(n)}</option>)}</select></label>}
           {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
-          {mode === "VD" && <><label>실행할 가상 장치<select required value={vdId} onChange={e => setVdId(e.target.value)}><option value="">가상 장치 선택</option>{virtualDevices.filter(vd => vd.state === "REGISTERED").map(vd => <option key={vd.id} value={vd.id} disabled={!version.dag.tasks.every(task => task.serviceProfileVersionId === vd.serviceProfileVersionId)}>{vd.displayName} · {vd.key}</option>)}</select></label><p className="hint">같은 SERVICE 버전의 가상 장치를 선택하세요. 실행 준비 상태는 요청 시 서버에서 확인합니다. <a href="/virtual-devices">가상 장치 관리 →</a></p></>}
+          {mode === "VD" && <><label>실행할 가상 장치<select required value={vdId} onChange={e => setVdId(e.target.value)}><option value="">가상 장치 선택</option>{virtualDevices.filter(vd => vd.state === "REGISTERED").map(vd => <option key={vd.id} value={vd.id} disabled={!version.dag.tasks.every(task => task.serviceProfileVersionId === vd.serviceProfileVersionId)}>{vd.displayName} · {vd.key}</option>)}</select></label><p className="hint">같은 SERVICE 버전의 가상 장치를 선택하세요. 실행 준비 상태와 센서값의 수신 시각은 요청 시 서버에서 확인합니다. 센서 원본의 선택 항목을 실행 입력으로 고정합니다. <a href="/virtual-devices">가상 장치 관리 →</a></p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
           {version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} nodes={nodes} virtualDevices={virtualDevices} stream={streamExecution} onChange={value => { setTaskExecutions(value); if (Object.values(value).some(target => ["VD", "REMOTE"].includes(target.mode))) setAutomaticOffload(null); }} />}
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
@@ -234,6 +235,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
           ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>
           : <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />)}
         {task?.attempts[0]?.vdId && <p className="hint">현재 작업의 VD: {task.attempts[0].vdId}. CPU·메모리는 VD 컨테이너 전체의 공유 측정값입니다.</p>}
+        {task?.vdInputs && <VDSensorInputs input={task.vdInputs} />}
         {task && <details><summary>고급 설정 · 실행 위치 전환</summary><div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
           <p className="hint">RESTART 작업은 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 체크포인트가 확정된 STREAM은 노드로 전환할 수 있습니다. 연결된 작업들도 함께 종료·재개하며 처리 상태를 이어받습니다. 전환 성공은 새 실행 시작을 뜻합니다.</p>
