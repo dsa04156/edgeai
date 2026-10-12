@@ -29,11 +29,11 @@ public class SensorHistoryService {
                     if(reading.isEmpty())continue;
                     if(!(reading.get("timestamp") instanceof Number observed))continue;
                     long timestamp=observed.longValue();
-                    if(timestamp<=0 || timestamp>clock.millis()+5000 || clock.millis()-timestamp>binding.maxAgeSeconds()*1000L)continue;
+                    if(timestamp<=0 || timestamp>clock.millis()+5000 || clock.millis()-timestamp>binding.maxAgeSeconds()*1000L || !currentConfiguration(device,reading,Instant.ofEpochMilli(timestamp)))continue;
                     var definitions=(List<?>)map(device.get("profile")).getOrDefault("properties",List.of());
                     var definition=definitions.stream().map(SensorHistoryService::definition).filter(v->property.equals(v.get("name"))).findFirst().orElseThrow();
                     Object value=VDSensorInputsService.value(Objects.toString(reading.get("value"),""),(String)definition.get("dataType"));
-                    append(binding.deviceUid(),property,Instant.ofEpochMilli(timestamp),value);
+                    append(binding.deviceUid(),property,configuration(device),Instant.ofEpochMilli(timestamp),value);
                 }
             } catch(ControlPlaneException | IllegalArgumentException | NoSuchElementException e) {
                 // An unavailable sensor contributes no observation; Run creation checks readiness.
@@ -41,11 +41,22 @@ public class SensorHistoryService {
         }
     }
     private static Map<String,Object> definition(Object value){return map(value);}
-    public void append(UUID uid,String property,Instant observedAt,Object value) {
-        samples.append(uid,property,new SensorSampleRepository.Sample(observedAt,WorkflowInput.JSON.canonical(value)));
+    public static String configuration(Map<String,Object> device) {
+        return WorkflowInput.JSON.digest("edgeai.sensor-configuration/v1",Map.of("model",device.get("model"),"profile",device.get("profile"),
+            "targetNode",Objects.toString(device.get("targetNode"),""),"updatedAt",Objects.toString(device.get("configurationUpdatedAt"),"")));
     }
-    public List<Map<String,Object>> window(UUID uid,String property,Instant captured,int maxAgeSeconds,int count) {
-        var window=samples.recent(uid,property,captured.minusSeconds(maxAgeSeconds),captured.plusSeconds(5),count);
+    public static boolean currentConfiguration(Map<String,Object> device,Map<String,Object> reading,Instant observed) {
+        String updated=Objects.toString(device.get("configurationUpdatedAt"),"");
+        String applied=Objects.toString(reading.get("configurationSha256"),"");
+        boolean required=device.containsKey("configurationSha256") || !updated.isEmpty() || !applied.isEmpty();
+        return (!required || io.edgeai.app.support.DeviceProfileCompiler.configuration(device.get("profile")).equals(applied))
+            && (updated.isEmpty() || observed.isAfter(Instant.parse(updated)));
+    }
+    public void append(UUID uid,String property,String configuration,Instant observedAt,Object value) {
+        samples.append(uid,property,configuration,new SensorSampleRepository.Sample(observedAt,WorkflowInput.JSON.canonical(value)));
+    }
+    public List<Map<String,Object>> window(UUID uid,String property,String configuration,Instant captured,int maxAgeSeconds,int count) {
+        var window=samples.recent(uid,property,configuration,captured.minusSeconds(maxAgeSeconds),captured.plusSeconds(5),count);
         if(window.size()!=count)throw new ControlPlaneException(409,"VD_PROCESSING_WINDOW_PENDING","처리에 필요한 새 표본을 수집 중입니다. 표본 수와 허용 시간을 확인하세요.");
         return window.stream().map(s->Map.<String,Object>of("value",WorkflowInput.JSON.decode(s.valueJson()),"observedAt",s.observedAt().toString())).toList();
     }

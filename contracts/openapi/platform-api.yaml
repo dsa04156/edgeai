@@ -2442,6 +2442,8 @@ components:
         stateReason: {type: string, enum: [DMI, STALE_DMI_REPORT, MAPPER_NOT_READY]}
         lastSeen: {type: integer, format: int64}
         resourceVersion: {type: string}
+        configurationUpdatedAt: {type: [string, 'null'], format: date-time, description: 마지막 수집 설정 변경 시각. 이 시각 이전의 twin은 새 처리 창에서 사용하지 않습니다.}
+        configurationSha256: {type: string, pattern: '^sha256:[0-9a-f]{64}$', description: Mapper가 적용해야 할 수집 설정 식별자. 해당 식별자를 보고한 관측값만 VD 입력으로 사용합니다.}
         mapper:
           type: object
           required: [name, ready]
@@ -2456,6 +2458,7 @@ components:
             properties:
               value: {type: string}
               timestamp: {type: integer, format: int64}
+              configurationSha256: {type: string, pattern: '^sha256:[0-9a-f]{64}$', description: 이 값을 수집한 Mapper의 실제 적용 설정 식별자.}
     ManagedDevicePage:
       type: object
       required: [items]
@@ -4386,6 +4389,7 @@ components:
               dataType: {type: string, description: 센서의 원시 자료형. value는 Mapper scale/offset 적용 후 공학 단위값입니다.}
               unit: {type: string}
               observedAt: {type: string, format: date-time}
+              configurationSha256: {type: string, pattern: '^sha256:[a-f0-9]{64}$', description: 표본 창의 센서 수집·보정 설정 신원}
               samples:
                 type: array
                 maxItems: 1024

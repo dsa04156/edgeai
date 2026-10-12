@@ -12,9 +12,10 @@ test("result view distinguishes pending, verified metadata and unavailable stora
     const task = { id: taskId, runId, key: "analyze", state: phase === "verified" ? "SUCCEEDED" : phase === "retry" ? "RETRY_WAIT" : "RUNNING", createdAt: now, updatedAt: now };
     let body: unknown;
     if (path === "csrf") body = { token: "ui-fixture" };
-    else if (path === "workflows" || path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
+    else if (["workflows", "profiles/SERVICE", "nodes", "virtual-devices"].includes(path)) body = { items: [], nextOffset: null };
     else if (path === "workflow-runs") body = { items: [run], nextOffset: null };
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
+    else if (path === `workflow-runs/${runId}/placements`) body=[];
     else if (path === `tasks/${taskId}`) body = { task, attempts: [{ id: attemptId, taskId, number: 1, epoch: 1, state: phase === "retry" ? "FAILED" : task.state }] };
     else if (path === `tasks/${taskId}/results`) {
       if (phase === "unavailable") return route.fulfill({ status: 503, json: { code: "RESULT_STORE_UNAVAILABLE", message: "결과 저장소에 연결할 수 없습니다. 복구 후 다시 시도하세요." } });
@@ -25,11 +26,7 @@ test("result view distinguishes pending, verified metadata and unavailable stora
     } else return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
     await route.fulfill({ status: 200, json: body });
   });
-  await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture");
-  await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
-  await page.getByRole("button", { name: runId, exact: true }).click();
+  await page.goto(`/runs?run=${runId}`);
   await page.getByRole("button", { name: "analyze", exact: true }).click();
   const results = page.getByRole("region", { name: "검증된 결과 · analyze", exact: true });
   await expect(results).toContainText("아직 확정된 결과가 없습니다.");
@@ -62,6 +59,6 @@ test("result view distinguishes pending, verified metadata and unavailable stora
   await results.getByRole("button", { name: "결과 새로고침", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "결과 저장소에 연결할 수 없습니다." })).toBeVisible();
   await expect(results).toHaveCount(0);
-  await page.getByRole("button", { name: "연결 해제", exact: true }).click();
+  await page.goto("/devices");
   await expect(page.getByText("fixture-version", { exact: false })).toHaveCount(0);
 });

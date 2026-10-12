@@ -1221,6 +1221,13 @@ export interface components {
             /** Format: int64 */
             lastSeen: number;
             resourceVersion: string;
+            /**
+             * Format: date-time
+             * @description 마지막 수집 설정 변경 시각. 이 시각 이전의 twin은 새 처리 창에서 사용하지 않습니다.
+             */
+            configurationUpdatedAt?: string | null;
+            /** @description Mapper가 적용해야 할 수집 설정 식별자. 해당 식별자를 보고한 관측값만 VD 입력으로 사용합니다. */
+            configurationSha256?: string;
             mapper: {
                 name: string;
                 ready: boolean;
@@ -1230,6 +1237,8 @@ export interface components {
                     value: string;
                     /** Format: int64 */
                     timestamp: number;
+                    /** @description 이 값을 수집한 Mapper의 실제 적용 설정 식별자. */
+                    configurationSha256?: string;
                 };
             };
         };
@@ -2398,6 +2407,8 @@ export interface components {
                     unit: string;
                     /** Format: date-time */
                     observedAt: string;
+                    /** @description 표본 창의 센서 수집·보정 설정 신원 */
+                    configurationSha256?: string;
                     samples?: {
                         value: string | number | boolean;
                         /** Format: date-time */

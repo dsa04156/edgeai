@@ -278,7 +278,11 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			twins := []*api.Twin{{PropertyName: "connection", ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: state}}}
 			if state == "online" {
 				for _, prop := range props {
-					twins = append(twins, &api.Twin{PropertyName: prop.name, ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: values[prop.name], Metadata: map[string]string{"timestamp": strconv.FormatInt(now.UnixMilli(), 10), "type": prop.typ}}})
+					metadata := map[string]string{"timestamp": strconv.FormatInt(now.UnixMilli(), 10), "type": prop.typ}
+					if prop.visitor.ConfigurationSha256 != "" {
+						metadata["edgeaiConfigurationSha256"] = prop.visitor.ConfigurationSha256
+					}
+					twins = append(twins, &api.Twin{PropertyName: prop.name, ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: values[prop.name], Metadata: metadata}})
 				}
 			}
 			// Coalesce latest reports while the node DMI budget is busy. Collection and

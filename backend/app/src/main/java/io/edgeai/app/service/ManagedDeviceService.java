@@ -69,6 +69,7 @@ public class ManagedDeviceService {
         if(!Objects.equals(compiled.model(),map(map(old.get("spec")).get("deviceModelRef")).get("name")))requireUnused(id);
         mapper(compiled.node(),node(compiled.node()),(String)compiled.profile().get("protocol"));ensure(path("devicemodels"),compiled.model(),compiled.modelResource());
         var replacement=new TreeMap<>(compiled.deviceResource());var metadata=map(replacement.get("metadata"));metadata.put("resourceVersion",map(old.get("metadata")).get("resourceVersion"));
+        configurationTimestamp(metadata,old,compiled.profile());
         // Status remains the controller's responsibility. The API replaces spec with optimistic concurrency.
         request("PUT",path("devices")+"/"+id,replacement,200);return get(id);
     }
@@ -126,8 +127,18 @@ public class ManagedDeviceService {
         var replacement=new TreeMap<>(old);replacement.remove("status");replacement.put("spec",compiled.deviceResource().get("spec"));
         var metadata=new TreeMap<>(meta);var annotations=new TreeMap<>(map(meta.getOrDefault("annotations",Map.of())));
         annotations.put("edgeai.io/device-profile",JSON.canonical(compiled.profile()));metadata.put("annotations",annotations);replacement.put("metadata",metadata);
+        configurationTimestamp(metadata,old,compiled.profile());
         // Use the version read above so concurrent edits are rejected rather than overwritten.
         request("PUT",path("devices")+"/"+key,replacement,200);
+    }
+    private void configurationTimestamp(Map<String,Object> metadata,Map<String,Object> old,Map<String,Object> profile) {
+        var previous=map(map(old.get("metadata")).getOrDefault("annotations",Map.of()));
+        var annotations=new TreeMap<>(map(metadata.getOrDefault("annotations",Map.of())));
+        String before=Objects.toString(previous.get("edgeai.io/device-profile"),"{}");
+        String changed=Objects.toString(previous.get("edgeai.io/configuration-updated-at"),"");
+        if(!JSON.canonical(JSON.decode(before)).equals(JSON.canonical(profile)))changed=clock.instant().toString();
+        if(!changed.isEmpty())annotations.put("edgeai.io/configuration-updated-at",changed);
+        metadata.put("annotations",annotations);
     }
     public Map<String,Object> list(){
         var result=new ArrayList<Map<String,Object>>();var root=request("GET",path("devices")+"?labelSelector=app.kubernetes.io%2Fpart-of%3Dedgeai",null,200);
@@ -153,7 +164,10 @@ public class ManagedDeviceService {
         var values=new TreeMap<String,Object>();long lastSeen=0;
         for(var value:(List<?>)status.getOrDefault("twins",List.of())){var twin=map(value);var reported=map(twin.getOrDefault("reported",Map.of()));var metadata=map(reported.getOrDefault("metadata",Map.of()));
             long timestamp=0;try{timestamp=Long.parseLong(Objects.toString(metadata.getOrDefault("timestamp","0")));}catch(NumberFormatException ignored){}
-            String property=Objects.toString(twin.get("propertyName"));if(!property.equals("connection")&&propertyNames.contains(property)){lastSeen=Math.max(lastSeen,timestamp);values.put(property,Map.of("value",Objects.toString(reported.getOrDefault("value","")),"timestamp",timestamp));}
+            String property=Objects.toString(twin.get("propertyName"));if(!property.equals("connection")&&propertyNames.contains(property)){
+                lastSeen=Math.max(lastSeen,timestamp);var reading=new TreeMap<String,Object>(Map.of("value",Objects.toString(reported.getOrDefault("value","")),"timestamp",timestamp));
+                String configuration=Objects.toString(metadata.get("edgeaiConfigurationSha256"),"");if(!configuration.isEmpty())reading.put("configurationSha256",configuration);values.put(property,reading);
+            }
         }
         String state=Objects.toString(status.getOrDefault("state","UNKNOWN")).toUpperCase(Locale.ROOT);
         String observedState=state,reason="DMI";
@@ -163,7 +177,12 @@ public class ManagedDeviceService {
         String mapper=MapperDeployment.nameFor((String)spec.get("nodeName"),protocol);var deployment=optional(deployments()+"/"+mapper);
         boolean mapperReady=deployment!=null&&((Number)map(deployment.getOrDefault("status",Map.of())).getOrDefault("readyReplicas",0)).intValue()>0;
         if(!mapperReady){state="OFFLINE";reason="MAPPER_NOT_READY";}
-        var result=new TreeMap<String,Object>();result.put("id",id);result.put("uid",meta.get("uid"));result.put("profile",profile);result.put("model",map(spec.get("deviceModelRef")).get("name"));result.put("targetNode",spec.get("nodeName"));result.put("state",state);result.put("observedState",observedState);result.put("stateReason",reason);result.put("lastSeen",lastSeen);result.put("properties",values);result.put("mapper",Map.of("name",mapper,"ready",mapperReady));result.put("resourceVersion",meta.get("resourceVersion"));return result;
+        var result=new TreeMap<String,Object>();result.put("id",id);result.put("uid",meta.get("uid"));result.put("profile",profile);result.put("model",map(spec.get("deviceModelRef")).get("name"));result.put("targetNode",spec.get("nodeName"));result.put("state",state);result.put("observedState",observedState);result.put("stateReason",reason);result.put("lastSeen",lastSeen);result.put("properties",values);result.put("mapper",Map.of("name",mapper,"ready",mapperReady));result.put("resourceVersion",meta.get("resourceVersion"));result.put("configurationUpdatedAt",map(meta.getOrDefault("annotations",Map.of())).get("edgeai.io/configuration-updated-at"));
+        for(var property:(List<?>)spec.getOrDefault("properties",List.of())) {
+            var visitor=map(map(property).getOrDefault("visitors",Map.of()));var data=map(visitor.getOrDefault("configData",Map.of()));
+            if(data.containsKey("configurationSha256")){result.put("configurationSha256",configuration(profile));break;}
+        }
+        return result;
     }
     public Map<String,Object> protocols(){return Map.of("items",List.of(Map.of("id","modbus-tcp","available",true,"kind","physical"),Map.of("id","opc-ua","available",true,"kind","physical"),Map.of("id","mqtt","available",true,"kind","physical"),Map.of("id","virtual","available",true,"kind","virtual"),Map.of("id","serial-json","available",true,"kind","physical"),Map.of("id","sensehat","available",!sensehatImage.isBlank(),"kind","physical")));}
     public Map<String,Object> profiles(){var root=request("GET",core("configmaps")+"?labelSelector=edgeai.io%2Fdevice-profile%3Dtrue",null,200);var items=new ArrayList<Object>();for(var item:(List<?>)root.getOrDefault("items",List.of()))items.add(JSON.decode((String)map(map(item).get("data")).get("profile.json")));return Map.of("items",items);}

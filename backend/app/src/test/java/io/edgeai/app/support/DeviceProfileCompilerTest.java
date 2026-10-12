@@ -38,6 +38,9 @@ class DeviceProfileCompilerTest {
         var spec=map(first.deviceResource().get("spec"));assertEquals("etri-dev0002-raspi5",spec.get("nodeName"));
         var props=(List<?>)spec.get("properties");assertEquals(4,props.size());
         var visitor=map(map(map(props.getFirst()).get("visitors")).get("configData"));assertEquals(0,visitor.get("address"));assertEquals(1,visitor.get("scale"));
+        assertEquals(configuration(first.profile()),visitor.get("configurationSha256"));
+        var changed=input();var changedProperties=new ArrayList<Object>((List<?>)changed.get("properties"));var calibration=new TreeMap<>(map(changedProperties.getFirst()));calibration.put("scale",2);changedProperties.set(0,calibration);changed.put("properties",changedProperties);
+        var calibrated=compile(changed,"edgeai-devices","tcp://127.0.0.1:1883");assertEquals(first.model(),calibrated.model());assertNotEquals(configuration(first.profile()),configuration(calibrated.profile()));
         Path artifact=Path.of("build/device-slice-compiled.json");Files.createDirectories(artifact.getParent());Files.writeString(artifact,JSON.canonical(first.deviceResource()));
     }
     @Test void rejectsDuplicatePropertiesInvalidWidthsAndUnknownProtocol(){

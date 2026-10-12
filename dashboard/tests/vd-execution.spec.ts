@@ -12,7 +12,8 @@ for (const enabled of [true, false]) test(`VD execution ${enabled ? "requests, r
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
     const now = new Date().toISOString();
     if (path === "csrf") return route.fulfill({ json: { token: "fixture" } });
-    if (["profiles/VD", "devices"].includes(path)) return route.fulfill({ json: { items: [], nextOffset: null } });
+    if (path === "profiles/VD") return route.fulfill({json:{items:[{id,kind:"VD",key:"vd-ui",version:"1.0.0",spec:{apiVersion:"edgeai.vd/v2",type:"emulation",sources:{}}}],nextOffset:null}});
+    if (["profiles/SERVICE", "managed-devices", "nodes"].includes(path)) return route.fulfill({ json: { items: [], nextOffset: null } });
     if (path === "virtual-devices") return route.fulfill({ json: { items: [vd], nextOffset: null } });
     if (path === `virtual-devices/${id}`) return route.fulfill({ json: { vd, activeSources: [], sourceHistory: [], sourceHistoryTruncated: false } });
     if (path === `virtual-devices/${id}/execution`) {
@@ -42,9 +43,8 @@ for (const enabled of [true, false]) test(`VD execution ${enabled ? "requests, r
     return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
   });
   await page.goto("/virtual-devices");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture");await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();await page.getByRole("button", { name: "실행 시험 장치 vd-ui", exact: true }).click();
-  const panel = page.getByRole("region", { name: "VD 실행", exact: true });
+  await page.getByRole("button", { name: "실행 시험 장치 vd-ui", exact: true }).click();
+  const panel = page.getByRole("region", { name: "실행 연결 · Runtime Binding", exact: true });
   await expect(panel).toContainText("활성 실행 없음");
   if (!enabled) {
     await expect(panel).toContainText("VD 실행 기능이 비활성화되어 있습니다.");
@@ -74,7 +74,7 @@ for (const enabled of [true, false]) test(`VD execution ${enabled ? "requests, r
   await expect(panel.locator("p.stage")).toHaveText("실행 종료 중");
   operations[0].state = "SUCCEEDED"; phase = "stopped";await panel.getByRole("button", { name: "실행 상태 새로고침", exact: true }).click();await expect(panel.locator("p.stage")).toHaveText("활성 실행 없음");
   await expect(page.locator('[aria-labelledby="vd-detail-title"] > .toolbar .stage')).toHaveText("등록됨");
-  await panel.getByText("실행 세대와 연결 이력", { exact: true }).click();await expect(panel).toContainText("1세대 · 종료 확인됨");await expect(panel).toContainText("2세대 · 종료 확인됨");await panel.screenshot({ path: testInfo.outputPath("vd-drained.png") });
+  await panel.getByText("실행 연결·세대 이력", { exact: true }).click();await expect(panel).toContainText("1세대 · 종료 확인됨");await expect(panel).toContainText("2세대 · 종료 확인됨");await panel.screenshot({ path: testInfo.outputPath("vd-drained.png") });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
   expect(errors).toEqual([]);

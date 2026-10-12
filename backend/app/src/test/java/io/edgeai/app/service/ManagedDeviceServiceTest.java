@@ -31,6 +31,11 @@ class ManagedDeviceServiceTest {
     @Test void workflowReferencesRejectProtocolFieldsAndMissingProperties(){device(true,"online",now);assertThrows(IllegalArgumentException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("temperature"),"host","private")));assertThrows(ControlPlaneException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("missing"))));}
     @Test void resourcesFromAnotherOwnerAreNeverAdopted(){device(true,"online",now);read(path("devices","sensor"),Map.of("metadata",Map.of("labels",Map.of("app.kubernetes.io/part-of","other"))));assertEquals(409,assertThrows(ControlPlaneException.class,()->service().delete("sensor")).status());verify(gateway,never()).request(eq("DELETE"),anyString(),any());}
     Map<String,Object> property(String name,int register){return Map.of("name",name,"register",register,"dataType","float32");}
+    String propertySettings(List<?> properties){
+        var settings=(List<?>)DeviceProfileCompiler.JSON.decode(DeviceProfileCompiler.JSON.canonical(properties));
+        for(var property:settings)DeviceProfileCompiler.map(DeviceProfileCompiler.map(DeviceProfileCompiler.map(property).get("visitors")).get("configData")).remove("configurationSha256");
+        return DeviceProfileCompiler.JSON.canonical(settings);
+    }
     Map<String,Object> registered(List<Map<String,Object>> properties){
         var compiled=DeviceProfileCompiler.compile(Map.of("name","sensor","targetNode","edge-a","protocol","modbus-tcp","host","192.0.2.31","port",502,"protocolConfig",Map.of("unitId",2),"collectionInterval",1500,"properties",properties),"edgeai-devices","tcp://127.0.0.1:1883");
         var document=new TreeMap<>(compiled.deviceResource());var metadata=new TreeMap<>(DeviceProfileCompiler.map(document.get("metadata")));
@@ -84,19 +89,36 @@ class ManagedDeviceServiceTest {
         var changed=new TreeMap<String,Object>(property("temperature",40007));changed.put("dataType","float64");changed.put("unit","C");changed.put("scale",0.1);changed.put("offset",2);
         when(gateway.request(eq("PUT"),eq(path("devices","sensor")),any())).thenAnswer(call->{
             var replacement=DeviceProfileCompiler.map(call.getArgument(2));var metadata=DeviceProfileCompiler.map(replacement.get("metadata"));
+            assertEquals(now.toString(),DeviceProfileCompiler.map(metadata.get("annotations")).get("edgeai.io/configuration-updated-at"));
             assertEquals("41",metadata.get("resourceVersion"));assertEquals("device-uid",metadata.get("uid"));assertEquals("keep",DeviceProfileCompiler.map(metadata.get("annotations")).get("external-note"));
             var spec=DeviceProfileCompiler.map(replacement.get("spec"));var oldSpec=DeviceProfileCompiler.map(old.get("spec"));
             assertEquals(oldSpec.get("protocol"),spec.get("protocol"));assertEquals(oldSpec.get("nodeName"),spec.get("nodeName"));
-            assertEquals(DeviceProfileCompiler.JSON.canonical(((List<?>)oldSpec.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList()),DeviceProfileCompiler.JSON.canonical(((List<?>)spec.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList()));
+            assertEquals(propertySettings(((List<?>)oldSpec.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList()),propertySettings(((List<?>)spec.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList()));
             var profile=DeviceProfileCompiler.map(DeviceProfileCompiler.JSON.decode((String)DeviceProfileCompiler.map(metadata.get("annotations")).get("edgeai.io/device-profile")));
             var unchanged=new TreeMap<>(profile);unchanged.remove("properties");var expected=new TreeMap<>(oldProfile);expected.remove("properties");assertEquals(expected,unchanged);
             assertEquals(((List<?>)oldProfile.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList(),((List<?>)profile.get("properties")).stream().filter(p->!"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).toList());
             read(path("devices","sensor"),replacement);return new DeviceResourceGateway.Reply(200,"{}");
         });
         var result=service().updateProperty("sensor","temperature",DeviceProfileCompiler.JSON.canonical(changed));
+        assertEquals(now.toString(),result.get("configurationUpdatedAt"));
         var fields=(List<?>)DeviceProfileCompiler.map(result.get("profile")).get("properties");assertEquals(3,fields.size());
         var selected=DeviceProfileCompiler.map(fields.stream().filter(p->"temperature".equals(DeviceProfileCompiler.map(p).get("name"))).findFirst().orElseThrow());assertEquals(40007,((Number)selected.get("register")).intValue());assertEquals("float64",selected.get("dataType"));assertEquals("C",selected.get("unit"));assertEquals(0.1,((Number)selected.get("scale")).doubleValue());assertEquals(2,((Number)selected.get("offset")).intValue());
         assertEquals("ONLINE",result.get("state"));verify(gateway,never()).request(eq("POST"),contains("/deployments"),any());verify(gateway,never()).request(eq("DELETE"),anyString(),any());
+    }
+    @Test void unchangedPropertyUpdatePreservesTheObservationCutoff(){
+        var old=registered(List.of(property("temperature",40001)));allowModelCreation();
+        read(path("devicestatuses","sensor"),Map.of("status",Map.of("state","online","lastOnlineTime",now.toString())));
+        read("/apis/apps/v1/namespaces/edgeai-devices/deployments/"+MapperDeployment.nameFor("edge-a"),Map.of("status",Map.of("readyReplicas",1)));
+        var metadata=DeviceProfileCompiler.map(old.get("metadata"));var annotations=new TreeMap<>(DeviceProfileCompiler.map(metadata.get("annotations")));
+        String cutoff=now.minusSeconds(60).toString();annotations.put("edgeai.io/configuration-updated-at",cutoff);metadata.put("annotations",annotations);read(path("devices","sensor"),old);
+        var profile=DeviceProfileCompiler.map(DeviceProfileCompiler.JSON.decode((String)annotations.get("edgeai.io/device-profile")));
+        var unchanged=((List<?>)profile.get("properties")).getFirst();
+        when(gateway.request(eq("PUT"),eq(path("devices","sensor")),any())).thenAnswer(call->{
+            var replacement=DeviceProfileCompiler.map(call.getArgument(2));
+            assertEquals(cutoff,DeviceProfileCompiler.map(DeviceProfileCompiler.map(replacement.get("metadata")).get("annotations")).get("edgeai.io/configuration-updated-at"));
+            read(path("devices","sensor"),replacement);return new DeviceResourceGateway.Reply(200,"{}");
+        });
+        assertEquals(cutoff,service().updateProperty("sensor","temperature",DeviceProfileCompiler.JSON.canonical(unchanged)).get("configurationUpdatedAt"));
     }
     @Test void missingReservedRenamedInvalidAndForeignPropertyUpdatesNeverMutateResources(){
         registered(List.of(property("temperature",40001)));var service=service();

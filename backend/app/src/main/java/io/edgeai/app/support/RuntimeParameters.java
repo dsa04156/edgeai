@@ -13,6 +13,7 @@ public final class RuntimeParameters {
             values.forEach((k,v)->merged.put((String)k,v));
         }
         if(vdInputs!=null)merged.put("vdInputs",JSON.decode(vdInputs));
-        return JSON.boundedCanonical(merged,65536);
+        boolean processing=vdInputs!=null && ((Map<?,?>)JSON.decode(vdInputs)).containsKey("processing");
+        return JSON.boundedCanonical(merged,processing?1179648:65536);
     }
 }

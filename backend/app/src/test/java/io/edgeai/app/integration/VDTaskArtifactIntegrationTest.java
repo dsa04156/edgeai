@@ -127,7 +127,8 @@ class VDTaskArtifactIntegrationTest {
         var vdSpec=new LinkedHashMap<String,Object>(Map.of("apiVersion",sensor || processing!=null?"edgeai.vd/v2":"edgeai.vd/v1","type",sensor?"sensorMirror":"emulation","serviceProfileVersionId",sp.toString(),"sources",sensor?Map.of("input",Map.of("deviceModel",source.get("model"),"required",true)):Map.of(),"state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",2,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
         if(processing!=null){vdSpec.put("type","processing");vdSpec.put("processing",processing);}
         UUID vp=profiles.publish(ProfileIdentity.Kind.VD,encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"version","1.0.0","spec",vdSpec))).version().id();
-        var vd=devices.create(encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"displayName","Actual VD child Runner","profileVersionId",vp.toString(),"sources",sensor?List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temp_humidity"),"maxAgeSeconds",30)):List.of(),"placement",Map.of("mode","AUTO")))).value();vdId=vd.id();
+        int maxAge=processing!=null && ((Number)processing.get("sampleCount")).intValue()>1?120:30;
+        var vd=devices.create(encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"displayName","Actual VD child Runner","profileVersionId",vp.toString(),"sources",sensor?List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temp_humidity"),"maxAgeSeconds",maxAge)):List.of(),"placement",Map.of("mode","AUTO")))).value();vdId=vd.id();
         var op=vdLifecycle.provision(vd.id(),0,"provision",new RuntimeSettings("vd-artifact-test","edgeai-runner",origin,120),false);
         supervisor=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());UUID node=UUID.randomUUID();work=directory.resolve("work-"+supervisor.id());Files.createDirectory(work);
         launched.put(supervisor.id(),supervisor);workDirectories.put(supervisor.id(),work);
@@ -247,9 +248,9 @@ class VDTaskArtifactIntegrationTest {
         UUID uid=UUID.fromString((String)sensors.get("sensehat-001").get("uid"));
         await(()->{
             history.collect();
-            try {return history.window(uid,"temp_humidity",Instant.now(),30,3).size()==3;}
+            try {return history.window(uid,"temp_humidity",SensorHistoryService.configuration(sensors.get("sensehat-001")),Instant.now(),120,3).size()==3;}
             catch(io.edgeai.app.exception.ControlPlaneException e){if(!e.code().equals("VD_PROCESSING_WINDOW_PENDING"))throw e;return false;}
-        },25,"Three distinct physical Mapper observations were not available");
+        },90,"Three distinct physical Mapper observations were not available within the configured 120-second age");
         var wf=workflows.create(encode(Map.of("key","window-acceptance-"+UUID.randomUUID(),"displayName","Physical three-sample mean"))).value();
         var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","average","serviceProfileVersionId",sp.toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
         var run=executionApi.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",vdId.toString()),"parameters",Map.of()))).value();

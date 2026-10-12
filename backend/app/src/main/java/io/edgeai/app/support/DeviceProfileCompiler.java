@@ -55,10 +55,14 @@ public final class DeviceProfileCompiler {
         var modelSpec=Map.<String,Object>of("protocol",mapperProtocol,"properties",modelProperties);
         String model="edgeai-model-"+JSON.digest("edgeai-device-model-v1",modelSpec).substring(7,31);
         var profile=new TreeMap<String,Object>();profile.putAll(input);profile.put("kind",kind);if(!local)profile.put("port",port);profile.put("collectionInterval",cycle);profile.put("protocolConfig",normalizedConfig);profile.put("properties",properties);
+        String configuration=configuration(profile);
+        for(var property:deviceProperties)if(!property.get("name").equals("connection"))
+            map(map(property.get("visitors")).get("configData")).put("configurationSha256",configuration);
         var metadata=metadata(id,namespace);metadata.put("annotations",Map.of("edgeai.io/device-profile",JSON.canonical(profile)));
         var spec=Map.of("deviceModelRef",Map.of("name",model),"nodeName",node,"protocol",Map.of("protocolName",mapperProtocol,"configData",connection),"properties",deviceProperties);
         return new Compilation(id,node,model,profile,resource("DeviceModel",metadata(model,namespace),modelSpec),resource("Device",metadata,spec));
     }
+    public static String configuration(Object profile){return JSON.digest("edgeai.mapper-configuration/v1",profile);}
     public static List<Map<String,Object>> properties(Object value) {
         return properties("modbus-tcp",value);
     }

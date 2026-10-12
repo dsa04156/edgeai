@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,6 +136,8 @@ class Fixture:
                 command.extend(["--env",key])
             if self.telemetry_status is not None:
                 command.extend(['--cpus=0.5', '--memory=128m'])
+            if "PYTHONPATH" in env:
+                command.extend(["--env", "PYTHONPATH"])
             command.append(self.image)
         return subprocess.Popen(command,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 
@@ -155,6 +158,12 @@ class Fixture:
 class RunnerTest(unittest.TestCase):
     def python(self, body):
         return [sys.executable,"-c",body]
+
+    def test_existing_service_pythonpath_is_preserved_in_the_actual_child(self):
+        command=self.python("import os,pathlib,json; pathlib.Path(os.environ['EDGEAI_OUTPUT_DIR'],'output').write_text(json.dumps(os.environ['PYTHONPATH'].split(os.pathsep)))")
+        with patch.dict(os.environ,{"PYTHONPATH":"/opt/existing-service:/opt/shared-libraries"}),Fixture(command) as fixture:
+            self.assertEqual(fixture.finish(fixture.start())[0],0)
+            self.assertEqual(json.loads(fixture.outputs["output"])[-2:],["/opt/existing-service","/opt/shared-libraries"])
 
     def test_real_reference_inference_upload_and_idempotent_commit_retry(self):
         with Fixture([sys.executable,str(ROOT / "runner/examples/linear.py")],

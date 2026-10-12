@@ -6,7 +6,7 @@ import java.util.*;
 
 public interface SensorSampleRepository {
     record Sample(Instant observedAt,String valueJson) {}
-    void append(UUID deviceUid,String property,Sample sample);
-    List<Sample> recent(UUID deviceUid,String property,Instant earliest,Instant latest,int limit);
+    void append(UUID deviceUid,String property,String configuration,Sample sample);
+    List<Sample> recent(UUID deviceUid,String property,String configuration,Instant earliest,Instant latest,int limit);
     List<VDSourceBinding> watchedSources();
 }

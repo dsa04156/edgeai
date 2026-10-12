@@ -26,16 +26,17 @@ type Connection struct {
 }
 
 type Property struct {
-	Address   uint16  `json:"address"`
-	Function  string  `json:"function"`
-	DataType  string  `json:"dataType"`
-	ByteOrder string  `json:"byteOrder"`
-	Scale     float64 `json:"scale"`
-	Offset    float64 `json:"offset"`
-	NodeID    string  `json:"nodeId"`
-	Topic     string  `json:"topic"`
-	JSONPath  string  `json:"jsonPath"`
-	Sensor    string  `json:"sensor"`
+	Address             uint16  `json:"address"`
+	Function            string  `json:"function"`
+	DataType            string  `json:"dataType"`
+	ByteOrder           string  `json:"byteOrder"`
+	Scale               float64 `json:"scale"`
+	Offset              float64 `json:"offset"`
+	NodeID              string  `json:"nodeId"`
+	Topic               string  `json:"topic"`
+	JSONPath            string  `json:"jsonPath"`
+	Sensor              string  `json:"sensor"`
+	ConfigurationSha256 string  `json:"configurationSha256,omitempty"`
 }
 
 type Reader interface {

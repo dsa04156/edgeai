@@ -25,6 +25,7 @@ from pathlib import Path
 from edgeai_runner.telemetry import Sampler, own_cgroup
 
 MAX_JSON = 262144
+MAX_ASSIGNMENT = 2097152
 MAX_FILE = 268435456
 PORT = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\Z")
 
@@ -168,8 +169,9 @@ class Runner:
                 request = urllib.request.Request(self.base + "/" + operation, data=body, method="POST",
                     headers={"Authorization": "Bearer " + self.token, "X-EdgeAI-Pod-Token": pod_token, "Content-Type": "application/json"})
                 with self.http.open(request, timeout=self.timeout(request_timeout)) as response:
-                    content = response.read(MAX_JSON + 1)
-                    if len(content) > MAX_JSON:
+                    maximum = MAX_ASSIGNMENT if operation == "claim" else MAX_JSON
+                    content = response.read(maximum + 1)
+                    if len(content) > maximum:
                         raise RunnerError("INVALID_RESPONSE")
                     return json_decode(content)
             except urllib.error.HTTPError as error:
@@ -230,7 +232,7 @@ class Runner:
         env = {k: v for k, v in os.environ.items() if not k.startswith("EDGEAI_")}
         env.update(EDGEAI_INPUT_DIR=str(self.work / "inputs"), EDGEAI_OUTPUT_DIR=str(self.work / "outputs"),
             EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), EDGEAI_TELEMETRY_FILE=str(self.work / "telemetry.json"), TMPDIR=str(self.work / "tmp"),
-            PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+            PYTHONPATH=os.pathsep.join(filter(None, (str(Path(__file__).resolve().parents[1]), env.get("PYTHONPATH")))))
         if state_file is not None:
             env['EDGEAI_STATE_FILE'] = str(state_file)
         process = None
@@ -365,10 +367,10 @@ class Runner:
                     source = pipeline["input"]
                     if "port" in source:
                         name = port_name(source["port"])
-                        if assignment["inputs"][name]["bytes"] > MAX_JSON:
+                        if assignment["inputs"][name]["bytes"] > MAX_ASSIGNMENT:
                             raise ProcessingError("Processing artifact exceeds input limit")
                         raw = (self.work / "inputs" / name).read_bytes()
-                        if len(raw) > MAX_JSON:
+                        if len(raw) > MAX_ASSIGNMENT:
                             raise ProcessingError("Processing artifact exceeds input limit")
                         artifacts[name] = json_decode(raw)
                 assignment["parameters"]["vdProcessed"] = process(frame["processing"], frame, artifacts,

@@ -47,7 +47,8 @@ public class VDSensorInputsService {
             for(var binding:bindings)sources.put(binding.sourceKey(),source(binding,readings.get(binding.managedDeviceId()),captured,count));
             var frame=new TreeMap<String,Object>(Map.of("apiVersion","edgeai.vd-input/v1","vdId",id.toString(),"vdRevision",identities.get(id).revision(),"capturedAt",captured.toString(),"sources",sources));
             if(spec.processingJson()!=null)frame.put("processing",JSON.decode(spec.processingJson()));
-            frames.put(id,JSON.boundedCanonical(frame,65536));
+            try {frames.put(id,JSON.boundedCanonical(frame,spec.processingJson()==null?65536:1048576));}
+            catch(io.edgeai.app.exception.ProfilePayloadTooLargeException e){throw error("VD_PROCESSING_INPUT_TOO_LARGE","처리 입력은 1 MiB 이하입니다. 선택 항목이나 표본 수를 줄여 다시 실행하세요.");}
         });
         return Map.copyOf(frames);
     }
@@ -59,12 +60,14 @@ public class VDSensorInputsService {
             var definition=definitions.get(property);if(definition==null)throw error("VD_SOURCE_INCOMPATIBLE","선택한 VD 측정 항목이 센서 규격에 없습니다.");
             if(!values.containsKey(property))throw error("VD_SOURCE_VALUE_MISSING","선택한 VD 측정 항목이 아직 수신되지 않았습니다.");
             var reading=map(values.get(property));long timestamp=((Number)reading.get("timestamp")).longValue();
+            if(!SensorHistoryService.currentConfiguration(device,reading,Instant.ofEpochMilli(timestamp)))
+                throw error("VD_SOURCE_CONFIGURATION_PENDING","Mapper의 새 수집 설정 적용과 해당 설정의 관측값을 기다리세요.");
             if(timestamp<=0 || timestamp>captured.toEpochMilli()+5000 || captured.toEpochMilli()-timestamp>b.maxAgeSeconds()*1000L)
                 throw error("VD_SOURCE_VALUE_STALE","선택한 VD 측정값의 수신 시각이 허용 범위를 벗어났습니다.");
             String type=(String)definition.get("dataType");
             Object value=value(Objects.toString(reading.get("value"),""),type);var observedAt=Instant.ofEpochMilli(timestamp);
             var measurement=new TreeMap<String,Object>(Map.of("value",value,"dataType",type,"unit",Objects.toString(definition.get("unit"),""),"observedAt",observedAt.toString()));
-            if(count>1){history.append(b.deviceUid(),property,observedAt,value);measurement.put("samples",history.window(b.deviceUid(),property,captured,b.maxAgeSeconds(),count));}
+            if(count>1){String configuration=SensorHistoryService.configuration(device);history.append(b.deviceUid(),property,configuration,observedAt,value);measurement.put("configurationSha256",configuration);measurement.put("samples",history.window(b.deviceUid(),property,configuration,captured,b.maxAgeSeconds(),count));}
             measurements.put(property,measurement);
         }
         return Map.of("bindingId",b.id().toString(),"deviceId",b.managedDeviceId(),"deviceUid",b.deviceUid().toString(),"deviceModel",b.deviceModel(),

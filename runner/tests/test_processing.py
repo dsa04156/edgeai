@@ -11,6 +11,19 @@ from test_runner import ROOT
 
 
 class ProcessingTest(unittest.TestCase):
+    def test_actual_claim_transports_multiple_1024_sample_windows(self):
+        names=["signal1","signal2","signal3","signal4"]
+        config={"apiVersion":"edgeai.processing/v1","sampleCount":1024,"outputPort":"output","pipelines":[
+            {"name":name,"input":{"sourceKey":"input","property":name},"steps":[{"op":"movingAverage","window":1024}]} for name in names]}
+        samples=[{"value":48.28257369995117,"observedAt":"2026-10-12T00:00:00.123456Z"} for _ in range(1024)]
+        frame={"vdId":"vd-1","vdRevision":0,"capturedAt":"2026-10-12T00:00:00Z","processing":config,
+               "sources":{"input":{"properties":{name:{"samples":samples} for name in names}}}}
+        self.assertGreater(len(json.dumps(frame).encode()),262144)
+        with Fixture([sys.executable,"-m","edgeai_runner.processing"],{"vdInputs":frame}) as fixture:
+            self.assertEqual(fixture.finish(fixture.start())[0],0)
+            result=json.loads(fixture.outputs["output"])
+            for name in names:self.assertAlmostEqual(result["outputs"][name]["values"][0],48.28257369995117)
+
     def test_engine_rejects_invalid_configuration_and_boolean_sample_counts(self):
         config={"apiVersion":"edgeai.processing/v1","sampleCount":1,"outputPort":"output","pipelines":[
             {"name":"energy","input":{"port":"input","output":"signal"},"steps":[{"op":"rms","window":1}]}]}
