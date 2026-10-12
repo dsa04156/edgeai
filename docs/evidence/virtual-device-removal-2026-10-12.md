@@ -67,8 +67,8 @@ selector와 성공 후 실행 목록으로 이동하는 검증을 현재 UI에 �
 
 사용자의 후속 “ㄱㄱ”에 따라 실제 반영 범위를 추가 승인받았다. 최신 main의 Mapper 센서 등록·측정 항목 CRUD를 유지하고,
 주 작업 공간에서 이미 구현한 일반 Result JSON 본문 조회도 보존했다. 주 작업 공간의 수정 중인 소스는 덮어쓰지 않는다.
-실제 DB에 V49~53이 이미 적용돼 있어 해당 파일을 원본 그대로 포함했다. 적용 migration 53개의 Flyway 체크섬은 모두 일치했다.
-사전 조회: 센서 17개, VD 0개, 활성 VD runtime·VD-origin task 0개, 프로필 14개, Run 6개, Task 6개, Result 0개.
+호스트 DB에 V49~53이 이미 적용돼 있어 해당 파일을 원본 그대로 포함했다. 적용 migration 53개의 Flyway 체크섬은 모두 일치했다.
+호스트 사전 조회: 센서 17개, VD 0개, 활성 VD runtime·VD-origin task 0개, 프로필 14개, Run 6개, Task 6개, Result 0개.
 eKuiper Pod 1개와 센서·broker 상태를 UID와 spec SHA-256로 기록했다. 실제 적용 결과는 후속 검증으로 기록한다.
 
 최신 main 병합 후 백엔드 단위 165개, 격리 PostgreSQL 5개 클래스 63개,
@@ -108,3 +108,35 @@ CI [38239601328](https://github.com/dsa04156/edgeai/actions/runs/38239601328)의
 Runner95·stream MQTT112 시험은 PASS/exit0/skip0이었다. provenance 기록의 삭제 전111 고정값으로만 실패했다.
 두 기대값과 fixture를95로 갱신했고 오래된111 provenance 거부를 유지했다. 관련10개 단위 시험과 다운로드한
 두 실제 CI artifact 판독이 통과했다. Standards·Spec 증분 리뷰도 완료했으며 배포 CI를 새 commit에서 다시 실행한다.
+
+## 최종 CI와 클러스터 적용
+
+수정 commit `77fd52a`의 [CI 38240695271](https://github.com/dsa04156/edgeai/actions/runs/38240695271)는 모든 job이 통과했다.
+기본 단위·계약·대시보드 검사, 실제 저장소 roundtrip·버전·체크섬 검증, native amd64·arm64 각각 Runner95·stream MQTT112,
+다중 플랫폼 Runner 발행, 실제 DB를 사용하는 API·대시보드 컨테이너 검증과 GitOps 반영이 모두 성공했다.
+두 native artifact의 PASS·exit0·실제 95/112 실행 건수 및 source revision을 별도로 대조했다.
+GitOps commit `93d5074`가 검증된 digest를 고정했고 Argo가 해당 revision으로 Synced 상태가 됐다.
+API는 `sha256:af01c0440bb0afb963040e7169416b073fa0f27d0d359950c00fba69e938db4d`로 교체돼 Ready 1/1,
+readiness UP이며 실제 클러스터 `/api/v1/virtual-devices`는 404, `/api/devices`는 17개를 반환한다.
+대시보드의 기존 클러스터 replica 0 설정은 유지하며 사용 중인 화면은 앞의 호스트 standalone 배포로 제공한다.
+
+호스트 DB와 클러스터 DB는 별개다. 클러스터의 배포 전후 조회 결과는 다음과 같다.
+
+| 항목 | 배포 전 | 배포 후 |
+|---|---:|---:|
+| 프로필 | 115 | 115 |
+| 과거 VD 등록 데이터 | 4 | 4 |
+| 활성 VD runtime·VD-origin Task | 0·0 | 0·0 |
+| Run·Task·Result | 40·95·44 | 40·95·44 |
+| 적용 migration | 48 | 53 |
+
+V1~48의 기존 migration 기록과 체크섬을 그대로 유지하면서 V49~53을 적용했다.
+업그레이드 후 53개 Flyway 체크섬은 이번 소스와 모두 일치했다. 과거 VD 등록 데이터도 삭제하지 않았다.
+eKuiper Pod1·sensor Device17·broker Pod6의 UID와 spec SHA-256은 배포 전과 동일하고 broker·eKuiper Pod는 Ready다.
+두 namespace의 PVC7개는 UID·volumeName·Bound 상태가 같았다. PostgreSQL·MQTT Pod UID도 유지했다.
+MinIO Pod는 CI가 검증한 새 이미지로 교체됐고 Ready이며 기존 저장 볼륨을 유지했다.
+호스트 API·대시보드도 계속 200/UP이다.
+
+Argo Application health는 기존 Progressing 표시를 유지한다. 확인된 결과는 Synced와 API Ready 1/1이며,
+전체 Kubernetes·복구 수용시험 통과나 기존 SenseHAT 상태 갱신 문제 해결로 확대해 보고하지 않는다.
+새 eKuiper 가상 디바이스 구현은 별도 후속 작업이다.
