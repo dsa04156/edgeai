@@ -48,6 +48,8 @@ public class ProcessingRegistrationService {
         var selected=parsed.configuration().sources().get("input");
         String digest=JSON.digest("edgeai.sensor-processing-registration/v1",Map.of("key",parsed.key(),"displayName",parsed.configuration().displayName(),
             "deviceId",selected.deviceId(),"maxAgeSeconds",selected.maxAgeSeconds(),"processing",config,"placement",VirtualDeviceInput.document(parsed.configuration().placement())));
+        // Serialize resolution across servers so runtime image changes cannot alter a concurrent replay.
+        registrations.lockProcessingKey(parsed.key());
         var previous=registrations.findByKey(parsed.key());
         if(previous.isPresent()) {
             if(!registrations.processingCreationDigest(previous.get().id()).filter(digest::equals).isPresent())

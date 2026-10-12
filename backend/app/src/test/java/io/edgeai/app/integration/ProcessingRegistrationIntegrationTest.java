@@ -26,6 +26,7 @@ class ProcessingRegistrationIntegrationTest {
     @Autowired VirtualDeviceService vds;
     @Autowired ProfileService profiles;
     @Autowired ManagedDeviceService sensors;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @Autowired io.edgeai.domain.repository.VirtualDeviceRepository registrations;
     @MockitoBean DeviceResourceGateway gateway;
     final JsonDocuments json=new JsonDocuments();
@@ -85,6 +86,21 @@ class ProcessingRegistrationIntegrationTest {
         mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content(json.canonical(changed))).andExpect(status().isConflict());
         assertThatThrownBy(()->jdbc.update("UPDATE edgeai.vd_processing_registration SET request_digest='sha256:'||repeat('a',64) WHERE vd_id=?",id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         vds.deleteRegistration(id);assertThat(registrations.processingCreationDigest(id)).isEmpty();
+    }
+    @Test void concurrentRegistrationAcrossRuntimeReplacementReplaysOneCreation() throws Exception {
+        var body=json.canonical(request("concurrent-"+UUID.randomUUID(),"temperature",List.of(Map.of("op","threshold","operator","gt","value",0))));
+        var services=List.of(new ProcessingRegistrationService(profiles,vds,sensors,registrations,"registry.test/old@sha256:"+"d".repeat(64),"amd64"),
+            new ProcessingRegistrationService(profiles,vds,sensors,registrations,"registry.test/new@sha256:"+"e".repeat(64),"amd64"));
+        var response=gateway.request("GET","/devices/selection-sensor",null);
+        when(gateway.request(eq("GET"),contains("/devices/selection-sensor"),isNull())).thenAnswer(call->{Thread.sleep(150);return response;});
+        var start=new java.util.concurrent.CountDownLatch(1);
+        try(var executor=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var futures=services.stream().map(service->executor.submit(()->{start.await();return new org.springframework.transaction.support.TransactionTemplate(transactions).execute(status->service.create(body));})).toList();
+            start.countDown();
+            var first=futures.get(0).get(10,java.util.concurrent.TimeUnit.SECONDS);var second=futures.get(1).get(10,java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(first.value().id()).isEqualTo(second.value().id());assertThat(first.created()).isNotEqualTo(second.created());
+            assertThat(vds.detail(first.value().id()).activeSources()).hasSize(1);
+        }
     }
     @Test void nullRegistrationFieldsAreInputErrors() throws Exception {
         var valid=request("null-"+UUID.randomUUID(),"temperature",List.of(Map.of("op","threshold","operator","gt","value",0)));

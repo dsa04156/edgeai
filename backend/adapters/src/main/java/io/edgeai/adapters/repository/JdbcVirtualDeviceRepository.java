@@ -37,6 +37,9 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     public Optional<VirtualDevice> findByKey(String key) {
         return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=?",VD,key).stream().findFirst();
     }
+    public void lockProcessingKey(String key) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtext('edgeai.processing-create'),hashtext(?))",(r,n)->true,key);
+    }
     public Optional<String> processingCreationDigest(UUID id) {
         return jdbc.query("SELECT request_digest FROM edgeai.vd_processing_registration WHERE vd_id=?",(r,n)->r.getString(1),id).stream().findFirst();
     }
