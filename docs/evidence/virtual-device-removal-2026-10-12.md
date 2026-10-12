@@ -92,3 +92,19 @@ Runner의 폐기된 VD 센서 신규 실행 안내를 제거했다.
 
 마지막 증분에서 계약·생성 타입·Swagger 4개 검증, lint·production build, PC·모바일 22개(결과 JSON 조회 포함)가 통과했다.
 Standards와 Spec 독립 리뷰는 각각 남은 구체적 결함 없음으로 완료했다.
+
+
+## 실제 화면·API 적용
+
+`5fab7a3`의 검증된 JAR와 Next standalone 빌드를 주 작업 공간의 `.tools/releases/`에 별도로 배치했다.
+기존 실행 프로세스의 설정과 포트를 보존해 API 18080·대시보드 13080을 교체했다. 수정 중인 주 작업 공간 소스는 변경하지 않았다.
+두 readiness는 UP이며 VD API·프록시·화면은 404다. 플랫폼 capability와 운영 현황 메뉴에서 VD를 제거했다.
+실제 브라우저 운영 현황·센서 화면을 확인했고 page error는 0이었다.
+센서 17개와 Run 6개는 조회 가능하며 DB 프로필14·Run6·Task6·Result0 및 migration53개는 배포 전후 동일하다.
+eKuiper Pod·sensor Device 17개·broker Pod6개의 UID와 spec SHA-256이 같고 해당 Pod는 Ready다.
+S3·MQTT·PostgreSQL Pod UID도 유지했다. API Pod는 Argo가 VD 설정 제거를 동기화하며 재생성됐다.
+
+CI [38239601328](https://github.com/dsa04156/edgeai/actions/runs/38239601328)의 native amd64·arm64 각각
+Runner95·stream MQTT112 시험은 PASS/exit0/skip0이었다. provenance 기록의 삭제 전111 고정값으로만 실패했다.
+두 기대값과 fixture를95로 갱신했고 오래된111 provenance 거부를 유지했다. 관련10개 단위 시험과 다운로드한
+두 실제 CI artifact 판독이 통과했다. Standards·Spec 증분 리뷰도 완료했으며 배포 CI를 새 commit에서 다시 실행한다.
