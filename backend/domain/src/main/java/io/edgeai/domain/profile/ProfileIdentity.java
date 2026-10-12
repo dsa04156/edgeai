@@ -1,9 +1,9 @@
 package io.edgeai.domain.profile;
 
 public record ProfileIdentity(Kind kind, String key, String version) {
-    public enum Kind { DEVICE, SERVICE, VD }
+    public enum Kind { DEVICE, SERVICE }
     public ProfileIdentity {
-        if (kind == null) throw new IllegalArgumentException("kind must be DEVICE, SERVICE or VD");
+        if (kind == null) throw new IllegalArgumentException("kind must be DEVICE or SERVICE");
         validateKey(key);
         if (version == null || version.length() > 32 ||
             !version.matches("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)"))

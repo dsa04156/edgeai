@@ -15,14 +15,13 @@ import java.util.*;
 import okhttp3.OkHttpClient;
 
 /** Fixed-bucket, version-bound artifact verification; never trusts ETag or user SHA metadata. */
-public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, VDTaskStartJournal, VDTaskResultJournal, StreamCompletionJournal, AutoCloseable {
+public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, RuntimeStartJournal, RuntimeResultJournal, StreamCompletionJournal, AutoCloseable {
     private static final int EXPIRY_SECONDS = 600;
     private final MinioClient client, signer;
     private final String bucket;
     private final Clock clock;
     private final S3RuntimeStartJournal starts;
     private final S3RuntimeResultJournal results;
-    private final S3VDTaskStartJournal vdStarts;
     private final S3StreamCompletionJournal completions;
     private final S3StreamCheckpointJournal checkpointAuthorities;
     public S3ArtifactStore(String endpoint, String runnerEndpoint, String accessKey, String secretKey, String bucket, Clock clock) {
@@ -36,7 +35,6 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
         signer = MinioClient.builder().endpoint(runnerEndpoint).credentials(accessKey, secretKey).region("us-east-1").build();
         starts=new S3RuntimeStartJournal(client,bucket);
         results=new S3RuntimeResultJournal(client,bucket);
-        vdStarts=new S3VDTaskStartJournal(client,bucket);
         completions=new S3StreamCompletionJournal(client,bucket);
         checkpointAuthorities=new S3StreamCheckpointJournal(client,bucket);
     }
@@ -48,8 +46,6 @@ public final class S3ArtifactStore implements ArtifactStore, ArtifactFiles, Runt
     }
     @Override public void retainStart(io.edgeai.domain.runtime.RuntimeStartAuthority authority){starts.retainStart(authority);}
     @Override public void retainResult(io.edgeai.domain.runtime.RuntimeResultAuthority authority){results.retainResult(authority);}
-    @Override public void retainVDStart(io.edgeai.domain.vd.VDTaskStartAuthority authority){vdStarts.retainVDStart(authority);}
-    @Override public void retainVDResult(io.edgeai.domain.vd.VDTaskResultAuthority authority){results.retainVDResult(authority);}
     @Override public void retainCompletion(io.edgeai.domain.stream.StreamCompletionAuthority authority){completions.retainCompletion(authority);}
     @Override public void retainCheckpoint(io.edgeai.domain.stream.StreamCheckpointAuthority authority){checkpointAuthorities.retain(authority);}
     @Override public ArtifactGrant upload(ArtifactContent expected) {

@@ -16,7 +16,7 @@ IDE·직접 Java 실행·컨테이너는 각 실행 환경에 같은 값을 전�
 | `EDGEAI_DB_NAME` / `USER` / `PASSWORD` | DB 접속; 비밀번호는 로컬 환경 또는 Secret |
 
 현재 관리 접근은 API 계정 로그인 없이 동작합니다. 이전 `.env`에 남은 API 계정 변수와
-내부 Runner/VD 인증을 혼동하지 않습니다. [접근 경계](access.md)를 확인합니다.
+내부 Runner 인증을 혼동하지 않습니다. [접근 경계](access.md)를 확인합니다.
 
 ## 인프라·센서·메트릭
 
@@ -45,7 +45,6 @@ Mapper 이미지의 저장소 기본값은 현재 개발 registry를 사용합�
 |---|---|---|
 | `EDGEAI_WORKFLOW_ENABLED` | `true` | 워크플로 화면과 공개 API |
 | `EDGEAI_RUNTIME_ENABLED` | `false` | 실제 Runtime 구성 |
-| `EDGEAI_VD_ENABLED` | `false` | 지속 VD 실행 |
 | `EDGEAI_REMOTE_ENABLED` | `false` | 참조 Remote 실행 |
 | `EDGEAI_STREAM_ENABLED` | `false` | 스트림 기반 기능 |
 | `EDGEAI_STREAM_BINDINGS_ENABLED` | `false` | 스트림 연결 관리 |

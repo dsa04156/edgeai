@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NextRequest } from "next/server";
-import { DELETE, GET, POST, PUT } from "../app/api/control-plane/[...path]/route";
+import { DELETE, GET, PATCH, POST, PUT } from "../app/api/control-plane/[...path]/route";
 
-test("sensor history, commands and VD registration deletion use the control-plane proxy", async () => {
+test("sensor history, commands and device registration deletion use the control-plane proxy", async () => {
   const original = global.fetch, previous = process.env.EDGEAI_API_BASE_URL;
   process.env.EDGEAI_API_BASE_URL = "http://127.0.0.1:18080";
   const calls: { url: string; init: RequestInit }[] = [];
   global.fetch = (async (input, init) => { calls.push({ url: String(input), init: init || {} }); return new Response('{"ok":true}', { status: 200 }); }) as typeof fetch;
   try {
-    for (const [path, handler, method] of [["sensors/readings", GET, "GET"], ["sensors/commands", GET, "GET"], ["sensors/command", POST, "POST"], ["virtual-devices/11111111-1111-4111-8111-111111111111/registration", DELETE, "DELETE"]] as const) {
+    for (const [path, handler, method] of [["sensors/readings", GET, "GET"], ["sensors/commands", GET, "GET"], ["sensors/command", POST, "POST"], ["devices/11111111-1111-4111-8111-111111111111/registration", DELETE, "DELETE"]] as const) {
       const request = new NextRequest(`http://dashboard.test/api/control-plane/${path}?device=sensor-1`, { method,
         headers: { Origin: "http://dashboard.test", "Content-Type": "application/json", "X-CSRF-TOKEN": "test-token" },
         ...(method === "POST" ? { body: '{"device":"sensor-1","command":"temp","method":"GET","values":{}}' } : {}) });
@@ -118,4 +118,20 @@ test("single property update forwards only the selected property and enforces mu
     assert.equal((await POST(new NextRequest(url, { method: "POST" }), context)).status, 404);
     assert.equal(calls.length, 1);
   } finally { global.fetch = original; if (previous === undefined) delete process.env.EDGEAI_API_BASE_URL; else process.env.EDGEAI_API_BASE_URL = previous; }
+});
+
+test("retired virtual-device and VD profile routes are never forwarded", async () => {
+  const original = global.fetch;
+  let calls = 0;
+  global.fetch = (async () => { calls++; throw new Error("Unexpected upstream request"); }) as typeof fetch;
+  try {
+    for (const path of ["virtual-devices", "virtual-devices/11111111-1111-4111-8111-111111111111", "profiles/VD", "internal/vd/poll"]) {
+      for (const [method, handler] of [["GET", GET], ["POST", POST], ["PATCH", PATCH], ["DELETE", DELETE]] as const) {
+        const response = await handler(new NextRequest(`http://dashboard.test/api/control-plane/${path}`, { method,
+          headers: { Origin: "http://dashboard.test", "Content-Type": "application/json" } }), { params: Promise.resolve({ path: path.split("/") }) });
+        assert.equal(response.status, 404, `${method} ${path}`);
+      }
+    }
+    assert.equal(calls, 0);
+  } finally { global.fetch = original; }
 });

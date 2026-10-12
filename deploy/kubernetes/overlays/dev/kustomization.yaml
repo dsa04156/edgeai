@@ -7,7 +7,6 @@ resources:
 components:
   - ../../components/stream
 patches:
-  - path: vd-execution.yaml
   - patch: |-
       apiVersion: apps/v1
       kind: Deployment

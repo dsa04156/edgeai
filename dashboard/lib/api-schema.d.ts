@@ -200,7 +200,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
@@ -215,11 +215,7 @@ export interface paths {
         put?: never;
         /**
          * 프로필 새 버전 등록
-         * @description DEVICE(장치 규격), SERVICE(서비스 규격), VD(가상 장치 규격) 중 종류를 선택해 JSON 문서를 발행합니다.
-         *
-         *     새 key/version은 201, 같은 종류·key·version에 같은 내용을 재전송하면 기존 id와 생성 시각을 유지한 200을 반환합니다. 같은 버전에 다른 내용을 보내면 409이며 version을 올려 등록해야 합니다. 발행 후 수정·삭제할 수 없습니다.
-         *
-         *     세션 쿠키·CSRF 토큰이 필요합니다. 요청은 UTF-8 기준 64 KiB 이하, spec은 비어 있지 않은 JSON 객체여야 합니다. 최대 중첩 깊이는 32이며 중복 JSON 키와 key/version/spec 이외의 최상위 필드는 거절합니다. 아래 규격은 입력 예시이며 실제 장치/런타임 호환성 검증은 후속 개발 범위입니다.
+         * @description DEVICE(장치 규격)와 SERVICE(서비스 규격)를 JSON 문서로 발행합니다. 발행된 내용은 불변이며 변경은 새 버전으로 등록합니다.
          */
         post: operations["publishProfile"];
         delete?: never;
@@ -233,7 +229,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
                 /** @description 조회할 프로필의 고유 키입니다. */
                 key: components["schemas"]["ProfileKey"];
@@ -251,7 +247,7 @@ export interface paths {
         post?: never;
         /**
          * 사용하지 않는 프로필 버전 삭제
-         * @description 장치·가상 장치·워크플로·실행 이력 또는 VD 프로필의 참조가 있으면 PROFILE_IN_USE(409)로 거절합니다. 다른 버전은 유지합니다.
+         * @description 장치·워크플로·실행 및 보존된 과거 이력의 참조가 있으면 PROFILE_IN_USE(409)로 거절합니다. 다른 버전은 유지합니다.
          */
         delete: operations["deleteProfileVersion"];
         options?: never;
@@ -323,7 +319,7 @@ export interface paths {
         post?: never;
         /**
          * 장치 해제 및 세션 종료
-         * @description 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 등록된 VD 또는 종료 대기 중인 이전 VD 실행이 원본으로 사용하면 DEVICE_IN_USE(409)입니다. 원본 연결 해제와 이전 실행의 종료 확인이 모두 필요합니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
+         * @description 장치를 RELEASED로 표시하고 활성 attachment/session을 닫습니다. 보존된 이전 VD 원본 연결이나 실행이 참조하면 DEVICE_IN_USE(409)입니다. 이전 버전에서 종료·해제한 뒤 업그레이드해야 합니다. 과거 이력을 보존하며 반복 해제는 같은 상태를 반환합니다. 해제 후 연결·세션·관측·수정 요청은 409입니다.
          */
         delete: operations["releaseDevice"];
         options?: never;
@@ -349,7 +345,7 @@ export interface paths {
         post?: never;
         /**
          * 사용하지 않는 장치 등록 삭제
-         * @description 활성 연결·세션이나 VD·실행 이력 참조가 있으면 DEVICE_IN_USE(409)로 거절합니다. 미사용 장치와 그 장치의 닫힌 연결·세션·관측 이력만 삭제하며 Kubernetes 노드는 변경하지 않습니다.
+         * @description 활성 연결·세션이나 보존된 과거 실행 이력 참조가 있으면 DEVICE_IN_USE(409)로 거절합니다. 미사용 장치와 그 장치의 닫힌 연결·세션·관측 이력만 삭제하며 Kubernetes 노드는 변경하지 않습니다.
          */
         delete: operations["deleteDeviceRegistration"];
         options?: never;
@@ -562,7 +558,7 @@ export interface paths {
         put?: never;
         /**
          * 검증된 DAG 버전 발행
-         * @description SERVICE Profile 버전을 참조하는 1–128개 task와 최대 512개 dependency를 발행합니다. 순환·없는 task·중복 입력 포트·잘못된 Profile 종류는 거절합니다. 배열 순서가 다른 같은 내용은 재발행으로 처리합니다. 발행 후 DAG와 자식 정의는 수정·삭제할 수 없습니다. 포트 타입·이미지 실행 호환성은 실행 계층에서 검증합니다. STREAM 실행은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE/VD 정책으로 요청할 수 있습니다.
+         * @description SERVICE Profile 버전을 참조하는 1–128개 task와 최대 512개 dependency를 발행합니다. 순환·없는 task·중복 입력 포트·잘못된 Profile 종류는 거절합니다. 배열 순서가 다른 같은 내용은 재발행으로 처리합니다. 발행 후 DAG와 자식 정의는 수정·삭제할 수 없습니다. 포트 타입·이미지 실행 호환성은 실행 계층에서 검증합니다. STREAM 실행은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE 정책으로 요청할 수 있습니다.
          */
         post: operations["publishWorkflowVersion"];
         delete?: never;
@@ -586,7 +582,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. UUID Idempotency-Key가 같고 입력이 같으면 기존 Run을 반환하며 다른 입력은 409입니다. 취소된 Run도 재사용하므로 다시 실행하려면 새 키를 사용합니다. 실행 기능이 비활성인 환경은 root를 READY/QUEUED, 나머지를 WAITING으로 저장합니다. 실행 기능이 활성인 환경은 전체 SERVICE 실행 규격과 입출력을 검증하고 root 실행 명령을 원자적으로 저장해 RUNNING/DISPATCHING으로 시작합니다. AUTO는 scheduler 선택, NODE는 지정 UID의 노드를 필수 조건으로 사용합니다. taskExecutions로 DAG 작업 키별 BATCH의 AUTO/NODE/VD/REMOTE 최초 배치를 지정할 수 있습니다. 생략한 작업은 execution 기본값을 따릅니다. 대기 중인 BATCH 하위 작업과 STREAM 그룹에도 적용하며 Task의 initialMode/initialNodeId/initialVdId/initialRemoteTarget으로 확인합니다. 재시도는 직전 Attempt의 실제 위치를 계승하므로 전환 뒤 최초 위치로 되돌아가지 않습니다. 알 수 없는 작업 키는400, 없는 노드/VD/제공자는404입니다. VD는 해당 작업의 SERVICE 버전을 확인하고 Remote 제공자 설정은 Task에 고정합니다. STREAM의 REMOTE 배치는409입니다. REMOTE는 서버에 설정된 providerKey로 제공자·설정 digest·sourceMode를 각 Task에 고정하고 재시도에도 유지합니다. 실행 또는 Remote 기능이 비활성이면 새 REMOTE 요청은503입니다. Remote 자원·지연 측정은 미지원이므로 REMOTE와 자동 offload 정책을 함께 요청하면409입니다. VD는 같은 namespace의 Ready 가상 장치를 vdId로 지정합니다. 해당 VD에 배치하는 작업은 같은 SERVICE Profile 버전을 사용해야 하며 작업별 Runtime은 지속 VD Pod의 빈 slot을 기다립니다. retry는 직전 Attempt의 대상을 계승하며 하위 작업은 자신의 최초 대상을 사용합니다. VD 비활성은503, 미준비·해제 또는 SERVICE 불일치는409입니다. VD 공유 자원 측정으로는 작업별 자동 offload를 설정할 수 없습니다. STREAM은 별도 실행 설정을 활성화한 환경에서 AUTO/NODE/VD로 요청합니다. streamInputs로 장치와 대상 작업/포트를 지정하면 서버가 현재 장치 세션을 고정합니다. STREAM 연결과 같은 장치 입력으로 묶인 작업을 함께 배정하며, 그룹의 모든 BATCH 선행 결과가 검증되기 전에는 시작하지 않습니다. 같은 STREAM 그룹이 한 VD에 요구하는 작업 수는 그 VD의 maxConcurrentTasks 이하여야 하며 초과하면409 VD_STREAM_CAPACITY입니다. 빈 slot 확보는 보장하지 않으며 기존 배치 기한과 취소·재시도 정책을 따릅니다. 그룹 내부 또는 그룹 사이에 BATCH 교착이 생기는 DAG는400입니다. STREAM retry는 계산 중 실패한 작업과 연결된 그룹을 함께 재시도합니다. 그룹의 모든 이전 실행 종료와 broker 권한 회수를 확인한 뒤 새 Attempt/epoch 및 경로 세대를 만들고 서버가 확인한 checkpoint를 복원합니다. Device는 같은 고정 세션·LOCAL 송신 볼륨에서 자동 재연결해야 합니다. 완료 허가 뒤에는 실패한 작업만 원래 최종 상태로 재시도하며 이미 확정된 결과는 유지합니다. 최대 횟수는 최초 실행을 포함한 작업별 예산이며 그룹은 가장 이른 재시도 기한을 따릅니다. STREAM 자동 offload는 현재 그룹 전체의 체크포인트가 확정되고 완료 허가 전일 때 적용합니다. 구성원 모두의 대기 시간·전환 한도를 확인하고, 그룹 전체의 종료와 권한 회수 뒤 새 Attempt에 상태를 인계합니다. 선택된 작업만 방문한 노드를 제외한 AUTO로 바꾸며 다른 구성원의 배치 정책은 보존합니다. VD가 포함된 그룹은 명시적 NODE 전환으로 선택 작업을 옮기고 동료의 기존 VD를 유지할 수 있습니다. VD의 자동 전환과 Remote 스트리밍은 아직 지원하지 않아409이며, 공개 STREAM 설정이 꺼져 있으면501입니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. 같은 UUID Idempotency-Key와 요청은 기존 Run을 반환하고 다른 입력은409입니다. execution은 AUTO/NODE/REMOTE를 지원하며 taskExecutions로 작업별 최초 위치를 지정합니다. 생략한 작업은 기본 정책을 따릅니다. Remote 제공자 설정은 고정하며 자동 offload와 함께 사용할 수 없습니다. STREAM은 별도 실행 설정과 AUTO/NODE 배치를 요구합니다. streamInputs는 현재 장치 세션을 고정합니다. 연결된 스트림 그룹의 BATCH 선행 결과가 검증된 뒤 함께 시작하며 체크포인트·이전 실행 종료·broker 권한 회수를 확인한 후 재시도 또는 전환합니다. 완료된 Result와 불변 Attempt 이력은 보존합니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -747,6 +743,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{taskId}/results/{port}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 검증된 JSON 출력 파일 본문 조회
+         * @description 확정된 Result의 출력 포트만 조회합니다. 고정 object version·크기·SHA-256·형식을 다시 검증한 뒤 1 MiB 이하 JSON 본문을 반환합니다. 서명 URL이나 저장소 자격 증명을 제공하지 않으며 응답은 no-store입니다.
+         */
+        get: operations["getTaskResultContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{taskId}/offload": {
         parameters: {
             query?: never;
@@ -758,7 +774,7 @@ export interface paths {
         put?: never;
         /**
          * 실행 중인 작업을 다른 노드 또는 Remote로 전환
-         * @description 실제 producer가 claim한 현재 Attempt만 전환합니다. 일반 작업은 SERVICE의 recovery.mode=RESTART 선언에 따라 고정 입력으로 처음부터 실행합니다. CHECKPOINT STREAM은 NODE 대상으로만 전환하며, 연결된 모든 작업의 현재 외부 체크포인트와 활성 경로가 필요합니다. 공동 완료 허가 뒤에는 전환하지 않습니다. STREAM 그룹 전체를 함께 차단하고 물리 종료와 브로커 권한 회수를 확인한 뒤 체크포인트를 인계합니다. 선택한 작업은 지정 노드로 이동하고 다른 그룹 구성원은 기존 AUTO/NODE/VD 배치 정책을 유지합니다. VD 구성원은 현재 배정과 supervisor 권한을 검증하고 자식 종료·slot 회수 뒤 같은 VD에서 재개합니다. 다른 Run의 VD 자식은 유지하며 Operation.members.targetVdId로 동료의 VD 배치를 확인합니다. 이전 producer를 즉시 차단하고 실제 종료를 확인한 뒤 같은 Task에서 새 Attempt/epoch를 만듭니다. targetNodeId는 현재 노드와 다르고 Profile 요구조건에 맞는 최근 READY 노드여야 합니다. Remote로 전환할 때는 targetNodeId 대신 targetProviderKey를 지정합니다. 제공자 설정은 접수 시 고정되며, 실제 Remote 종료를 확인한 뒤 새 실행으로 이동합니다. 동일 제공자로의 재전환은 허용하지 않습니다. 같은 키·내용은 같은 Operation을 반환하며, 다른 입력은409입니다. 작업별 최대8회, 동시에1개입니다. STREAM은 구성원 모두의 전환 한도를 검사하며 Operation.members에 이전/새 Attempt·체크포인트를 기록합니다. Operation의 성공은 모든 구성원이 새 producer를 claim했다는 뜻이며 Task 결과 성공과 구분합니다.
+         * @description 작업의 실행 위치 전환을 요청합니다. STREAM은 그룹 전체의 체크포인트·실행 종료·권한 회수 후 선택 작업을 지정 노드로 이동하고 동료의 AUTO/NODE 정책을 유지합니다. Remote 스트리밍은 지원하지 않습니다.
          */
         post: operations["offloadTask"];
         delete?: never;
@@ -775,145 +791,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 비동기 실행 전환·VD 작업 상태 조회
-         * @description kind로 TASK_OFFLOAD와 VD_PROVISION/VD_REPLACE/VD_DRAIN을 구분합니다. TASK_OFFLOAD는 이전/새 Attempt, 대상 노드 또는 고정 Remote 제공자, drain/start 마감과 실패 코드를 조회합니다. DRAINING은 이전 실행 종료 대기, STARTING은 새 producer 대기, SUCCEEDED는 새 producer claim 확인입니다. VD RUNNING은 준비/종료 대기, SUCCEEDED는 준비 확인 또는 물리 종료 확인입니다. SUPERSEDED는 새 요청으로 대체됨입니다. VD 성공은 Task/Result 완료를 뜻하지 않습니다. TASK_OFFLOAD의 FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인하세요. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
+         * 비동기 작업 실행 전환 상태 조회
+         * @description TASK_OFFLOAD의 이전/새 Attempt, 대상 노드 또는 고정 Remote 제공자, drain/start 마감과 실패 코드를 조회합니다. FAILED나 CANCELLED는 Task/Attempt 이력과 함께 확인합니다. 인증 토큰이나 내부 claim 정보는 반환하지 않습니다.
          */
         get: operations["getOperation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 등록·해제된 VD 목록 조회
-         * @description key 순서로 논리 VD를 조회합니다. REGISTERED를 Ready로 해석하지 마세요. 해제 이력도 보존합니다.
-         */
-        get: operations["listVirtualDevices"];
-        put?: never;
-        /**
-         * VD 식별자와 원본 장치 연결 등록
-         * @description edgeai.vd/v1 규격의 VD Profile과 실제 DEVICE/SERVICE 버전을 검증하고 원본 연결을 원자적으로 저장합니다. 같은 key와 생성 입력은 기존 VD를 반환하고 다른 입력은409입니다. 해제 뒤 재전송도 기존 VD이며 재활성화하지 않습니다. 현재 REGISTERED는 논리 등록만 완료된 상태입니다. 실행은 별도 provision 요청으로 시작하고 execution에서 준비 상태를 확인합니다. VD 경유 Task 실행은 후속 연결 범위입니다.
-         */
-        post: operations["createVirtualDevice"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        /**
-         * VD 설정과 활성·과거 원본 연결 조회
-         * @description 최신 revision, 불변 Profile 참조와 source 이력을 조회합니다. closedAt이 null인 연결만 현재 원본입니다. 이력은 최신100개이며 더 있으면 sourceHistoryTruncated=true입니다.
-         */
-        get: operations["getVirtualDevice"];
-        put?: never;
-        post?: never;
-        /**
-         * VD 논리 해제와 원본 연결 종료
-         * @description VD를 RELEASED로 표시하고 활성 source를 닫습니다. 관리 중인 실행이 있으면 종료 Operation을 함께 기록하며 완료 전까지 이전 원본 Device 해제를 막습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 응답은 논리 해제이며 실제 Pod 종료 완료를 뜻하지 않습니다. execution의 pendingOperation과 Operation 조회에서 실제 종료를 확인하세요.
-         */
-        delete: operations["releaseVirtualDevice"];
-        options?: never;
-        head?: never;
-        /**
-         * revision을 확인하여 VD 이름·원본·배치 의도 수정
-         * @description 이름·sources 전체 집합·placement를 함께 보내세요. profileVersionId로 새 템플릿으로 전환할 수 있으며 vdId와 연결 이력은 유지합니다. 변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다. 오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다. 관리 중인 실행이 있으면 원본·배치 변경과 교체 Operation을 같은 트랜잭션에 기록합니다. 이름만 바꾸면 실행을 교체하지 않습니다.
-         */
-        patch: operations["updateVirtualDevice"];
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}/provision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * VD 실행 시작 요청
-         * @description 현재 설정으로 지속 실행을 시작합니다. 같은 설정의 실행이 있으면 재사용하며, 다른 설정이면 종료 후 교체합니다. 현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다. 새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다. VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
-         */
-        post: operations["provisionVirtualDevice"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}/replace": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * VD 실행 세대 교체 요청
-         * @description 현재 실행의 종료를 확인한 뒤 새 세대를 만듭니다. 교체할 실행이 없으면409입니다. vdId와 이전 이력은 유지됩니다. 현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다. 새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다. VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
-         */
-        post: operations["replaceVirtualDeviceRuntime"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}/drain": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * VD 실행 종료 요청
-         * @description 새 작업 수용을 중단하고 drain 후 물리 Pod 종료를 기다립니다. 제한 시간 초과는 강제 종료로 전환합니다. 실행이 없으면 즉시 SUCCEEDED이며 VD 등록은 유지됩니다. 현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다. 새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다. VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
-         */
-        post: operations["drainVirtualDeviceRuntime"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}/execution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * VD 실행 준비 상태·세대·작업 이력 조회
-         * @description asOf 시점의 일관된 DB 스냅샷입니다. ready는 RUNNING 의도·Pod Ready 관측·미만료 인증 lease를 모두 요구합니다. 과거 observedState=READY만으로 현재 준비 상태를 판단하지 마세요. current는 미종료 실행이며 없으면 null입니다. pendingOperation은 현재 진행 작업이며 runtimeHistory/bindings/operations는 각각 최신100개입니다. 각 Truncated 값이 true이면 이전 이력이 더 있습니다. 기능 비활성·VD 해제 후에도 이력은 조회 가능합니다. 세션·자격·내부 설정은 반환하지 않습니다. 성공한 Operation도 현재 실행이나 Task/Result 성공을 보장하지 않습니다.
-         */
-        get: operations["getVirtualDeviceExecution"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1085,26 +966,6 @@ export interface paths {
          */
         post: operations["executeSensorCommand"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/virtual-devices/{vdId}/registration": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * 해제된 미사용 가상 장치 등록 영구 삭제
-         * @description 실행·작업 참조가 없는 RELEASED VD와 닫힌 원본 연결 기록만 삭제한다. 원본 물리 장치와 프로필은 보존한다. 실행 이력은 삭제하지 않으며 참조가 남으면409로 거절한다.
-         */
-        delete: operations["deleteVirtualDeviceRegistration"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1398,7 +1259,7 @@ export interface components {
              * @description 프로필 종류입니다. 종류마다 키·버전 공간이 구분됩니다.
              * @enum {string}
              */
-            kind: "DEVICE" | "SERVICE" | "VD";
+            kind: "DEVICE" | "SERVICE";
             key: components["schemas"]["ProfileKey"];
             version: components["schemas"]["Version"];
             /** @description 발행 시 저장된 JSON 규격입니다. */
@@ -1415,7 +1276,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "VD_EXECUTION_DISABLED" | "VD_NOT_READY" | "VD_SERVICE_MISMATCH" | "VD_AUTOMATIC_OFFLOAD_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "VD_NOT_FOUND" | "VD_CONFLICT" | "VD_RELEASED" | "VD_SOURCE_INCOMPATIBLE" | "VD_STORE_UNAVAILABLE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -1430,8 +1291,7 @@ export interface components {
          *         "workflows",
          *         "runs",
          *         "tasks",
-         *         "results",
-         *         "virtual-devices"
+         *         "results"
          *       ]
          *     }
          */
@@ -1738,14 +1598,6 @@ export interface components {
             mode: "REMOTE";
             /** @description 서버에 설정된 Remote 제공자 key. endpoint와 자격은 요청에 넣지 않습니다. */
             providerKey: string;
-        } | {
-            /** @constant */
-            mode: "VD";
-            /**
-             * Format: uuid
-             * @description 현재 Ready인 영속 VD의 ID. 이 VD에 배치하는 작업은 같은 SERVICE Profile 버전을 사용합니다.
-             */
-            vdId: string;
         };
         /** @description 요청 시 고정된 제공자 설정. SYNTHETIC 참조 계산은 실장비 검증이 아닙니다. 비밀정보와 endpoint는 반환하지 않습니다. */
         RemoteTarget: {
@@ -1776,7 +1628,7 @@ export interface components {
             retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
         } & unknown;
         /**
-         * @description 명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE/VD 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는 CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+         * @description 명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는 CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
          * @example {
          *       "cpuPercent": 90,
          *       "memoryPercent": 90,
@@ -1821,7 +1673,7 @@ export interface components {
             samples: components["schemas"]["RuntimeTelemetry"][];
         } | null;
         /**
-         * @description 발행된 DAG의 작업 키별 최초 실행 위치입니다. 생략한 작업은 Run의 execution을 따릅니다. BATCH는 AUTO/NODE/VD/REMOTE를 섞을 수 있습니다. VD는 해당 작업의 SERVICE와 일치해야 하며 Remote 제공자 설정은 대기 작업에도 고정합니다. STREAM Run은 AUTO/NODE/VD를 지원합니다. 같은 STREAM 그룹이 한 VD에 요구하는 작업 수가 maxConcurrentTasks를 넘으면409 VD_STREAM_CAPACITY입니다. 빈 객체와 생략은 같은 멱등 요청입니다. 재시도는 직전 Attempt의 실제 위치를 계승합니다.
+         * @description 작업 키별 최초 실행 위치입니다. BATCH는 AUTO/NODE/REMOTE를, STREAM은 AUTO/NODE를 지원합니다. 생략한 작업은 execution 기본값을 따르며 Remote 제공자 설정은 대기 작업에도 고정합니다.
          * @example {
          *       "decode": {
          *         "mode": "AUTO"
@@ -1915,14 +1767,17 @@ export interface components {
             /** Format: uuid */
             workflowVersionId: string;
             remoteTarget: components["schemas"]["RemoteTarget"];
-            taskExecutions: components["schemas"]["TaskExecutions"];
-            /** @enum {string} */
+            taskExecutions: components["schemas"]["HistoricalTaskExecutions"];
+            /**
+             * @description VD는 제거된 기능의 과거 이력에만 사용되는 읽기 전용 값입니다.
+             * @enum {string}
+             */
             mode: "AUTO" | "NODE" | "REMOTE" | "VD";
             /**
              * Format: uuid
-             * @description VD 실행 대상. 재시도와 하위 작업에도 유지되며 다른 mode이면 null입니다.
+             * @description 제거된 VD 기능의 과거 이력 식별자. 새 실행 입력에는 사용할 수 없습니다.
              */
-            vdId: string | null;
+            readonly vdId: string | null;
             /** Format: uuid */
             nodeId: string | null;
             retry: components["schemas"]["RetryPolicy"];
@@ -1946,7 +1801,7 @@ export interface components {
             definitionId: string;
             key: components["schemas"]["ProfileKey"];
             /**
-             * @description Run 기본값과 작업별 지정을 적용한 불변 최초 배치입니다. 전환 후 현재 위치는 Attempt에서 확인합니다.
+             * @description VD는 제거된 기능의 과거 이력에만 사용되는 읽기 전용 값입니다.
              * @enum {string}
              */
             initialMode: "AUTO" | "NODE" | "REMOTE" | "VD";
@@ -1957,9 +1812,9 @@ export interface components {
             initialNodeId: string | null;
             /**
              * Format: uuid
-             * @description 최초 VD 배치의 ID입니다. 대기 중인 작업도 고정하며 현재 실행 세대는 Attempt와 Runtime에서 확인합니다.
+             * @description 제거된 VD 기능의 과거 이력 식별자. 새 실행 입력에는 사용할 수 없습니다.
              */
-            initialVdId: string | null;
+            readonly initialVdId: string | null;
             initialRemoteTarget: components["schemas"]["RemoteTarget"];
             /** @enum {string} */
             state: "WAITING" | "READY" | "RUNNING" | "RETRY_WAIT" | "OFFLOADING" | "SUCCEEDED" | "FAILED" | "CANCELLING" | "CANCELLED" | "SKIPPED";
@@ -1978,7 +1833,7 @@ export interface components {
             epoch: number;
             remoteTarget: components["schemas"]["RemoteTarget"];
             /**
-             * @description 이 Attempt의 실제 실행 정책. Task의 최초 배치와 구분하며 전환 후 재시도도 이 위치를 계승합니다.
+             * @description VD는 제거된 기능의 과거 이력에만 사용되는 읽기 전용 값입니다.
              * @enum {string}
              */
             mode: "AUTO" | "NODE" | "REMOTE" | "VD";
@@ -1986,9 +1841,9 @@ export interface components {
             nodeId: string | null;
             /**
              * Format: uuid
-             * @description 이 Attempt가 실행될 VD. 명시적 NODE/REMOTE 전환 후에는 null입니다.
+             * @description 제거된 VD 기능의 과거 이력 식별자. 새 실행 입력에는 사용할 수 없습니다.
              */
-            vdId: string | null;
+            readonly vdId: string | null;
             /** @enum {string} */
             cause: "INITIAL" | "RETRY" | "OFFLOAD";
             /** @description AUTO에서 제외할 이전 실행 노드. 재시도도 동일 제약을 유지합니다. */
@@ -2027,8 +1882,8 @@ export interface components {
             tasks: components["schemas"]["Task"][];
         };
         TaskDetail: {
-            /** @description 실행 생성 시 고정한 VD 센서 입력. 같은 요청의 재호출·재시도에 유지됩니다. */
-            vdInputs: components["schemas"]["VDSensorInput"] | null;
+            /** @description 기존 VD 실행의 읽기 전용 입력 이력 */
+            readonly vdInputs: components["schemas"]["HistoricalSensorInput"] | null;
             /** @description 최신 Attempt의 최신 측정. 미수집은 null이며 과거 Attempt의 값으로 대체하지 않습니다. */
             telemetry: components["schemas"]["RuntimeTelemetry"] | null;
             offloads: components["schemas"]["OffloadOperation"][];
@@ -2068,9 +1923,9 @@ export interface components {
             remoteSourceMode: null | "SYNTHETIC" | "EXTERNAL";
             /**
              * Format: uuid
-             * @description VD 결과의 실제 supervisor 실행 세대 ID. 해당 작업 배정과 producerPodUid에 결합되며 일반 Job/Remote 결과에서는 null입니다.
+             * @description 제거된 VD 기능의 과거 이력 식별자. 새 실행 입력에는 사용할 수 없습니다.
              */
-            vdRuntimeId: string | null;
+            readonly vdRuntimeId: string | null;
             manifestDigest: string;
             /** Format: date-time */
             createdAt: string;
@@ -2166,9 +2021,9 @@ export interface components {
             targetNodeId: string | null;
             /**
              * Format: uuid
-             * @description 선택 작업과 함께 재개하는 동료의 기존 VD. 새 VD를 전환 대상으로 지정하지 않습니다.
+             * @description 제거된 VD 기능의 과거 이력 식별자. 새 실행 입력에는 사용할 수 없습니다.
              */
-            targetVdId: string | null;
+            readonly targetVdId: string | null;
             excludedNodeNames: string[];
         };
         RuntimeTelemetry: {
@@ -2205,113 +2060,47 @@ export interface components {
             items: components["schemas"]["WorkflowRun"][];
             nextOffset: number | null;
         };
-        Operation: components["schemas"]["OffloadOperation"] | components["schemas"]["VDOperation"];
-        VDExecutionRequest: {
-            /** Format: int64 */
-            revision: number;
-        };
-        VDOperation: {
-            /** Format: uuid */
-            id: string;
+        Operation: components["schemas"]["OffloadOperation"];
+        /** @description 과거 실행 위치 조회 전용. 새 실행은 ExecutionPolicy의 AUTO/NODE/REMOTE만 허용합니다. */
+        HistoricalExecutionPolicy: {
             /** @enum {string} */
-            kind: "VD_PROVISION" | "VD_REPLACE" | "VD_DRAIN";
-            /** Format: uuid */
-            vdId: string;
-            /** Format: int64 */
-            requestedRevision: number;
-            /** Format: uuid */
-            sourceRuntimeId: string | null;
-            /** Format: uuid */
-            targetRuntimeId: string | null;
+            mode: "AUTO";
+        } | {
             /** @enum {string} */
-            state: "RUNNING" | "SUCCEEDED" | "FAILED" | "SUPERSEDED";
-            reason: string | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-            /** Format: date-time */
-            finishedAt: string | null;
-        };
-        VDRuntime: {
+            mode: "NODE";
             /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            vdId: string;
-            /** Format: int64 */
-            generation: number;
-            /** Format: int64 */
-            requestedRevision: number;
-            /** @enum {string} */
-            desiredState: "RUNNING" | "DRAINING" | "STOPPED";
-            /** @enum {string} */
-            observedState: "PENDING" | "SUBMITTED" | "READY" | "UNREADY" | "TERMINATED";
-            /** @description asOf 시점 준비 상태. leaseUntil 이후에는 이 응답으로 준비됨을 표시하지 마세요. */
-            ready: boolean;
-            /** Format: uuid */
-            podUid: string | null;
-            /** Format: uuid */
-            nodeUid: string | null;
-            nodeName: string | null;
-            /** Format: date-time */
-            leaseUntil: string | null;
-            /** Format: date-time */
-            readyAt: string | null;
-            /** Format: date-time */
-            startupDeadline: string;
-            /** Format: date-time */
-            drainDeadline: string | null;
-            failureReason: string | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        VDRuntimeBinding: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            vdId: string;
-            /** Format: uuid */
-            runtimeId: string;
-            /** Format: int64 */
-            openedRevision: number;
-            /** Format: int64 */
-            closedRevision: number | null;
-            /** Format: date-time */
-            openedAt: string;
-            /** Format: date-time */
-            closedAt: string | null;
-        };
-        VDExecution: {
-            /** Format: uuid */
-            vdId: string;
-            enabled: boolean;
-            /** Format: date-time */
-            asOf: string;
-            current: components["schemas"]["VDRuntime"] | null;
-            pendingOperation: components["schemas"]["VDOperation"] | null;
-            runtimeHistory: components["schemas"]["VDRuntime"][];
-            runtimeHistoryTruncated: boolean;
-            bindings: components["schemas"]["VDRuntimeBinding"][];
-            bindingsTruncated: boolean;
-            operations: components["schemas"]["VDOperation"][];
-            operationsTruncated: boolean;
-        };
-        /** @description Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다. */
-        VirtualDeviceSources: {
-            sourceKey: components["schemas"]["ProfileKey"];
-            /** @description KubeEdge 센서 Device 이름 */
-            deviceId: string;
-            /** @description BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다. */
-            properties?: string[];
+            nodeId: string;
+        } | {
+            /** @constant */
+            mode: "REMOTE";
+            /** @description 서버에 설정된 Remote 제공자 key. endpoint와 자격은 요청에 넣지 않습니다. */
+            providerKey: string;
+        } | {
+            /** @constant */
+            mode: "VD";
             /**
-             * @description 항목별 최신 수신값의 최대 허용 경과 시간(초)
-             * @default 30
+             * Format: uuid
+             * @description 현재 Ready인 영속 VD의 ID. 이 VD에 배치하는 작업은 같은 SERVICE Profile 버전을 사용합니다.
              */
-            maxAgeSeconds: number;
-        }[];
-        VDSensorInput: {
+            vdId: string;
+        };
+        /**
+         * @description 보존된 최초 실행 위치. VD는 과거 이력에만 존재합니다.
+         * @example {
+         *       "decode": {
+         *         "mode": "AUTO"
+         *       },
+         *       "infer": {
+         *         "mode": "NODE",
+         *         "nodeId": "730912fc-52fb-437b-a31b-5df5c68e22ab"
+         *       }
+         *     }
+         */
+        HistoricalTaskExecutions: {
+            [key: string]: components["schemas"]["HistoricalExecutionPolicy"];
+        };
+        /** @description 기존 VD 실행에서 보존한 읽기 전용 센서 입력 이력 */
+        HistoricalSensorInput: {
             /** @constant */
             apiVersion: "edgeai.vd-input/v1";
             /** Format: uuid */
@@ -2321,10 +2110,14 @@ export interface components {
             /** Format: date-time */
             capturedAt: string;
             sources: {
-                [key: string]: components["schemas"]["VDSensorSourceReading"];
+                [key: string]: components["schemas"]["HistoricalSensorSourceReading"];
+            };
+            /** @description 기존 VD 실행에 고정한 처리 정의 원본. 새 실행 입력으로 사용할 수 없다. */
+            readonly processing?: {
+                [key: string]: unknown;
             };
         };
-        VDSensorSourceReading: {
+        HistoricalSensorSourceReading: {
             /** Format: uuid */
             bindingId: string;
             deviceId: string;
@@ -2342,91 +2135,6 @@ export interface components {
                     observedAt: string;
                 };
             };
-        };
-        /** @description 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다. */
-        VirtualDevicePlacement: {
-            /** @constant */
-            mode: "AUTO";
-        } | {
-            /** @constant */
-            mode: "NODE";
-            /** Format: uuid */
-            nodeId: string;
-        };
-        VirtualDeviceCreate: {
-            key: components["schemas"]["ProfileKey"];
-            displayName: string;
-            /**
-             * Format: uuid
-             * @description edgeai.vd/v2 센서 원본 템플릿 UUID
-             */
-            profileVersionId: string;
-            sources: components["schemas"]["VirtualDeviceSources"];
-            placement: components["schemas"]["VirtualDevicePlacement"];
-        };
-        VirtualDeviceUpdate: {
-            /**
-             * Format: uuid
-             * @description 새 VD 템플릿 버전. 생략하면 현재 버전을 유지합니다.
-             */
-            profileVersionId?: string;
-            /** Format: int64 */
-            revision: number;
-            displayName: string;
-            sources: components["schemas"]["VirtualDeviceSources"];
-            placement: components["schemas"]["VirtualDevicePlacement"];
-        };
-        VirtualDevice: {
-            /** Format: uuid */
-            id: string;
-            key: components["schemas"]["ProfileKey"];
-            displayName: string;
-            /** Format: uuid */
-            profileVersionId: string;
-            /** Format: uuid */
-            serviceProfileVersionId: string;
-            /**
-             * @description 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.
-             * @enum {string}
-             */
-            state: "REGISTERED" | "RELEASED";
-            /** Format: int64 */
-            revision: number;
-            placement: components["schemas"]["VirtualDevicePlacement"];
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        VDSourceBinding: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            vdId: string;
-            sourceKey: string;
-            /** @description 센서 Device 이름. legacy 이력은 이전 앱 UUID. */
-            deviceId: string;
-            /** Format: uuid */
-            deviceUid: string | null;
-            deviceModel: string | null;
-            /** @enum {string} */
-            sourceKind: "physical" | "virtual" | "legacy";
-            properties: string[];
-            maxAgeSeconds: number;
-            /** Format: int64 */
-            openedRevision: number;
-            /** Format: int64 */
-            closedRevision: number | null;
-            /** Format: date-time */
-            openedAt: string;
-            /** Format: date-time */
-            closedAt: string | null;
-        };
-        VirtualDeviceDetail: {
-            vd: components["schemas"]["VirtualDevice"];
-            activeSources: components["schemas"]["VDSourceBinding"][];
-            sourceHistory: components["schemas"]["VDSourceBinding"][];
-            sourceHistoryTruncated: boolean;
         };
     };
     responses: {
@@ -2457,15 +2165,6 @@ export interface components {
                  *       "message": "감사 저장소에 연결할 수 없습니다."
                  *     }
                  */
-                "application/json": components["schemas"]["ApiError"];
-            };
-        };
-        /** @description 잘못된 입력400·없는 VD/Profile/Device/Node404·중복 키/revision/원본 충돌409·64KiB 초과413·DB 장애503입니다. code와 message를 확인하세요. */
-        VirtualDeviceError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
@@ -2531,8 +2230,8 @@ export interface components {
         };
     };
     parameters: {
-        /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
-        Kind: "DEVICE" | "SERVICE" | "VD";
+        /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
+        Kind: "DEVICE" | "SERVICE";
     };
     requestBodies: never;
     headers: never;
@@ -2953,7 +2652,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
@@ -2981,7 +2680,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
             };
             cookie?: never;
@@ -3046,7 +2745,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
                 /** @description 조회할 프로필의 고유 키입니다. */
                 key: components["schemas"]["ProfileKey"];
@@ -3076,7 +2775,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격 / VD: 가상 장치 규격. 동일한 key/version이라도 종류가 다르면 별개입니다. */
+                /** @description DEVICE: 장치 규격 / SERVICE: 서비스 규격. 같은 key/version이라도 종류가 다르면 별개입니다. */
                 kind: components["parameters"]["Kind"];
                 /** @description 조회할 프로필의 고유 키입니다. */
                 key: components["schemas"]["ProfileKey"];
@@ -4684,6 +4383,65 @@ export interface operations {
             };
         };
     };
+    getTaskResultContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                port: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 검증된 JSON 결과 본문 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Task 또는 확정된 출력 파일이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description JSON 형식 또는 미리보기 크기 제한을 확인하세요. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 동시 조회 한도에 도달했습니다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소 조회 또는 파일 검증에 실패했습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     offloadTask: {
         parameters: {
             query?: never;
@@ -4804,382 +4562,6 @@ export interface operations {
                 };
                 content?: never;
             };
-        };
-    };
-    listVirtualDevices: {
-        parameters: {
-            query?: {
-                /** @description 한 페이지 수 */
-                limit?: number;
-                /** @description 건너뛸 수 */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description VD 목록과 다음 offset */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items: components["schemas"]["VirtualDevice"][];
-                        nextOffset: number | null;
-                    };
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    createVirtualDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VirtualDeviceCreate"];
-            };
-        };
-        responses: {
-            /** @description 같은 생성 입력의 기존 VD */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VirtualDevice"];
-                };
-            };
-            /** @description 논리 VD와 원본 연결 생성. 실제 Runtime 준비 완료를 뜻하지 않습니다. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VirtualDevice"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            409: components["responses"]["VirtualDeviceError"];
-            413: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    getVirtualDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description VD 상세 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VirtualDeviceDetail"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            404: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    releaseVirtualDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 해제된 VD */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VirtualDevice"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    updateVirtualDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VirtualDeviceUpdate"];
-            };
-        };
-        responses: {
-            /** @description 최신 VD 설정. 같은 내용이면 revision도 유지합니다. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VirtualDevice"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            409: components["responses"]["VirtualDeviceError"];
-            413: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    provisionVirtualDevice: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 동일 요청 재전송에서 유지할 UUID */
-                "Idempotency-Key": string;
-            };
-            path: {
-                /** @description 대상 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "revision": 0
-                 *     }
-                 */
-                "application/json": components["schemas"]["VDExecutionRequest"];
-            };
-        };
-        responses: {
-            /** @description 동일 요청의 기존 Operation */
-            200: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            /** @description 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요. */
-            202: {
-                headers: {
-                    /** @description /api/v1/operations/{operationId} */
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            409: components["responses"]["VirtualDeviceError"];
-            413: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    replaceVirtualDeviceRuntime: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 동일 요청 재전송에서 유지할 UUID */
-                "Idempotency-Key": string;
-            };
-            path: {
-                /** @description 대상 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "revision": 0
-                 *     }
-                 */
-                "application/json": components["schemas"]["VDExecutionRequest"];
-            };
-        };
-        responses: {
-            /** @description 동일 요청의 기존 Operation */
-            200: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            /** @description 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요. */
-            202: {
-                headers: {
-                    /** @description /api/v1/operations/{operationId} */
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            409: components["responses"]["VirtualDeviceError"];
-            413: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    drainVirtualDeviceRuntime: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 동일 요청 재전송에서 유지할 UUID */
-                "Idempotency-Key": string;
-            };
-            path: {
-                /** @description 대상 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                /**
-                 * @example {
-                 *       "revision": 0
-                 *     }
-                 */
-                "application/json": components["schemas"]["VDExecutionRequest"];
-            };
-        };
-        responses: {
-            /** @description 동일 요청의 기존 Operation */
-            200: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            /** @description 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요. */
-            202: {
-                headers: {
-                    /** @description /api/v1/operations/{operationId} */
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDOperation"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            /** @description CSRF 쿠키/토큰 필요 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["VirtualDeviceError"];
-            409: components["responses"]["VirtualDeviceError"];
-            413: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
-        };
-    };
-    getVirtualDeviceExecution: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 대상 VD UUID */
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description VD 실행 상태와 보존된 이력 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VDExecution"];
-                };
-            };
-            400: components["responses"]["VirtualDeviceError"];
-            404: components["responses"]["VirtualDeviceError"];
-            503: components["responses"]["VirtualDeviceError"];
         };
     };
     issueDeviceStreamToken: {
@@ -5421,54 +4803,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiError"];
                 };
-            };
-        };
-    };
-    deleteVirtualDeviceRegistration: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                vdId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 등록 삭제 완료 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description CSRF 검증 실패 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description VD 없음 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 미해제 또는 실행·작업 참조가 남음 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 저장소 사용 불가 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };

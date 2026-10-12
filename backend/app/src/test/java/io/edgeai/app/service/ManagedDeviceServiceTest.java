@@ -14,7 +14,7 @@ class ManagedDeviceServiceTest {
     final Instant now=Instant.parse("2026-10-07T04:30:00Z");
     final DeviceResourceGateway gateway=mock(DeviceResourceGateway.class);
     @SuppressWarnings("unchecked") final ObjectProvider<DeviceResourceGateway> provider=mock(ObjectProvider.class);
-    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","",mock(io.edgeai.domain.repository.VirtualDeviceRepository.class));}
+    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","",mock(io.edgeai.domain.repository.DeviceRepository.class));}
     void read(String path,Object data){when(gateway.request("GET",path,null)).thenReturn(new DeviceResourceGateway.Reply(200,DeviceProfileCompiler.JSON.canonical(data)));}
     String path(String kind,String id){return "/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/"+kind+"/"+id;}
     void device(boolean ready,String state,Instant heartbeat){

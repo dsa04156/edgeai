@@ -58,6 +58,12 @@ public final class JdbcDeviceRepository implements DeviceRepository {
                     AND r.observed_state<>'TERMINATED' AND r.configuration->'sources'->>b.source_key=b.id::text)))
             """,Boolean.class,id));
     }
+    public boolean hasHistoricalManagedDeviceReferences(String id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding b WHERE managed_device_id=? AND (closed_at IS NULL OR EXISTS (SELECT 1 FROM edgeai.vd_runtime r WHERE r.vd_id=b.vd_id AND r.observed_state<>'TERMINATED' AND r.configuration->'sources'->>b.source_key=b.id::text)))",Boolean.class,id));
+    }
+    public void lockManagedDeviceReferences(Collection<String> ids) {
+        ids.stream().distinct().sorted().forEach(id->jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "edgeai.vd-source:"+id));
+    }
     public void advanceEpoch(UUID id,Instant now) { jdbc.update("UPDATE edgeai.device SET session_epoch=session_epoch+1,updated_at=? WHERE id=?",Timestamp.from(now),id); }
     public List<DeviceAttachment> attachments(UUID id) { return jdbc.query("SELECT * FROM edgeai.device_attachment WHERE device_id=? ORDER BY attached_at DESC,id LIMIT 20",ATTACHMENT,id); }
     public Optional<DeviceAttachment> activeAttachment(UUID id) { return jdbc.query("SELECT * FROM edgeai.device_attachment WHERE device_id=? AND detached_at IS NULL",ATTACHMENT,id).stream().findFirst(); }

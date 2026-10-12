@@ -17,8 +17,6 @@ import tempfile
 import time
 import urllib.request
 import uuid
-from vd_acceptance import VDScenario, wait as vd_wait
-from mixed_remote_acceptance import run_mixed_remote
 
 ROOT = Path(__file__).resolve().parents[2]
 KIND_VERSION = 'v0.33.0'
@@ -88,7 +86,6 @@ def remote_fixture(state,runner_image,cluster):
 def remote_api_patch():
     return {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': 'edgeai-api'},
     'spec': {'template': {'spec': {'containers': [{'name': 'api', 'env': [
-        {'name': 'EDGEAI_VD_ENABLED', 'value': 'true'}, {'name': 'EDGEAI_VD_LEASE_SECONDS', 'value': '60'},
         {'name': 'EDGEAI_REMOTE_ENABLED', 'value': 'true'}, {'name': 'EDGEAI_REMOTE_URL', 'value': 'https://edgeai-remote.edgeai.svc:8443'},
         {'name': 'EDGEAI_REMOTE_TOKEN_FILE', 'value': '/var/run/edgeai-remote/token'}, {'name': 'EDGEAI_REMOTE_CA_FILE', 'value': '/var/run/edgeai-remote/ca.crt'}],
         'volumeMounts': [{'name': 'remote-client', 'mountPath': '/var/run/edgeai-remote', 'readOnly': True}]}],
@@ -218,24 +215,6 @@ def main():
             result = subprocess.run(['python3', 'scripts/internal/smoke-runtime.py', '--context', context, '--faults', '--remote', '--report', '.tools/kind-runtime.json'], env=env, timeout=1500)
             if result.returncode:
                 raise RuntimeError('kind runtime acceptance failed')
-            scenario = VDScenario(context, '.tools/kind-vd.json', env)
-            def restart_vd_api():
-                meta = json.loads(kcall(['get', 'namespace', 'edgeai', '-o', 'json']))['metadata']
-                assert meta['labels'].get('edgeai.io/test-cluster') == name and context == 'kind-' + name
-                before = {p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}
-                started = time.monotonic()
-                kcall(['-n', 'edgeai', 'rollout', 'restart', 'deployment/edgeai-api'])
-                kcall(['-n', 'edgeai', 'rollout', 'status', 'deployment/edgeai-api', '--timeout=180s'], timeout=190)
-                vd_wait(lambda: before.isdisjoint({p['metadata']['uid'] for p in json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-api', '-o', 'json']))['items']}), 60, 'Old API Pod did not terminate')
-                scenario.origin = forward('edgeai-api', 18080, '/actuator/health/readiness')
-                return {'kind': 'actual-kubernetes-api-pod', 'replaced': True, 'elapsedSeconds': round(time.monotonic() - started, 3)}
-            scenario.run(restart_vd_api, tasks=True, mixed=True)
-            scenario = VDScenario(context, '.tools/kind-mixed-remote.json', env)
-            def mixed_provider_pod():
-                pods = json.loads(kcall(['-n', 'edgeai', 'get', 'pods', '-l', 'app=edgeai-remote', '-o', 'json']))['items']
-                assert len(pods) == 1 and pods[0]['metadata']['labels'].get('edgeai.io/test-cluster') == name
-                return pods[0]
-            run_mixed_remote(scenario, mixed_provider_pod, restart_vd_api)
             print('Running actual TLS multi-device STREAM/BATCH, group retry, API restart and cancellation acceptance', flush=True)
             source_revision = images['api'].rsplit(':sha-', 1)[1]
             result = subprocess.run(['python3', 'scripts/internal/test-stream-kubernetes.py', '--context', context,
@@ -263,15 +242,6 @@ def main():
                 '--report', '.tools/kind-recovery-stop.json'], env=env, timeout=480)
             if result.returncode:
                 raise RuntimeError('kind recovery producer termination acceptance failed')
-            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-kubernetes-retire',
-                'bash', 'scripts/test/test-recovery-kubernetes-retire.sh', '--context', context, '--transport', 'compose',
-                '--vd-tasks', '--workflows', '--offloads', '--unclaimed-jobs', '--remote-offloads', '--remote-start-receipts',
-                '--runtime-start-journals', '--runtime-start-api',
-                '--minio-binary', '.tools/minio-recovery-tested',
-                '--runner-image', images['runner'], '--runner-source', source_revision,
-                '--report', '.tools/kind-recovery-kubernetes-retire.json'], env=env, timeout=600)
-            if result.returncode:
-                raise RuntimeError('kind restored Kubernetes runtime retirement acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-kubernetes-results',
                 'bash', 'scripts/test/test-recovery-kubernetes-results.sh', '--context', context, '--transport', 'compose',
                 '--minio-binary', '.tools/minio-recovery-tested',
@@ -279,16 +249,7 @@ def main():
                 '--report', '.tools/kind-recovery-kubernetes-results.json'], env=env, timeout=600)
             if result.returncode:
                 raise RuntimeError('kind restored Kubernetes Result acceptance failed')
-            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-vd-results',
-                'bash', 'scripts/test/test-recovery-kubernetes-results.sh', '--context', context, '--transport', 'compose',
-                '--vd-tasks', '--minio-binary', '.tools/minio-recovery-tested',
-                '--runner-image', images['runner'], '--runner-source', source_revision,
-                '--report', '.tools/kind-recovery-vd-results.json'], env=env, timeout=600)
-            if result.returncode:
-                raise RuntimeError('kind restored VD Result acceptance failed')
-            for producer, flags in [('kubernetes', []), ('vd', ['--vd-tasks']),
-                    ('finalizer-kubernetes', ['--finalizer-retries']),
-                    ('finalizer-vd', ['--vd-tasks', '--finalizer-retries'])]:
+            for producer, flags in [('kubernetes', []), ('finalizer-kubernetes', ['--finalizer-retries'])]:
                 result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-' + producer + '-results',
                     'bash', 'scripts/test/test-recovery-kubernetes-results.sh', '--context', context, '--transport', 'compose',
                     '--stream-results', *flags, '--minio-binary', '.tools/minio-recovery-tested',
@@ -297,17 +258,9 @@ def main():
                     env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
                 if result.returncode:
                     raise RuntimeError('kind restored STREAM ' + producer + ' Result acceptance failed')
-            result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-group-results',
-                'bash', 'scripts/test/test-recovery-stream-group-results.sh', '--context', context, '--transport', 'compose',
-                '--minio-binary', '.tools/minio-recovery-tested',
-                '--runner-image', images['runner'], '--runner-source', source_revision,
-                '--report', '.tools/kind-recovery-stream-group-results.json'],
-                env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
-            if result.returncode:
-                raise RuntimeError('kind restored mixed STREAM group Result acceptance failed')
             result = subprocess.run(['bash', 'scripts/collect-evidence.sh', 'recovery-stream-workflows',
                 'bash', 'scripts/test/test-recovery-stream-workflows.sh', '--context', context, '--transport', 'compose',
-                '--offloads', '--finalizers', '--runtime-start-journals', '--vd-peer', '--minio-binary', '.tools/minio-recovery-tested',
+                '--offloads', '--finalizers', '--runtime-start-journals', '--minio-binary', '.tools/minio-recovery-tested',
                 '--runner-image', images['runner'], '--runner-source', source_revision,
                 '--report', '.tools/kind-recovery-stream-workflows.json'],
                 env={**env, 'EDGEAI_STREAM_PYTHON': str(ROOT / '.tools/stream-venv/bin/python')}, timeout=900)
@@ -326,7 +279,7 @@ def main():
                 '--runner-image', images['runner'], '--runner-source', source_revision, '--report', '.tools/kind-multidevice-demo.json'], env=env, timeout=900)
             if result.returncode:
                 raise RuntimeError('kind persistent-deployment stream demo failed')
-            print('PASS: isolated kind runtime, VD, multi-device STREAM, persistent TLS broker and deployment demo acceptance', flush=True)
+            print('PASS: isolated kind runtime, multi-device STREAM, persistent TLS broker and deployment demo acceptance', flush=True)
             return 0
         finally:
             for process in forwards:

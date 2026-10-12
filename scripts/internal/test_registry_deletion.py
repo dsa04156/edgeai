@@ -13,12 +13,12 @@ def main():
     try:
         env = os.environ.copy()
         env.update(EDGEAI_DB_NAME=database, EDGEAI_INFRASTRUCTURE_SOURCE="disabled")
-        for feature in ("KUBE", "PROMETHEUS", "EDGEX", "RUNTIME", "VD", "REMOTE", "STREAM", "STREAM_BINDINGS", "STREAM_RUNS"):
+        for feature in ("KUBE", "PROMETHEUS", "EDGEX", "RUNTIME", "REMOTE", "STREAM", "STREAM_BINDINGS", "STREAM_RUNS"):
             env[f"EDGEAI_{feature}_ENABLED"] = "false"
         result = subprocess.run([
             "backend/gradlew", "-p", "backend", ":app:integrationTest",
             "--tests", "io.edgeai.app.integration.RegistryDeletionIntegrationTest",
-            "--tests", "io.edgeai.app.integration.VirtualDeviceIntegrationTest", "--console=plain",
+            "--console=plain",
         ], env=env, check=False)
         return result.returncode
     finally:

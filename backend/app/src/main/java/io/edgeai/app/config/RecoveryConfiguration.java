@@ -13,7 +13,7 @@ import org.springframework.core.env.Environment;
 /** A restored snapshot cannot regain execution authority merely by starting the API. */
 @Configuration
 public class RecoveryConfiguration {
-    private static final List<String> EXTERNAL_FEATURES = List.of("edgeai.runtime.enabled", "edgeai.vd.enabled",
+    private static final List<String> EXTERNAL_FEATURES = List.of("edgeai.runtime.enabled",
         "edgeai.remote.enabled", "edgeai.stream.enabled", "edgeai.stream.bindings-enabled",
         "edgeai.stream.runs-enabled", "edgeai.kubernetes.enabled");
 

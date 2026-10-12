@@ -14,7 +14,6 @@
 | 센서 최신값 | KubeEdge DeviceStatus twins | 마지막 DMI 반영값과 원본 시각 |
 | 고주기 센서 데이터 | 별도 MQTT topic | 매 수집의 DataModel 값과 시각 |
 | 앱 장치 연결 | 현재 Device Session의 Observation | 해당 에이전트가 보고한 연결 상태 |
-| VD Ready | Pod 관측과 인증된 supervisor 상태 | VD 작업을 받을 실행의 준비 상태 |
 | 작업 성공 | Task·Attempt 및 검증된 Result | 플랫폼 실행 계약의 완료 상태 |
 
 ## 실시간의 의미

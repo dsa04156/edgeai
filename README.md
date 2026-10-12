@@ -1,6 +1,6 @@
 # EdgeAI
 
-엣지 AI 서버·엣지 디바이스·센서·가상 장치를 관리하고 서비스 배포와 실행 상태를 조회하는 플랫폼입니다.
+엣지 AI 서버·엣지 디바이스·센서를 관리하고 서비스 배포와 실행 상태를 조회하는 플랫폼입니다.
 Spring Boot, Next.js, PostgreSQL을 기반으로 Kubernetes·Prometheus·KubeEdge Mapper와 연결합니다.
 
 ## 시작하기

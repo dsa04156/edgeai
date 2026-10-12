@@ -38,7 +38,7 @@ class ProfileIntegrationTest {
         String token = json.readTree(tokenResponse.getResponse().getContentAsString()).get("token").asText();
         mvc.perform(get("/api/v1/profiles/DEVICE").session(session)).andExpect(status().isOk());
         String key = key();
-        for (String kind : List.of("DEVICE", "SERVICE", "VD")) {
+        for (String kind : List.of("DEVICE", "SERVICE")) {
             String url = "/api/v1/profiles/" + kind;
             String body = body(key, "1.0.0", "{\"protocol\":\"mqtt\",\"value\":1}");
             var response = mvc.perform(post(url).session(session).with(httpBasic("profile-test", "profile-test-only"))
@@ -111,7 +111,7 @@ class ProfileIntegrationTest {
         }
     }
     @Test void databaseRejectsMutationAndDuplicateIdentities() {
-        var value = service.publish(ProfileIdentity.Kind.VD, body(key(), "1.0.0", "{\"type\":\"sensorMirror\"}")).version();
+        var value = service.publish(ProfileIdentity.Kind.DEVICE, body(key(), "1.0.0", "{\"protocol\":\"mqtt\"}")).version();
         assertThatThrownBy(() -> jdbc.update("UPDATE edgeai.profile_version SET spec = '{\"changed\":true}' WHERE id = ?", value.id()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)

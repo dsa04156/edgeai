@@ -11,9 +11,6 @@ class CancellationTest(unittest.TestCase):
     def test_runner_signal_handler_returns_even_when_wait_lock_is_held(self):
         self.check_signal_owner('main','cancelled','Runner')
 
-    def test_supervisor_signal_handler_returns_even_when_wait_lock_is_held(self):
-        self.check_signal_owner('virtual_device','stopping','Supervisor')
-
     def check_signal_owner(self,module,event,constructor):
         image=os.environ.get('EDGEAI_RUNNER_IMAGE')
         package='/opt/edgeai' if image else str(Path(__file__).resolve().parents[1])

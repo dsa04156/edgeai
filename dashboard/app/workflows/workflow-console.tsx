@@ -1,5 +1,6 @@
 "use client";
-import { VDSensorInputs } from "./vd-sensor-inputs";
+import { HistoricalSensorInputs } from "./historical-sensor-inputs";
+import { ResultContent } from "./result-content";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { registryItems } from "../../lib/registry";
@@ -40,7 +41,6 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
   const [workflow, setWorkflow] = useState<Schema["WorkflowDetail"] | null>(null); const [versionOffset, setVersionOffset] = useState(0);
   const [version, setVersion] = useState<Schema["WorkflowVersion"] | null>(null); const [versionJson, setVersionJson] = useState("");
   const [profiles, setProfiles] = useState<Schema["ProfileVersion"][]>([]); const [nodes, setNodes] = useState<Schema["ExecutionNode"][]>([]);
-  const [virtualDevices, setVirtualDevices] = useState<Schema["VirtualDevice"][]>([]);
   const [placements, setPlacements] = useState<Schema["Placement"][]>([]);
   const [pollError, setPollError] = useState("");
   const [dag, setDag] = useState('{"tasks": [], "dependencies": []}');
@@ -49,11 +49,10 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
   const [task, setTask] = useState<Schema["TaskDetail"] | null>(null); const [key, setKey] = useState("");
   const [results, setResults] = useState<Schema["TaskResults"] | null>(null);
   const [mode, setMode] = useState("AUTO"); const [providerKey, setProviderKey] = useState("reference"); const [offloadMode, setOffloadMode] = useState("NODE"); const [parameters, setParameters] = useState("{}");
-  const [vdId, setVdId] = useState("");
   const [streamInputs, setStreamInputs] = useState<StreamInput[]>([]);
   const [taskExecutions, setTaskExecutions] = useState<TaskExecutions>({});
-  const externalTarget = ["REMOTE", "VD"].includes(mode) || Object.values(taskExecutions).some(value => ["REMOTE", "VD"].includes(value.mode));
-  const remoteTarget = mode === "REMOTE" || Object.values(taskExecutions).some(value => value.mode === "REMOTE");
+  const externalTarget = mode === "REMOTE" || Object.values(taskExecutions).some(value => value.mode === "REMOTE");
+  const remoteTarget = externalTarget;
   const streamExecution = streamInputs.length > 0 || !!version?.dag.dependencies.some(edge => edge.mode === "STREAM");
   const [retryAttempts, setRetryAttempts] = useState(1);
   const [automaticOffload, setAutomaticOffload] = useState<AutomaticOffloadPolicy | null>(null);
@@ -71,7 +70,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
     const response = await fetch(`/api/control-plane/${path}`, { ...init, cache: "no-store", headers: { ...(authorization.startsWith("Basic ") ? { Authorization: authorization } : {}), ...init?.headers } });
     if (!response.ok) {
       const value = await response.json().catch(() => ({}));
-      if (response.status === 404 && /^(workflows|workflow-runs)/.test(path)) throw new Error("워크플로 API가 비활성 상태입니다. 변경된 설정으로 백엔드를 재실행하세요.");
+      if (response.status === 404 && !value.code && /^(workflows|workflow-runs)/.test(path)) throw new Error("워크플로 API가 비활성 상태입니다. 변경된 설정으로 백엔드를 재실행하세요.");
       throw new Error(response.status === 401 ? "API 연결을 확인하세요." : response.status === 403 ? "연결이 만료되었습니다. 화면을 새로고침하세요." : value.message || "요청을 처리하지 못했습니다.");
     }
     return response;
@@ -108,16 +107,14 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       const authorization = "dashboard";
       const token = await (await api("csrf", undefined, authorization)).json();
       await Promise.all([loadWorkflows(0, authorization), loadRuns(0, authorization)]);
-      const [serviceItems, nodeItems, vdItems] = await Promise.all([
+      const [serviceItems, nodeItems] = await Promise.all([
         registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", path => api(path, undefined, authorization)),
         registryItems<Schema["ExecutionNode"]>("nodes", path => api(path, undefined, authorization)),
-        registryItems<Schema["VirtualDevice"]>("virtual-devices", path => api(path, undefined, authorization)),
       ]);
-      setProfiles(serviceItems); setNodes(nodeItems); setVirtualDevices(vdItems);
+      setProfiles(serviceItems); setNodes(nodeItems);
       const query = new URLSearchParams(window.location.search);
       if (query.get("run")) await showRun(query.get("run")!);
       if (query.get("service")) setDag(JSON.stringify({ tasks: [{ key: "service", serviceProfileVersionId: query.get("service"), parameters: {} }], dependencies: [] }));
-      if (query.get("vd")) { setMode("VD"); setVdId(query.get("vd")!); }
       setAuth(authorization); setCsrf(token.token);
     });
   }
@@ -186,22 +183,21 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       </section>}
       {version && <section className="panel" aria-labelledby="selected-version-title"><h2 id="selected-version-title">선택한 DAG · {version.version}</h2><p className="digest mono">버전 ID {version.id}</p><p className="digest mono">{version.digest}</p><p>{version.dag.tasks.length}개 ServiceTask · {version.dag.dependencies.length}개 연결</p><button disabled={busy} onClick={() => setDag(versionJson)}>이 버전으로 편집하기</button><details><summary>발행된 DAG JSON</summary><pre aria-label="발행된 DAG JSON">{versionJson}</pre></details>
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {
-          if (streamExecution && remoteTarget) throw new Error("STREAM 실행은 AUTO/NODE/VD 작업 배치를 지원합니다. Remote 스트리밍은 아직 지원하지 않습니다.");
+          if (streamExecution && remoteTarget) throw new Error("STREAM 실행은 AUTO/NODE 작업 배치를 지원합니다. Remote 스트리밍은 아직 지원하지 않습니다.");
           if (retryAttempts > 1 && retryOn.length === 0) throw new Error("재시도할 오류를 한 개 이상 선택하세요.");
           if (automaticOffload && [automaticOffload.cpuPercent, automaticOffload.memoryPercent, automaticOffload.latencyMicros].every(v => v == null)) throw new Error("자동 전환 기준을 한 개 이상 입력하세요.");
-          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : mode === "VD" ? { mode, vdId } : { mode, nodeId }, parameters: objectJson(parameters),
+          const response = await post("workflow-runs", { workflowVersionId: version.id, execution: mode === "AUTO" ? { mode } : mode === "REMOTE" ? { mode, providerKey } : { mode, nodeId }, parameters: objectJson(parameters),
             ...(streamInputs.length ? { streamInputs } : {}),
             ...(Object.keys(taskExecutions).length ? { taskExecutions } : {}),
             ...(automaticOffload && !externalTarget ? { offload: automaticOffload } : {}),
             ...(retryAttempts > 1 ? { retry: { maxAttempts: retryAttempts, backoffSeconds: retryBackoff, maxElapsedSeconds: retryWindow, retryOn } } : {}) }, key);
           const value = await response.json(); router.push(`/runs?run=${value.id}`); await showRun(value.id); await loadRuns(0); setNotice(response.status === 201 ? (value.state === "PENDING" ? "실행 요청을 저장했습니다. 작업은 실행 대기 상태입니다." : `실행 요청을 저장했습니다. 현재 상태는 ${stateNames[value.state]}입니다.`) : "동일한 실행 요청을 조회했습니다. 새 실행은 만들지 않았습니다.");
         }); }}><fieldset disabled={busy} className="publish-fields">
-          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (["REMOTE", "VD"].includes(e.target.value)) setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option><option value="VD">가상 장치 (VD)</option></select></label>
+          <label>실행 위치 정책<select value={mode} onChange={e => { setMode(e.target.value); if (e.target.value === "REMOTE") setAutomaticOffload(null); }}><option value="AUTO">자동 선택 (AUTO)</option><option value="NODE">노드 지정 (NODE)</option><option value="REMOTE">원격 제공자 (REMOTE)</option></select></label>
           {mode === "NODE" && <label>실행 노드<select name="nodeId" required defaultValue=""><option value="">실제 실행 노드 선택</option>{nodes.map(n => <option key={n.id} value={n.id} disabled={n.status !== "READY"}>{n.name} · {n.architecture} · {hardwareLabel(n)}</option>)}</select></label>}
           {mode === "REMOTE" && <><label>Remote 제공자 key<input required maxLength={63} pattern="[a-z][a-z0-9]*(-[a-z0-9]+)*" value={providerKey} onChange={e => setProviderKey(e.target.value)} /></label><p className="hint">서버에 설정된 제공자를 사용합니다. 참조 제공자의 합성 계산은 실제 장비·모델 검증과 구분합니다.</p></>}
-          {mode === "VD" && <><label>실행할 가상 장치<select required value={vdId} onChange={e => setVdId(e.target.value)}><option value="">가상 장치 선택</option>{virtualDevices.filter(vd => vd.state === "REGISTERED").map(vd => <option key={vd.id} value={vd.id} disabled={!version.dag.tasks.every(task => task.serviceProfileVersionId === vd.serviceProfileVersionId)}>{vd.displayName} · {vd.key}</option>)}</select></label><p className="hint">같은 SERVICE 버전의 가상 장치를 선택하세요. 실행 준비 상태와 센서값의 수신 시각은 요청 시 서버에서 확인합니다. 센서 원본의 선택 항목을 실행 입력으로 고정합니다. <a href="/virtual-devices">가상 장치 관리 →</a></p></>}
           <datalist id="workflow-execution-nodes">{nodes.map(n => <option key={n.id} value={n.id}>{n.name} · {n.architecture}</option>)}</datalist>
-          {version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} nodes={nodes} virtualDevices={virtualDevices} stream={streamExecution} onChange={value => { setTaskExecutions(value); if (Object.values(value).some(target => ["VD", "REMOTE"].includes(target.mode))) setAutomaticOffload(null); }} />}
+          {version.dag.tasks.length > 0 && <TaskExecutionFields tasks={version.dag.tasks} value={taskExecutions} nodes={nodes} stream={streamExecution} onChange={value => { setTaskExecutions(value); if (Object.values(value).some(target => target.mode === "REMOTE")) setAutomaticOffload(null); }} />}
           <label>실행 매개변수 JSON<textarea rows={4} value={parameters} onChange={e => setParameters(e.target.value)} spellCheck={false} /></label>
           <details><summary>고급 설정 · STREAM 입력</summary><StreamInputFields value={streamInputs} onChange={setStreamInputs} /></details>
           <details><summary>고급 설정 · 재시도 및 위치 전환</summary><label>최대 실행 횟수<input type="number" min={1} max={8} required value={retryAttempts} onChange={e => setRetryAttempts(Number(e.target.value))} /></label>
@@ -225,17 +221,15 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
         <p className="hint">Run · Task · Placement · 결과를 3초마다 갱신합니다.</p>
         <PlacementTable placements={placements} nodes={nodes} onSelect={id => void action(() => showTask(id))} />
-        {run.run.vdId && <p className="digest mono">실행 대상 VD {run.run.vdId}</p>}
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>
         <OffloadPolicySummary value={run.run.offload} />
         <details><summary>STREAM 경로</summary><StreamRoutes key={run.run.id} tasks={run.tasks} disabled={busy} fetchPage={async offset => (await api(`workflow-runs/${run.run.id}/streams?limit=20&offset=${offset}`)).json()} /></details>
-        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button><span className="block muted digest">최초 배치 · {t.initialMode}{t.initialNodeId ? ` · ${nodes.find(n => n.id === t.initialNodeId)?.name || t.initialNodeId}` : t.initialVdId ? ` · ${t.initialVdId}` : t.initialRemoteTarget ? ` · ${t.initialRemoteTarget.providerKey}` : ""}</span></td><td><StatusBadge state={t.state} />{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
+        <div className="table-scroll"><table><caption className="sr-only">실행에 속한 작업</caption><thead><tr><th>작업</th><th>상태</th><th>작업 제어</th></tr></thead><tbody>{run.tasks.map(t => <tr key={t.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showTask(t.id))}>{t.key}</button><span className="block muted digest">최초 배치 · {t.initialMode}{t.initialNodeId ? ` · ${nodes.find(n => n.id === t.initialNodeId)?.name || t.initialNodeId}` : t.initialRemoteTarget ? ` · ${t.initialRemoteTarget.providerKey}` : ""}</span></td><td><StatusBadge state={t.state} />{t.cancellationReason === "UPSTREAM_CANCELLED" && <span className="block muted">선행 작업 취소</span>}</td><td>{!terminal.has(t.state) && <button disabled={busy} onClick={() => setCancel({ kind: "task", id: t.id })} aria-label={`${t.key} 작업 취소`}>작업 취소</button>}</td></tr>)}</tbody></table></div>
         {task && <div><h3>실행 시도 · {task.task.key}</h3>{task.attempts.length ? <ul className="history-list">{task.attempts.map(a => <li key={a.id}>Attempt #{a.number} · epoch {a.epoch} · {stateNames[a.state]}{a.cause && <span className="block muted">{({ INITIAL: "최초 실행", RETRY: "재시도", OFFLOAD: "위치 전환" })[a.cause]} · {a.mode}{a.remoteTarget ? ` · ${a.remoteTarget.providerKey} · ${a.remoteTarget.sourceMode}` : ""}{a.nodeId ? ` · ${nodes.find(n => n.id === a.nodeId)?.name || a.nodeId}` : ""}</span>}<span className="block mono digest">{a.id}</span></li>)}</ul> : <p className="muted">{task.task.state === "WAITING" ? "선행 작업을 기다리는 중이며 아직 실행 시도가 없습니다." : "생성된 실행 시도가 없습니다."}</p>}</div>}
         {task && (task.attempts[0]?.mode === "REMOTE"
           ? <p className="hint">현재 Remote 실행은 자원·지연 측정을 지원하지 않습니다.</p>
           : <RuntimeMeasurements sample={task.telemetry} active={task.attempts[0]?.state === "RUNNING"} />)}
-        {task?.attempts[0]?.vdId && <p className="hint">현재 작업의 VD: {task.attempts[0].vdId}. CPU·메모리는 VD 컨테이너 전체의 공유 측정값입니다.</p>}
-        {task?.vdInputs && <VDSensorInputs input={task.vdInputs} />}
+        {task?.vdInputs && <HistoricalSensorInputs input={task.vdInputs} />}
         {task && <details><summary>고급 설정 · 실행 위치 전환</summary><div role="region" aria-label="실행 위치 전환">
           <h3>실행 위치 전환</h3>
           <p className="hint">RESTART 작업은 같은 입력으로 선택한 노드 또는 Remote에서 처음부터 실행합니다. 체크포인트가 확정된 STREAM은 노드로 전환할 수 있습니다. 연결된 작업들도 함께 종료·재개하며 처리 상태를 이어받습니다. 전환 성공은 새 실행 시작을 뜻합니다.</p>
@@ -257,7 +251,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
             {o.failureReason && <span className="block muted">실패 코드: {o.failureReason}</span>}
             {!!o.members?.length && <details><summary>함께 전환하는 스트리밍 작업 {o.members.length}개</summary>
               <p className="hint">선택한 작업은 새 노드로 이동하고, 다른 작업은 기존 배치 정책을 유지합니다. 모든 작업이 새 실행을 시작해야 전환 성공입니다.</p>
-              <ul>{o.members.map(m => <li key={m.taskId}><strong>{run.tasks.find(t => t.id === m.taskId)?.key || m.taskId}</strong> · {m.targetVdId ? `기존 VD 유지 · ${m.targetVdId}` : m.targetNodeId ? nodes.find(n => n.id === m.targetNodeId)?.name || m.targetNodeId : "자동 배치"}
+              <ul>{o.members.map(m => <li key={m.taskId}><strong>{run.tasks.find(t => t.id === m.taskId)?.key || m.taskId}</strong> · {m.targetNodeId ? nodes.find(n => n.id === m.targetNodeId)?.name || m.targetNodeId : "자동 배치"}
                 <p className="digest mono">체크포인트 {m.checkpointId}</p><p className="digest mono">새 Attempt {m.targetAttemptId || "이전 실행 종료 대기"}</p>
               </li>)}</ul>
             </details>}
@@ -269,8 +263,8 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
           {results.items.length === 0 ? <p className="muted">아직 확정된 결과가 없습니다.</p> : results.items.map(result => <div key={result.id}>
             <p className="hint">파일 검증 완료 · {new Date(result.createdAt).toLocaleString()}</p>
             {result.remoteAllocationId && <p className="hint">{result.remoteSourceMode === "SYNTHETIC" ? "Remote 참조 계산 · 실장비 검증 아님" : result.remoteSourceMode === "EXTERNAL" ? "외부 Remote 실행" : "Remote 실행 · 출처 확인 필요"}</p>}
-            {result.vdRuntimeId && <p className="hint digest">가상 장치 실행 결과 · VD Runtime {result.vdRuntimeId} · Pod {result.producerPodUid}</p>}
             <div className="table-scroll"><table><caption className="sr-only">검증된 출력 파일</caption><thead><tr><th>출력 포트</th><th>크기</th><th>형식</th></tr></thead><tbody>{result.artifacts.map(artifact => <tr key={artifact.port}><td>{artifact.port}</td><td>{artifact.bytes.toLocaleString()} bytes</td><td>{artifact.mediaType}</td></tr>)}</tbody></table></div>
+            {result.artifacts.map(artifact => <ResultContent key={`${result.id}/${artifact.port}`} taskId={task.task.id} port={artifact.port} supported={artifact.mediaType === "application/json" && artifact.bytes <= 1048576} />)}
             <details><summary>결과 ID·체크섬·파일 버전</summary><p className="digest mono">Result {result.id}</p><p className="digest mono">Attempt {result.attemptId}</p>{result.remoteAllocationId && <p className="digest mono">RemoteAllocation {result.remoteAllocationId}</p>}{result.artifacts.map(artifact => <div key={artifact.port}><h4>{artifact.port}</h4><p className="digest mono">SHA-256 {artifact.sha256}</p><p className="digest mono">버전 {artifact.objectVersion}</p><p className="digest mono">{artifact.bucket}/{artifact.objectKey}</p></div>)}</details>
           </div>)}
         </div>}

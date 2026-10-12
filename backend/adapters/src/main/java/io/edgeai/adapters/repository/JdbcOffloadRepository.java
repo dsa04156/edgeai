@@ -38,7 +38,7 @@ public final class JdbcOffloadRepository implements OffloadRepository {
         return jdbc.query("""
             SELECT t.id FROM edgeai.task t JOIN edgeai.workflow_run w ON w.id=t.run_id
             JOIN edgeai.runtime_instance r ON r.task_id=t.id
-            WHERE w.offload_policy IS NOT NULL AND w.state='RUNNING' AND t.state='RUNNING'
+            WHERE t.initial_mode<>'VD' AND w.offload_policy IS NOT NULL AND w.state='RUNNING' AND t.state='RUNNING'
               AND r.namespace=? AND r.desired_state='RUNNING' AND r.observed_state='RUNNING'
             ORDER BY t.updated_at,t.id LIMIT ?
             """,(r,n)->r.getObject(1,UUID.class),namespace,limit);

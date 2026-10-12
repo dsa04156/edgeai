@@ -9,7 +9,6 @@ import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.*;
 import io.edgeai.domain.storage.*;
 import io.edgeai.domain.workflow.*;
-import io.edgeai.domain.vd.*;
 import java.time.*;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,28 +29,20 @@ public class RuntimeLifecycleService {
     private final RemoteRepository remotes;
     private final Clock clock;
     private final boolean autoDispatch;
-    private final VirtualDeviceRepository vds;
-    private final VDRuntimeRepository vdRuntimes;
-    private final VDTaskRepository vdTasks;
-    private final boolean vdEnabled;
-    private final int dispatchSeconds;
     private final StreamExecutionRepository streamExecutions;
     private final StreamRunService streams;
     private final StreamRecoveryService streamRecovery;
     public RuntimeLifecycleService(RuntimeRepository runtimes,ExecutionRepository executions,WorkflowRepository workflows,
             ProfileRepository profiles,NodeRepository nodes,OffloadRepository offloads,RemoteRepository remotes,Clock clock,@Value("${edgeai.runtime.enabled:false}") boolean autoDispatch,
-            VirtualDeviceRepository vds,VDRuntimeRepository vdRuntimes,VDTaskRepository vdTasks,@Value("${edgeai.vd.enabled:false}") boolean vdEnabled,@Value("${edgeai.runtime.dispatch-seconds:120}") int dispatchSeconds,
             StreamExecutionRepository streamExecutions,StreamRunService streams,StreamRecoveryService streamRecovery) {
         this.runtimes=runtimes;this.executions=executions;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.offloads=offloads;this.remotes=remotes;this.clock=clock;this.autoDispatch=autoDispatch;
-        this.vds=vds;this.vdRuntimes=vdRuntimes;this.vdTasks=vdTasks;this.vdEnabled=vdEnabled;this.dispatchSeconds=dispatchSeconds;
         this.streamExecutions=streamExecutions;
         this.streams=streams;this.streamRecovery=streamRecovery;
     }
     public record InputArtifact(String port,VerifiedArtifact artifact) {}
-    public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs,RuntimeStartAuthority startAuthority,VDTaskStartAuthority vdStartAuthority) {
+    public record Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs,RuntimeStartAuthority startAuthority) {
         public Assignment { inputs=List.copyOf(inputs); }
         public Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs){this(runtime,spec,parametersJson,inputs,null);}
-        public Assignment(RuntimeInstance runtime,ServiceExecutionSpec spec,String parametersJson,List<InputArtifact> inputs,RuntimeStartAuthority startAuthority){this(runtime,spec,parametersJson,inputs,startAuthority,null);}
     }
     public record CommitPermit(RuntimeInstance runtime,ResultManifest manifest,String digest,TaskResult replay) {}
     public record Dispatch(RuntimeInstance runtime,ServiceExecutionSpec spec,UUID nodeId,String nodeName,List<String> excludedNodeNames) {}
@@ -76,7 +67,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public Dispatch dispatch(UUID attemptId) {
         var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote() || r.vd())throw fenced();
+        if(c.task().retiredVirtualDevice() || r.remote() || r.vd())throw fenced();
         String name=c.attempt().nodeId()==null?null:nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced).name();
         return new Dispatch(r,spec(c),c.attempt().nodeId(),name,c.attempt().excludedNodeNames());
     }
@@ -95,9 +86,9 @@ public class RuntimeLifecycleService {
     public RuntimeInstance plan(UUID attemptId,String namespace) {
         RuntimeNames.dns(namespace,63);
         if(namespace.contains("."))throw new IllegalArgumentException("Runtime namespace requires a DNS label");
-        var c=lockRun(attemptId);var existing=runtimes.byAttempt(attemptId);
+        var c=lockRun(attemptId);if(c.task().retiredVirtualDevice())throw fenced();var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent())return existing.get();
-        if(c.attempt().mode().equals("VD"))return planVD(c,namespace);
+        if(c.attempt().mode().equals("VD"))throw fenced(); // Retired execution history is never dispatched.
         if(c.attempt().mode().equals("REMOTE"))return planRemote(attemptId,namespace,c.attempt().remoteTarget());
         if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()))throw fenced();
         validateDag(c.run().workflowVersionId(),streams.managed(c.run().id()));
@@ -108,75 +99,9 @@ public class RuntimeLifecycleService {
         runtimes.create(value);return value;
     }
     @Transactional
-    public void validateVDRequest(UUID vdId,UUID versionId,String namespace) {
-        validateVDTaskProfiles(vdId,workflows.definitions(versionId).stream().map(TaskDefinition::serviceProfileVersionId).collect(java.util.stream.Collectors.toSet()),namespace);
-    }
-    @Transactional
-    public void validateVDTaskProfiles(UUID vdId,Set<UUID> serviceProfiles,String namespace) {
-        if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
-        var vd=vds.find(vdId,true).orElseThrow(()->error(404,"VD_NOT_FOUND","VD를 찾을 수 없습니다."));
-        var current=vdRuntimes.current(vdId).orElseThrow(()->error(409,"VD_NOT_READY","VD를 먼저 기동하세요."));
-        if(vd.state()!=VirtualDevice.State.REGISTERED || !current.ready(clock.instant()) || !current.namespace().equals(namespace))
-            throw error(409,"VD_NOT_READY","현재 namespace의 Ready VD만 실행 대상으로 선택할 수 있습니다.");
-        if(serviceProfiles.stream().anyMatch(id->!id.equals(vd.serviceProfileVersionId())))
-            throw error(409,"VD_SERVICE_MISMATCH","해당 VD에 배치한 작업은 VD와 같은 SERVICE Profile 버전을 사용해야 합니다.");
-    }
-    private RuntimeInstance planVD(Context c,String namespace) {
-        if(!autoDispatch || !vdEnabled)throw error(503,"VD_EXECUTION_DISABLED","VD 실행 설정을 확인하세요.");
-        if(!c.attempt().state().equals("QUEUED") || !c.task().state().equals("READY") || !Set.of("PENDING","RUNNING").contains(c.run().state()) ||
-            c.attempt().vdId()==null || !c.attempt().vdId().equals(c.task().initialVdId()))throw fenced();
-        var vd=vds.find(c.attempt().vdId(),false).orElseThrow(RuntimeLifecycleService::fenced);
-        if(!definition(c).serviceProfileVersionId().equals(vd.serviceProfileVersionId()))throw error(409,"VD_SERVICE_MISMATCH","작업과 VD의 SERVICE Profile 버전이 다릅니다.");
-        validateDag(c.run().workflowVersionId(),streams.managed(c.run().id()));
-        var spec=spec(c);inputs(c,spec);parameters(c);var now=clock.instant();
-        // Retries/children can queue during replacement; only the public initial request requires Ready.
-        var r=new RuntimeInstance(UUID.randomUUID(),c.attempt().id(),c.task().id(),c.run().id(),c.attempt().epoch(),namespace,null,UUID.randomUUID(),
-            "RUNNING","PENDING",null,null,null,null,now.plusSeconds(dispatchSeconds),null,now,now,null,vd.id());
-        runtimes.create(r);return r;
-    }
-    @Transactional
-    public VDTaskAllocation allocateVD(UUID attemptId,UUID supervisorId,int slot,long sequence) {
-        var c=lock(attemptId);var r=runtime(attemptId);var vr=vdRuntimes.runtime(supervisorId).orElseThrow(RuntimeLifecycleService::fenced);
-        var now=clock.instant();
-        if(!r.vd() || !r.vdId().equals(vr.vdId()) || !r.namespace().equals(vr.namespace()) || !vr.ready(now) ||
-            !r.desiredState().equals("RUNNING") || !r.observedState().equals("PENDING") || !now.isBefore(r.expiresAt()) ||
-            !c.attempt().state().equals("DISPATCHING") || !c.task().state().equals("RUNNING") || !c.run().state().equals("RUNNING"))throw fenced();
-        var a=new VDTaskAllocation(UUID.randomUUID(),r.id(),r.vdId(),vr.id(),vr.generation(),vr.sessionId(),vr.podUid(),slot,sequence,now,null,null,null,null);
-        vdTasks.create(a,now.plusSeconds(spec(c).timeoutSeconds()));return vdTasks.byRuntime(r.id()).orElseThrow();
-    }
-    @Transactional
-    public Assignment claimVD(UUID attemptId,long epoch,VDTaskProducer proof) {
-        var c=lock(attemptId);var r=runtime(attemptId);active(c,r,epoch);var a=vdAuthority(r,proof.podUid());
-        var vr=vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow(RuntimeLifecycleService::fenced);
-        if(!a.vdRuntimeId().equals(proof.runtimeId()) || a.generation()!=proof.generation() || !a.sessionId().equals(proof.sessionId()) ||
-            !vr.nodeUid().equals(proof.nodeUid()) || !vr.nodeName().equals(proof.nodeName()))throw fenced();
-        var spec=spec(c);var inputs=inputs(c,spec);var parameters=parameters(c);
-        var transfer=startTransfer(c);var digest=startWorkDigest(c,parameters,inputs);
-        var now=clock.instant();vdTasks.claimed(r.id(),proof.podUid(),proof.nodeUid(),proof.nodeName(),now);
-        offloads.completedByClaim(attemptId,now);
-        var claimed=runtime(attemptId);
-        return new Assignment(claimed,spec,parameters,inputs,null,new VDTaskStartAuthority(claimed,a,vr,digest,
-            transfer==null?null:transfer.id(),transfer==null?null:transfer.startDeadline(),now));
-    }
-    /** Called only with authenticated completion/absence evidence or confirmed supervisor deletion. */
-    @Transactional
-    public void finishVD(UUID attemptId,String reason,Long sequence,Integer exitCode) {
-        var c=lock(attemptId);var r=runtime(attemptId);if(!r.vd())throw fenced();
-        var a=vdTasks.byRuntime(r.id()).orElse(null);
-        if(a!=null && !a.open())return;
-        if(!Set.of("PROCESS_EXIT","NOT_STARTED","POD_GONE","UNASSIGNED").contains(reason) ||
-            a==null && !reason.equals("UNASSIGNED") || a!=null && reason.equals("UNASSIGNED"))throw fenced();
-        if(a!=null && reason.equals("POD_GONE") && !vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().terminal())throw fenced();
-        if(a!=null && reason.equals("NOT_STARTED") && (sequence==null || sequence<=a.assignedSequence() || r.producerPodUid()!=null))throw fenced();
-        if(r.desiredState().equals("RUNNING"))recordFailure(c,r,reason.equals("PROCESS_EXIT")?(Objects.equals(exitCode,0)?"RESULT_MISSING":"WORKLOAD_FAILED"):"RUNTIME_LOST");
-        var now=clock.instant();runtimes.terminated(r.id(),now);
-        if(a!=null)vdTasks.close(r.id(),reason,sequence,exitCode,now);
-        executions.reconcileRunState(r.runId(),now);
-    }
-    @Transactional
     public RuntimeInstance planRemote(UUID attemptId,String namespace,RemoteTarget target) {
         RuntimeNames.dns(namespace,63);if(namespace.contains("."))throw new IllegalArgumentException("Worker scope requires a DNS label");
-        Objects.requireNonNull(target);var c=lock(attemptId);if(!target.equals(c.attempt().remoteTarget()))throw fenced();var existing=runtimes.byAttempt(attemptId);
+        Objects.requireNonNull(target);var c=lock(attemptId);if(c.task().retiredVirtualDevice())throw fenced();if(!target.equals(c.attempt().remoteTarget()))throw fenced();var existing=runtimes.byAttempt(attemptId);
         if(existing.isPresent()) {
             var r=existing.get();if(!r.remote() || !r.namespace().equals(namespace) || !remotes.find(r.remoteAllocationId()).orElseThrow().target().equals(target))throw fenced();
             return r;
@@ -192,7 +117,7 @@ public class RuntimeLifecycleService {
     }
     @Transactional
     public RemoteDispatch remoteDispatch(UUID attemptId) {
-        var c=lock(attemptId);var r=runtime(attemptId);if(!r.remote())throw fenced();
+        var c=lock(attemptId);var r=runtime(attemptId);if(c.task().retiredVirtualDevice() && r.desiredState().equals("RUNNING") || !r.remote())throw fenced();
         var allocation=remotes.find(r.remoteAllocationId()).orElseThrow();var work=RemoteDocuments.readWork(allocation.workJson());
         if(!work.identity().equals(remoteIdentity(r)) || !work.expiresAt().equals(r.expiresAt()) || !RemoteDocuments.digest(work).equals(allocation.requestDigest()))throw fenced();
         return new RemoteDispatch(r,allocation,work,inputs(c,spec(c)));
@@ -229,6 +154,7 @@ public class RuntimeLifecycleService {
         if(status.state()==RemoteStatus.State.SUCCEEDED)validateRemoteOutputs(spec(c),status.outputs());
         var now=clock.instant();if(status.revision()>allocation.providerRevision())remotes.observe(allocation.id(),status.revision(),status.state().name(),observation,now);
         if(r.desiredState().equals("RUNNING")) {
+            if(c.task().retiredVirtualDevice())throw fenced();
             if(!Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING") || !c.run().state().equals("RUNNING"))throw fenced();
             if(!now.isBefore(r.expiresAt()))recordFailure(c,r,"RUNTIME_TIMEOUT");
             else if(status.state()==RemoteStatus.State.FAILED)recordFailure(c,r,switch(status.failureReason()){
@@ -277,7 +203,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public RuntimeInstance submitted(UUID attemptId,UUID jobUid) {
         Objects.requireNonNull(jobUid);var c=lock(attemptId);var r=runtime(attemptId);
-        if(r.remote() || r.vd())throw fenced();
+        if(c.task().retiredVirtualDevice() && r.desiredState().equals("RUNNING") || r.remote() || r.vd())throw fenced();
         if(r.jobUid()!=null && !r.jobUid().equals(jobUid))throw fenced();
         if(r.observedState().equals("TERMINATED") && !r.desiredState().equals("STOPPED"))throw fenced();
         runtimes.submitted(r.id(),jobUid,clock.instant().plusSeconds(spec(c).timeoutSeconds()),clock.instant());
@@ -288,7 +214,7 @@ public class RuntimeLifecycleService {
     @Transactional
     public Assignment claim(UUID attemptId,long epoch,RuntimePod pod) {
         var c=lock(attemptId);var r=runtime(attemptId);active(c,r,epoch);
-        if(r.remote() || r.vd())throw fenced();
+        if(c.task().retiredVirtualDevice() || r.remote() || r.vd())throw fenced();
         if(!pod.jobUid().equals(r.jobUid()) || (r.producerPodUid()!=null && !r.producerPodUid().equals(pod.podUid())))throw fenced();
         if(c.attempt().nodeId()!=null) {
             var expected=nodes.find(c.attempt().nodeId()).orElseThrow(RuntimeLifecycleService::fenced);
@@ -326,15 +252,9 @@ public class RuntimeLifecycleService {
     @Transactional
     public Instant authorizeProducerUntil(UUID attemptId,long epoch,UUID podUid){
         var c=lock(attemptId);var r=runtime(attemptId);producer(c,r,epoch,podUid);var until=r.expiresAt();
-        if(r.vd()){
-            var allocation=vdAuthority(r,podUid);var supervisor=vdRuntimes.runtime(allocation.vdRuntimeId()).orElseThrow();
-            if(supervisor.leaseUntil().isBefore(until))until=supervisor.leaseUntil();
-            if(supervisor.drainDeadline()!=null && supervisor.drainDeadline().isBefore(until))until=supervisor.drainDeadline();
-        }
         return until;
     }
-    /** Group planning/completion only: inspect peer authority under the Run lock without taking another VD mutex.
-     * This does not issue credentials or commit a peer result; those paths still lock the caller's VD. */
+    /** Group planning/completion inspects peer authority under the Run lock. */
     @Transactional(propagation=org.springframework.transaction.annotation.Propagation.MANDATORY)
     public void validateStreamPeer(UUID attemptId,long epoch,UUID podUid){
         var c=lockRun(attemptId);producer(c,runtime(attemptId),epoch,podUid);
@@ -342,10 +262,6 @@ public class RuntimeLifecycleService {
     @Transactional(propagation=org.springframework.transaction.annotation.Propagation.MANDATORY)
     public void validateStreamOffloadPeer(UUID attemptId,long epoch,UUID podUid){
         var c=lockRun(attemptId);var r=runtime(attemptId);producer(c,r,epoch,podUid);
-        if(r.vd()){
-            var a=vdAuthority(r,podUid);
-            if(!vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().ready(clock.instant()))throw fenced();
-        }
     }
     @Transactional
     public CommitPermit prepareCommit(UUID attemptId,long epoch,UUID podUid,ResultManifest manifest) {
@@ -384,7 +300,7 @@ public class RuntimeLifecycleService {
                     !artifact.sha256().equals(output.sha256()) || artifact.bytes()!=output.bytes() || !artifact.mediaType().equals(output.mediaType()))
                 throw new IllegalArgumentException("Verification receipt differs from declared artifact");
         }
-        var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified,r.remoteAllocationId(),r.vd()?vdTasks.byRuntime(r.id()).orElseThrow().vdRuntimeId():null);
+        var now=clock.instant();var result=new TaskResult(UUID.randomUUID(),r.taskId(),r.attemptId(),r.id(),r.epoch(),r.producerPodUid(),permit.digest(),now,verified,r.remoteAllocationId());
         runtimes.commit(result,now);
         if(!streams.releaseReady(r.runId()))runtimes.releaseReadyChildren(r.runId(),now);
         executions.reconcileRunState(r.runId(),now);
@@ -397,10 +313,6 @@ public class RuntimeLifecycleService {
             throw new IllegalArgumentException("Unknown Runner failure code");
         var c=lock(attemptId);var r=runtime(attemptId);
         if(r.remote())throw fenced();
-        // A draining supervisor stops its children before its lease/deadline elapses. This is
-        // runtime loss, not a user Task cancellation (which already fences producer authority).
-        if(r.vd() && reason.equals("CANCELLED") && vdTasks.byRuntime(r.id())
-                .map(a->vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow().drainDeadline()!=null).orElse(false))reason="RUNTIME_LOST";
         if(c.attempt().state().equals("FAILED") && r.epoch()==epoch && Objects.equals(r.producerPodUid(),podUid) && Objects.equals(r.failureReason(),reason))return;
         producer(c,r,epoch,podUid);recordFailure(c,r,reason);
     }
@@ -431,7 +343,7 @@ public class RuntimeLifecycleService {
         var first=executions.attempts(c.task().id()).stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
         var deadline=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
         var availableAt=now.plusSeconds(policy.backoffSeconds());
-        if(!transferring && (!grouped || finalizing) && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
+        if(!c.task().retiredVirtualDevice() && !transferring && (!grouped || finalizing) && policy.retryOn().contains(reason) && retryAttempts(c.task().id())<policy.maxAttempts() && availableAt.isBefore(deadline))
             executions.scheduleRetry(new TaskRetry(c.task().id(),c.attempt().id(),r.namespace(),availableAt,deadline),now);
         else failDescendants(c.run(),c.task(),now);
         if(finalizing)streamRecovery.fenceFinalizer(c.run(),c.task().id(),now);
@@ -444,7 +356,7 @@ public class RuntimeLifecycleService {
         var initial=executions.task(taskId).orElseThrow();
         var run=executions.run(initial.runId(),true).orElseThrow();
         var task=executions.task(taskId).orElseThrow();var retry=executions.retry(taskId).orElse(null);
-        if(retry==null)return false;
+        if(task.retiredVirtualDevice() || retry==null || executions.attempt(retry.failedAttemptId()).orElseThrow().mode().equals("VD"))return false;
         if(!task.state().equals("RETRY_WAIT") || !run.state().equals("RUNNING")){executions.clearRetry(taskId);return false;}
         var now=clock.instant();
         if(!now.isBefore(retry.deadline())) {
@@ -475,12 +387,7 @@ public class RuntimeLifecycleService {
         if(!result.attemptId().equals(runtime.attemptId()) || result.epoch()!=epoch || !Objects.equals(result.producerPodUid(),pod) || !Objects.equals(result.remoteAllocationId(),allocation) || !result.manifestDigest().equals(digest))throw fenced();
         return result;
     }
-    private Context lock(UUID attemptId) {
-        var initial=executions.attempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced);
-        // Only the current producer's VD is locked. Planning children never acquires a peer VD.
-        if(initial.vdId()!=null)vds.find(initial.vdId(),true).orElseThrow(RuntimeLifecycleService::fenced);
-        return lockRun(attemptId);
-    }
+    private Context lock(UUID attemptId) { return lockRun(attemptId); }
     private Context lockRun(UUID attemptId) {
         var initial=executions.attempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced);
         var task=executions.task(initial.taskId()).orElseThrow();
@@ -489,7 +396,7 @@ public class RuntimeLifecycleService {
     }
     private RuntimeInstance runtime(UUID attemptId) { return runtimes.byAttempt(attemptId).orElseThrow(RuntimeLifecycleService::fenced); }
     private void active(Context c,RuntimeInstance r,long epoch) {
-        if(!offloads.canStart(c.attempt().id(),clock.instant()) || r.epoch()!=epoch || !r.desiredState().equals("RUNNING") || !Set.of("SUBMITTED","RUNNING").contains(r.observedState()) ||
+        if(c.task().retiredVirtualDevice() || !offloads.canStart(c.attempt().id(),clock.instant()) || r.epoch()!=epoch || !r.desiredState().equals("RUNNING") || !Set.of("SUBMITTED","RUNNING").contains(r.observedState()) ||
                 !Set.of("DISPATCHING","RUNNING").contains(c.attempt().state()) || !c.task().state().equals("RUNNING") || !c.run().state().equals("RUNNING") ||
                 r.expiresAt()==null || !clock.instant().isBefore(r.expiresAt()))throw fenced();
     }
@@ -498,18 +405,9 @@ public class RuntimeLifecycleService {
     }
     private void producer(Context c,RuntimeInstance r,long epoch,UUID pod,UUID allocation) {
         active(c,r,epoch);
-        if(r.vd())vdAuthority(r,pod);
+        if(r.vd())throw fenced();
         if(!c.attempt().state().equals("RUNNING") || r.remote()!=(allocation!=null) ||
             (r.remote() ? pod!=null || !r.remoteAllocationId().equals(allocation) : pod==null || !pod.equals(r.producerPodUid())))throw fenced();
-    }
-    private VDTaskAllocation vdAuthority(RuntimeInstance r,UUID podUid) {
-        if(!r.vd())throw fenced();var a=vdTasks.byRuntime(r.id()).orElseThrow(RuntimeLifecycleService::fenced);
-        var vr=vdRuntimes.runtime(a.vdRuntimeId()).orElseThrow(RuntimeLifecycleService::fenced);var now=clock.instant();
-        if(!a.open() || !a.podUid().equals(podUid) || !a.vdId().equals(r.vdId()) || vr.terminal() ||
-            !Set.of("RUNNING","DRAINING").contains(vr.desiredState()) || !Objects.equals(vr.sessionId(),a.sessionId()) ||
-            vr.generation()!=a.generation() || !Objects.equals(vr.podUid(),a.podUid()) || vr.leaseUntil()==null || !now.isBefore(vr.leaseUntil()) ||
-            vr.drainDeadline()!=null && !now.isBefore(vr.drainDeadline()))throw fenced();
-        return a;
     }
     private static RemoteIdentity remoteIdentity(RuntimeInstance r){return new RemoteIdentity(r.remoteAllocationId(),r.runId(),r.taskId(),r.attemptId(),r.epoch());}
     private static void validateRemoteOutputs(ServiceExecutionSpec spec,List<RemoteFile> outputs) {
@@ -530,10 +428,10 @@ public class RuntimeLifecycleService {
     }
     private ServiceExecutionSpec spec(Context c) { return ServiceExecutionInput.parseSpec(profiles.find(definition(c).serviceProfileVersionId()).orElseThrow().specJson()); }
     private String parameters(Context c) {
-        return RuntimeParameters.merge(definition(c).parametersJson(),c.run().parametersJson(),executions.vdInput(c.task().id()).orElse(null));
+        return RuntimeParameters.merge(definition(c).parametersJson(),c.run().parametersJson());
     }
     private static String mergeParameters(String taskParameters,String runParameters) {
-        return RuntimeParameters.merge(taskParameters,runParameters,null);
+        return RuntimeParameters.merge(taskParameters,runParameters);
     }
     private List<InputArtifact> inputs(Context c,ServiceExecutionSpec spec) {
         var tasks=new HashMap<String,Task>();executions.tasks(c.run().id()).forEach(t->tasks.put(t.key(),t));

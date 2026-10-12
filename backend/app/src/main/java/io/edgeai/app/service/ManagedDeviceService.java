@@ -3,7 +3,7 @@ package io.edgeai.app.service;
 import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.app.support.*;
 import io.edgeai.domain.device.DeviceResourceGateway;
-import io.edgeai.domain.repository.VirtualDeviceRepository;
+import io.edgeai.domain.repository.DeviceRepository;
 import java.net.URI;
 import java.net.http.*;
 import java.time.*;
@@ -19,10 +19,10 @@ public class ManagedDeviceService {
     private final ObjectProvider<DeviceResourceGateway> gateways;
     private final String ns,broker,armImage,amdImage,sensehatImage;
     private final Clock clock;
-    private final VirtualDeviceRepository vds;
+    private final DeviceRepository devices;
     public ManagedDeviceService(ObjectProvider<DeviceResourceGateway> gateways,Clock clock,
         @Value("${edgeai.devices.namespace:edgeai-devices}") String ns,@Value("${edgeai.devices.data-broker:tcp://127.0.0.1:1883}") String broker,
-        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,VirtualDeviceRepository vds){this.vds=vds;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;}
+        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,DeviceRepository devices){this.devices=devices;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;}
     private String path(String resource){return "/apis/"+API+"/namespaces/"+ns+"/"+resource;}
     private String core(String resource){return "/api/v1/namespaces/"+ns+"/"+resource;}
     private String deployments(){return "/apis/apps/v1/namespaces/"+ns+"/deployments";}
@@ -64,7 +64,7 @@ public class ManagedDeviceService {
     @Transactional
     public Map<String,Object> update(String id,String body){
         var compiled=compile(JSON.parse(body,65536),ns,broker);if(!name(id).equals(compiled.id()))throw new IllegalArgumentException("Device name cannot change");
-        vds.lockManagedSources(List.of(id));
+        devices.lockManagedDeviceReferences(List.of(id));
         var old=request("GET",path("devices")+"/"+id,null,200);owned(old);
         if(!Objects.equals(compiled.model(),map(map(old.get("spec")).get("deviceModelRef")).get("name")))requireUnused(id);
         mapper(compiled.node(),node(compiled.node()),(String)compiled.profile().get("protocol"));ensure(path("devicemodels"),compiled.model(),compiled.modelResource());
@@ -74,7 +74,7 @@ public class ManagedDeviceService {
     }
     @Transactional
     public void delete(String id){
-        String key=name(id);vds.lockManagedSources(List.of(key));var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
+        String key=name(id);devices.lockManagedDeviceReferences(List.of(key));var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
         requireUnused(key);deleteResource(key,old);
     }
     private void deleteResource(String key,Map<String,Object> old){
@@ -82,7 +82,7 @@ public class ManagedDeviceService {
     }
     @Transactional
     public Map<String,Object> addProperty(String id,String body){
-        String key=name(id);vds.lockManagedSources(List.of(key));var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
+        String key=name(id);devices.lockManagedDeviceReferences(List.of(key));var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
         var meta=map(old.get("metadata"));
         var profile=map(JSON.decode(Objects.toString(map(meta.getOrDefault("annotations",Map.of())).getOrDefault("edgeai.io/device-profile","{}"))));
         var added=properties((String)profile.get("protocol"),List.of(JSON.parse(body,65536))).getFirst();
@@ -95,7 +95,7 @@ public class ManagedDeviceService {
     public Map<String,Object> updateProperty(String id,String property,String body){
         String key=name(id),field=WorkflowInput.text(property,63);
         if(!field.matches("[a-z][a-z0-9_]*")||field.equals("connection"))throw new IllegalArgumentException("Invalid property name");
-        vds.lockManagedSources(List.of(key));
+        devices.lockManagedDeviceReferences(List.of(key));
         var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
         var meta=map(old.get("metadata"));
         var profile=map(JSON.decode(Objects.toString(map(meta.getOrDefault("annotations",Map.of())).getOrDefault("edgeai.io/device-profile","{}"))));
@@ -110,7 +110,7 @@ public class ManagedDeviceService {
     public void deleteProperty(String id,String property){
         String key=name(id),field=WorkflowInput.text(property,63);
         if(!field.matches("[a-z][a-z0-9_]*")||field.equals("connection"))throw new IllegalArgumentException("Invalid property name");
-        vds.lockManagedSources(List.of(key));
+        devices.lockManagedDeviceReferences(List.of(key));
         var old=request("GET",path("devices")+"/"+key,null,200);owned(old);
         var meta=map(old.get("metadata"));
         var profile=map(JSON.decode(Objects.toString(map(meta.getOrDefault("annotations",Map.of())).getOrDefault("edgeai.io/device-profile","{}"))));
@@ -136,14 +136,7 @@ public class ManagedDeviceService {
     }
     public Map<String,Object> get(String id){var resource=request("GET",path("devices")+"/"+name(id),null,200);owned(resource);return view(resource);}
     private void requireUnused(String id) {
-        if(vds.managedSourceInUse(id))throw error(409,"DEVICE_IN_USE","VD 원본으로 사용 중인 센서입니다. VD 원본을 교체하고 이전 실행의 종료를 확인하세요.");
-    }
-    public Map<String,Object> source(String id,String model,UUID uid) {
-        var device=get(id);
-        if(!Objects.equals(model,device.get("model")) || uid!=null && !uid.toString().equals(device.get("uid")))
-            throw error(409,"VD_SOURCE_INCOMPATIBLE","센서 DeviceModel 또는 UID가 변경됐습니다. 원본을 다시 선택하세요.");
-        if(device.get("uid")==null)throw error(503,"DEVICE_IDENTITY_UNAVAILABLE","센서 UID를 확인할 수 없습니다.");
-        return device;
+        if(devices.hasHistoricalManagedDeviceReferences(id))throw error(409,"DEVICE_IN_USE","과거 VD 원본이나 실행 이력이 참조하는 센서입니다. 기존 버전의 연결·실행 종료 여부를 확인하세요.");
     }
     private Map<String,Object> view(Map<String,Object> resource){
         var meta=map(resource.get("metadata"));String id=(String)meta.get("name");var spec=map(resource.get("spec"));

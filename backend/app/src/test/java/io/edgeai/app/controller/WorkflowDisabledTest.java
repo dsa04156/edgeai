@@ -42,7 +42,7 @@ class WorkflowDisabledTest {
         mvc.perform(get("/api/v1/platform").with(user("test")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.capabilities", not(hasItem("workflows"))))
             .andExpect(jsonPath("$.capabilities", not(hasItem("runs"))))
-            .andExpect(jsonPath("$.capabilities", hasItem("virtual-devices")));
+            .andExpect(jsonPath("$.capabilities", not(hasItem("virtual-devices"))));
         mvc.perform(get("/openapi.yaml").with(user("test")))
             .andExpect(status().isOk()).andExpect(content().string(not(containsString("/api/v1/workflows"))))
             .andExpect(content().string(not(containsString("/api/v1/workflow-runs"))))

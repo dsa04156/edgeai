@@ -21,7 +21,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OperationControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean OffloadService service;
-    @MockitoBean io.edgeai.app.service.VDExecutionService vds;
     @Test void csrfAndMissingIdempotencyPreventCommands() throws Exception {
         String id=UUID.randomUUID().toString();
         mvc.perform(post("/api/v1/tasks/"+id+"/offload").contentType("application/json").content("{}")).andExpect(status().isForbidden());

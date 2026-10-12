@@ -28,13 +28,12 @@ public class ExecutionService {
     private final RemoteProvider remoteProvider;
     private final StreamRunService streams;
     private final ManagedDeviceService managedDevices;
-    private final VDSensorInputsService sensorInputs;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,VDSensorInputsService sensorInputs) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;this.managedDevices=managedDevices;this.sensorInputs=sensorInputs;
+        this.streams=streams;this.managedDevices=managedDevices;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -45,16 +44,14 @@ public class ExecutionService {
         var offload=offloadPolicy(input.get("offload"));String offloadJson=offload==null?null:JSON.canonical(input.get("offload"));
         UUID versionId=uuid(input.get("workflowVersionId"));var parameters=parameters(input.get("parameters"));
         if(!(input.get("execution") instanceof Map<?,?> policy)) throw new IllegalArgumentException("Execution policy required");
-        String mode=text(policy.get("mode"),8);UUID nodeId;UUID vdId=null;String providerKey=null;
+        String mode=text(policy.get("mode"),8);UUID nodeId;String providerKey=null;
         if(mode.equals("AUTO")) { object(policy,"mode");nodeId=null; }
         else if(mode.equals("NODE")) { object(policy,"mode","nodeId");nodeId=uuid(policy.get("nodeId")); }
         else if(mode.equals("REMOTE")){object(policy,"mode","providerKey");providerKey=text(policy.get("providerKey"),63);nodeId=null;}
-        else if(mode.equals("VD")){object(policy,"mode","vdId");vdId=uuid(policy.get("vdId"));nodeId=null;}
-        else throw new IllegalArgumentException("Execution mode must be AUTO, NODE, REMOTE or VD");
+        else throw new IllegalArgumentException("Execution mode must be AUTO, NODE or REMOTE");
         var normalized=new TreeMap<String,Object>(Map.of("workflowVersionId",versionId.toString(),"parameters",parameters,
             "execution",nodeId==null?Map.of("mode",mode):Map.of("mode",mode,"nodeId",nodeId.toString())));
         if(providerKey!=null)normalized.put("execution",Map.of("mode",mode,"providerKey",providerKey));
-        if(vdId!=null)normalized.put("execution",Map.of("mode",mode,"vdId",vdId.toString()));
         if(!retry.equals(RetryPolicy.disabled()))normalized.put("retry",document(retry));
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         if(!streamInputs.isEmpty())normalized.put("streamInputs",streamInputs.stream().map(StreamRunInput::document).toList());
@@ -75,7 +72,6 @@ public class ExecutionService {
             resolved.put("device",managedDevices.workflowDevice(input.get("device")));parameters=resolved;
         }
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
-        if(vdId!=null && offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 자원 측정은 공유 컨테이너 값이므로 작업별 자동 전환을 설정할 수 없습니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
         var dag=storedDag(version.dagJson());
         var definitions=workflows.definitions(versionId);
@@ -87,18 +83,13 @@ public class ExecutionService {
                 throw error(404,"NODE_NOT_FOUND","작업별 실행 위치에서 참조할 노드를 찾을 수 없습니다.");
         }
         boolean stream=!streamInputs.isEmpty() || streams.streaming(dag);
-        var vdProfiles=new TreeMap<UUID,Set<UUID>>(Comparator.comparing(UUID::toString));
-        if(vdId!=null)vdProfiles.put(vdId,new HashSet<>());
         var taskRemoteTargets=new TreeMap<String,io.edgeai.domain.remote.RemoteTarget>();
         for(var definition:definitions) {
             var placement=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);
             String targetMode=(String)placement.get("mode");
             if(stream && targetMode.equals("REMOTE"))
                 throw error(409,"STREAM_TARGET_UNSUPPORTED","STREAM Run의 Remote 배치에는 별도 스트림 실행 연결이 필요합니다.");
-            if(targetMode.equals("VD")) {
-                if(offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 공유 자원을 작업별 자동 전환에 사용할 수 없습니다.");
-                vdProfiles.computeIfAbsent(uuid(placement.get("vdId")),id->new HashSet<>()).add(definition.serviceProfileVersionId());
-            } else if(targetMode.equals("REMOTE")) {
+            if(targetMode.equals("REMOTE")) {
                 if(!runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
                 if(offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","Remote 배치에는 Kubernetes 측정 기반 자동 전환을 사용할 수 없습니다.");
                 if(taskExecutions.containsKey(definition.key()))taskRemoteTargets.put(definition.key(),remoteProvider.select((String)placement.get("providerKey")));
@@ -107,21 +98,15 @@ public class ExecutionService {
         var remoteTarget=providerKey==null?null:remoteProvider.select(providerKey);
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
-        for(var entry:vdProfiles.entrySet())lifecycle.validateVDTaskProfiles(entry.getKey(),entry.getValue(),runtimeNamespace);
-        var selectedVds=new TreeSet<UUID>();
-        for(var definition:definitions){var target=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);if("VD".equals(target.get("mode")))selectedVds.add(uuid(target.get("vdId")));}
-        var frames=sensorInputs.capture(selectedVds,stream);
         for(var definition:definitions) {
-            var target=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);
-            RuntimeParameters.merge(definition.parametersJson(),JSON.canonical(parameters),"VD".equals(target.get("mode"))?frames.get(uuid(target.get("vdId"))):null);
+            RuntimeParameters.merge(definition.parametersJson(),JSON.canonical(parameters));
         }
         var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId,JSON.canonical(taskExecutions));
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,null,JSON.canonical(taskExecutions));
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,definitions,stream?Set.of():dag.roots(),taskRemoteTargets);
-        for(var task:repository.tasks(run.id()))if(task.initialVdId()!=null && frames.containsKey(task.initialVdId()))repository.saveVDInput(task.id(),task.initialVdId(),frames.get(task.initialVdId()));
         if(stream)streams.configure(run,runtimeNamespace,streamInputs,sessions);
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
         return new Creation<>(repository.run(run.id(),false).orElseThrow(),true);

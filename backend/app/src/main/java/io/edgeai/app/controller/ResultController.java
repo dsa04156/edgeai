@@ -13,4 +13,6 @@ public class ResultController {
     public ResultController(ResultService service){this.service=service;}
     @GetMapping("/{taskId}/results")
     public ResponseEntity<TaskResultsResponse> results(@PathVariable UUID taskId){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.results(taskId));}
+    @GetMapping(value="/{taskId}/results/{port}/content",produces="application/json")
+    public ResponseEntity<String> content(@PathVariable UUID taskId,@PathVariable String port){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.content(taskId,port));}
 }

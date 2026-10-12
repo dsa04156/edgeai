@@ -18,12 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DataRouteService {
     private final DataRouteRepository routes;private final ExecutionRepository executions;private final WorkflowRepository workflows;
-    private final DeviceRepository devices;private final VirtualDeviceRepository vds;private final ProfileRepository profiles;private final Clock clock;
+    private final DeviceRepository devices;private final ProfileRepository profiles;private final Clock clock;
     private final StreamExecutionRepository streamExecutions;
     private final JsonDocuments json=new JsonDocuments();
     public DataRouteService(DataRouteRepository routes,ExecutionRepository executions,WorkflowRepository workflows,DeviceRepository devices,
-            VirtualDeviceRepository vds,ProfileRepository profiles,Clock clock,StreamExecutionRepository streamExecutions){
-        this.routes=routes;this.executions=executions;this.workflows=workflows;this.devices=devices;this.vds=vds;this.profiles=profiles;this.clock=clock;
+            ProfileRepository profiles,Clock clock,StreamExecutionRepository streamExecutions){
+        this.routes=routes;this.executions=executions;this.workflows=workflows;this.devices=devices;this.profiles=profiles;this.clock=clock;
         this.streamExecutions=streamExecutions;
     }
     @Transactional
@@ -191,7 +191,6 @@ public class DataRouteService {
     private void lockActor(StreamBrokerGateway.Principal caller){
         if(!caller.kind().equals("TASK"))return;
         var attempt=executions.attempt(caller.actor().id()).orElseThrow(()->conflict("STREAM_FOREIGN_ACTOR"));
-        if(attempt.vdId()!=null)vds.find(attempt.vdId(),true).orElseThrow(()->conflict("STREAM_FOREIGN_ACTOR"));
     }
     private DataRoute lock(UUID id){var r=routes.route(id,false).orElseThrow(()->new ControlPlaneException(404,"STREAM_ROUTE_NOT_FOUND","데이터 경로가 없습니다."));lockRun(r.runId(),r.sourceDeviceId());return routes.route(id,true).orElseThrow();}
     private RouteGeneration get(UUID id){return routes.generation(id).orElseThrow(()->new ControlPlaneException(404,"STREAM_GENERATION_NOT_FOUND","데이터 경로 실행 세대가 없습니다."));}

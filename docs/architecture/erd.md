@@ -1,5 +1,7 @@
 # 데이터 모델과 DB 제약
 
+> 2026-10-12: 기존 VD 기능을 제거했습니다. 아래 VD 설명·검증은 이전 버전의 이력입니다. 현재 범위는 [제거 결정](../adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
+
 실제 schema의 기준은 `backend/app/src/main/resources/db/migration`의 Flyway migration입니다.
 아래는 주요 관계를 이해하기 위한 요약이며 전체 컬럼·인덱스·제약을 대체하지 않습니다.
 

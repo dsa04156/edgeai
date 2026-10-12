@@ -19,7 +19,7 @@ test("real Profile publication, replay, conflict, version lookup and kind isolat
   await page.getByRole("button", { name: "연결", exact: true }).click();
   await expect(page.getByRole("button", { name: "연결 해제" })).toBeVisible();
 
-  for (const kind of ["DEVICE", "SERVICE", "VD"]) {
+  for (const kind of ["DEVICE", "SERVICE"]) {
     await page.getByRole("radio", { name: new RegExp(kind + "$" ) }).check();
     await expect(page.getByRole("button", { name: "버전 발행" })).toBeEnabled();
     const key = `browser${randomUUID().replaceAll("-", "")}${"a".repeat(61)}`;
@@ -51,7 +51,7 @@ test("real Profile publication, replay, conflict, version lookup and kind isolat
     await expect(page.getByLabel("발행된 JSON 규격", { exact: true })).toContainText('"mqtt"');
     await expect(page.getByLabel("발행된 JSON 규격", { exact: true })).toContainText("9007199254740993");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    if (kind === "VD") await page.screenshot({ path: testInfo.outputPath("profile-registry.png"), fullPage: true });
+    if (kind === "SERVICE") await page.screenshot({ path: testInfo.outputPath("profile-registry.png"), fullPage: true });
   }
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
   await page.getByRole("button", { name: "연결 해제" }).click();

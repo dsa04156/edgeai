@@ -18,7 +18,7 @@ public final class JdbcRuntimeResultPublicationRepository implements RuntimeResu
             UPDATE edgeai.runtime_result_publication SET lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
             WHERE result_id=(SELECT p.result_id FROM edgeai.runtime_result_publication p
                 JOIN edgeai.runtime_instance r ON r.id=p.runtime_id
-                WHERE r.namespace=? AND NOT p.completed AND p.available_at<=? AND (p.lease_until IS NULL OR p.lease_until<=?)
+                WHERE r.namespace=? AND r.vd_id IS NULL AND NOT p.completed AND p.available_at<=? AND (p.lease_until IS NULL OR p.lease_until<=?)
                 ORDER BY p.available_at,p.result_id FOR UPDATE OF p SKIP LOCKED LIMIT 1)
             RETURNING result_id,runtime_id,lease_owner
             """,(r,n)->new Publication(r.getObject("result_id",UUID.class),r.getObject("runtime_id",UUID.class),r.getObject("lease_owner",UUID.class)),

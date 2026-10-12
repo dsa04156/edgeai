@@ -1,7 +1,7 @@
 """Bounded persistent computation over nonblocking pipes, with an independent lease watchdog.
 
 Workload stdout is a protocol channel; stderr and credentials never reach logs.
-This owns only its child session (or workload group inside a supervised VD Runner).
+This owns only its child session.
 """
 import ctypes
 import math
@@ -48,19 +48,14 @@ class WorkloadProcess:
         self._sending = b''
         self._offset = 0
         self._received = bytearray()
-        self.supervised = os.environ.get('EDGEAI_VD_SUPERVISED') == 'true'
-        if self.supervised and os.getsid(0) != os.getpid():
-            raise WorkloadError('STREAM_INVALID_SUPERVISED_SESSION')
-        self.scope_id = os.getsid(0) if self.supervised else None
         # Preserve interpreter/accelerator lookup, not control-plane/storage credentials.
         env = {k: os.environ[k] for k in ('PATH', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'PYTHONPATH') if k in os.environ}
         env.update(PYTHONDONTWRITEBYTECODE='1', PYTHONUNBUFFERED='1')
         try:
             self.process = subprocess.Popen(command, cwd=directory, env=env, stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0,
-                start_new_session=not self.supervised, process_group=0 if self.supervised else None)
-            if not self.supervised:
-                self.scope_id = self.process.pid
+                start_new_session=True)
+            self.scope_id = self.process.pid
             os.set_blocking(self.process.stdin.fileno(), False)
             os.set_blocking(self.process.stdout.fileno(), False)
         except OSError:

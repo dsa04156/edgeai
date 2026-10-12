@@ -48,8 +48,8 @@ public class OffloadService {
         previous=operations.byKey(idempotency);if(previous.isPresent())return replay(previous.get(),digest);
         var attempt=executions.attempt(source).orElseThrow(()->error(409,"OFFLOAD_SOURCE_CHANGED","현재 실행 중인 Attempt를 선택하세요."));
         var runtime=runtimes.byAttempt(source).orElse(null);
-        if(!attempt.taskId().equals(taskId) || !attempt.state().equals("RUNNING") || !task.state().equals("RUNNING") || !run.state().equals("RUNNING") ||
-                runtime==null || !runtime.desiredState().equals("RUNNING") || !runtime.observedState().equals("RUNNING") || (!runtime.remote() && runtime.producerPodUid()==null) ||
+        if(task.retiredVirtualDevice() || !attempt.taskId().equals(taskId) || !attempt.state().equals("RUNNING") || !task.state().equals("RUNNING") || !run.state().equals("RUNNING") ||
+                runtime==null || runtime.vd() || !runtime.desiredState().equals("RUNNING") || !runtime.observedState().equals("RUNNING") || (!runtime.remote() && runtime.producerPodUid()==null) ||
                 runtime.expiresAt()==null || !clock.instant().isBefore(runtime.expiresAt()))
             throw error(409,"OFFLOAD_SOURCE_CHANGED","실제 producer가 실행 중인 현재 Attempt만 전환할 수 있습니다.");
         var history=operations.forTask(taskId);
@@ -82,12 +82,16 @@ public class OffloadService {
     public void advance(UUID id) {
         var initial=find(id);executions.run(initial.runId(),true).orElseThrow();var operation=find(id);
         if(!Set.of("DRAINING","STARTING","CANCELLING").contains(operation.state()))return;
+        if(runtimes.byAttempt(operation.sourceAttemptId()).filter(r->r.vd()).isPresent()
+            || operation.members().stream().anyMatch(m->m.targetVdId()!=null
+                || runtimes.byAttempt(m.sourceAttemptId()).filter(r->r.vd()).isPresent()))return;
         var task=executions.task(operation.taskId()).orElseThrow();var now=clock.instant();
         if(Set.of("CANCELLING","CANCELLED","SKIPPED").contains(task.state()) || operation.state().equals("CANCELLING")) {
             operations.cancelForTask(task.id(),now);
             if(operation.members().isEmpty()?runtimes.retryReady(task.id()):streamOffload.stopped(operation))operations.terminal(id,"CANCELLED",null,now);
             return;
         }
+        if(task.retiredVirtualDevice() || operation.members().stream().anyMatch(m->executions.task(m.taskId()).orElseThrow().retiredVirtualDevice()))return;
         if(task.state().equals("FAILED")){operations.terminal(id,"FAILED","TARGET_FAILED",now);return;}
         if(operation.state().equals("DRAINING")) {
             if(!now.isBefore(operation.drainDeadline())){fail(operation,"SOURCE_DRAIN_TIMEOUT",now);return;}
@@ -95,8 +99,7 @@ public class OffloadService {
                 if(!streamOffload.ready(operation))return;
                 UUID selected=null;
                 for(var member:operation.members()){
-                    var next=member.targetVdId()==null?executions.startOffload(member.taskId(),member.targetNodeId(),member.excludedNodeNames(),now)
-                        :executions.startVdOffload(member.taskId(),member.targetVdId(),now);
+                    var next=executions.startOffload(member.taskId(),member.targetNodeId(),member.excludedNodeNames(),now);
                     operations.memberTarget(id,member.taskId(),next.id());lifecycle.plan(next.id(),operation.namespace());
                     if(member.taskId().equals(operation.taskId()))selected=next.id();
                 }
@@ -113,7 +116,7 @@ public class OffloadService {
     public Optional<OffloadOperation> evaluate(UUID taskId,String namespace) {
         var initial=executions.task(taskId).orElseThrow();var run=executions.run(initial.runId(),true).orElseThrow();
         var task=executions.task(taskId).orElseThrow();var now=clock.instant();
-        if(run.offloadPolicyJson()==null || !run.state().equals("RUNNING") || !task.state().equals("RUNNING"))return Optional.empty();
+        if(task.retiredVirtualDevice() || run.offloadPolicyJson()==null || !run.state().equals("RUNNING") || !task.state().equals("RUNNING"))return Optional.empty();
         var policy=offloadPolicy(JSON.decode(run.offloadPolicyJson()));var attempt=executions.attempts(taskId).getFirst();
         var runtime=runtimes.byAttempt(attempt.id()).orElse(null);
         if(!attempt.state().equals("RUNNING") || runtime==null || runtime.vd() || !runtime.namespace().equals(namespace) || !runtime.desiredState().equals("RUNNING") ||

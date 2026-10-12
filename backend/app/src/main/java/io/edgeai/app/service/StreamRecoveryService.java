@@ -33,7 +33,7 @@ public class StreamRecoveryService {
     public Optional<TaskAttempt> retryFinalizer(WorkflowRun run,UUID taskId,Instant now){
         var pending=executions.retry(taskId).orElseThrow();
         var previous=executions.attempt(pending.failedAttemptId()).orElseThrow();
-        if(!finalizing(previous.id()) || !previous.state().equals("FAILED") || runtimes.result(taskId).isPresent()
+        if(executions.task(taskId).orElseThrow().retiredVirtualDevice() || previous.mode().equals("VD") || !finalizing(previous.id()) || !previous.state().equals("FAILED") || runtimes.result(taskId).isPresent()
             || now.isBefore(pending.availableAt()) || !now.isBefore(pending.deadline())
             || retryAttempts(executions.attempts(taskId))>=run.retry().maxAttempts() || !runtimes.retryReady(taskId)
             || streams.plan(run).taskRoutes(taskId).stream().anyMatch(r->routes.open(r.id()).isPresent()))return Optional.empty();
@@ -49,11 +49,11 @@ public class StreamRecoveryService {
         var previous=new ArrayList<TaskAttempt>();var producers=new ArrayList<RuntimeInstance>();Instant deadline=null;
         for(var task:members){
             var history=executions.attempts(task.id());
-            if(!task.state().equals("RUNNING") || history.isEmpty() || retryAttempts(history)>=policy.maxAttempts())return false;
+            if(task.retiredVirtualDevice() || !task.state().equals("RUNNING") || history.isEmpty() || retryAttempts(history)>=policy.maxAttempts())return false;
             var attempt=history.getFirst();var runtime=runtimes.byAttempt(attempt.id()).orElse(null);
             // Finalization recovery has a separate durable grant boundary. Never restart a sealed computation.
             if(completions.task(attempt.id()).filter(c->c.grantedAt()!=null).isPresent() || runtimes.result(task.id()).isPresent()
-                || runtime==null || runtime.remote() || !runtime.desiredState().equals("RUNNING")
+                || runtime==null || runtime.remote() || runtime.vd() || !runtime.desiredState().equals("RUNNING")
                 || !Set.of("DISPATCHING","RUNNING").contains(attempt.state()))return false;
             var first=history.stream().min(Comparator.comparingInt(TaskAttempt::number)).orElseThrow();
             var until=first.createdAt().plusSeconds(policy.maxElapsedSeconds());
@@ -79,8 +79,8 @@ public class StreamRecoveryService {
         if(!run.state().equals("RUNNING"))return List.of();
         for(var task:members){
             var retry=executions.retry(task.id()).orElse(null);var history=executions.attempts(task.id());
-            if(!task.state().equals("RETRY_WAIT") || retry==null || now.isBefore(retry.availableAt()) || !now.isBefore(retry.deadline())
-                || history.isEmpty() || !history.getFirst().id().equals(retry.failedAttemptId()) || !history.getFirst().state().equals("FAILED")
+            if(task.retiredVirtualDevice() || !task.state().equals("RETRY_WAIT") || retry==null || now.isBefore(retry.availableAt()) || !now.isBefore(retry.deadline())
+                || history.isEmpty() || history.getFirst().mode().equals("VD") || !history.getFirst().id().equals(retry.failedAttemptId()) || !history.getFirst().state().equals("FAILED")
                 || retryAttempts(history)>=run.retry().maxAttempts() || !runtimes.retryReady(task.id()))return List.of();
         }
         if(plan.componentRoutes(taskId).stream().anyMatch(r->routes.open(r.id()).isPresent()))return List.of();

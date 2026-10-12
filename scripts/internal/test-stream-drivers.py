@@ -22,7 +22,7 @@ from edgeai_runner.stream_device_run import DeviceRunSource
 from edgeai_runner.stream_journal import Emission, Limits
 from edgeai_runner.stream_source import SourceError
 from stream_source_completion_probe import open_source
-from vd_stream_probe import discover_routes, emit_samples, wait
+from stream_driver_helpers import discover_routes, emit_samples, wait
 
 
 class StreamDriverTest(unittest.TestCase):

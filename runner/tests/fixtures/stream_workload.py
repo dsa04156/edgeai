@@ -8,24 +8,7 @@ import sys
 import time
 
 mode = sys.argv[1]
-if mode == 'supervised-owner':
-    sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
-    from edgeai_runner.stream_workload import WorkloadProcess
-    os.environ['EDGEAI_VD_SUPERVISED']='true'
-    child=WorkloadProcess([sys.executable,str(Path(__file__).resolve()),'descendants'],Path.cwd(),time.monotonic()+.6)
-    try:
-        deadline=time.monotonic()+3
-        while (not Path('owned.json').exists() or child.process.poll() is None) and time.monotonic()<deadline:
-            time.sleep(.01)
-        owned=json.loads(Path('owned.json').read_text())
-        while any(Path('/proc',str(pid)).exists() for pid in owned.values()) and time.monotonic()<deadline:
-            time.sleep(.01)
-        assert all(not Path('/proc',str(pid)).exists() for pid in owned.values())
-        assert child.reason=='STREAM_LEASE_EXPIRED'
-    finally:
-        child.close()
-    print('PASS supervised owner survives descendant cleanup')
-elif mode == 'descendants':
+if mode == 'descendants':
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'], process_group=0)
     Path('owned.json').write_text(json.dumps({'parent': os.getpid(), 'child': child.pid}))

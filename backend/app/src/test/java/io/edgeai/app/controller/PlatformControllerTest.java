@@ -28,7 +28,7 @@ class PlatformControllerTest {
             .andExpect(jsonPath("$.name").value("edgeai"))
             .andExpect(jsonPath("$.milestone").value("M4"))
             .andExpect(jsonPath("$.capabilities[0]").value("profiles"))
-            .andExpect(jsonPath("$.capabilities[7]").value("virtual-devices"));
+            .andExpect(jsonPath("$.capabilities", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("virtual-devices"))));
     }
     @Test @WithMockUser
     void disabledVdInternalEndpointsRemainDeniedToBasicUsers()throws Exception {

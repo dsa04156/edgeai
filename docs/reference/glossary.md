@@ -15,7 +15,7 @@
 | Data plane | 매 수집 데이터를 별도 MQTT topic으로 소비자에게 전달하는 경로 |
 | EdgeX Device (과거) | 제거된 EdgeX 실행 계층의 논리 장치; 과거 설계·검증 기록에서 사용하는 용어 |
 | ExecutionNode | 실행과 연결하는 Kubernetes 노드 관측 |
-| VD / VirtualDevice | 원본 장치 연결과 SERVICE 규격을 묶은 가상 장치 등록 |
+| VD / VirtualDevice | 제거된 이전 가상 장치 기능. 과거 DB·감사 이력에서만 사용 |
 | Binding | 장치·원본·실행 간 연결과 그 수명 기록 |
 | Revision | 등록 리소스의 동시 변경을 검사하는 버전 |
 | WorkflowVersion | 발행한 Spring DAG의 불변 버전 |

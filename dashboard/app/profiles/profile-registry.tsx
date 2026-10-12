@@ -2,11 +2,10 @@
 
 import { parse, stringify, isLosslessNumber } from "lossless-json";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { registryItems } from "../../lib/registry";
 import type { components } from "../../lib/api-schema";
 
 import { ConnectionPanel } from "../components/connection-panel";
-import { registryItems } from "../../lib/registry";
-import { validateVDTemplate } from "../../lib/vd-profile";
 import { nextProfileVersion, readProfilePage } from "../../lib/profile-version";
 import { ProfileFields } from "./profile-fields";
 import { HardwareProfileFields } from "./hardware-profile-fields";
@@ -17,8 +16,8 @@ type Kind = Profile["kind"];
 type Page = { items: Profile[]; nextOffset: number | null };
 type PublishFeedback = { state: "pending" | "error"; message: string }
   | { state: "success"; message: string; profileId: string; refreshError?: string };
-const kinds: Kind[] = ["DEVICE", "SERVICE", "VD"];
-const names: Record<Kind, string> = { DEVICE: "장치", SERVICE: "실행 모듈", VD: "가상 디바이스 템플릿" };
+const kinds: Kind[] = ["DEVICE", "SERVICE"];
+const names: Record<Kind, string> = { DEVICE: "장치", SERVICE: "실행 모듈" };
 
 export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) {
   const createPanel = useRef<HTMLDetailsElement>(null);
@@ -45,8 +44,8 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [publishFeedback, setPublishFeedback] = useState<PublishFeedback | null>(null);
-  const [nodes, setNodes] = useState<components["schemas"]["ExecutionNode"][]>([]);
   const [profileChoices, setProfileChoices] = useState<Profile[]>([]);
+  const [nodes, setNodes] = useState<components["schemas"]["ExecutionNode"][]>([]);
   const [specText, setSpecText] = useState("");
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   function editProfile(profile: Profile) {
@@ -55,7 +54,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
     setEditingProfile(profile);
     const keyInput = publishForm.current?.querySelector<HTMLInputElement>('input[name="key"]');
     const versionInput = publishForm.current?.querySelector<HTMLInputElement>('input[name="version"]');
-    const nextVersion = nextProfileVersion(profile, [...(result?.items || []), ...profileChoices]);
+    const nextVersion = nextProfileVersion(profile, [...(result?.items || []), ...(profileChoices)]);
     if (keyInput) keyInput.value = profile.key;
     if (versionInput) { versionInput.value = nextVersion; versionInput.focus(); }
   }
@@ -123,17 +122,13 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
       catch { throw new Error("JSON 문법을 확인하세요. 속성 이름과 문자열은 큰따옴표로 감싸야 합니다."); }
       if (!spec || isLosslessNumber(spec) || Array.isArray(spec) || typeof spec !== "object" || Object.keys(spec).length === 0)
         throw new Error("규격은 비어 있지 않은 JSON 객체여야 합니다.");
-      if (kind === "VD") {
-        const issue = validateVDTemplate(spec, profileChoices);
-        if (issue) throw new Error(issue);
-      }
       const response = await api(`profiles/${kind}`, auth, {
         method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf },
         body: stringify({ key: data.get("key"), version: data.get("version"), spec }),
       });
       const saved = parse(await response.text()) as Profile;
       setDetail(saved);
-      if (kind !== "VD") setProfileChoices(previous => [...previous.filter(p => p.id !== saved.id), saved]);
+      setProfileChoices(current => [...current.filter(profile => profile.id !== saved.id), saved]);
       const feedback: PublishFeedback = {
         state: "success", profileId: saved.id,
         message: response.status === 201 ? "새 버전을 발행했습니다." : "같은 내용의 버전이 이미 발행되어 있습니다. 기존 버전을 표시합니다.",
@@ -153,8 +148,8 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
     void run(async () => {
       await api(`profiles/${profile.kind}/${profile.key}/versions/${profile.version}`, auth,
         { method: "DELETE", headers: { "X-CSRF-TOKEN": csrf } });
+      setProfileChoices(current => current.filter(value => value.id !== profile.id));
       if (detail?.id === profile.id) setDetail(null);
-      setProfileChoices(previous => previous.filter(value => value.id !== profile.id));
       setDeleting(null);
       await load(kind, result?.items.length === 1 ? Math.max(0, offset - 20) : offset, filter);
       setNotice(`${profile.key} · ${profile.version} 버전을 삭제했습니다.`);
@@ -206,7 +201,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
           {publishFeedback.refreshError && <p className="error" role="alert">{publishFeedback.refreshError}</p>}
         </>}
         <p className="hint">발행됨 · 이 버전의 규격은 변경되지 않습니다.</p>
-        <div className="toolbar"><button disabled={busy} onClick={() => editProfile(detail)}>새 버전으로 수정</button>{(detail.kind !== "DEVICE" && (detail.kind !== "SERVICE" || workflows)) && <a href={detail.kind === "VD" ? `/virtual-devices?profile=${detail.id}` : `/workflows?service=${detail.id}`}>{detail.kind === "VD" ? "가상 장치 등록" : "서비스 실행 구성"} →</a>}</div>
+        <div className="toolbar"><button disabled={busy} onClick={() => editProfile(detail)}>새 버전으로 수정</button>{(detail.kind !== "DEVICE" && (detail.kind !== "SERVICE" || workflows)) && <a href={`/workflows?service=${detail.id}`}>{"서비스 실행 구성"} →</a>}</div>
         <p className="mono digest">버전 ID {detail.id}</p><p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
       </section>}
       </div><details className="create-panel" ref={createPanel}>
@@ -224,7 +219,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
           <fieldset disabled={busy} className="publish-fields">
             <div className="form-row"><label>Profile 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-sensor" /></label>
               <label>버전<input name="version" required maxLength={32} pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)" placeholder="1.0.0" /></label></div>
-            <ProfileFields kind={kind} value={specText} onChange={setSpecText} profiles={profileChoices} />
+            <ProfileFields kind={kind} value={specText} onChange={setSpecText} />
             {kind === "SERVICE" && <HardwareProfileFields nodes={nodes} value={specText} onChange={setSpecText} />}
             <label>JSON 규격<textarea aria-label="JSON 규격" name="spec" rows={9} spellCheck={false} required value={specText} onChange={e => setSpecText(e.target.value)} placeholder={'{\n  "protocol": "mqtt"\n}'} aria-describedby="spec-help" /></label>
             <p className="hint" id="spec-help">비어 있지 않은 JSON 객체 · 최대 64 KiB. 비밀번호나 토큰을 규격에 넣지 마세요. 등록은 실행 호환성을 보장하지 않습니다.</p>

@@ -13,7 +13,6 @@ public interface ExecutionRepository {
     List<WorkflowRun> runs(int limit, int offset);
     List<Task> tasks(UUID runId);
     Optional<Task> task(UUID id);
-    void saveVDInput(UUID taskId,UUID vdId,String document);
     Optional<String> vdInput(UUID taskId);
     List<TaskAttempt> attempts(UUID taskId);
     Optional<TaskAttempt> attempt(UUID id);
@@ -23,7 +22,6 @@ public interface ExecutionRepository {
     void clearRetry(UUID taskId);
     TaskAttempt startRetry(UUID taskId,Instant now);
     TaskAttempt startOffload(UUID taskId,UUID nodeId,List<String> excluded,Instant now);
-    TaskAttempt startVdOffload(UUID taskId,UUID vdId,Instant now);
     TaskAttempt startRemoteOffload(UUID taskId,io.edgeai.domain.remote.RemoteTarget target,Instant now);
     void failTask(UUID taskId,Instant now);
     void cancelTask(UUID taskId, String terminalState, String reason, Instant now);

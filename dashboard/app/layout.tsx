@@ -6,7 +6,7 @@ import "./nexus-theme.css";
 
 export const metadata: Metadata = {
   title: "EdgeAI · Control Plane",
-  description: "장치, 가상 장치, 워크플로와 실행 결과를 관리하는 EdgeAI 운영 콘솔",
+  description: "장치, 워크플로와 실행 결과를 관리하는 EdgeAI 운영 콘솔",
 };
 export const dynamic = "force-dynamic";
 export default function RootLayout({ children }: { children: React.ReactNode }) {

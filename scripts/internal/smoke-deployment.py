@@ -105,7 +105,7 @@ status, body = request(api + "/api/v1/platform", authenticated=True)
 assert status == 200
 if "workflows" not in json.loads(body)["capabilities"]:
     assert request(ui + "/workflows")[0] == 404
-    for page in ("/", "/profiles", "/devices", "/virtual-devices", "/audit"):
+    for page in ("/", "/profiles", "/devices", "/audit"):
         status, html = request(ui + page)
         assert status == 200 and b'href="/workflows"' not in html
     for path in ("workflows", "workflow-runs"):

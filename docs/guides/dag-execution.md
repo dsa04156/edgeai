@@ -1,13 +1,13 @@
 # Spring DAG 구성과 실행
 
 기본 **서비스 워크플로** 화면(`/workflows`, 기존 `?mode=dag` 지원)에서 발행된 SERVICE 모듈을 연결하고 버전별로 실행을 요청합니다.
-SERVICE 프로필 또는 VD의 서비스 구성 링크에서도 이 편집기로 진입합니다.
+SERVICE 프로필의 서비스 구성 링크에서도 이 편집기로 진입합니다.
 
 ## 준비 사항
 
 API와 Dashboard의 워크플로 기능을 활성화하고 필요한 SERVICE 프로필을 발행합니다.
 실제 작업을 실행하려면 Runtime·Runner·Kubernetes·고정 버전 결과 저장소를 준비해야 합니다.
-고급 STREAM·Remote·VD 실행은 각각 별도 설정과 [지원 조건](../reference/support.md)을 확인합니다.
+고급 STREAM·Remote 실행은 각각 별도 설정과 [지원 조건](../reference/support.md)을 확인합니다.
 
 ## 1. 작업과 의존성 작성
 
@@ -26,7 +26,7 @@ JSON 편집 파일은 `edgeai.workflow-editor/v1` 형식으로 DAG와 캔버스 
 
 ## 3. 실행 요청
 
-발행한 버전과 실행 정책을 선택합니다. AUTO/NODE와 준비된 VD·Remote 대상은
+발행한 버전과 실행 정책을 선택합니다. AUTO/NODE와 준비된 Remote 대상은
 해당 기능의 지원 조건에 따라 선택합니다. 작업별 실행 위치가 지정된 경우 Run 기본 정책보다 우선합니다.
 
 `Idempotency-Key`는 동일 실행 요청의 재전송을 구분합니다. 응답이 유실됐을 때 같은 요청은 같은 키를

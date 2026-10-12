@@ -67,11 +67,6 @@ class StreamWorkloadTest(unittest.TestCase):
                 with self.assertRaisesRegex(WorkloadError,'TIMEOUT' if mode=='timeout' else 'CANCELLED'):child.check()
                 child.close()
 
-    def test_supervised_task_session_keeps_its_runner_alive_while_killing_all_workload_groups(self):
-        completed=subprocess.run([sys.executable,FIXTURE,'supervised-owner'],cwd=self.root,
-                                 start_new_session=True,capture_output=True,timeout=8)
-        self.assertEqual(0,completed.returncode,'Supervised process fixture failed; private output suppressed')
-        self.assertEqual(b'PASS supervised owner survives descendant cleanup\n',completed.stdout)
 
     def test_flooded_stdout_and_crashed_process_fail_with_fixed_reasons(self):
         child=self.process('flood');child.request(b'{}',5)

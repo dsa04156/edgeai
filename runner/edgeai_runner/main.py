@@ -234,10 +234,8 @@ class Runner:
             env['EDGEAI_STATE_FILE'] = str(state_file)
         process = None
         try:
-            supervised = os.environ.get("EDGEAI_VD_SUPERVISED") == "true"
             process = subprocess.Popen(command, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=not supervised,
-                process_group=0 if supervised else None)
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             while process.poll() is None:
                 self.timeout()
                 cancelled.wait(0.05)
