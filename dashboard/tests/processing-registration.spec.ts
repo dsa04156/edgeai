@@ -13,6 +13,8 @@ test("sensor and processing selection registers without image or template input 
       expect(body).not.toHaveProperty("image"); expect(body).not.toHaveProperty("profileVersionId");
       expect(body.processing.pipelines[0].input).toEqual({ sourceKey: "input", property: "temperature" });
       expect(body.processing.pipelines[0].steps).toEqual([{ op: "movingAverage", window: 3 }]);
+      expect(body.processing.pipelines).toHaveLength(3);
+      expect(new Set(body.processing.pipelines.map((pipeline: { name: string }) => pipeline.name)).size).toBe(3);
       if (++attempts === 1) return route.fulfill({ status: 503, json: { message: "등록 재시도" } });
       return route.fulfill({ status: 201, json: { id: "11111111-1111-4111-8111-111111111111", displayName: body.displayName } });
     }
@@ -30,6 +32,12 @@ test("sensor and processing selection registers without image or template input 
   await form.getByLabel("처리 표본 수").fill("3");
   await form.getByLabel("처리 1 · 단계 1 · 기능").selectOption("movingAverage");
   await form.getByLabel("처리 1 · 단계 1 · 창 크기").fill("3");
+  await form.getByRole("button", { name: "처리 파이프라인 추가", exact: true }).click();
+  await form.getByRole("button", { name: "처리 파이프라인 추가", exact: true }).click();
+  await form.getByRole("button", { name: "처리 2 · 삭제", exact: true }).click();
+  await form.getByRole("button", { name: "처리 파이프라인 추가", exact: true }).click();
+  await form.getByLabel("처리 2 · 측정 항목").selectOption("temperature");
+  await form.getByLabel("처리 3 · 측정 항목").selectOption("temperature");
   await form.getByRole("button", { name: "센서 처리 장치 등록", exact: true }).click();
   await expect(form.getByRole("alert")).toHaveText("등록 재시도");
   await expect(form.getByLabel("센서 선택", { exact: true })).toHaveValue("sensor");
@@ -46,4 +54,19 @@ test("unconfigured common image clearly disables simple registration", async ({ 
   await page.goto("/virtual-devices?create=1");
   await expect(page.getByText("공통 처리 실행 이미지가 아직 준비되지 않았습니다.")).toBeVisible();
   await expect(page.getByRole("button", { name: "센서 처리 장치 등록", exact: true })).toBeDisabled();
+});
+
+test("catalog connection failure remains distinct from an unconfigured image and can be retried", async ({ page }) => {
+  let catalogs = 0;
+  await page.route("**/api/control-plane/**", route => {
+    const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
+    if (path.endsWith("processing-catalog")) return ++catalogs === 1 ? route.fulfill({ status: 503, json: { message: "상태 조회 연결 실패" } }) : route.fulfill({ json: { ready: true, architectures: ["amd64"], operations: [] } });
+    return route.fulfill({ json: path === "csrf" ? { token: "test" } : { items: [], nextOffset: null } });
+  });
+  await page.goto("/virtual-devices?create=1");
+  await expect(page.getByRole("alert").filter({ hasText: "상태 조회 연결 실패" })).toBeVisible();
+  await expect(page.getByText("공통 처리 실행 이미지가 아직 준비되지 않았습니다.")).toHaveCount(0);
+  await page.getByRole("button", { name: "공통 처리 상태 다시 확인" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "상태 조회 연결 실패" })).toHaveCount(0);
+  expect(catalogs).toBe(2);
 });

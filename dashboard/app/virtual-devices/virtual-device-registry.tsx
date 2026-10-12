@@ -93,6 +93,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   const [updateProfile, setUpdateProfile] = useState("");
   const [initialDevice, setInitialDevice] = useState("");
   const [processingReady, setProcessingReady] = useState(false);
+  const [processingError, setProcessingError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [sourceSelections, setSourceSelections] = useState<Record<string, string>>({});
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
@@ -116,6 +117,10 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   async function load(nextOffset = offset, authorization = auth) {
     setPage(await (await api(`virtual-devices?limit=20&offset=${nextOffset}`, undefined, authorization)).json()); setOffset(nextOffset);
   }
+  async function loadProcessingCatalog(authorization = auth) {
+    try { setProcessingReady((await (await api("virtual-devices/processing-catalog", undefined, authorization)).json()).ready === true); setProcessingError(""); }
+    catch (error) { setProcessingReady(false); setProcessingError(error instanceof Error ? error.message : "다시 시도하세요."); }
+  }
   async function show(id: string) { const value: Detail=await (await api(`virtual-devices/${id}`)).json(); setDetail(value); setUpdateProfile(value.vd.profileVersionId); setConfirmRelease(false); }
   function write(method: string, body?: object): RequestInit {
     return { method, headers: { "X-CSRF-TOKEN": csrf, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: stringify(body) } : {}) };
@@ -132,8 +137,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", path => api(path, undefined, authorization), readProfilePage),
       ]);
       setServiceProfiles(serviceItems); setProfiles(profileItems); setDevices(deviceItems); setNodes(nodeItems);
-      try { setProcessingReady((await (await api("virtual-devices/processing-catalog", undefined, authorization)).json()).ready === true); }
-      catch { setProcessingReady(false); }
+      await loadProcessingCatalog(authorization);
       const query = new URLSearchParams(window.location.search);
       setSelectedProfile(query.get("profile") || ""); setInitialDevice(query.get("device") || "");
       setCreateOpen(query.has("profile") || query.has("device") || query.get("create") === "1");
@@ -246,7 +250,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         {detail.vd.state === "REGISTERED" && <div className="release-controls">{confirmRelease ? <><p>이 VD의 원본 연결을 종료합니다. VD ID와 연결 이력, 원본 장치는 보존됩니다.</p><div className="toolbar"><button disabled={busy} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); setNotice("가상 장치를 해제했습니다."); })}>VD 해제 확정</button><button disabled={busy} onClick={() => setConfirmRelease(false)}>계속 사용</button></div></> : <button disabled={busy} onClick={() => setConfirmRelease(true)}>VD 해제</button>}</div>}
       </section>}
       </div><details className="create-panel" ref={createPanel} open={createOpen} onToggle={event => setCreateOpen(event.currentTarget.open)}><summary><h2 id="vd-register-title">새 가상 장치 등록</h2></summary>
-        <SensorProcessingRegistration key={`processing-${formVersion}-${initialDevice}`} devices={devices} initialDevice={initialDevice} ready={processingReady} busy={busy} onBusy={setBusy}
+        <SensorProcessingRegistration key={`processing-${formVersion}-${initialDevice}`} devices={devices} initialDevice={initialDevice} ready={processingReady} catalogError={processingError} onRetryCatalog={() => void run(() => loadProcessingCatalog())} busy={busy} onBusy={setBusy}
           create={async body => (await api("virtual-devices/processing", write("POST", body))).json()} onRegistered={onProcessingRegistered} />
         <details open={!!selectedProfile}><summary>템플릿으로 등록 · 고급 설정</summary>
         <fieldset disabled={busy} className="publish-fields"><VDPrerequisites profiles={[...serviceProfiles, ...profiles]} nodes={nodes} template={template}

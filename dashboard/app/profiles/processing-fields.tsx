@@ -8,6 +8,8 @@ type Props = { spec: Record<string, unknown>; devices: components["schemas"]["Ma
 export function ProcessingFields({ spec, devices, update, sensorOnly = false }: Props) {
   const config = record(spec.processing), pipelines = Array.isArray(config.pipelines) ? config.pipelines.map(record) : [];
   const sources = Object.keys(record(spec.sources));
+  let nextName = 1;
+  while (pipelines.some(value => value.name === `signal${nextName}`)) nextName++;
   const change = (patch: Record<string, unknown>) => update({ processing: { ...config, ...patch } });
   const pipeline = (index: number, patch: Record<string, unknown>) => change({ pipelines: pipelines.map((value, position) => position === index ? { ...value, ...patch } : value) });
   return <fieldset className="publish-fields"><legend>공통 데이터 처리</legend>
@@ -51,7 +53,7 @@ export function ProcessingFields({ spec, devices, update, sensorOnly = false }: 
             <button type="button" disabled={pipelines.length === 1} onClick={() => change({ pipelines: pipelines.filter((_, i) => i !== index) })}>{prefix} · 삭제</button></div>
         </fieldset>;
       })}
-      <button type="button" disabled={pipelines.length >= 16} onClick={() => change({ pipelines: [...pipelines, { name: `signal${pipelines.length + 1}`, input: { sourceKey: sources[0] || "", property: "" }, steps: [newProcessingStep("threshold")] }] })}>처리 파이프라인 추가</button>
+      <button type="button" disabled={pipelines.length >= 16} onClick={() => change({ pipelines: [...pipelines, { name: `signal${nextName}`, input: { sourceKey: sources[0] || "", property: "" }, steps: [newProcessingStep("threshold")] }] })}>처리 파이프라인 추가</button>
       {!sensorOnly && <p className="hint">다른 VD의 결과는 Workflow Builder에서 앞 작업의 출력 포트를 이 SERVICE 입력 포트에 연결합니다. AI 작업도 같은 출력 파일을 입력으로 사용할 수 있습니다.</p>}
     </>}
   </fieldset>;

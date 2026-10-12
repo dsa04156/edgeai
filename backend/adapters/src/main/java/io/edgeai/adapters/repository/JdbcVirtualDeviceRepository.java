@@ -37,6 +37,12 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     public Optional<VirtualDevice> findByKey(String key) {
         return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=?",VD,key).stream().findFirst();
     }
+    public Optional<String> processingCreationDigest(UUID id) {
+        return jdbc.query("SELECT request_digest FROM edgeai.vd_processing_registration WHERE vd_id=?",(r,n)->r.getString(1),id).stream().findFirst();
+    }
+    public void recordProcessingCreation(UUID id,String digest) {
+        jdbc.update("INSERT INTO edgeai.vd_processing_registration(vd_id,request_digest) VALUES (?,?) ON CONFLICT(vd_id) DO NOTHING",id,digest);
+    }
     public List<VirtualDevice> list(int limit,int offset) {
         return jdbc.query("SELECT * FROM edgeai.virtual_device ORDER BY vd_key COLLATE \"C\" LIMIT ? OFFSET ?",VD,limit,offset);
     }

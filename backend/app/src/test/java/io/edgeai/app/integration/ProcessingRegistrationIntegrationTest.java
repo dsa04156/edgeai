@@ -1,6 +1,6 @@
 package io.edgeai.app.integration;
 
-import io.edgeai.app.service.VirtualDeviceService;
+import io.edgeai.app.service.*;
 import io.edgeai.app.support.JsonDocuments;
 import io.edgeai.domain.device.DeviceResourceGateway;
 import java.util.*;
@@ -24,6 +24,9 @@ class ProcessingRegistrationIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired VirtualDeviceService vds;
+    @Autowired ProfileService profiles;
+    @Autowired ManagedDeviceService sensors;
+    @Autowired io.edgeai.domain.repository.VirtualDeviceRepository registrations;
     @MockitoBean DeviceResourceGateway gateway;
     final JsonDocuments json=new JsonDocuments();
     final UUID uid=UUID.randomUUID();
@@ -67,5 +70,27 @@ class ProcessingRegistrationIntegrationTest {
     }
     @Test void writeRequiresCsrf() throws Exception {
         mvc.perform(post("/api/v1/virtual-devices/processing").contentType("application/json").content("{}")).andExpect(status().isForbidden());
+    }
+    @Test void successfulRequestReplaysAfterReleaseSensorLossAndRuntimeReplacement() throws Exception {
+        var body=json.canonical(request("replay-"+UUID.randomUUID(),"temperature",List.of(Map.of("op","threshold","operator","gt","value",0))));
+        var created=mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn().getResponse();
+        UUID id=UUID.fromString((String)((Map<?,?>)json.decode(created.getContentAsString())).get("id"));vds.release(id);
+        when(gateway.request(eq("GET"),anyString(),isNull())).thenReturn(new DeviceResourceGateway.Reply(404,"{}"));
+        mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("RELEASED"));
+        for(String image:List.of("", "registry.test/new-runner@sha256:"+"c".repeat(64))) {
+            var replacement=new ProcessingRegistrationService(profiles,vds,sensors,registrations,image,"amd64");
+            assertThat(replacement.create(body).value().id()).isEqualTo(id);
+        }
+        var changed=new HashMap<>((Map<String,Object>)json.decode(body));changed.put("displayName","다른 이름");
+        mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content(json.canonical(changed))).andExpect(status().isConflict());
+        assertThatThrownBy(()->jdbc.update("UPDATE edgeai.vd_processing_registration SET request_digest='sha256:'||repeat('a',64) WHERE vd_id=?",id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        vds.deleteRegistration(id);assertThat(registrations.processingCreationDigest(id)).isEmpty();
+    }
+    @Test void nullRegistrationFieldsAreInputErrors() throws Exception {
+        var valid=request("null-"+UUID.randomUUID(),"temperature",List.of(Map.of("op","threshold","operator","gt","value",0)));
+        for(String field:List.of("key","displayName","deviceId","maxAgeSeconds","processing","placement")) {
+            var invalid=new HashMap<>(valid);invalid.put(field,null);
+            mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content(json.canonical(invalid))).andExpect(status().isBadRequest());
+        }
     }
 }

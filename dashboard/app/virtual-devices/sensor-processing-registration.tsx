@@ -7,8 +7,9 @@ import { validateProcessing } from "../../lib/processing";
 import { ProcessingFields } from "../profiles/processing-fields";
 
 type Schema = components["schemas"];
-export function SensorProcessingRegistration({ devices, initialDevice, ready, busy, onBusy, create, onRegistered }: {
+export function SensorProcessingRegistration({ devices, initialDevice, ready, catalogError, onRetryCatalog, busy, onBusy, create, onRegistered }: {
   devices: Schema["ManagedDevice"][]; initialDevice: string; ready: boolean; busy: boolean;
+  catalogError: string; onRetryCatalog: () => void;
   onBusy: (busy: boolean) => void; create: (body: Schema["ProcessingVirtualDeviceCreate"]) => Promise<Schema["VirtualDevice"]>;
   onRegistered: (vd: Schema["VirtualDevice"]) => Promise<void>;
 }) {
@@ -35,7 +36,8 @@ export function SensorProcessingRegistration({ devices, initialDevice, ready, bu
   return <form aria-label="센서 처리 장치 등록" onSubmit={event => void submit(event)}><fieldset disabled={busy} className="publish-fields">
     <legend>센서와 처리 선택</legend>
     <p className="hint">센서의 측정값에 적용할 처리를 선택하세요. 공통 실행 이미지와 템플릿은 자동으로 연결합니다.</p>
-    {!ready && <p className="notice">공통 처리 실행 이미지가 아직 준비되지 않았습니다.</p>}
+    {catalogError ? <div><p className="error" role="alert">공통 처리 상태 조회에 실패했습니다. {catalogError}</p><button type="button" onClick={onRetryCatalog}>공통 처리 상태 다시 확인</button></div>
+      : !ready && <p className="notice">공통 처리 실행 이미지가 아직 준비되지 않았습니다.</p>}
     <div className="form-row"><label>장치 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-average" /></label><label>장치 이름<input name="displayName" required maxLength={128} /></label></div>
     <label>센서 선택<select aria-label="센서 선택" required value={deviceId} onChange={event => {
       setDeviceId(event.target.value); setFeedback("");

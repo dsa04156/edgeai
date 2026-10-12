@@ -8,6 +8,8 @@ public interface VirtualDeviceRepository {
     boolean create(String key, String name, UUID profileId, UUID serviceId, VirtualDevice.Placement placement, String digest);
     Optional<VirtualDevice> find(UUID id, boolean lock);
     Optional<VirtualDevice> findByKey(String key);
+    Optional<String> processingCreationDigest(UUID id);
+    void recordProcessingCreation(UUID id,String digest);
     List<VirtualDevice> list(int limit, int offset);
     void update(UUID id, String name, VirtualDevice.Placement placement, VirtualDevice.State state, Instant now);
     void reconfigure(UUID id, String name, UUID profileId, UUID serviceId, VirtualDevice.Placement placement, Instant now);
