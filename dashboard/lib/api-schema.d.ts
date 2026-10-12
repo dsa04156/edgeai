@@ -747,6 +747,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{taskId}/results/{port}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 검증된 JSON 출력 파일 본문 조회
+         * @description 확정된 Result의 출력 포트만 조회합니다. 고정 object version·크기·SHA-256·형식을 다시 검증한 뒤 1 MiB 이하 JSON 본문을 반환합니다. 서명 URL이나 저장소 자격 증명을 제공하지 않으며 응답은 no-store입니다.
+         */
+        get: operations["getTaskResultContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{taskId}/offload": {
         parameters: {
             query?: never;
@@ -2311,7 +2331,45 @@ export interface components {
              */
             maxAgeSeconds: number;
         }[];
+        ProcessingSpec: {
+            /** @constant */
+            apiVersion: "edgeai.processing/v1";
+            sampleCount: number;
+            outputPort: string;
+            pipelines: {
+                name: string;
+                input: {
+                    sourceKey: string;
+                    property: string;
+                } | {
+                    port: string;
+                    output: string;
+                };
+                steps: ({
+                    /** @constant */
+                    op: "filter";
+                    /** @enum {unknown} */
+                    mode: "lowPass" | "highPass";
+                    alpha: number;
+                } | {
+                    /** @enum {unknown} */
+                    op: "movingAverage" | "rms";
+                    window: number;
+                } | {
+                    /** @constant */
+                    op: "fft";
+                    sampleRateHz: number;
+                } | {
+                    /** @constant */
+                    op: "threshold";
+                    /** @enum {unknown} */
+                    operator: "gt" | "gte" | "lt" | "lte" | "eq";
+                    value: number;
+                })[];
+            }[];
+        };
         VDSensorInput: {
+            processing?: components["schemas"]["ProcessingSpec"];
             /** @constant */
             apiVersion: "edgeai.vd-input/v1";
             /** Format: uuid */
@@ -2340,6 +2398,11 @@ export interface components {
                     unit: string;
                     /** Format: date-time */
                     observedAt: string;
+                    samples?: {
+                        value: string | number | boolean;
+                        /** Format: date-time */
+                        observedAt: string;
+                    }[];
                 };
             };
         };
@@ -4674,6 +4737,65 @@ export interface operations {
                 };
             };
             /** @description 결과 메타데이터 저장소에 연결할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskResultContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                port: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 검증된 JSON 결과 본문 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Task 또는 확정된 출력 파일이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description JSON 형식 또는 미리보기 크기 제한을 확인하세요. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 동시 조회 한도에 도달했습니다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소 조회 또는 파일 검증에 실패했습니다. */
             503: {
                 headers: {
                     [name: string]: unknown;

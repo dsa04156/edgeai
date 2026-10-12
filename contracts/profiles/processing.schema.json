@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EdgeAI shared processing v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "sampleCount",
+    "outputPort",
+    "pipelines"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "edgeai.processing/v1"
+    },
+    "sampleCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1024
+    },
+    "outputPort": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 63
+    },
+    "pipelines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "input",
+          "steps"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "maxLength": 63
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sourceKey",
+                  "property"
+                ],
+                "properties": {
+                  "sourceKey": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "property": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 63
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "port",
+                  "output"
+                ],
+                "properties": {
+                  "port": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 63
+                  },
+                  "output": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "maxLength": 63
+                  }
+                }
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "op",
+                    "mode",
+                    "alpha"
+                  ],
+                  "properties": {
+                    "op": {
+                      "const": "filter"
+                    },
+                    "mode": {
+                      "enum": [
+                        "lowPass",
+                        "highPass"
+                      ]
+                    },
+                    "alpha": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "op",
+                    "window"
+                  ],
+                  "properties": {
+                    "op": {
+                      "enum": [
+                        "movingAverage",
+                        "rms"
+                      ]
+                    },
+                    "window": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1024
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "op",
+                    "sampleRateHz"
+                  ],
+                  "properties": {
+                    "op": {
+                      "const": "fft"
+                    },
+                    "sampleRateHz": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "op",
+                    "operator",
+                    "value"
+                  ],
+                  "properties": {
+                    "op": {
+                      "const": "threshold"
+                    },
+                    "operator": {
+                      "enum": [
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "eq"
+                      ]
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

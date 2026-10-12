@@ -114,6 +114,11 @@
       "description": "가상 장치 등록·실행·해제·삭제 순서를 확인합니다."
     },
     {
+      "source": "docs/guides/vd-processing.md",
+      "group": "guides",
+      "description": "센서 표본에 필터·이동평균·RMS·FFT·임계값을 조합하고 다른 VD·AI로 결과를 연결합니다."
+    },
+    {
       "source": "docs/guides/workflow-editor-integration.md",
       "group": "guides",
       "description": "DDS 서비스를 구성해 Buildx·Gitea·Argo CD로 배포합니다."

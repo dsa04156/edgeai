@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @Configuration
 class VirtualDeviceConfiguration {
+    @Bean io.edgeai.domain.repository.SensorSampleRepository sensorSampleRepository(JdbcTemplate jdbc) { return new io.edgeai.adapters.repository.JdbcSensorSampleRepository(jdbc); }
     @Bean VirtualDeviceRepository virtualDeviceRepository(JdbcTemplate jdbc) { return new JdbcVirtualDeviceRepository(jdbc); }
     @Bean VDRuntimeRepository vdRuntimeRepository(JdbcTemplate jdbc) { return new JdbcVDRuntimeRepository(jdbc); }
     @Bean VDPollRepository vdPollRepository(JdbcTemplate jdbc) { return new JdbcVDPollRepository(jdbc); }

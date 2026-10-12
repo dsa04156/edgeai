@@ -16,6 +16,7 @@ public final class ProfileJson {
         var identity = new ProfileIdentity(kind, key, version);
         if (!(map.get("spec") instanceof Map<?, ?> spec) || spec.isEmpty())
             throw new IllegalArgumentException("spec must be a nonempty JSON object");
+        if(kind==ProfileIdentity.Kind.VD && spec.containsKey("processing"))VirtualDeviceInput.spec(documents.canonical(spec));
         return new Parsed(identity, documents.boundedCanonical(spec, 65536), documents.digest("edgeai-profile-v1\n" + kind.name(), spec));
     }
     public Object decode(String json) { return documents.decode(json); }

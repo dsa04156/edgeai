@@ -29,6 +29,7 @@ class Fixture:
         self.commit_calls = 0
         self.claim_calls = 0
         self.telemetry = []
+        self.input_data = b'{"features":[2,3]}'
         self.telemetry_status = telemetry_status
         self.assignment = {"runId": self.run, "taskId": self.task, "attemptId": self.attempt, "epoch": 1,
             "command": command, "args": [], "parameters": parameters or {}, "inputs": inputs or {},
@@ -93,7 +94,7 @@ class Fixture:
                 self.send_header("Content-Length","0")
                 self.end_headers()
             def do_GET(self):
-                data = b'{"features":[2,3]}'
+                data = fixture.input_data
                 self.send_response(200)
                 self.send_header("Content-Length",str(len(data)))
                 self.end_headers()

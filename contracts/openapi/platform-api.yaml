@@ -1712,6 +1712,43 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/tasks/{taskId}/results/{port}/content:
+    get:
+      tags: [Result]
+      operationId: getTaskResultContent
+      summary: 검증된 JSON 출력 파일 본문 조회
+      description: >-
+        확정된 Result의 출력 포트만 조회합니다. 고정 object version·크기·SHA-256·형식을 다시 검증한 뒤
+        1 MiB 이하 JSON 본문을 반환합니다. 서명 URL이나 저장소 자격 증명을 제공하지 않으며 응답은 no-store입니다.
+      parameters:
+        - {name: taskId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: port, in: path, required: true, schema: {type: string, maxLength: 63, pattern: '^[a-z][a-z0-9_]*$'}}
+      responses:
+        '200':
+          description: 검증된 JSON 결과 본문
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Task 또는 확정된 출력 파일이 없습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '422':
+          description: JSON 형식 또는 미리보기 크기 제한을 확인하세요.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '429':
+          description: 동시 조회 한도에 도달했습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: 저장소 조회 또는 파일 검증에 실패했습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/tasks/{taskId}/offload:
     post:
       tags: [Task]
@@ -4184,11 +4221,143 @@ components:
           deviceId: {type: string, maxLength: 253, description: KubeEdge 센서 Device 이름}
           properties: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*$', maxLength: 63}, description: BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다.}
           maxAgeSeconds: {type: integer, minimum: 1, maximum: 300, default: 30, description: 항목별 최신 수신값의 최대 허용 경과 시간(초)}
+    ProcessingSpec:
+      type: object
+      additionalProperties: false
+      required:
+      - apiVersion
+      - sampleCount
+      - outputPort
+      - pipelines
+      properties:
+        apiVersion:
+          const: edgeai.processing/v1
+        sampleCount:
+          type: integer
+          minimum: 1
+          maximum: 1024
+        outputPort:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          maxLength: 63
+        pipelines:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - name
+            - input
+            - steps
+            properties:
+              name:
+                type: string
+                pattern: ^[a-z][a-z0-9_]*$
+                maxLength: 63
+              input:
+                oneOf:
+                - type: object
+                  additionalProperties: false
+                  required:
+                  - sourceKey
+                  - property
+                  properties:
+                    sourceKey:
+                      type: string
+                      maxLength: 100
+                    property:
+                      type: string
+                      pattern: ^[a-z][a-z0-9_]*$
+                      maxLength: 63
+                - type: object
+                  additionalProperties: false
+                  required:
+                  - port
+                  - output
+                  properties:
+                    port:
+                      type: string
+                      pattern: ^[a-z][a-z0-9_]*$
+                      maxLength: 63
+                    output:
+                      type: string
+                      pattern: ^[a-z][a-z0-9_]*$
+                      maxLength: 63
+              steps:
+                type: array
+                minItems: 1
+                maxItems: 16
+                items:
+                  oneOf:
+                  - type: object
+                    additionalProperties: false
+                    required:
+                    - op
+                    - mode
+                    - alpha
+                    properties:
+                      op:
+                        const: filter
+                      mode:
+                        enum:
+                        - lowPass
+                        - highPass
+                      alpha:
+                        type: number
+                        exclusiveMinimum: 0
+                        maximum: 1
+                  - type: object
+                    additionalProperties: false
+                    required:
+                    - op
+                    - window
+                    properties:
+                      op:
+                        enum:
+                        - movingAverage
+                        - rms
+                      window:
+                        type: integer
+                        minimum: 1
+                        maximum: 1024
+                  - type: object
+                    additionalProperties: false
+                    required:
+                    - op
+                    - sampleRateHz
+                    properties:
+                      op:
+                        const: fft
+                      sampleRateHz:
+                        type: number
+                        exclusiveMinimum: 0
+                        maximum: 1000000
+                  - type: object
+                    additionalProperties: false
+                    required:
+                    - op
+                    - operator
+                    - value
+                    properties:
+                      op:
+                        const: threshold
+                      operator:
+                        enum:
+                        - gt
+                        - gte
+                        - lt
+                        - lte
+                        - eq
+                      value:
+                        type: number
     VDSensorInput:
       type: object
       additionalProperties: false
       required: [apiVersion, vdId, vdRevision, capturedAt, sources]
       properties:
+        processing: {$ref: '#/components/schemas/ProcessingSpec'}
         apiVersion: {const: edgeai.vd-input/v1}
         vdId: {type: string, format: uuid}
         vdRevision: {type: integer, format: int64}
@@ -4217,6 +4386,15 @@ components:
               dataType: {type: string, description: 센서의 원시 자료형. value는 Mapper scale/offset 적용 후 공학 단위값입니다.}
               unit: {type: string}
               observedAt: {type: string, format: date-time}
+              samples:
+                type: array
+                maxItems: 1024
+                items:
+                  type: object
+                  required: [value, observedAt]
+                  properties:
+                    value: {type: [string, number, boolean]}
+                    observedAt: {type: string, format: date-time}
     VirtualDevicePlacement:
       oneOf:
       - type: object

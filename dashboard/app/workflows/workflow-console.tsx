@@ -1,5 +1,6 @@
 "use client";
 import { VDSensorInputs } from "./vd-sensor-inputs";
+import { ResultContent } from "./result-content";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { registryItems } from "../../lib/registry";
@@ -271,6 +272,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
             {result.remoteAllocationId && <p className="hint">{result.remoteSourceMode === "SYNTHETIC" ? "Remote 참조 계산 · 실장비 검증 아님" : result.remoteSourceMode === "EXTERNAL" ? "외부 Remote 실행" : "Remote 실행 · 출처 확인 필요"}</p>}
             {result.vdRuntimeId && <p className="hint digest">가상 장치 실행 결과 · VD Runtime {result.vdRuntimeId} · Pod {result.producerPodUid}</p>}
             <div className="table-scroll"><table><caption className="sr-only">검증된 출력 파일</caption><thead><tr><th>출력 포트</th><th>크기</th><th>형식</th></tr></thead><tbody>{result.artifacts.map(artifact => <tr key={artifact.port}><td>{artifact.port}</td><td>{artifact.bytes.toLocaleString()} bytes</td><td>{artifact.mediaType}</td></tr>)}</tbody></table></div>
+            {result.artifacts.map(artifact => <ResultContent key={`${result.id}/${artifact.port}`} taskId={task.task.id} port={artifact.port} supported={artifact.mediaType === "application/json" && artifact.bytes <= 1048576} />)}
             <details><summary>결과 ID·체크섬·파일 버전</summary><p className="digest mono">Result {result.id}</p><p className="digest mono">Attempt {result.attemptId}</p>{result.remoteAllocationId && <p className="digest mono">RemoteAllocation {result.remoteAllocationId}</p>}{result.artifacts.map(artifact => <div key={artifact.port}><h4>{artifact.port}</h4><p className="digest mono">SHA-256 {artifact.sha256}</p><p className="digest mono">버전 {artifact.objectVersion}</p><p className="digest mono">{artifact.bucket}/{artifact.objectKey}</p></div>)}</details>
           </div>)}
         </div>}

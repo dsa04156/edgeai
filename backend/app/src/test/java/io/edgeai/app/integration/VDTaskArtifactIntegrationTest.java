@@ -53,6 +53,7 @@ class VDTaskArtifactIntegrationTest {
     @Autowired VDPollRepository polls;
     @Autowired S3ArtifactStore storage;
     @Autowired ManagedDeviceService sensors;
+    @Autowired SensorHistoryService history;
     @MockitoBean VDGateway gateway;
     @MockitoBean RuntimeGateway jobs;
     @LocalServerPort int port;
@@ -60,6 +61,11 @@ class VDTaskArtifactIntegrationTest {
     private final JsonDocuments json=new JsonDocuments();
     private MinioClient admin;
     private Process process;
+    private final List<Process> processes=new ArrayList<>();
+    private final Map<UUID,VDRuntime> launched=new HashMap<>();
+    private final Map<UUID,Path> workDirectories=new HashMap<>();
+    private final Map<UUID,UUID> nodeIdentities=new HashMap<>();
+    private URI proxyOrigin;
     private HttpServer proxy;
     private ExecutorService proxyExecutor;
     private HttpClient client;
@@ -76,8 +82,8 @@ class VDTaskArtifactIntegrationTest {
     }
     @AfterEach void cleanup()throws Exception {
         try {
-            if(process!=null && process.isAlive()){process.destroy();if(!process.waitFor(8,TimeUnit.SECONDS)){process.destroyForcibly();assertThat(process.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
-            if(supervisor!=null && !vdLifecycle.get(supervisor.id()).desiredState().equals("STOPPED"))vdLifecycle.fail(supervisor.id(),"RUNTIME_LOST");
+            for(var child:processes)if(child.isAlive()){child.destroy();if(!child.waitFor(8,TimeUnit.SECONDS)){child.destroyForcibly();assertThat(child.waitFor(5,TimeUnit.SECONDS)).isTrue();}}
+            for(var runtime:launched.values())if(!vdLifecycle.get(runtime.id()).desiredState().equals("STOPPED"))vdLifecycle.fail(runtime.id(),"RUNTIME_LOST");
         } finally {
             if(proxy!=null)proxy.stop(0);if(proxyExecutor!=null)proxyExecutor.close();if(client!=null)client.close();
             if(admin!=null)try {
@@ -106,24 +112,35 @@ class VDTaskArtifactIntegrationTest {
         });proxy.start();return URI.create("http://127.0.0.1:"+proxy.getAddress().getPort());
     }
     private UUID fixture(boolean loseReplies)throws Exception {return fixture(loseReplies,false);}
-    @SuppressWarnings("unchecked") private UUID fixture(boolean loseReplies,boolean sensor)throws Exception {
-        URI origin=proxy(loseReplies);var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
+    private UUID fixture(boolean loseReplies,boolean sensor)throws Exception {return fixture(loseReplies,sensor,false);}
+    private UUID fixture(boolean loseReplies,boolean sensor,boolean processing)throws Exception {
+        return fixture(loseReplies,sensor,processing?Map.of("apiVersion","edgeai.processing/v1","sampleCount",1,"outputPort","output",
+            "pipelines",List.of(Map.of("name","temperature","input",Map.of("sourceKey","input","property","temp_humidity"),"steps",List.of(Map.of("op","movingAverage","window",1))))):null);
+    }
+    @SuppressWarnings("unchecked") private UUID fixture(boolean loseReplies,boolean sensor,Map<String,Object> processing)throws Exception {
+        if(proxyOrigin==null)proxyOrigin=proxy(loseReplies);URI origin=proxyOrigin;var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
         spec.put("command",List.of("python3",Path.of(sensor?"../../runner/examples/temperature.py":"../../runner/examples/linear.py").toAbsolutePath().normalize().toString()));
+        if(processing!=null)spec.put("command",List.of("python3","-m","edgeai_runner.processing"));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",1048576,"required",false)));
         UUID sp=profiles.publish(ProfileIdentity.Kind.SERVICE,encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version().id();
         var source=sensor?sensors.get("sensehat-001"):Map.<String,Object>of();
-        UUID vp=profiles.publish(ProfileIdentity.Kind.VD,encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"version","1.0.0","spec",Map.of("apiVersion",sensor?"edgeai.vd/v2":"edgeai.vd/v1","type",sensor?"sensorMirror":"emulation","serviceProfileVersionId",sp.toString(),"sources",sensor?Map.of("input",Map.of("deviceModel",source.get("model"),"required",true)):Map.of(),"state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",2,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30))))).version().id();
+        var vdSpec=new LinkedHashMap<String,Object>(Map.of("apiVersion",sensor || processing!=null?"edgeai.vd/v2":"edgeai.vd/v1","type",sensor?"sensorMirror":"emulation","serviceProfileVersionId",sp.toString(),"sources",sensor?Map.of("input",Map.of("deviceModel",source.get("model"),"required",true)):Map.of(),"state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",2,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
+        if(processing!=null){vdSpec.put("type","processing");vdSpec.put("processing",processing);}
+        UUID vp=profiles.publish(ProfileIdentity.Kind.VD,encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"version","1.0.0","spec",vdSpec))).version().id();
         var vd=devices.create(encode(Map.of("key","vd-artifact-"+UUID.randomUUID(),"displayName","Actual VD child Runner","profileVersionId",vp.toString(),"sources",sensor?List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temp_humidity"),"maxAgeSeconds",30)):List.of(),"placement",Map.of("mode","AUTO")))).value();vdId=vd.id();
         var op=vdLifecycle.provision(vd.id(),0,"provision",new RuntimeSettings("vd-artifact-test","edgeai-runner",origin,120),false);
-        supervisor=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());UUID node=UUID.randomUUID();work=directory.resolve("work");Files.createDirectory(work);
-        when(gateway.authenticatePod(any(),any())).thenAnswer(call->{VDRuntime r=call.getArgument(0);if(!"pod-proof-fixture".equals(call.getArgument(1)) || !r.id().equals(supervisor.id()))throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);
-            return new VDGateway.PodIdentity(supervisor.podUid(),node,"fixture-node",Files.exists(work.resolve(".vd-ready")));});
-        Path token=directory.resolve("claim"),proof=directory.resolve("proof");Files.writeString(token,vdTokens.issue(supervisor));Files.writeString(proof,"pod-proof-fixture");
+        supervisor=vdLifecycle.submitted(op.targetRuntimeId(),UUID.randomUUID());UUID node=UUID.randomUUID();work=directory.resolve("work-"+supervisor.id());Files.createDirectory(work);
+        launched.put(supervisor.id(),supervisor);workDirectories.put(supervisor.id(),work);
+        nodeIdentities.put(supervisor.id(),node);
+        doAnswer(call->{VDRuntime r=call.getArgument(0);var current=launched.get(r.id());if(!"pod-proof-fixture".equals(call.getArgument(1)) || current==null)throw new RuntimeGatewayException(RuntimeGatewayException.Reason.AUTH_REJECTED);
+            return new VDGateway.PodIdentity(current.podUid(),nodeIdentities.get(r.id()),"fixture-node",Files.exists(workDirectories.get(r.id()).resolve(".vd-ready")));}).when(gateway).authenticatePod(any(),any());
+        Path token=directory.resolve("claim-"+supervisor.id()),proof=directory.resolve("proof-"+supervisor.id());Files.writeString(token,vdTokens.issue(supervisor));Files.writeString(proof,"pod-proof-fixture");
         Files.setPosixFilePermissions(token,PosixFilePermissions.fromString("rw-------"));Files.setPosixFilePermissions(proof,PosixFilePermissions.fromString("rw-------"));
         var command=new ProcessBuilder("python3",Path.of("../../runner/vd.py").toAbsolutePath().normalize().toString());var env=command.environment();env.keySet().removeIf(k->k.startsWith("EDGEAI_"));
         env.putAll(Map.of("EDGEAI_VD_ID",vd.id().toString(),"EDGEAI_VD_RUNTIME_ID",supervisor.id().toString(),"EDGEAI_VD_GENERATION","1","EDGEAI_POD_UID",supervisor.podUid().toString(),"EDGEAI_CONTROL_PLANE_URL",origin.toString(),"EDGEAI_VD_CLAIM_FILE",token.toString(),"EDGEAI_POD_TOKEN_FILE",proof.toString(),"EDGEAI_WORK_DIR",work.toString(),"EDGEAI_VD_MAX_CONCURRENT_TASKS","2","EDGEAI_VD_STARTUP_SECONDS","60"));
-        env.put("EDGEAI_VD_DRAIN_SECONDS","30");env.put("PYTHONDONTWRITEBYTECODE","1");Path log=directory.resolve("supervisor.log");Files.createFile(log,PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+        env.put("EDGEAI_VD_DRAIN_SECONDS","30");env.put("PYTHONDONTWRITEBYTECODE","1");Path log=directory.resolve("supervisor-"+supervisor.id()+".log");Files.createFile(log,PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         process=command.redirectOutput(log.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        processes.add(process);
         await(()->vdLifecycle.get(supervisor.id()).ready(Instant.now()),15,"Actual HTTP supervisor did not become Ready");return sp;
     }
     private UUID run(UUID sp,boolean dag,int delay)throws Exception {
@@ -200,6 +217,91 @@ class VDTaskArtifactIntegrationTest {
         System.out.println("VD_SENSOR_ACCEPTANCE "+encode(Map.of("deviceId",source.get("deviceId"),"deviceUid",source.get("deviceUid"),"observedAt",reading.get("observedAt"),"capturedAt",frame.get("capturedAt"),"temperatureC",output.get("temperatureC"),"temperatureF",output.get("temperatureF"),"sha256",artifact.sha256(),"bytes",artifact.bytes(),"runState","SUCCEEDED","podBoundary","fixture")));
         drain();verifyNoInteractions(jobs);
     }
+    @Test @Tag("sensor-hardware") void realSenseHatUsesTheCommonProcessingEngineAndPublishesAVerifiedResult()throws Exception {
+        UUID sp=fixture(false,true,true);
+        var wf=workflows.create(encode(Map.of("key","processing-acceptance-"+UUID.randomUUID(),"displayName","Physical sensor common processing"))).value();
+        var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","process","serviceProfileVersionId",sp.toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
+        var run=executionApi.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",vdId.toString()),"parameters",Map.of()))).value();
+        var task=executions.tasks(run.id()).getFirst();
+        var frame=(Map<?,?>)json.decode(executions.vdInput(task.id()).orElseThrow());
+        var reading=(Map<?,?>)((Map<?,?>)((Map<?,?>)((Map<?,?>)frame.get("sources")).get("input")).get("properties")).get("temp_humidity");
+        await(()->executions.run(run.id(),false).orElseThrow().state().equals("SUCCEEDED"),30,"Physical processing task did not succeed");
+        var result=runtimes.result(task.id()).orElseThrow();var artifact=result.outputs().getFirst().artifact();
+        var response=client.send(HttpRequest.newBuilder(storage.download(artifact).url()).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);var output=(Map<?,?>)json.decode(response.body());
+        assertThat(output.get("apiVersion")).isEqualTo("edgeai.processing-output/v1");
+        var values=(List<?>)((Map<?,?>)((Map<?,?>)output.get("outputs")).get("temperature")).get("values");
+        assertThat(((Number)values.getFirst()).doubleValue()).isEqualTo(((Number)reading.get("value")).doubleValue());
+        assertThat(output.get("vdId")).isEqualTo(vdId.toString());
+        var preview=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/tasks/"+task.id()+"/results/output/content")).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(preview.statusCode()).isEqualTo(200);
+        assertThat(preview.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        assertThat(json.canonical(json.decode(preview.body()))).isEqualTo(json.canonical(output));
+        verifyStart(runtimes.runtime(result.runtimeId()).orElseThrow());verifyResult(runtimes.runtime(result.runtimeId()).orElseThrow());
+        System.out.println("VD_SENSOR_ACCEPTANCE "+encode(Map.of("processing","movingAverage","value",values.getFirst(),"observedAt",reading.get("observedAt"),"runState","SUCCEEDED","sha256",artifact.sha256(),"podBoundary","fixture")));
+        await(()->allocations.open(supervisor.id()).isEmpty(),10,"Processing slot was not acknowledged");drain();verifyNoInteractions(jobs);
+    }
+    @Test @Tag("sensor-hardware") void realSenseHatMovingAverageUsesThreeDistinctMapperObservations()throws Exception {
+        UUID sp=fixture(false,true,Map.of("apiVersion","edgeai.processing/v1","sampleCount",3,"outputPort","output",
+            "pipelines",List.of(Map.of("name","average","input",Map.of("sourceKey","input","property","temp_humidity"),"steps",List.of(Map.of("op","movingAverage","window",3))))));
+        UUID uid=UUID.fromString((String)sensors.get("sensehat-001").get("uid"));
+        await(()->{
+            history.collect();
+            try {return history.window(uid,"temp_humidity",Instant.now(),30,3).size()==3;}
+            catch(io.edgeai.app.exception.ControlPlaneException e){if(!e.code().equals("VD_PROCESSING_WINDOW_PENDING"))throw e;return false;}
+        },25,"Three distinct physical Mapper observations were not available");
+        var wf=workflows.create(encode(Map.of("key","window-acceptance-"+UUID.randomUUID(),"displayName","Physical three-sample mean"))).value();
+        var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","average","serviceProfileVersionId",sp.toString(),"parameters",Map.of())),"dependencies",List.of()))).value();
+        var run=executionApi.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","VD","vdId",vdId.toString()),"parameters",Map.of()))).value();
+        var task=executions.tasks(run.id()).getFirst();var frame=(Map<?,?>)json.decode(executions.vdInput(task.id()).orElseThrow());
+        var reading=(Map<?,?>)((Map<?,?>)((Map<?,?>)((Map<?,?>)frame.get("sources")).get("input")).get("properties")).get("temp_humidity");
+        var samples=(List<?>)reading.get("samples");
+        assertThat(samples).hasSize(3);assertThat(samples.stream().map(value->((Map<?,?>)value).get("observedAt")).distinct().count()).isEqualTo(3);
+        double expected=samples.stream().mapToDouble(value->((Number)((Map<?,?>)value).get("value")).doubleValue()/3).sum();
+        await(()->executions.run(run.id(),false).orElseThrow().state().equals("SUCCEEDED"),30,"Physical observation window did not produce a Result");
+        var result=runtimes.result(task.id()).orElseThrow();var artifact=result.outputs().getFirst().artifact();
+        var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/tasks/"+task.id()+"/results/output/content")).GET().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);var output=(Map<?,?>)json.decode(response.body());
+        var values=(List<?>)((Map<?,?>)((Map<?,?>)output.get("outputs")).get("average")).get("values");
+        assertThat(((Number)values.getFirst()).doubleValue()).isCloseTo(expected,within(0.000001));
+        verifyStart(runtimes.runtime(result.runtimeId()).orElseThrow());verifyResult(runtimes.runtime(result.runtimeId()).orElseThrow());
+        System.out.println("VD_SENSOR_ACCEPTANCE "+encode(Map.of("processing","movingAverage","samples",samples,"value",values.getFirst(),"runState","SUCCEEDED","sha256",artifact.sha256(),"podBoundary","fixture")));
+        await(()->allocations.open(supervisor.id()).isEmpty(),10,"Window-processing slot was not acknowledged");drain();verifyNoInteractions(jobs);
+    }
+    @Test @Tag("sensor-hardware") void realSensorProcessingFeedsAnotherVdAndAnAiWorkflowThroughVerifiedArtifacts()throws Exception {
+        UUID sensorService=fixture(false,true,true),sensorVd=vdId;
+        UUID derivedService=fixture(false,false,Map.of("apiVersion","edgeai.processing/v1","sampleCount",1,"outputPort","output",
+            "pipelines",List.of(Map.of("name","energy","input",Map.of("port","input","output","temperature"),"steps",List.of(Map.of("op","rms","window",1)))))),derivedVd=vdId;
+        UUID aiService=fixture(false),aiVd=vdId;
+        var wf=workflows.create(encode(Map.of("key","vd-chain-"+UUID.randomUUID(),"displayName","Sensor VD → derived VD → AI"))).value();
+        var version=workflows.publish(wf.id(),encode(Map.of("version","1.0.0","tasks",List.of(
+            Map.of("key","sensor","serviceProfileVersionId",sensorService.toString(),"parameters",Map.of()),
+            Map.of("key","derived","serviceProfileVersionId",derivedService.toString(),"parameters",Map.of()),
+            Map.of("key","inference","serviceProfileVersionId",aiService.toString(),"parameters",Map.of("weights",List.of(2),"bias",1,"inputPipeline","energy"))),
+            "dependencies",List.of(Map.of("fromTask","sensor","toTask","derived","fromPort","output","toPort","input","mode","BATCH"),
+                Map.of("fromTask","derived","toTask","inference","fromPort","output","toPort","input","mode","BATCH"))))).value();
+        var run=executionApi.create(UUID.randomUUID().toString(),encode(Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of(),
+            "taskExecutions",Map.of("sensor",Map.of("mode","VD","vdId",sensorVd.toString()),"derived",Map.of("mode","VD","vdId",derivedVd.toString()),"inference",Map.of("mode","VD","vdId",aiVd.toString()))))).value();
+        await(()->executions.run(run.id(),false).orElseThrow().state().equals("SUCCEEDED"),40,"Sensor → VD → VD → AI execution failed");
+        var tasks=executions.tasks(run.id());var sensorTask=tasks.stream().filter(t->t.key().equals("sensor")).findFirst().orElseThrow();
+        var frame=(Map<?,?>)json.decode(executions.vdInput(sensorTask.id()).orElseThrow());
+        var reading=(Map<?,?>)((Map<?,?>)((Map<?,?>)((Map<?,?>)frame.get("sources")).get("input")).get("properties")).get("temp_humidity");
+        double temperature=((Number)reading.get("value")).doubleValue();
+        for(var task:tasks) {
+            var result=runtimes.result(task.id()).orElseThrow();var runtime=runtimes.runtime(result.runtimeId()).orElseThrow();
+            verifyStart(runtime);verifyResult(runtime);assertThat(executions.attempts(task.id())).hasSize(1);
+            if(task.key().equals("inference")) {
+                var artifact=result.outputs().getFirst().artifact();
+                var response=client.send(HttpRequest.newBuilder(storage.download(artifact).url()).GET().build(),HttpResponse.BodyHandlers.ofString());
+                assertThat(response.statusCode()).isEqualTo(200);var output=(Map<?,?>)json.decode(response.body());
+                assertThat(output.get("sourceMode")).isEqualTo("VD");assertThat(((Number)output.get("score")).doubleValue()).isCloseTo(Math.abs(temperature)*2+1,within(0.000001));
+                System.out.println("VD_SENSOR_ACCEPTANCE "+encode(Map.of("path","sensor→processingVD→derivedVD→referenceAI→Result","temperature",temperature,"score",output.get("score"),"runState","SUCCEEDED","sha256",artifact.sha256(),"podBoundary","fixture")));
+            }
+        }
+        for(var runtime:launched.values())vdLifecycle.drain(runtime.vdId(),0,"chain-drain");
+        for(var child:processes){assertThat(child.waitFor(10,TimeUnit.SECONDS)).isTrue();assertThat(child.exitValue()).isZero();}
+        verifyNoInteractions(jobs);
+    }
     private void verifyResult(RuntimeInstance runtime)throws Exception {
         String key="authority/vd-task-result/"+runtime.id()+".json";var versions=new ArrayList<String>();
         for(var value:admin.listObjects(ListObjectsArgs.builder().bucket(BUCKET).prefix(key).includeVersions(true).build()))versions.add(value.get().versionId());
@@ -211,7 +313,7 @@ class VDTaskArtifactIntegrationTest {
             assertThat(document.get("apiVersion")).isEqualTo("edgeai.vd.task.result/v1");
             assertThat(document.get("resultId")).isEqualTo(result.id().toString());assertThat(document.get("committedAt")).isEqualTo(result.createdAt().toString());
             assertThat(document.get("allocationId")).isEqualTo(allocation.id().toString());assertThat(document.get("sessionId")).isEqualTo(allocation.sessionId().toString());
-            assertThat(document.get("vdRuntimeId")).isEqualTo(supervisor.id().toString());assertThat(document.get("podUid")).isEqualTo(supervisor.podUid().toString());
+            assertThat(document.get("vdRuntimeId")).isEqualTo(allocation.vdRuntimeId().toString());assertThat(document.get("podUid")).isEqualTo(runtime.producerPodUid().toString());
             assertThat(document.get("manifestDigest")).isEqualTo(result.manifestDigest());
             var expected=result.outputs().stream().sorted(Comparator.comparing(io.edgeai.domain.storage.TaskResult.Output::port)).map(o->{var a=o.artifact();
                 return Map.of("port",o.port(),"bucket",a.bucket(),"objectKey",a.objectKey(),"versionId",a.versionId(),"bytes",a.bytes(),"sha256",a.sha256(),"mediaType",a.mediaType());}).toList();
@@ -228,7 +330,7 @@ class VDTaskArtifactIntegrationTest {
             var document=(Map<?,?>)json.decode(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
             assertThat(document.get("runtimeId")).isEqualTo(runtime.id().toString());assertThat(document.get("attemptId")).isEqualTo(runtime.attemptId().toString());
             assertThat(document.get("allocationId")).isEqualTo(allocation.id().toString());assertThat(document.get("sessionId")).isEqualTo(allocation.sessionId().toString());
-            assertThat(document.get("vdRuntimeId")).isEqualTo(supervisor.id().toString());assertThat(document.get("podUid")).isEqualTo(supervisor.podUid().toString());
+            assertThat(document.get("vdRuntimeId")).isEqualTo(allocation.vdRuntimeId().toString());assertThat(document.get("podUid")).isEqualTo(runtime.producerPodUid().toString());
             assertThat(Instant.parse((String)document.get("admittedAt"))).isBefore(runtime.expiresAt()).isBefore(Instant.parse((String)document.get("supervisorLeaseUntil")));
         }
     }

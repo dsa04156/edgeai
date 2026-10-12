@@ -17,7 +17,9 @@ public class VDSensorInputsService {
     private final VirtualDeviceRepository vds;
     private final ManagedDeviceService devices;
     private final Clock clock;
-    public VDSensorInputsService(VirtualDeviceRepository vds,ManagedDeviceService devices,Clock clock){this.vds=vds;this.devices=devices;this.clock=clock;}
+    private final io.edgeai.domain.repository.ProfileRepository profiles;
+    private final SensorHistoryService history;
+    public VDSensorInputsService(VirtualDeviceRepository vds,ManagedDeviceService devices,Clock clock,io.edgeai.domain.repository.ProfileRepository profiles,SensorHistoryService history){this.vds=vds;this.devices=devices;this.clock=clock;this.profiles=profiles;this.history=history;}
 
     @Transactional(propagation=Propagation.MANDATORY)
     public Map<UUID,String> capture(Collection<UUID> ids,boolean stream) {
@@ -38,14 +40,18 @@ public class VDSensorInputsService {
         }
         var captured=clock.instant();var frames=new HashMap<UUID,String>();
         selected.forEach((id,bindings)->{
-            if(bindings.isEmpty())return;
+            var spec=VirtualDeviceInput.spec(profiles.find(identities.get(id).profileVersionId()).orElseThrow().specJson());
+            if(bindings.isEmpty() && spec.processingJson()==null)return;
             var sources=new TreeMap<String,Object>();
-            for(var binding:bindings)sources.put(binding.sourceKey(),source(binding,readings.get(binding.managedDeviceId()),captured));
-            frames.put(id,JSON.boundedCanonical(Map.of("apiVersion","edgeai.vd-input/v1","vdId",id.toString(),"vdRevision",identities.get(id).revision(),"capturedAt",captured.toString(),"sources",sources),65536));
+            int count=spec.processingJson()==null?1:((Number)map(JSON.decode(spec.processingJson())).get("sampleCount")).intValue();
+            for(var binding:bindings)sources.put(binding.sourceKey(),source(binding,readings.get(binding.managedDeviceId()),captured,count));
+            var frame=new TreeMap<String,Object>(Map.of("apiVersion","edgeai.vd-input/v1","vdId",id.toString(),"vdRevision",identities.get(id).revision(),"capturedAt",captured.toString(),"sources",sources));
+            if(spec.processingJson()!=null)frame.put("processing",JSON.decode(spec.processingJson()));
+            frames.put(id,JSON.boundedCanonical(frame,65536));
         });
         return Map.copyOf(frames);
     }
-    private Map<String,Object> source(VDSourceBinding b,Map<String,Object> device,Instant captured) {
+    private Map<String,Object> source(VDSourceBinding b,Map<String,Object> device,Instant captured,int count) {
         var definitions=new HashMap<String,Map<String,Object>>();
         for(var item:(List<?>)map(device.get("profile")).getOrDefault("properties",List.of())){var p=map(item);definitions.put((String)p.get("name"),p);}
         var values=map(device.get("properties"));var measurements=new TreeMap<String,Object>();
@@ -56,13 +62,15 @@ public class VDSensorInputsService {
             if(timestamp<=0 || timestamp>captured.toEpochMilli()+5000 || captured.toEpochMilli()-timestamp>b.maxAgeSeconds()*1000L)
                 throw error("VD_SOURCE_VALUE_STALE","선택한 VD 측정값의 수신 시각이 허용 범위를 벗어났습니다.");
             String type=(String)definition.get("dataType");
-            measurements.put(property,Map.of("value",value(Objects.toString(reading.get("value"),""),type),"dataType",type,
-                "unit",Objects.toString(definition.get("unit"),""),"observedAt",Instant.ofEpochMilli(timestamp).toString()));
+            Object value=value(Objects.toString(reading.get("value"),""),type);var observedAt=Instant.ofEpochMilli(timestamp);
+            var measurement=new TreeMap<String,Object>(Map.of("value",value,"dataType",type,"unit",Objects.toString(definition.get("unit"),""),"observedAt",observedAt.toString()));
+            if(count>1){history.append(b.deviceUid(),property,observedAt,value);measurement.put("samples",history.window(b.deviceUid(),property,captured,b.maxAgeSeconds(),count));}
+            measurements.put(property,measurement);
         }
         return Map.of("bindingId",b.id().toString(),"deviceId",b.managedDeviceId(),"deviceUid",b.deviceUid().toString(),"deviceModel",b.deviceModel(),
             "maxAgeSeconds",b.maxAgeSeconds(),"properties",measurements);
     }
-    private Object value(String raw,String type) {
+    static Object value(String raw,String type) {
         if(raw.length()>4096)throw error("VD_SOURCE_VALUE_INVALID","VD 측정값이 허용 크기를 초과했습니다.");
         try {
             if("string".equals(type))return raw;

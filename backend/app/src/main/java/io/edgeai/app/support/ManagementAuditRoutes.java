@@ -59,6 +59,7 @@ public final class ManagementAuditRoutes {
         new Route("GET","/api/v1/tasks/{taskId}","getTask"),
         new Route("POST","/api/v1/tasks/{taskId}/cancel","cancelTask"),
         new Route("GET","/api/v1/tasks/{taskId}/results","getTaskResults"),
+        new Route("GET","/api/v1/tasks/{taskId}/results/{port}/content","getTaskResultContent"),
         new Route("POST","/api/v1/tasks/{taskId}/offload","offloadTask"),
         new Route("GET","/api/v1/operations/{operationId}","getOperation"),
         new Route("POST","/api/v1/virtual-devices","createVirtualDevice"),

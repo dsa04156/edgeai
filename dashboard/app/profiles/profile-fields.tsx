@@ -17,6 +17,7 @@ export function ProfileFields({ kind, value, onChange, profiles }: { kind: Profi
   return <div className="publish-fields"><div className="toolbar"><button type="button" onClick={() => onChange(stringify(kind === "SERVICE" ? service() : kind === "DEVICE" ? { protocol: "mqtt" } : newVDTemplate(), null, 2) || "")}>{kind} 기본 양식 채우기</button></div>
     {kind === "DEVICE" && <label>장치 프로토콜<input value={String(spec.protocol || "")} onChange={e => update({ protocol: e.target.value })} placeholder="mqtt / http / usb" /></label>}
     {kind === "SERVICE" && spec.apiVersion === "edgeai/v1" && <>
+      <button type="button" onClick={() => update({ command: ["python3", "-m", "edgeai_runner.processing"], args: [] })}>공통 Processing Engine 사용</button>
       <label>실행 이미지<input value={String(spec.image || "")} onChange={e => update({ image: e.target.value })} placeholder="registry/image@sha256:…" /></label>
       <p className="hint">기존 Runner가 포함된 실행 이미지를 사용하세요. 이미지 digest와 장비 아키텍처가 맞아야 합니다.</p>
       <label>실행 명령 · 한 줄에 인자 하나<textarea rows={3} value={(Array.isArray(spec.command) ? spec.command : []).join("\n")} onChange={e => update({ command: e.target.value.split("\n") })} /></label>

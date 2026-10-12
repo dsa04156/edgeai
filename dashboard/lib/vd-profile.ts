@@ -1,5 +1,8 @@
 import { isLosslessNumber } from "lossless-json";
 import type { components } from "./api-schema";
+import { validateProcessing } from "./processing";
+import { record } from "./json-record";
+export { record } from "./json-record";
 
 type Schema = components["schemas"];
 export type VDSourceRequirement = { deviceModel: string; required: boolean };
@@ -7,9 +10,6 @@ export type VDTemplate = { apiVersion: "edgeai.vd/v2"; type: "sensorMirror" | "p
   sources: Record<string, VDSourceRequirement>; state: { mode: "STATELESS" }; runtime: { maxConcurrentTasks: number; startupTimeoutSeconds: number; drainTimeoutSeconds: number } };
 export const vdTypeNames = { sensorMirror: "센서 미러", processing: "데이터 처리", emulation: "모의 장치" };
 export const sourceModeNames = { LIVE: "실제 장치", REPLAY: "재생 데이터", SYNTHETIC: "합성 데이터" };
-export function record(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value) && !isLosslessNumber(value) ? value as Record<string, unknown> : {};
-}
 export function newVDTemplate(type: VDTemplate["type"] = "sensorMirror"): VDTemplate {
   return { apiVersion: "edgeai.vd/v2", type, serviceProfileVersionId: "", sources: type === "emulation" ? {} : { input: { deviceModel: "", required: true } },
     state: { mode: "STATELESS" }, runtime: { maxConcurrentTasks: 1, startupTimeoutSeconds: 120, drainTimeoutSeconds: 120 } };
@@ -32,7 +32,11 @@ export function validateVDTemplate(value: unknown, profiles: Schema["ProfileVers
   const sources = sourceRequirements(spec);
   if (spec.sources === null || typeof spec.sources !== "object" || Array.isArray(spec.sources)) return "원본 조건은 키별 JSON 객체여야 합니다.";
   if (Object.keys(sources).length > 16) return "원본 조건은 16개까지 정의할 수 있습니다.";
-  if (spec.type !== "emulation" && !Object.values(sources).some(source => source.required)) return "센서 미러와 데이터 처리는 필수 원본 조건이 하나 이상 필요합니다.";
+  if (spec.type !== "emulation" && !Object.values(sources).some(source => source.required) && !(spec.type === "processing" && spec.processing && !Object.keys(sources).length)) return "센서 미러와 데이터 처리는 필수 원본 조건이 하나 이상 필요합니다.";
+  if (spec.processing) {
+    if (spec.type !== "processing") return "공통 처리 설정은 데이터 처리 종류에서 사용합니다.";
+    const issue = validateProcessing(spec.processing, Object.keys(sources)); if (issue) return issue;
+  }
   for (const [key, source] of Object.entries(sources)) {
     const raw = record(record(spec.sources)[key]);
     if (typeof raw.required !== "boolean") return `${key}: 필수 여부를 지정하세요.`;

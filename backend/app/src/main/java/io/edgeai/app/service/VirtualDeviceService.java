@@ -97,7 +97,15 @@ public class VirtualDeviceService {
     }
     private VDProfileSpec profile(UUID id) {
         var spec=VirtualDeviceInput.spec(requireProfile(id,ProfileIdentity.Kind.VD).specJson());
-        ServiceExecutionInput.parseSpec(requireProfile(spec.serviceProfileVersionId(),ProfileIdentity.Kind.SERVICE).specJson());
+        var service=ServiceExecutionInput.parseSpec(requireProfile(spec.serviceProfileVersionId(),ProfileIdentity.Kind.SERVICE).specJson());
+        if(spec.processingJson()!=null) {
+            var processing=DeviceProfileCompiler.map(WorkflowInput.JSON.decode(spec.processingJson()));
+            if(!service.outputs().containsKey(processing.get("outputPort")))throw new IllegalArgumentException("Processing output port is not declared by SERVICE");
+            for(var raw:(List<?>)processing.get("pipelines")) {
+                var input=DeviceProfileCompiler.map(DeviceProfileCompiler.map(raw).get("input"));
+                if(input.containsKey("port") && !service.inputs().containsKey(input.get("port")))throw new IllegalArgumentException("Processing artifact input port is not declared by SERVICE");
+            }
+        }
         for(var source:spec.sources().values())if(source.deviceProfileVersionId()!=null)requireProfile(source.deviceProfileVersionId(),ProfileIdentity.Kind.DEVICE);
         return spec;
     }
@@ -114,6 +122,7 @@ public class VirtualDeviceService {
             .anyMatch(e->e.getValue().required() && !requested.containsKey(e.getKey())))
             throw error(409,"VD_SOURCE_INCOMPATIBLE","선언된 원본 키와 필수 원본을 확인하세요.");
         var sources=new HashMap<String,VDSourceBinding>();
+        var numericProperties=new HashMap<String,Set<String>>();
         repository.lockManagedSources(requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()!=null).map(e->e.getValue().deviceId()).toList());
         // Preserve a global row-lock order for immutable legacy Device references.
         requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()==null).map(e->UUID.fromString(e.getValue().deviceId())).distinct().sorted()
@@ -125,6 +134,8 @@ public class VirtualDeviceService {
                 var kind=((Map<?,?>)device.get("profile")).get("kind");
                 var declared=((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(p->((Map<?,?>)p).get("name")).toList();
                 if(!declared.containsAll(selection.properties()))throw error(409,"VD_SOURCE_INCOMPATIBLE","선택한 측정 항목이 센서 규격에 없습니다.");
+                numericProperties.put(entry.getKey(),((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(DeviceProfileCompiler::map)
+                    .filter(property->Set.of("float32","float64","int16","uint16","int32","uint32").contains(Objects.toString(property.get("dataType"),""))).map(property->(String)property.get("name")).collect(java.util.stream.Collectors.toSet()));
                 sources.put(entry.getKey(),new VDSourceBinding(null,null,null,null,null,"virtual".equals(kind)?Device.SourceMode.SYNTHETIC:Device.SourceMode.LIVE,
                     0,null,null,null,id,UUID.fromString((String)device.get("uid")),(String)device.get("model"),selection.properties(),selection.maxAgeSeconds()));
             } else {
@@ -134,6 +145,14 @@ public class VirtualDeviceService {
                     throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 원본 Device의 규격 또는 상태가 조건과 다릅니다.");
                 if(!selection.properties().isEmpty())throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 UUID 원본은 센서 디바이스로 전환한 뒤 측정 항목을 선택하세요.");
                 sources.put(entry.getKey(),new VDSourceBinding(null,null,null,device.id(),device.profileVersionId(),device.sourceMode(),0,null,null,null));
+            }
+        }
+        if(spec.processingJson()!=null)for(var raw:(List<?>)DeviceProfileCompiler.map(WorkflowInput.JSON.decode(spec.processingJson())).get("pipelines")) {
+            var input=DeviceProfileCompiler.map(DeviceProfileCompiler.map(raw).get("input"));
+            if(input.containsKey("sourceKey")) {
+                var binding=sources.get(input.get("sourceKey"));
+                if(binding==null || !binding.properties().contains(input.get("property")))throw error(409,"VD_SOURCE_INCOMPATIBLE","처리 설정의 측정 항목을 VD 원본에서 선택하세요.");
+                if(!numericProperties.getOrDefault(input.get("sourceKey"),Set.of()).contains(input.get("property")))throw error(409,"VD_SOURCE_INCOMPATIBLE","공통 처리는 숫자 측정 항목을 사용합니다.");
             }
         }
         return sources;

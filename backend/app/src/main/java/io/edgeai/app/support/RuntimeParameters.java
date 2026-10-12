@@ -9,7 +9,7 @@ public final class RuntimeParameters {
         var merged=new TreeMap<String,Object>();
         for(String document:List.of(task,run)) {
             var values=(Map<?,?>)JSON.decode(document);
-            if(values.containsKey("vdInputs"))throw new IllegalArgumentException("vdInputs is reserved for pinned sensor inputs");
+            if(values.containsKey("vdInputs") || values.containsKey("vdProcessed"))throw new IllegalArgumentException("vdInputs and vdProcessed are reserved for VD processing");
             values.forEach((k,v)->merged.put((String)k,v));
         }
         if(vdInputs!=null)merged.put("vdInputs",JSON.decode(vdInputs));

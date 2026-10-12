@@ -5,7 +5,7 @@ test("VD workflow selection preserves retries and displays its actual result gen
   const workflowId = "11111111-1111-4111-8111-111111111111", versionId = "22222222-2222-4222-8222-222222222222";
   const runId = "33333333-3333-4333-8333-333333333333", taskId = "44444444-4444-4444-8444-444444444444";
   const vdId = "55555555-5555-4555-8555-555555555555", runtimeId = "66666666-6666-4666-8666-666666666666", pod = "77777777-7777-4777-8777-777777777777";
-  const now = "2026-10-03T04:00:00Z"; let posts = 0; const keys: string[] = [];
+  const now = "2026-10-03T04:00:00Z"; let posts = 0, previews = 0; const keys: string[] = [];
   await page.route("**/api/control-plane/**", async route => {
     const req = route.request(), path = new URL(req.url()).pathname.replace("/api/control-plane/", "");
     const run = { id: runId, workflowVersionId: versionId, mode: "VD", vdId, nodeId: null, remoteTarget: null, state: "SUCCEEDED", parameters: {}, offload: null, createdAt: now, updatedAt: now };
@@ -29,6 +29,10 @@ test("VD workflow selection preserves retries and displays its actual result gen
     else if (path === `tasks/${taskId}`) body = { task, telemetry: null, offloads: [], vdInputs: {apiVersion:"edgeai.vd-input/v1",vdId,vdRevision:2,capturedAt:now,sources:{input:{bindingId:taskId,deviceId:"sensehat-001",deviceUid:pod,deviceModel:"edgeai-model-sensehat",maxAgeSeconds:30,properties:{temp_humidity:{value:26.5,unit:"°C",dataType:"float64",observedAt:now}}}}}, attempts: [{ id: taskId, taskId, state: "SUCCEEDED", mode: "VD", vdId, nodeId: null, remoteTarget: null, cause: "INITIAL", number: 1, epoch: 1 }] };
     else if (path === `tasks/${taskId}/results`) body = { taskId, items: [{ id: runId, taskId, attemptId: taskId, runtimeId, epoch: 1, producerPodUid: pod, vdRuntimeId: runtimeId, remoteAllocationId: null, remoteSourceMode: null, manifestDigest: "sha256:" + "a".repeat(64), createdAt: now,
       artifacts: [{ port: "output", bucket: "fixture", objectKey: "output", objectVersion: "fixed-version", sha256: "a".repeat(64), bytes: 32, mediaType: "application/json" }] }] };
+    else if (path === `tasks/${taskId}/results/output/content`) {
+      if (++previews === 1) return route.fulfill({status:503,json:{message:"결과 저장소 조회 실패"}});
+      body={apiVersion:"edgeai.processing-output/v1",vdId,vdRevision:2,capturedAt:now,outputs:{average:{values:[26.5],observedAt:[now]},spectrum:{values:[0,1,0],frequenciesHz:[0,1,2]},alarm:{values:[true]}}};
+    }
     else return route.fulfill({ status: 404, json: {} });
     await route.fulfill({ status: 200, json: body });
   });
@@ -55,6 +59,12 @@ test("VD workflow selection preserves retries and displays its actual result gen
   await expect(sensorInput).toContainText("revision 2");
   const result = page.getByRole("region", { name: "검증된 결과 · analyze", exact: true });
   await expect(result).toContainText(`VD Runtime ${runtimeId}`); await expect(result).toContainText(`Pod ${pod}`);
+  await result.getByRole("button", {name:"output · 결과 내용 조회",exact:true}).click();
+  await expect(result.getByRole("alert")).toContainText("결과 저장소 조회 실패");
+  await result.getByRole("button", {name:"output · 결과 내용 조회",exact:true}).click();
+  await expect(result.getByRole("table", {name:"average · 처리 결과"})).toContainText("26.5");
+  await expect(result.getByRole("table", {name:"spectrum · 처리 결과"})).toContainText("주파수(Hz)");
+  await expect(result.getByRole("table", {name:"alarm · 처리 결과"})).toContainText("참");
   expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);

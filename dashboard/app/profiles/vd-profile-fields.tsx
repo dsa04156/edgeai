@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { record, sourceRequirements, vdTypeNames, type VDSourceRequirement } from "../../lib/vd-profile";
+import { ProcessingFields } from "./processing-fields";
 
 type Profile = components["schemas"]["ProfileVersion"];
 type Props = { spec: Record<string, unknown>; profiles: Profile[]; update: (patch: Record<string, unknown>) => void };
@@ -41,9 +42,9 @@ export function VDProfileFields({ spec, profiles, update }: Props) {
     </select></label>
     {!profiles.some(p => p.kind === "SERVICE") && <p className="hint">실행 모듈이 없습니다. <a href="/profiles?kind=SERVICE">SERVICE 규격 등록 →</a></p>}
     <fieldset className="publish-fields"><legend>원본 규격과 조건</legend>
-      {spec.type !== "emulation" && <p className="hint">센서 미러와 데이터 처리는 필수 원본이 하나 이상 필요합니다.</p>}
+      {spec.type !== "emulation" && <p className="hint">센서 측정값을 처리할 때는 필수 원본이 필요합니다. 다른 VD의 결과만 처리하면 원본 조건을 비워 둘 수 있습니다.</p>}
       {Object.entries(requirements).map(([key, source]) => <SourceCondition key={key} name={key} source={source} sources={sources} devices={devices} update={update} />)}
-      {!Object.keys(sources).length && <p className="muted">원본 조건이 없습니다. 모의 장치는 원본 없이 구성할 수 있습니다.</p>}
+      {!Object.keys(sources).length && <p className="muted">원본 조건이 없습니다. 다른 VD의 결과 입력 또는 모의 장치를 구성할 수 있습니다.</p>}
       <button type="button" disabled={Object.keys(sources).length >= 16} onClick={() => {
         let index = 1; while (Object.hasOwn(sources, `input${index}`)) index++;
         update({ sources: { ...sources, [`input${index}`]: { deviceModel: "", required: true } } });
@@ -51,6 +52,7 @@ export function VDProfileFields({ spec, profiles, update }: Props) {
       {failed&&<p role="alert" className="error">센서 목록을 불러오지 못했습니다. 연결 상태를 확인하고 새로고침하세요.</p>}
       <p className="hint"><a href="/devices?view=sensors">센서 디바이스 등록·관리 →</a></p>
     </fieldset>
+    {spec.type === "processing" && <ProcessingFields spec={spec} devices={devices} update={update} />}
     <fieldset className="publish-fields"><legend>상태와 실행 정책</legend>
       <label>상태 관리<select aria-label="상태 관리" value={String(record(spec.state).mode || "STATELESS")} onChange={event => update({ state: { ...record(spec.state), mode: event.target.value } })}>
         <option value="STATELESS">상태 없음 · STATELESS</option>

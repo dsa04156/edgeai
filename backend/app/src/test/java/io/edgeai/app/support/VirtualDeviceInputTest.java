@@ -7,6 +7,16 @@ import static org.assertj.core.api.Assertions.*;
 
 class VirtualDeviceInputTest {
     private final JsonDocuments json=new JsonDocuments();
+    @Test void processingConfigurationIsPreservedAndUnknownOperationsAreRejected() throws Exception {
+        var spec=spec();spec.put("type","processing");
+        var processing=new HashMap<String,Object>(Map.of("apiVersion","edgeai.processing/v1","sampleCount",1,"outputPort","output",
+            "pipelines",List.of(Map.of("name","alarm","input",Map.of("sourceKey","input","property","temperature"),
+                "steps",List.of(Map.of("op","threshold","operator","gt","value",30))))));
+        spec.put("processing",processing);
+        assertThat(VirtualDeviceInput.spec(json.canonical(spec)).processingJson()).contains("threshold");
+        processing.put("pipelines",List.of(Map.of("name","alarm","input",Map.of("sourceKey","input","property","temperature"),"steps",List.of(Map.of("op","execute","command","shell")))));
+        assertThatThrownBy(()->VirtualDeviceInput.spec(json.canonical(spec))).isInstanceOf(IllegalArgumentException.class);
+    }
     private Map<String,Object> spec() throws Exception {
         var original=(Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/vd-profile.example.json")));
         var result=new HashMap<String,Object>();original.forEach((k,v)->result.put((String)k,v));return result;

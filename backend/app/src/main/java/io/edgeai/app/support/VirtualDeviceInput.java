@@ -58,7 +58,9 @@ public final class VirtualDeviceInput {
         return placement.mode()==VirtualDevice.Mode.AUTO?Map.of("mode","AUTO"):Map.of("mode","NODE","nodeId",placement.nodeId().toString());
     }
     public static VDProfileSpec spec(String document) {
-        var map=parse(document,"apiVersion","type","serviceProfileVersionId","sources","state","runtime");
+        var map=parameters(JSON.parse(document,65536));
+        var fields=new ArrayList<>(List.of("apiVersion","type","serviceProfileVersionId","sources","state","runtime"));
+        if(map.containsKey("processing"))fields.add("processing");object(map,fields.toArray(String[]::new));
         boolean managed="edgeai.vd/v2".equals(map.get("apiVersion"));
         if(!managed && !"edgeai.vd/v1".equals(map.get("apiVersion")))throw new IllegalArgumentException("Unsupported VD profile apiVersion");
         String type=text(map.get("type"),16);
@@ -74,12 +76,14 @@ public final class VirtualDeviceInput {
             for(var mode:modes)if(!allowed.add(Device.SourceMode.valueOf(text(mode,16))))throw new IllegalArgumentException("Duplicate sourceMode");
             sources.put(key(k),new VDProfileSpec.Source(uuid(source.get("deviceProfileVersionId")),required,allowed));
         });
-        if(!type.equals("emulation") && sources.values().stream().noneMatch(VDProfileSpec.Source::required))throw new IllegalArgumentException("Required source missing");
+        String processing=map.containsKey("processing")?ProcessingInput.parse(map.get("processing"),sources.keySet()):null;
+        if(processing!=null && (!managed || !type.equals("processing")))throw new IllegalArgumentException("Processing requires a v2 processing VD");
+        if(!type.equals("emulation") && sources.values().stream().noneMatch(VDProfileSpec.Source::required) && !(processing!=null && sources.isEmpty()))throw new IllegalArgumentException("Required source missing");
         if(!"STATELESS".equals(object(map.get("state"),"mode").get("mode")))throw new IllegalArgumentException("Only STATELESS is supported");
         var runtime=object(map.get("runtime"),"maxConcurrentTasks","startupTimeoutSeconds","drainTimeoutSeconds");
         return new VDProfileSpec(type,uuid(map.get("serviceProfileVersionId")),sources,
             (int)number(runtime.get("maxConcurrentTasks"),1,16),(int)number(runtime.get("startupTimeoutSeconds"),1,600),
-            (int)number(runtime.get("drainTimeoutSeconds"),1,600));
+            (int)number(runtime.get("drainTimeoutSeconds"),1,600),processing);
     }
     private static String deviceName(Object value) {
         String name=text(value,253);io.edgeai.domain.runtime.RuntimeNames.dns(name,253);return name;

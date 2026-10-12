@@ -25,6 +25,7 @@ class VDSensorBatchIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ProfileService profiles;
     @Autowired Clock clock;
+    @Autowired SensorHistoryService history;
     @MockitoBean DeviceResourceGateway gateway;
     private final JsonDocuments json=new JsonDocuments();
     private final UUID sensorUid=UUID.randomUUID();
@@ -52,6 +53,22 @@ class VDSensorBatchIntegrationTest {
         return profile(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v2","type","sensorMirror","serviceProfileVersionId",sp.toString(),
             "sources",Map.of("input",Map.of("deviceModel",MODEL,"required",true)),"state",Map.of("mode","STATELESS"),
             "runtime",Map.of("maxConcurrentTasks",1,"startupTimeoutSeconds",60,"drainTimeoutSeconds",60)));
+    }
+    @Test void sharedSamplerKeepsDistinctObservationsForAProcessingWindow() throws Exception {
+        var sp=profile(ProfileIdentity.Kind.SERVICE,json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json"))));
+        var vdProfile=profile(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v2","type","processing","serviceProfileVersionId",sp.toString(),
+            "sources",Map.of("input",Map.of("deviceModel",MODEL,"required",true)),"state",Map.of("mode","STATELESS"),
+            "runtime",Map.of("maxConcurrentTasks",1,"startupTimeoutSeconds",60,"drainTimeoutSeconds",60),
+            "processing",Map.of("apiVersion","edgeai.processing/v1","sampleCount",3,"outputPort","output",
+                "pipelines",List.of(Map.of("name","average","input",Map.of("sourceKey","input","property","temperature"),"steps",List.of(Map.of("op","movingAverage","window",3)))))));
+        mvc.perform(post("/api/v1/virtual-devices").with(csrf()).contentType("application/json").content(json.canonical(Map.of(
+            "key","processing-"+UUID.randomUUID(),"displayName","Average","profileVersionId",vdProfile.toString(),
+            "sources",List.of(Map.of("sourceKey","input","deviceId","sensehat-001","properties",List.of("temperature"),"maxAgeSeconds",30)),"placement",Map.of("mode","AUTO")))))
+            .andExpect(status().isCreated());
+        var start=clock.instant().minusSeconds(3);value="20";observedAt=start.toEpochMilli();history.collect();history.collect();
+        value="30";observedAt=start.plusSeconds(1).toEpochMilli();history.collect();
+        value="40";observedAt=start.plusSeconds(2).toEpochMilli();history.collect();
+        org.assertj.core.api.Assertions.assertThat(history.window(sensorUid,"temperature",clock.instant(),30,3).stream().map(s->((Number)s.get("value")).intValue()).toList()).containsExactly(20,30,40);
     }
     @Test void selectedMeasurementsAndFreshnessPolicyAreStoredOnTheVdSource() throws Exception {
         var body=Map.of("key","sensor-vd-"+UUID.randomUUID(),"displayName","Temperature VD","profileVersionId",template().toString(),
