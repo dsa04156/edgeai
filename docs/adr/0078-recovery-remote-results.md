@@ -1,7 +1,7 @@
 # ADR0078: 격리된 복원 DB의 Remote 성공 결과 확정
 
 상태: 실제 PG16/API/Remote/TLS MinIO 결합14개 검증 완료.
-[검증 근거](../evidence/m9-recovery-remote-results.md). 새 원격 CI/배포는 별도 확인한다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-results.md). 새 원격 CI/배포는 별도 확인한다.
 
 ADR0077의 S3 publication은 DB Result를 만들지 않는다. 일반 결과 API는 살아 있는 producer의
 권한을 요구하고 후속 작업을 실행할 수 있으므로 복구 경로로 재사용하지 않는다. 별도 CLI에서

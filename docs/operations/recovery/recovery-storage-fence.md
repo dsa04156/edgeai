@@ -57,4 +57,4 @@ CA 검증을 끄거나 HTTP로 실행하는 옵션은 없다.
 차단 보고서의 false 필드는 그대로 유지하고 두 결과를 함께 사용한다.
 
 격리 검증은 `bash scripts/test/test-recovery-storage-fence.sh --minio-binary <시험 binary>`다.
-별도 TLS MinIO와 합성 파일만 사용한다. [검증 결과](../../evidence/m9-recovery-storage-fence.md).
+별도 TLS MinIO와 합성 파일만 사용한다. [검증 결과](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-storage-fence.md).

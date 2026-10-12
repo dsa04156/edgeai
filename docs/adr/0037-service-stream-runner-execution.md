@@ -55,4 +55,4 @@ STREAM_NOT_IMPLEMENTED로 차단하여 스트림 SERVICE를 BATCH 최종 명령�
 
 시험 서버의 완료 허가·checkpoint object 저장은 fixture다. 실제 Runner/model 프로세스와
 HTTPS/TLS MQTT 시험을 서버 장벽·실제 S3·Kubernetes 전체 수용 근거로 대체하지 않는다.
-상세 증거는 [실행 연결 검증](../evidence/m7-service-stream-runner.md)을 따른다.
+상세 증거는 [실행 연결 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-service-stream-runner.md)을 따른다.

@@ -7,7 +7,7 @@
 상태: 네 설계 문서에서 확인한 원칙과 초기화·Profile·Device/Node·Workflow/실행/Result·VD 구현 범위.
 M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·CI·배포 검증을 통과했다.
 실행 측정·ADR0009 자동 전환·참조 Remote는 실제 kind·CI·배포 검증을 통과했다.
-VD의 현재 수용 범위는 `docs/evidence/m6-vd-task-execution.md`를 따른다.
+VD의 현재 수용 범위는 [당시 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-task-execution.md)를 따른다.
 별도 전체 계약 원문은 아직 확인되지 않았다.
 
 ## 현재 수용 범위
@@ -16,7 +16,7 @@ VD의 현재 수용 범위는 `docs/evidence/m6-vd-task-execution.md`를 따른�
 2. Flyway가 실제 PostgreSQL에서 schema를 초기화한다.
 3. `GET /actuator/health/readiness`는 DB 연결을 포함하며 장애 시 503을 반환한다.
 4. Next.js `GET /api/health`는 Spring readiness 결과를 전달하며 연결 실패를 UP으로 표시하지 않는다.
-5. `GET /api/v1/platform`은 인증을 요구하고 마지막 완료 milestone=M4, capabilities=[profiles,devices,nodes,workflows,runs,tasks,results]를 반환한다. M4 완료 증거는 docs/evidence/m4-runtime.md를 따른다.
+5. `GET /api/v1/platform`은 인증을 요구하고 마지막 완료 milestone=M4, capabilities=[profiles,devices,nodes,workflows,runs,tasks,results]를 반환한다. M4 완료 증거는 [당시 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m4-runtime.md)를 따른다.
 6. 개발 서비스는 loopback에만 publish한다. 비밀번호는 무작위 local `.env`로 관리한다.
 7. 미구현 시험은 exit 2/BLOCKED를 반환한다. scaffold 성공을 전체 플랫폼 완료로 표시하지 않는다.
 

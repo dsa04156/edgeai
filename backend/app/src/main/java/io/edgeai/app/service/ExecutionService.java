@@ -1,4 +1,5 @@
 package io.edgeai.app.service;
+import io.edgeai.app.support.RuntimeParameters;
 
 import io.edgeai.domain.execution.*;
 import io.edgeai.domain.repository.*;
@@ -26,12 +27,14 @@ public class ExecutionService {
     private final String runtimeNamespace;
     private final RemoteProvider remoteProvider;
     private final StreamRunService streams;
+    private final ManagedDeviceService managedDevices;
+    private final VDSensorInputsService sensorInputs;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,VDSensorInputsService sensorInputs) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;
+        this.streams=streams;this.managedDevices=managedDevices;this.sensorInputs=sensorInputs;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -56,9 +59,21 @@ public class ExecutionService {
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         if(!streamInputs.isEmpty())normalized.put("streamInputs",streamInputs.stream().map(StreamRunInput::document).toList());
         if(!taskExecutions.isEmpty())normalized.put("taskExecutions",taskExecutions);
+        if(input.containsKey("device")) {
+            var ref=io.edgeai.app.support.DeviceProfileCompiler.map(input.get("device"));
+            io.edgeai.app.support.DeviceProfileCompiler.fields(ref,Set.of("id","outputs"),Set.of("id","outputs"));
+            if(parameters.containsKey("device"))throw new IllegalArgumentException("device input conflicts with parameters.device");
+            normalized.put("device",ref);
+        }
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
+        repository.lockRequestKey(idempotency);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
+        // Resolve protocol-independent references only after idempotency replay checks.
+        if(input.containsKey("device")) {
+            var resolved=new TreeMap<String,Object>();parameters.forEach((k,v)->resolved.put((String)k,v));
+            resolved.put("device",managedDevices.workflowDevice(input.get("device")));parameters=resolved;
+        }
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         if(vdId!=null && offload!=null)throw error(409,"VD_AUTOMATIC_OFFLOAD_UNSUPPORTED","VD 자원 측정은 공유 컨테이너 값이므로 작업별 자동 전환을 설정할 수 없습니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
@@ -93,12 +108,20 @@ public class ExecutionService {
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         for(var entry:vdProfiles.entrySet())lifecycle.validateVDTaskProfiles(entry.getKey(),entry.getValue(),runtimeNamespace);
+        var selectedVds=new TreeSet<UUID>();
+        for(var definition:definitions){var target=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);if("VD".equals(target.get("mode")))selectedVds.add(uuid(target.get("vdId")));}
+        var frames=sensorInputs.capture(selectedVds,stream);
+        for(var definition:definitions) {
+            var target=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);
+            RuntimeParameters.merge(definition.parametersJson(),JSON.canonical(parameters),"VD".equals(target.get("mode"))?frames.get(uuid(target.get("vdId"))):null);
+        }
         var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
         var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,vdId,JSON.canonical(taskExecutions));
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,definitions,stream?Set.of():dag.roots(),taskRemoteTargets);
+        for(var task:repository.tasks(run.id()))if(task.initialVdId()!=null && frames.containsKey(task.initialVdId()))repository.saveVDInput(task.id(),task.initialVdId(),frames.get(task.initialVdId()));
         if(stream)streams.configure(run,runtimeNamespace,streamInputs,sessions);
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
         return new Creation<>(repository.run(run.id(),false).orElseThrow(),true);
@@ -125,7 +148,7 @@ public class ExecutionService {
     private TaskSnapshot snapshot(Task task) {
         var attempts=repository.attempts(task.id());
         var latest=attempts.isEmpty()?null:telemetry.recent(attempts.getFirst().id(),1).stream().findFirst().orElse(null);
-        return new TaskSnapshot(task,attempts,offloads.forTask(task.id()),latest);
+        return new TaskSnapshot(task,attempts,offloads.forTask(task.id()),latest,repository.vdInput(task.id()).orElse(null));
     }
     @Transactional
     public WorkflowRun cancelRun(UUID id,String body) {

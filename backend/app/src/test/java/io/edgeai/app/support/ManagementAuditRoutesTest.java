@@ -12,7 +12,7 @@ class ManagementAuditRoutesTest {
             assertThat(source).isNotNull();Map<String,Object> contract=new Yaml().load(source);
             var expected=new HashSet<String>();
             for (var path:((Map<String,Map<String,Object>>)contract.get("paths")).entrySet()) {
-                if (!path.getKey().startsWith("/api/v1/")) continue;
+                if (!path.getKey().startsWith("/api/")) continue;
                 for (var operation:path.getValue().entrySet())
                     if (operation.getValue() instanceof Map<?,?> value && value.containsKey("operationId"))
                         expected.add(operation.getKey().toUpperCase()+" "+path.getKey()+" "+value.get("operationId"));

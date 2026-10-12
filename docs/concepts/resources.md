@@ -10,7 +10,7 @@ EdgeAI는 규격, 실제 자원, 실행 인스턴스를 서로 다른 리소스�
 
 | 종류 | 정의하는 대상 | 소비하는 기능 |
 |---|---|---|
-| DEVICE | 입력 장치의 규격 | 앱 등록 장치 |
+| DEVICE | 이전 입력 장치의 규격 | 기존 실행 이력의 호환 참조 |
 | SERVICE | 실행 이미지·입출력 등 처리 모듈 규격 | Spring DAG, 가상 장치 실행 |
 | VD | 원본 슬롯·서비스 연결 등 가상 장치 규격 | 가상 장치 등록 |
 
@@ -21,12 +21,14 @@ EdgeAI는 규격, 실제 자원, 실행 인스턴스를 서로 다른 리소스�
 **노드**는 Kubernetes가 관측하는 실행 자원입니다. 서버와 엣지 디바이스는 명시적인 노드 라벨로
 분류합니다. 장비 이름이나 ARM/x86만으로 역할을 추측하지 않습니다.
 
-**앱 등록 장치(Device)**는 EdgeAI가 관리하는 입력 장치의 신원입니다. DEVICE 프로필을 참조하며
-세션과 관측 보고로 연결 상태를 관리합니다. 새로 등록한 장치는 보고를 받기 전까지 연결 상태를 알 수 없습니다.
+**센서 디바이스(Device)**는 KubeEdge Device/DeviceStatus CRD를 원본으로 사용합니다. 연결·항목 설정은
+DeviceModel/Device CRD로 변환되고 노드·프로토콜별 Mapper를 공유합니다. Physical과 Virtual은 같은
+CRD/property 인터페이스를 사용합니다. VD는 이 디바이스의 이름·UID·DeviceModel을 직접 참조합니다.
+별도 앱 장치 등록은 종료됐으며, 이전 UUID 장치·세션은 기존 실행 이력을 위한 호환 데이터로만 보존합니다.
 
-**EdgeX 센서**의 원본은 EdgeX Device·Profile입니다. Core Metadata 목록과 Core Data 측정값을
-조회합니다. EdgeAI Device 등록과 자동 동기화되는 동일한 레코드는 아닙니다.
-채널별 논리 장치가 여러 개라면 물리 보드 한 대가 여러 센서 행으로 표시될 수 있습니다.
+센서 화면의 저장 Property 규격은 프로토콜별 항목 설정을 재사용하며 `/api/device-profiles`로 관리합니다.
+이 규격과 `/api/v1/profiles`의 버전형 DEVICE/SERVICE/VD 프로필은 다른 리소스입니다.
+기존 장치의 항목 추가·삭제는 연결 설정을 재사용하고 새 장치나 공유 Mapper를 만들지 않습니다.
 
 ## 가상 장치
 
@@ -41,8 +43,8 @@ EdgeAI는 규격, 실제 자원, 실행 인스턴스를 서로 다른 리소스�
 
 ```mermaid
 flowchart LR
-  DP[DEVICE 프로필 버전] --> D[앱 등록 장치]
-  D --> B[VD 원본 연결]
+  DM[DeviceModel] --> D[KubeEdge 센서 디바이스]
+  D --> B[VD 원본 연결: 이름·UID·모델]
   VP[VD 프로필 버전] --> V[가상 장치 등록]
   SP[SERVICE 프로필 버전] --> V
   B --> V

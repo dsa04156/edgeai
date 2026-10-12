@@ -99,9 +99,26 @@ select { min-width: 0; max-width: 100%; }textarea { resize: vertical; line-heigh
 .filter-form { justify-content: flex-start; align-items: end; margin: 16px 0; }.filter-form label { flex: 1; max-width: 400px; }
 .empty { padding: 32px 20px; margin: 16px 0; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: 13px; text-align: center; }.empty strong { color: var(--secondary); }.empty p { margin: 8px 0 16px; }
 .table-scroll { overflow-x: auto; overscroll-behavior-x: contain; margin-top: 16px; }table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }th { color: var(--muted); background: var(--control); font-size: 11px; font-weight: 500; white-space: nowrap; }th, td { padding: 12px 16px; border-bottom: 1px solid var(--line); }td { font-variant-numeric: tabular-nums; }tbody tr:last-child td { border-bottom: 0; }tbody tr:hover { background: var(--control); }tr[data-selected=true] { background: var(--signal-surface); }
+.managed-device-list { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); }
+.managed-device + .managed-device { border-top: 1px solid var(--line); }
+.managed-device > summary { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 4px 16px; padding: 16px; list-style: none; color: var(--ink); }
+.managed-device > summary::-webkit-details-marker { display: none; }
+.managed-device > summary::after { content: "+"; grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: center; font-size: 20px; color: var(--secondary); }
+.managed-device[open] > summary::after { content: "−"; }
+.managed-device > summary:hover, .managed-device[open] > summary { background: var(--control); }
+.managed-device[open] > summary { margin-bottom: 0; }
+.managed-device-identity, .managed-device-meta, .managed-device-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
+.managed-device-identity { grid-column: 1; }
+.managed-device-identity strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.managed-device-meta { grid-column: 1; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.managed-device-content { padding: 16px; border-top: 1px solid var(--line); min-width: 0; }
+.managed-device-content h3 { margin: 0; font-size: 14px; }
+.managed-device-content > form { margin-top: 16px; }
 .version-link { text-align: left; border: 0; color: var(--ink); background: transparent; padding: 8px 0; overflow-wrap: anywhere; font-weight: 600; }.version-link:hover:not(:disabled) { color: var(--signal); background: transparent; }.version-link span { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }.pagination button { font-size: 11px; min-height: 44px; padding: 6px 12px; }
 .publish-fields { border: 0; margin: 0; padding: 0; display: grid; gap: 16px; min-width: 0; }.publish-fields > button { justify-self: start; }.publish-fields legend { margin-bottom: 12px; font-size: 13px; font-weight: 600; }
+.profile-detail-title { scroll-margin-top: 24px; }
+.vd-prerequisites { display: grid; gap: 12px; margin-bottom: 24px; }.vd-prerequisite { padding: 12px 16px; border: 1px solid var(--line); border-radius: 6px; scroll-margin-top: 24px; }.vd-prerequisite > summary { font-weight: 600; cursor: pointer; }.vd-prerequisite[open] > summary { margin-bottom: 16px; }.vd-prerequisite form { margin-top: 16px; }
 .notice, .error { padding: 12px 16px; border-radius: 6px; overflow-wrap: anywhere; font-size: 13px; }.notice { color: var(--signal); background: var(--signal-surface); }.error { color: var(--error); background: var(--error-surface); }
 .digest { font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }pre { font-size: 12px; padding: 16px; overflow: auto; max-height: 480px; background: var(--canvas); border: 1px solid var(--line); border-radius: 6px; }
 dl { margin: 16px 0; }dl > div { display: flex; justify-content: space-between; gap: 24px; padding: 12px 0; border-bottom: 1px solid var(--line); }dt { color: var(--secondary); font-size: 12px; }dd { margin: 0; text-align: right; font-size: 12px; overflow-wrap: anywhere; min-width: 0; }

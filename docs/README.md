@@ -10,6 +10,8 @@ EdgeAI는 엣지 AI 서버, 엣지 디바이스, 센서와 가상 장치를 관�
 3. [첫 프로필 등록](getting-started/first-profile.md)을 따라 등록·조회·정리 흐름을 익힙니다.
 4. 실제 장비가 있는 환경은 [인프라 연결](guides/infrastructure-inventory.md)과 [센서 등록](guides/sensor-registration.md)·[센서 사용](guides/sensor-controls-and-vd-deletion.md)으로 이어갑니다.
 
+KubeEdge 장치 실행 계층은 [Mapper 구성](../deploy/kubeedge/README.md)을 확인하세요.
+
 ## 목적별 문서
 
 | 문서 영역 | 다루는 내용 | 시작 문서 |
@@ -31,6 +33,7 @@ DB 제약은 Flyway migration이 기준입니다. [원 설계와 현재 구현](
 
 ## 개발 기록
 
-[설계 결정](adr/), [검증 기록](evidence/), [과거 문서](history/), [단계별 요구사항](requirements/)은
-설계·시험 당시의 근거입니다. 사용자 안내와 별도로 찾아볼 수 있으며 당시의 성공·제약을 현재 배포 상태로 해석하지 않습니다.
+[설계 결정](adr/)과 [단계별 요구사항](requirements/)은 구현 경계와 수용 기준을 설명합니다.
+과거 검증 보고서와 상태 문서 복사본은 Git 이력에서 확인합니다. 기존 인용은 해당 커밋으로 연결하며,
+당시 성공·제약을 현재 배포 상태로 해석하지 않습니다.
 세부 복구 명령과 구현 계약은 [운영 심화 자료](operations/backup-and-recovery.md)에서 필요한 범위만 선택합니다.

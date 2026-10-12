@@ -24,7 +24,7 @@ HTTP 대기와 무관하게 계산 lease/step timeout/취소를 강제한다. �
 세션은 동일 볼륨의 journal·실행 규격을 복구하고 계산을 재개할 수 있다. 로컬
 complete/settled에서도 heartbeat와 ACK 재전송을 유지한다. 제어 서버가 별도로 종료를
 승인하기 전까지 Result를 확정하거나 성공 종료하지 않는다.
-실제 HTTPS/MQTT와 Spring 검증은 [세션 실행 기록](../evidence/m7-stream-session.md)을 따른다.
+실제 HTTPS/MQTT와 Spring 검증은 [세션 실행 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-session.md)을 따른다.
 
 ## 공개 실행 연결 전 필요한 조건
 

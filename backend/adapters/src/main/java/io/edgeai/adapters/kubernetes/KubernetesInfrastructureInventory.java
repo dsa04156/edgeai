@@ -9,7 +9,7 @@ import java.util.concurrent.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Fixed node GET path only. Sensor inventory belongs exclusively to EdgeX. */
+/** Fixed node GET path only. Sensor inventory belongs to the Device CRD gateway. */
 public final class KubernetesInfrastructureInventory implements InfrastructureSource, AutoCloseable {
     private final KubernetesRuntimeHttp http;
     private final String context;

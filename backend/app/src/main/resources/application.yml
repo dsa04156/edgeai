@@ -24,11 +24,12 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
-  edgex:
-    enabled: ${EDGEAI_EDGEX_ENABLED:false}
-    metadata-url: ${EDGEAI_EDGEX_METADATA_URL:http://edgex-core-metadata.edgex-system.svc:59881}
-    data-url: ${EDGEAI_EDGEX_DATA_URL:http://edgex-core-data.edgex-system.svc:59880}
-    command-url: ${EDGEAI_EDGEX_COMMAND_URL:http://edgex-core-command.edgex-system.svc:59882}
+  devices:
+    namespace: ${EDGEAI_DEVICE_NAMESPACE:edgeai-devices}
+    data-broker: ${EDGEAI_DEVICE_DATA_BROKER:tcp://127.0.0.1:1883}
+    mapper-arm64: ${EDGEAI_MAPPER_ARM64:192.168.0.56:5000/edgeai/mapper@sha256:ed37d5483be78a2b121a8722e6b5e2253cba14e49f7d382bf0de2b87a4591d36}
+    mapper-amd64: ${EDGEAI_MAPPER_AMD64:192.168.0.56:5000/edgeai/mapper@sha256:83585ac2bf1d0dc59538798af8fdcc9de7c5c35c7f48a33e2ebaff70e9c91c2a}
+    mapper-sensehat-arm64: ${EDGEAI_MAPPER_SENSEHAT_ARM64:192.168.0.56:5000/edgeai/mapper-sensehat@sha256:a5d58a40545c4fe1f712c7b1f0a3a859d9e4fc4213bf8ca1e98af4f8307bf66f}
   infrastructure:
     source: ${EDGEAI_INFRASTRUCTURE_SOURCE:disabled}
     context: ${EDGEAI_INFRASTRUCTURE_CONTEXT:}

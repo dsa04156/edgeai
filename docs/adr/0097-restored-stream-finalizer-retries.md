@@ -26,4 +26,4 @@ offload 경로로 보내며, 계산 중 peer·봉인되지 않은 retry·모순�
 이 경로는 기록된 최종 저장 재시도의 기한 정리다. 새 finalizer 실행, 실제 결과 재생성,
 외부 시작 권한과 종합 복구 활성화는 별도 구현·수용 대상이다. 시험은 실제 복원 DB와
 TLS MQTT/S3·Kubernetes 종료 증거를 사용하되 업무 상태 binding은 명시적 fixture다.
-[검증 근거](../evidence/m9-restored-stream-finalizers.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-restored-stream-finalizers.md)를 따른다.

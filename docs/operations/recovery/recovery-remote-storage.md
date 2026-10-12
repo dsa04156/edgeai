@@ -59,4 +59,4 @@ PUT을 보내고 새 version을 실제 GET/크기/SHA로 검증한다. 내용이
 `reusedVersions`를 구분한다. verify는 latest 대신 receipt의 version ID를 사용한다.
 기존 확정 Result/체크포인트 전체의 보존은 [DB 참조 검증](recovery-references.md)을 별도로
 확인해야 한다. 이 명령은 DB Result·Task·Run 상태를 바꾸거나 서비스를 재개하지 않는다.
-[ADR0077](../../adr/0077-recovery-remote-storage.md), [실제 검증](../../evidence/m9-recovery-remote-storage.md)을 따른다.
+[ADR0077](../../adr/0077-recovery-remote-storage.md), [실제 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-storage.md)을 따른다.

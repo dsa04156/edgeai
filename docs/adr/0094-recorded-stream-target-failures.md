@@ -32,4 +32,4 @@ WORKLOAD_FAILED, claim 전 peer는 관측 가능한 JOB_FAILED 사유를 사용�
 종합 재가동은 별도 남은 범위다.
 
 서버와 같은 CANCELLING Run 이력으로 전체36개를 `170123Z-963eee1a`에서 통과했다.
-[실제 검증 근거](../evidence/m9-recorded-stream-target-failures.md)를 따른다.
+[실제 검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recorded-stream-target-failures.md)를 따른다.

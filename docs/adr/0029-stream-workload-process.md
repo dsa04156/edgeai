@@ -37,4 +37,4 @@ S3 checkpoint와 새로운 Attempt/generation 복원은 이 계약만으로 충�
 한다. END 처리 ACK가 유실된 뒤 upstream이 재전송하는 경우에도 동일 watermark를 응답해야 한다.
 공개 제어 서버·SERVICE Profile 실행 계약·Kubernetes Job/VD 실행 연결은 후속 수용 게이트다.
 
-검증은 [실제 프로세스·MQTT·Spring 기록](../evidence/m7-stream-workload.md)을 따른다.
+검증은 [실제 프로세스·MQTT·Spring 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-workload.md)을 따른다.

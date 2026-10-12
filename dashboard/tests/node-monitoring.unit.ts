@@ -8,7 +8,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MonitoredNodes } from "../app/components/monitored-nodes";
 import { NodeUsage } from "../app/components/node-usage";
-import { ClusterSensors } from "../app/components/cluster-sensors";
 import type { InfrastructureSnapshot } from "../lib/infrastructure";
 
 const now = Date.parse("2026-10-06T06:20:00Z");
@@ -119,12 +118,4 @@ test("server and edge lists use fresh cluster roles and work without performance
   assert.match(edge, /edge-device/); assert.doesNotMatch(edge, /arm-server/);
   assert.deepEqual(monitoredNodes({ ...live, now: now + 61000 }, [], infrastructure), []);
   assert.equal(monitoredNodes(state, [node])[0].kind, "UNKNOWN");
-});
-
-test("EdgeX sensor display preserves source state and does not imply live readings", () => {
-  const html = renderToStaticMarkup(createElement(ClusterSensors, { snapshot: infrastructure, failed: false }));
-  assert.match(html, /sensehat-humidity/); assert.match(html, /edge-device/); assert.match(html, /UNLOCKED/); assert.match(html, /UP/);
-  assert.doesNotMatch(html, /온라인/);
-  const failed = renderToStaticMarkup(createElement(ClusterSensors, { snapshot: { ...infrastructure, sensorsStatus: "UNAVAILABLE" }, failed: false }));
-  assert.doesNotMatch(failed, /sensehat-humidity/); assert.match(failed, /불러오지 못했습니다/);
 });

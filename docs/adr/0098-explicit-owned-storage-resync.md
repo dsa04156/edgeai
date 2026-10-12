@@ -22,4 +22,4 @@ bytes/SHA-256을 대상에서 확인하고 소유 rule/target을 제거한 뒤�
 `MINIO_SCANNER_SPEED=slowest`로 시작한11개 실제 TLS 회귀가 통과했다. 기존/이전 버전,
 빈 파일·한글 key·256KiB 파일, source 종료와 target 재시작, 기존 bucket/rule/orphan 보존,
 잘못된 rule ID의 resync 거절, 검증 장애·누락/손상 거절을 포함한다.
-[재현과 검증](../evidence/m9-storage-explicit-resync.md)을 따른다.
+[재현과 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-storage-explicit-resync.md)을 따른다.

@@ -52,4 +52,4 @@ bash scripts/test/test-recovery-kubernetes-live.sh --context <시험-context>
 
 시험용 Pod는 존재하지 않는 노드에 지정해 모델 프로세스를 시작하지 않는다. 실제 Kubernetes
 메타데이터 목록과 DB 조회 시험이며 실제 producer 종료/복구 시험과 구분한다. 시험은 생성한
-namespace UID와 DB OID를 확인하고 정리한다. [검증 근거](../../evidence/m9-recovery-kubernetes.md).
+namespace UID와 DB OID를 확인하고 정리한다. [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes.md).

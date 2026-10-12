@@ -35,4 +35,4 @@ Job의 active/ready 및 완료 계수·미반영 종료 UID도 보존된 자식�
 Job controller 상태만으로 전역 중지나 실행 이력의 완전성을 주장하지 않는다.
 `globalQuiescenceProven=false`, `activated=false`와 복원 격리를 유지한다.
 
-[실제 검증](../evidence/m9-recovery-unclaimed-jobs.md)을 따른다.
+[실제 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-unclaimed-jobs.md)을 따른다.

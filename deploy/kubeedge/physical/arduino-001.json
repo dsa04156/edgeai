@@ -1,0 +1,69 @@
+{
+  "name": "arduino-001",
+  "kind": "physical",
+  "protocol": "serial-json",
+  "targetNode": "etri-dev0001-jetorn",
+  "collectionInterval": 1000,
+  "protocolConfig": {
+    "devicePath": "/dev/edgeai/arduino-001",
+    "deviceId": "arduino-001",
+    "baudRate": 115200,
+    "timeoutMs": 4000
+  },
+  "properties": [
+    {
+      "name": "temperature_raw",
+      "sensor": "temperature",
+      "jsonPath": "raw",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "light_raw",
+      "sensor": "light",
+      "jsonPath": "value",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "magnetic_raw",
+      "sensor": "magnetic",
+      "jsonPath": "value",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "acceleration_x_raw",
+      "sensor": "acceleration",
+      "jsonPath": "x",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "acceleration_y_raw",
+      "sensor": "acceleration",
+      "jsonPath": "y",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    },
+    {
+      "name": "acceleration_z_raw",
+      "sensor": "acceleration",
+      "jsonPath": "z",
+      "dataType": "int32",
+      "unit": "raw",
+      "scale": 1,
+      "offset": 0
+    }
+  ]
+}

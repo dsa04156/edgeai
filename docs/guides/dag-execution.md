@@ -43,6 +43,17 @@ JSON 편집 파일은 `edgeai.workflow-editor/v1` 형식으로 DAG와 캔버스 
 
 ## 고급 기능
 
+API 실행 요청은 `device`에 CRD 장치 이름과 필요한 property를 지정할 수 있습니다.
+
+```json
+{"device":{"id":"sensor-01","outputs":["temperature"]},"parameters":{}}
+```
+
+`sensor-01`은 설치 환경에 등록된 장치 이름으로 바꿉니다. Run 접수 시 ONLINE 장치의 최신값을
+`parameters.device.values`와 `parameters.device.observedAt`으로 고정하며 OFFLINE 또는 없는 항목은 거절합니다.
+같은 `Idempotency-Key` 재호출은 값을 다시 읽지 않습니다. 이는 BATCH 입력이며 연속 MQTT STREAM
+연결이나 UUID VD 원본 연결을 자동으로 만들지 않습니다. [Mapper 데이터 경로](../../deploy/kubeedge/README.md#데이터-경로)를 확인합니다.
+
 재시도·NODE/Remote 전환·STREAM 그룹의 조건은 [API 참고](../reference/api.md)와
 [Remote 설정](../operations/remote.md)을 따릅니다. 일반 SERVICE의 재시작과 checkpoint 복원은
 서로 다른 계약이며 실제 외부 제공자 수용은 별도입니다.

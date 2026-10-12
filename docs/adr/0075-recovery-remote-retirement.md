@@ -1,6 +1,6 @@
 # ADR0075: 복원 DB의 Remote 종료 관측·runtime·명령 원자적 정리
 
-상태: 로컬 실제 PG16/TLS 검증. [근거](../evidence/m9-recovery-remote-retirement.md).
+상태: 로컬 실제 PG16/TLS 검증. [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-retirement.md).
 
 ADR0073/0074는 제공자 차단·실제 계산 종료와 복원 DB의 전체 이력을 대조한다. 과거 DB의
 runtime과 CREATE 명령이 남으면 이후 worker가 이미 끝난 할당을 다시 처리할 수 있다.

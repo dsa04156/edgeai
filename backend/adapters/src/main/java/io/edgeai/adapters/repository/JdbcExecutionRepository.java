@@ -12,6 +12,15 @@ import org.springframework.jdbc.core.RowMapper;
 public final class JdbcExecutionRepository implements ExecutionRepository {
     private final JdbcTemplate jdbc;
     public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    public void lockRequestKey(UUID key) {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))","edgeai-run-create:"+key);
+    }
+    public void saveVDInput(UUID taskId,UUID vdId,String document) {
+        jdbc.update("INSERT INTO edgeai.vd_task_input(task_id,vd_id,document) VALUES (?,?,CAST(? AS jsonb))",taskId,vdId,document);
+    }
+    public Optional<String> vdInput(UUID taskId) {
+        return jdbc.query("SELECT document::text FROM edgeai.vd_task_input WHERE task_id=?",(r,n)->r.getString(1),taskId).stream().findFirst();
+    }
     private static final RowMapper<WorkflowRun> RUN=(r,n)->new WorkflowRun(r.getObject("id",UUID.class),r.getObject("workflow_version_id",UUID.class),r.getObject("idempotency_key",UUID.class),r.getString("request_digest"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("parameters"),new RetryPolicy(r.getInt("retry_max_attempts"),r.getInt("retry_backoff_seconds"),r.getInt("retry_max_elapsed_seconds"),Set.of((String[])r.getArray("retry_on").getArray())),r.getString("offload_policy"),r.getString("state"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),RemoteTargets.read(r),r.getObject("vd_id",UUID.class),r.getString("task_executions"));
     private static final RowMapper<Task> TASK=(r,n)->new Task(r.getObject("id",UUID.class),r.getObject("run_id",UUID.class),r.getObject("definition_id",UUID.class),r.getString("task_key"),r.getString("state"),r.getString("cancellation_reason"),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),r.getString("initial_mode"),r.getObject("initial_node_id",UUID.class),r.getObject("initial_vd_id",UUID.class),RemoteTargets.read(r,"initial_"));
     private static final RowMapper<TaskAttempt> ATTEMPT=(r,n)->new TaskAttempt(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getInt("number"),r.getLong("epoch"),r.getString("state"),r.getString("mode"),r.getObject("node_id",UUID.class),r.getString("cause"),List.of((String[])r.getArray("excluded_node_names").getArray()),r.getTimestamp("created_at").toInstant(),r.getTimestamp("updated_at").toInstant(),RemoteTargets.read(r),r.getObject("vd_id",UUID.class));

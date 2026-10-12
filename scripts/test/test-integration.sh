@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/../lib.sh"
 load_env
+source "$EDGEAI_ROOT/scripts/test/isolated-db.sh"
+isolated_test_db
 python3 - <<'PY'
 import socket,os
 try:

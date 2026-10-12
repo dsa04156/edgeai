@@ -38,5 +38,5 @@ journal은 배정이 연결되면 쓰기 트랜잭션 시작과 commit 직전에
 전달한 패킷을 회수하거나 broker ACL 회수 지연 동안 악성 client의 전송을 막는 기능은 아니다.
 consumer의 현재 binding/기한 검사와 broker 권한 worker를 함께 사용해야 한다.
 
-검증: [SDK 배정·lease 기록](../evidence/m7-stream-client.md). S3 checkpoint/새 Pod 복원,
+검증: [SDK 배정·lease 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-client.md). S3 checkpoint/새 Pod 복원,
 다중 장치 공개 API·UI·실제 Kubernetes 실행과 M5 잔여/M8–M10 수용 범위는 유지한다.

@@ -61,4 +61,4 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-가상환경>/bin/python \
 시험은 실제 Mosquitto/mosquitto_ctrl/Dynamic Security plugin·OpenSSL이 필요하다.
 비표준 설치는 `EDGEAI_MOSQUITTO_BINARY`, `EDGEAI_MOSQUITTO_CTRL_BINARY`,
 `EDGEAI_MOSQUITTO_DYNAMIC_SECURITY_PLUGIN`을 지정한다. 전용 로컬 TLS 프로세스만 생성하며
-운영 브로커에 연결하지 않는다. [검증 범위](../../evidence/m9-recovery-mqtt-fence.md).
+운영 브로커에 연결하지 않는다. [검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-mqtt-fence.md).

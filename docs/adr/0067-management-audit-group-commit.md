@@ -8,7 +8,7 @@
 실험 구현은 비공개 작업 자료에 보존하고 서비스 변경은 되돌렸다. 이 결정은 기존 부하 실패를
 해결했다는 뜻이 아니며, DB 지연과 합의 성능 수용은 계속 남는다.
 
-후속 [동기화 빈도·20ms 비교](../evidence/m8-audit-storage-diagnostics.md)는 별도 작업 복사본의
+후속 [동기화 빈도·20ms 비교](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m8-audit-storage-diagnostics.md)는 별도 작업 복사본의
 측정이다. 비계측 지속 부하는 통과했으나 공유 호스트 변동과 진단 기록 경계의 영향을 구분하며,
 이 문서의 미채택 상태나 제품 저장 방식을 변경하지 않는다.
 
@@ -35,4 +35,4 @@ INSERT 또는 commit 실패는 해당 묶음 전체에 실패를 전달한다. �
 않으며, 이미 도메인이 실행된 결과의 유실은 기존 OUTCOME_UNKNOWN으로 나타난다.
 
 실험의 commit 전 응답 금지·묶음 rollback/복구·interrupt·예외와 실제 PostgreSQL 정합성은
-검증했다. [부하 실패와 근거](../evidence/m9-audit-group-commit.md)를 함께 보존한다.
+검증했다. [부하 실패와 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-audit-group-commit.md)를 함께 보존한다.

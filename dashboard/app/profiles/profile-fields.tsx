@@ -40,6 +40,6 @@ export function ProfileFields({ kind, value, onChange, profiles }: { kind: Profi
         </fieldset>;
       })}
     </>}
-    {kind === "VD" && spec.apiVersion === "edgeai.vd/v1" && <VDProfileFields spec={spec} profiles={profiles} update={update} />}
+    {kind === "VD" && spec.apiVersion === "edgeai.vd/v2" && <VDProfileFields spec={spec} profiles={profiles} update={update} />}
   </div>;
 }

@@ -46,14 +46,9 @@ class DeviceIntegrationTest {
     private String perform(MockHttpServletRequestBuilder request,int expected) throws Exception {
         return mvc.perform(request.with(user("test")).with(csrf())).andExpect(status().is(expected)).andReturn().getResponse().getContentAsString();
     }
-    @Test void httpLifecycleCoversRegistrationRenameSessionObservationAndRelease() throws Exception {
-        var body=createBody(key());String input=encode(body);
-        var created=json.readTree(perform(post("/api/v1/devices").contentType("application/json").content(input),201));
-        String id=created.get("id").asText(),path="/api/v1/devices/"+id;
-        assertThat(created.get("connectionStatus").asText()).isEqualTo("UNKNOWN");
-        assertThat(created.get("sourceMode").asText()).isEqualTo("SYNTHETIC");
-        assertThat(json.readTree(perform(post("/api/v1/devices").contentType("application/json").content(input),200)).get("id").asText()).isEqualTo(id);
-        perform(post("/api/v1/devices").contentType("application/json").content(input.replace("시험 센서","다른 센서")),409);
+    @Test void archivedDeviceSessionsAndHistoryRemainAccessibleAfterRegistrationRetirement() throws Exception {
+        perform(post("/api/v1/devices").contentType("application/json").content("{}"),410);
+        var archived=device();String id=archived.id().toString(),path="/api/v1/devices/"+id;
         perform(get("/api/v1/devices?limit=1"),200);
         String renamed=perform(patch(path).contentType("application/json").content("{\"revision\":0,\"displayName\":\"새 이름\"}"),200);
         assertThat(json.readTree(renamed).get("revision").asLong()).isEqualTo(1);
@@ -126,10 +121,10 @@ class DeviceIntegrationTest {
         var body=new HashMap<>(createBody(key()));
         var wrong=profiles.publish(ProfileIdentity.Kind.SERVICE,encode(Map.of("key",key(),"version","1.0.0","spec",Map.of("image","sample")))).version();
         body.put("profileVersionId",wrong.id().toString());
-        perform(post("/api/v1/devices").contentType("application/json").content(encode(body)),400);
+        perform(post("/api/v1/devices").contentType("application/json").content(encode(body)),410);
         for(String invalid:List.of("{}","[]","{\"key\":\"a\",\"key\":\"b\"}",encode(createBody(key())).replace("SYNTHETIC","INVALID")))
-            perform(post("/api/v1/devices").contentType("application/json").content(invalid),400);
-        perform(post("/api/v1/devices").contentType("application/json").content("{\"data\":\""+"a".repeat(17000)+"\"}"),413);
+            perform(post("/api/v1/devices").contentType("application/json").content(invalid),410);
+        perform(post("/api/v1/devices").contentType("application/json").content("{\"data\":\""+"a".repeat(17000)+"\"}"),410);
         perform(get("/api/v1/devices?limit=101"),400);perform(get("/api/v1/nodes?offset=-1"),400);
         perform(get("/api/v1/devices/"+UUID.randomUUID()),404);perform(get("/api/v1/nodes/"+UUID.randomUUID()),404);
         var d=device();var s=session(d);

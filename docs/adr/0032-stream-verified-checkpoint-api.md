@@ -1,7 +1,7 @@
 # ADR0032 — 인증된 스트림 체크포인트 확정
 
 상태: 내부 HTTP·PostgreSQL·실제 S3 연결 구현. 자동 Session 저장·새 Attempt/세대 인계와
-공개 STREAM 실행은 후속이다. [검증 범위](../evidence/m7-stream-checkpoint-api.md).
+공개 STREAM 실행은 후속이다. [검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-api.md).
 
 ## 계약과 저장
 

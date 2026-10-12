@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/../lib.sh"
 load_env
+source "$EDGEAI_ROOT/scripts/test/isolated-db.sh"
+isolated_test_db
 export EDGEAI_STORAGE_URL="${EDGEAI_STORAGE_URL:-http://127.0.0.1:$EDGEAI_MINIO_PORT}"
 test_status=0
 test_started=$(date +%s)

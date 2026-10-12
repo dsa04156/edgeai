@@ -878,9 +878,9 @@ class StreamRunIntegrationTest {
         assertThat(task(expired,"child").state()).isEqualTo("SKIPPED");assertThat(task(expired,"independent").state()).isEqualTo("RUNNING");
         for(String name:List.of("source","sink")){assertThat(executions.retry(task(expired,name).id())).isEmpty();assertThat(executions.attempts(task(expired,name).id())).hasSize(1);}
     }
-    @Test void routeInspectionIsAuthenticatedPaginatedAndContainsOnlyProvenanceAndStatus()throws Exception{
+    @Test void routeInspectionIsPaginatedAndContainsOnlyProvenanceAndStatus()throws Exception{
         UUID id=create(definition(false,false));String path="/api/v1/workflow-runs/"+id+"/streams";
-        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path)).andExpect(status().isOk());
         var first=(Map<?,?>)json.decode(perform(get(path+"?limit=2"),200));assertThat((List<?>)first.get("items")).hasSize(2);assertThat(first.get("nextOffset").toString()).isEqualTo("2");
         var last=(Map<?,?>)json.decode(perform(get(path+"?limit=2&offset=2"),200));assertThat((List<?>)last.get("items")).hasSize(1);assertThat(last.get("nextOffset")).isNull();
         assertThat(perform(get(path+"?limit=101"),400)).contains("INVALID_WORKFLOW");assertThat(perform(get("/api/v1/workflow-runs/"+UUID.randomUUID()+"/streams"),404)).contains("RUN_NOT_FOUND");

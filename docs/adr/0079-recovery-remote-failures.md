@@ -1,7 +1,7 @@
 # ADR0079: 복원 Remote 실패·취소·재시도 대기 정리
 
 상태: 실제 PG16/API/Remote 결합15개 검증 완료.
-[검증 근거](../evidence/m9-recovery-remote-failures.md). 새 CI/배포는 별도 확인한다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-failures.md). 새 CI/배포는 별도 확인한다.
 
 ADR0075는 Remote 관측·runtime·명령을 종료하고 ADR0078은 성공 Result를 확정한다.
 실패·취소 작업은 별도 CLI에서 원래 실행 정책을 유지하며 정리한다. 원본 Remote와 DB가

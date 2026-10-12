@@ -1,6 +1,6 @@
 # ADR0077: 회수한 Remote 파일의 고정 S3 버전 등록
 
-상태: 로컬 실제 TLS MinIO 검증. [근거](../evidence/m9-recovery-remote-storage.md).
+상태: 로컬 실제 TLS MinIO 검증. [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-storage.md).
 
 ADR0076의 개인 파일 묶음은 원본 제공자 없이 검증할 수 있다. 이후 DB Result를 확정하려면
 플랫폼이 읽을 수 있는 버킷·object key·고정 version이 필요하다. 기존 S3ArtifactStore는 하나의

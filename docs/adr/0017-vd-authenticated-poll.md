@@ -51,4 +51,4 @@ REPLACE Operation을 남긴다. 이미 진행 중인 drain/replacement를 뒤집
 이 시험의 Kubernetes identity/Ready는 fixture다. ADR0016의 실제 클러스터 경계 시험과 구분하고,
 실제 Pod→서버 poll 전체 연결·API 프로세스 재시작·VD Task/Result/demo-vd는 후속 수용 게이트로 남긴다.
 `EDGEAI_VD_ENABLED=false` 기본값을 유지한다. 공개 provision/Operation/상태 API·UI도 이어서 연결한다.
-상세: [poll 검증 기록](../evidence/m6-vd-poll.md).
+상세: [poll 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-poll.md).

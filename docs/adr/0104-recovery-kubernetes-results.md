@@ -1,7 +1,7 @@
 # ADR 0104: 원래 시작·확정 결과 기록으로 격리 DB의 Kubernetes BATCH Result를 복원한다
 
 상태: 구현·실제 결합20개 검증 통과. 2026-10-05.
-[검증 근거](../evidence/m9-recovery-kubernetes-results.md). 새 원격 CI/배포는 별도다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-results.md). 새 원격 CI/배포는 별도다.
 
 ADR0101의 시작 기록, ADR0103의 DB 확정 결과 기록과 고정 출력 버전을 별도 S3 백업에서
 읽고 ADR0080의 보존 Pod 종료 증거와 대조한다. 사용자가 명시한 runtime만 반영한다.

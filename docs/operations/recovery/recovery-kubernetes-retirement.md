@@ -45,7 +45,7 @@ Job UID는 기록됐지만 Runner claim 전 장애가 난 경우에는 `--unclai
 `unclaimedJobs`는 이 별도 증거이며 원래 producer/node 필드는 채우지 않는다. Job UID가
 없거나 자식 Pod가 전혀 남지 않은 Job은 계속 미해결이다. 후속 workflow 명령에도 같은
 옵션이 필요하다. [ADR0084](../../adr/0084-recovery-unclaimed-jobs.md)와
-[실제56개 검증](../../evidence/m9-recovery-unclaimed-jobs.md)을 참고한다.
+[실제56개 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-unclaimed-jobs.md)을 참고한다.
 
 종료0은 커밋 후 재검증 일치, 종료2는 관측/신원 충돌 등 BLOCKED, 종료1은 입력/DB 오류
 등 FAIL이다. `failure.json`의 `databaseModified:null`은 커밋 여부가 확정되지 않았다는 뜻이다.
@@ -58,5 +58,5 @@ DB marker, quota, Pod finalizer를 이 명령 뒤에 임의로 해제하지 않�
 실제 합성 부모/자식 컨테이너와 별도 DB를 만들고, 종료 확인 뒤 소유 자원을 정리한다.
 CI에서는 정확히 빌드한 API 이미지의 JAR·검증된 Runner digest·Compose PostgreSQL17을
 사용해 kind 게이트에서 실행한다. [ADR0080](../../adr/0080-recovery-kubernetes-retirement.md),
-[기본 검증](../../evidence/m9-recovery-kubernetes-retirement.md),
-[VD Task 확장](../../evidence/m9-recovery-vd-tasks.md)과 [ADR0081](../../adr/0081-recovery-vd-task-retirement.md).
+[기본 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-kubernetes-retirement.md),
+[VD Task 확장](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-vd-tasks.md)과 [ADR0081](../../adr/0081-recovery-vd-task-retirement.md).

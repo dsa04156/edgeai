@@ -25,7 +25,7 @@ def redact(text):
     return re.sub(r"(?i)(authorization[:=]\s*).+", r"\1[REDACTED]", text)
 
 run_id = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-directory = Path("docs/evidence/runs") / run_id
+directory = Path("output/verification") / run_id
 directory.mkdir(parents=True)
 with (directory / "output.log").open("w") as log:
     try:

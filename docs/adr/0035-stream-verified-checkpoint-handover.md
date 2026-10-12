@@ -52,4 +52,4 @@ restore_latest=True, handover_latest=True)`로 명시적으로 연결한다. SDK
 서버 인계와 peer journal 전환은 별도다. Device/인접 Task가 새 세대의 같은 순번을 이어가도록
 하는 제어·배정과 SDK 인계, SERVICE/Runner 시작/종료·Result·공개 STREAM 및 실제 Kubernetes
 다중 장치 수용을 아직 연결해야 한다. 현재 공개 STREAM501과 M5 잔여/M7–M10 미완료를 유지한다.
-[검증과 fixture 경계](../evidence/m7-stream-checkpoint-handover.md)를 따른다.
+[검증과 fixture 경계](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-handover.md)를 따른다.

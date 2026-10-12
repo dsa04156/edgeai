@@ -107,10 +107,10 @@ EDGEAI_STREAM_PYTHON=<고정-Paho-환경>/bin/python \
 
 전용 namespace와 소유 DB/API·TLS MinIO/MQTT를 만들고 삭제한다. [ADR0092](../../adr/0092-restored-stream-workflows.md)에
 정의한 업무 상태 복구 범위이며 실제 엣지 모델·전체 서비스 재개 수용과는 별도다.
-[실제18개 검증 근거](../../evidence/m9-recovery-stream-workflows.md)를 참고한다.
+[실제18개 검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-workflows.md)를 참고한다.
 같은 시험에 `--offloads`를 추가하면 실제 source→target 교체와 복원 전환 검사를 포함한다.
-[전환 포함29개 근거](../../evidence/m9-recovery-stream-offloads.md)를 참고한다.
-기록된 target 실패 검사를 더한 [최신36개 근거](../../evidence/m9-recorded-stream-target-failures.md)도
+[전환 포함29개 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-stream-offloads.md)를 참고한다.
+기록된 target 실패 검사를 더한 [최신36개 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recorded-stream-target-failures.md)도
 같은 `--offloads` 시험으로 실행한다.
 `--finalizers`를 함께 지정하면 봉인된 작업별 재시도의 원래 기한·경쟁·원복·이력 보존도
 실제 복원 DB에서 검사한다. 검증 결과는 해당 실행 증거를 확인한다.

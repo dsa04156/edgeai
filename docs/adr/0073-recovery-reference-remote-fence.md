@@ -1,6 +1,6 @@
 # ADR0073: 참조 Remote 제공자의 영속 차단과 계산 종료
 
-상태: 구현. 검증 결과는 [복구 시험 근거](../evidence/m9-recovery-remote-fence.md)를 따른다.
+상태: 구현. 검증 결과는 [복구 시험 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-fence.md)를 따른다.
 
 복원 DB에는 백업 이후 만들어진 Remote 할당이 없을 수 있다. 플랫폼 DB의 알려진 ID만
 취소하면 이 실행을 놓친다. ADR0010의 SYNTHETIC 참조 제공자 전체에 새 요청 차단과

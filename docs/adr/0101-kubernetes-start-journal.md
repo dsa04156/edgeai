@@ -40,4 +40,4 @@ API 시계와 S3 관리 권한은 신뢰 경계다. 조건부 쓰기와 버전 �
 막지만 S3 Object Lock이나 관리자에 대한 변조 방지는 아니다. 복구 시 원본 writer 차단,
 진행 요청 소진, 모든 관련 버전의 백업 및 새 관측 검증을 결합해야 한다.
 이 기록을 복원 DB 전환/Result·STREAM 그룹에 반영하는 경로와 종합 재가동은 후속이다.
-[검증 근거](../evidence/m9-kubernetes-start-journal.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-kubernetes-start-journal.md)를 따른다.

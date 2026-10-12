@@ -1,6 +1,6 @@
 # ADR0076: 차단된 Remote의 미반영 성공 파일 회수
 
-상태: 로컬 실제 PG/TLS 검증. [근거](../evidence/m9-recovery-remote-outputs.md).
+상태: 로컬 실제 PG/TLS 검증. [근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-outputs.md).
 
 ADR0075가 runtime과 기존 명령을 종료해도 DB에 아직 확정하지 못한 SUCCEEDED 파일은
 제공자에 남을 수 있다. 일반 API는 ADR0073의 차단을 유지하므로 별도 복구 조회로 파일을

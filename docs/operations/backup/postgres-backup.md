@@ -77,5 +77,5 @@ bash scripts/collect-evidence.sh postgres-backup bash scripts/test/test-postgres
 시험은 별도의 합성 DB 두 개와 API를 만들고 정상 종료 시 소유 자원만 제거한다.
 덤프와 원본 API/SQL 로그는0700/0600의 `.tools/postgres-recovery-test-*`에 남는다.
 기본 결과 `.tools/postgres-backup-test.json`에는 시험 이름·개수·환경·정리 여부만 기록한다.
-CI는 `--report docs/evidence/runs/postgres-backup-report.json`으로 이 요약만 업로드한다.
-[검증 근거](../../evidence/m9-postgres-backup.md), [설계 결정](../../adr/0059-postgres-backup-restore.md).
+CI는 `--report output/verification/postgres-backup-report.json`으로 이 요약만 업로드한다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-postgres-backup.md), [설계 결정](../../adr/0059-postgres-backup-restore.md).

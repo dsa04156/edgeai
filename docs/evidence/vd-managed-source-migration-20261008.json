@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-08",
+  "decision": "docs/adr/0116-vd-managed-device-sources.md",
+  "scope": "Remove duplicate app Device registration UI and bind VD v2 sources directly to KubeEdge sensor names, pinned UID and DeviceModel.",
+  "verification": {
+    "backendUnit": { "tests": 188, "failures": 0, "errors": 0, "skipped": 0 },
+    "focusedPostgresIntegration": { "tests": 38, "failures": 0, "errors": 0, "skipped": 0 },
+    "vdProfileUiUnit": { "tests": 2, "failures": 0 },
+    "desktopMobileE2e": { "tests": 18, "failures": 0 },
+    "contract": "PASS: generated and packaged OpenAPI agreement; controller tests",
+    "dashboard": "PASS: lint, typecheck, production build",
+    "codeReview": "Standards and Spec reviewers confirmed UID refresh, lock ordering/concurrent deletion protection and final source/template integrity fixes; no outstanding findings.",
+    "fullPostgresIntegration": {
+      "database": "isolated temporary database, removed after verification",
+      "tests": 244,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0,
+      "remainingFailures": [
+        "ApiTlsIntegrationTest: expects 401, actual 200",
+        "ProfileIntegrationTest: expects 401, actual 200",
+        "RunnerApiIntegrationTest: expects 401, actual 200",
+        "StreamRunIntegrationTest: expects 401, actual 200",
+        "VDTaskIntegrationTest: expects 401, actual 400"
+      ],
+      "reason": "These tests retain authentication expectations inconsistent with the current passwordless management endpoints. Authentication implementation was not changed by this task."
+    }
+  },
+  "live": {
+    "dashboardPort": 13080,
+    "backendPort": 18080,
+    "flywayVersion": 45,
+    "registeredAppDevices": 0,
+    "virtualDevices": 0,
+    "removedTutorialVd": "tutorial-temperature-vd",
+    "removedTutorialDevice": "tutorial-temperature-01",
+    "removedRecordGetStatus": 404,
+    "retiredAppDevicePostStatus": 410,
+    "sensors": [
+      { "id": "arduino-001", "properties": 6, "state": "ONLINE", "mapperReady": true },
+      { "id": "sensehat-001", "properties": 11, "state": "ONLINE", "mapperReady": true }
+    ],
+    "sensorUidModelNodeProfileUnchanged": true,
+    "browser": "PASS: actual sensor list visible, retired tab absent, deleted tutorial absent, sensor-based VD setup visible, no page errors"
+  },
+  "testDataCleanup": {
+    "incident": "The initial full integration invocation used the developer database. Subsequent runs used isolated databases.",
+    "backup": "/tmp/edgeai-before-test-cleanup.dump",
+    "selection": "Only roots generated between 2026-10-08T10:51:23Z and 2026-10-08T10:52:37Z, their FK descendants, and identified fixture nodes were removed in a transaction.",
+    "deletedTestRoots": { "profiles": 678, "workflows": 209, "appDevices": 236, "virtualDevices": 96, "fixtureNodes": 110 },
+    "referentialIntegrity": "All composite and simple foreign keys checked after cleanup; no orphan references.",
+    "realNodeCache": "Ten real node rows refreshed from a read-only current Kubernetes snapshot after test snapshots marked them REMOVED.",
+    "retainedProfiles": 11,
+    "retainedRealNodes": 10,
+    "tutorialCleanup": "User-authorized exact tutorial VD and Device removed through release then registration-delete APIs; actual sensors untouched."
+  },
+  "limits": [
+    "Legacy immutable Device/session/STREAM history remains compatible.",
+    "Continuous MQTT-to-VD consumer configuration is outside this source-registry migration.",
+    "Full integration suite remains non-green because of the five authentication expectation failures listed above."
+  ]
+}

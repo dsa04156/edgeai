@@ -55,4 +55,4 @@ PC/모바일 UI 시험을 구분하여 기록한다. Pod 생성/신원은 해당
 실제 다중 Runner의 Task→Task 데이터, peer checkpoint 인계, 운영 TLS 배포와 실제 Kubernetes 종단 수용은
 후속 작업이며 전체 M5 잔여/M7–M10 목표를 축소하지 않는다.
 
-검증 근거: [공개 실행 검증](../evidence/m7-public-stream-runs.md).
+검증 근거: [공개 실행 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-public-stream-runs.md).

@@ -10,6 +10,18 @@ public final class ManagementAuditRoutes {
     private ManagementAuditRoutes() {}
     public record Route(String method,String template,String operation) {}
     public static final List<Route> ROUTES=List.of(
+        new Route("POST","/api/devices","createManagedDevice"),
+        new Route("GET","/api/devices","listManagedDevices"),
+        new Route("GET","/api/devices/{id}","getManagedDevice"),
+        new Route("PUT","/api/devices/{id}","updateManagedDevice"),
+        new Route("DELETE","/api/devices/{id}","deleteManagedDevice"),
+        new Route("POST","/api/devices/{id}/properties","addManagedDeviceProperty"),
+        new Route("PUT","/api/devices/{id}/properties/{property}","updateManagedDeviceProperty"),
+        new Route("DELETE","/api/devices/{id}/properties/{property}","deleteManagedDeviceProperty"),
+        new Route("POST","/api/device-connections/test","testDeviceConnection"),
+        new Route("GET","/api/device-profiles","listManagedDeviceProfiles"),
+        new Route("POST","/api/device-profiles","createManagedDeviceProfile"),
+        new Route("GET","/api/protocols","listDeviceProtocols"),
         new Route("GET","/api/v1/platform","getPlatform"),
         new Route("GET","/api/v1/csrf","getCsrfToken"),
         new Route("POST","/api/v1/profiles/{kind}","publishProfile"),

@@ -18,9 +18,10 @@ public class VirtualDeviceService {
     private final ProfileRepository profiles;
     private final NodeRepository nodes;
     private final Clock clock;
+    private final ManagedDeviceService managed;
     private final VDLifecycleService lifecycle;
-    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDLifecycleService lifecycle) {
-        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.lifecycle=lifecycle;
+    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDLifecycleService lifecycle,ManagedDeviceService managed) {
+        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.lifecycle=lifecycle;this.managed=managed;
     }
     @Transactional
     public VirtualDeviceRepository.Creation create(String body) {
@@ -54,11 +55,12 @@ public class VirtualDeviceService {
         var input=VirtualDeviceInput.update(body);var vd=find(id,true);
         if(vd.state()==VirtualDevice.State.RELEASED)throw error(409,"VD_RELEASED","해제된 VD는 수정할 수 없습니다.");
         if(vd.revision()!=input.revision())throw error(409,"VD_CONFLICT","VD가 변경되었습니다. 다시 조회한 revision으로 수정하세요.");
-        var configuration=input.configuration();var spec=profile(vd.profileVersionId());validatePlacement(configuration.placement());
+        var configuration=input.configuration();UUID profileId=input.profileVersionId()==null?vd.profileVersionId():input.profileVersionId();var spec=profile(profileId);validatePlacement(configuration.placement());
         var devicesById=validateSources(spec,configuration.sources());var active=repository.activeSources(id);
-        var current=new TreeMap<String,UUID>();active.forEach(b->current.put(b.sourceKey(),b.deviceId()));
-        if(vd.displayName().equals(configuration.displayName()) && vd.placement().equals(configuration.placement()) && current.equals(configuration.sources()))return vd;
-        var now=now(vd);repository.update(id,configuration.displayName(),configuration.placement(),vd.state(),now);
+        var current=new TreeMap<String,VDSourceSelection>();active.forEach(b->current.put(b.sourceKey(),new VDSourceSelection(b.sourceId(),b.properties(),b.maxAgeSeconds())));
+        if(profileId.equals(vd.profileVersionId()) && vd.displayName().equals(configuration.displayName()) && vd.placement().equals(configuration.placement()) && current.equals(configuration.sources())
+            && active.stream().allMatch(b->sameIdentity(b,devicesById.get(b.sourceKey()))))return vd;
+        var now=now(vd);repository.reconfigure(id,configuration.displayName(),profileId,spec.serviceProfileVersionId(),configuration.placement(),now);
         var updated=find(id,false);bindChanges(updated,active,configuration.sources(),devicesById,now);lifecycle.registryChanged(updated);return updated;
     }
     @Transactional
@@ -76,23 +78,27 @@ public class VirtualDeviceService {
         try {repository.deleteRegistration(id);}
         catch(org.springframework.dao.DataIntegrityViolationException e) {throw error(409,"VD_IN_USE","연결 또는 실행 참조가 남아 있어 삭제할 수 없습니다. 새로고침 후 확인하세요.");}
     }
-    private void bindChanges(VirtualDevice vd,List<VDSourceBinding> current,Map<String,UUID> requested,Map<UUID,Device> sources,Instant now) {
+    private void bindChanges(VirtualDevice vd,List<VDSourceBinding> current,Map<String,VDSourceSelection> requested,Map<String,VDSourceBinding> sources,Instant now) {
         var unchanged=new HashSet<String>();
         for(var binding:current) {
-            if(binding.deviceId().equals(requested.get(binding.sourceKey())))unchanged.add(binding.sourceKey());
+            if(sameIdentity(binding,sources.get(binding.sourceKey())))unchanged.add(binding.sourceKey());
             else repository.close(binding.id(),vd.revision(),now);
         }
-        requested.forEach((key,id)->{
+        requested.forEach((key,selection)->{
             if(!unchanged.contains(key)) {
-                var device=sources.get(id);
-                repository.bind(new VDSourceBinding(UUID.randomUUID(),vd.id(),key,id,device.profileVersionId(),device.sourceMode(),vd.revision(),null,now,null));
+                var source=sources.get(key);
+                repository.bind(new VDSourceBinding(UUID.randomUUID(),vd.id(),key,source.deviceId(),source.deviceProfileVersionId(),source.sourceMode(),vd.revision(),null,now,null,source.managedDeviceId(),source.deviceUid(),source.deviceModel(),source.properties(),source.maxAgeSeconds()));
             }
         });
+    }
+    private static boolean sameIdentity(VDSourceBinding binding,VDSourceBinding source) {
+        return source!=null && binding.sourceId().equals(source.sourceId()) && Objects.equals(binding.deviceUid(),source.deviceUid()) && Objects.equals(binding.deviceModel(),source.deviceModel())
+            && binding.properties().equals(source.properties()) && binding.maxAgeSeconds()==source.maxAgeSeconds();
     }
     private VDProfileSpec profile(UUID id) {
         var spec=VirtualDeviceInput.spec(requireProfile(id,ProfileIdentity.Kind.VD).specJson());
         ServiceExecutionInput.parseSpec(requireProfile(spec.serviceProfileVersionId(),ProfileIdentity.Kind.SERVICE).specJson());
-        for(var source:spec.sources().values())requireProfile(source.deviceProfileVersionId(),ProfileIdentity.Kind.DEVICE);
+        for(var source:spec.sources().values())if(source.deviceProfileVersionId()!=null)requireProfile(source.deviceProfileVersionId(),ProfileIdentity.Kind.DEVICE);
         return spec;
     }
     private ProfileVersion requireProfile(UUID id,ProfileIdentity.Kind kind) {
@@ -103,22 +109,33 @@ public class VirtualDeviceService {
     private void validatePlacement(VirtualDevice.Placement placement) {
         if(placement.nodeId()!=null && nodes.find(placement.nodeId()).isEmpty())throw error(404,"VD_NOT_FOUND","배치 대상으로 지정한 Node가 없습니다.");
     }
-    private Map<UUID,Device> validateSources(VDProfileSpec spec,Map<String,UUID> requested) {
+    private Map<String,VDSourceBinding> validateSources(VDProfileSpec spec,Map<String,VDSourceSelection> requested) {
         if(!spec.sources().keySet().containsAll(requested.keySet()) || spec.sources().entrySet().stream()
             .anyMatch(e->e.getValue().required() && !requested.containsKey(e.getKey())))
             throw error(409,"VD_SOURCE_INCOMPATIBLE","선언된 원본 키와 필수 원본을 확인하세요.");
-        var sources=new HashMap<UUID,Device>();
-        // Stable ordering prevents overlapping VD source sets from locking Devices in reverse order.
-        for(var id:requested.values().stream().distinct().sorted().toList()) {
-            var device=devices.find(id,true).orElseThrow(()->error(404,"VD_NOT_FOUND","원본 Device가 없습니다."));
-            if(device.state()!=Device.State.ACTIVE)throw error(409,"VD_SOURCE_INCOMPATIBLE","해제된 Device는 원본으로 연결할 수 없습니다.");
-            sources.put(id,device);
+        var sources=new HashMap<String,VDSourceBinding>();
+        repository.lockManagedSources(requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()!=null).map(e->e.getValue().deviceId()).toList());
+        // Preserve a global row-lock order for immutable legacy Device references.
+        requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()==null).map(e->UUID.fromString(e.getValue().deviceId())).distinct().sorted()
+            .forEach(id->devices.find(id,true).orElseThrow(()->error(404,"VD_NOT_FOUND","원본 Device가 없습니다.")));
+        for(var entry:requested.entrySet()) {
+            var selection=entry.getValue();String id=selection.deviceId();var requirement=spec.sources().get(entry.getKey());
+            if(requirement.deviceModel()!=null) {
+                var device=managed.source(id,requirement.deviceModel(),null);
+                var kind=((Map<?,?>)device.get("profile")).get("kind");
+                var declared=((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(p->((Map<?,?>)p).get("name")).toList();
+                if(!declared.containsAll(selection.properties()))throw error(409,"VD_SOURCE_INCOMPATIBLE","선택한 측정 항목이 센서 규격에 없습니다.");
+                sources.put(entry.getKey(),new VDSourceBinding(null,null,null,null,null,"virtual".equals(kind)?Device.SourceMode.SYNTHETIC:Device.SourceMode.LIVE,
+                    0,null,null,null,id,UUID.fromString((String)device.get("uid")),(String)device.get("model"),selection.properties(),selection.maxAgeSeconds()));
+            } else {
+                // Immutable v1 templates and their history remain readable during migration.
+                var device=devices.find(UUID.fromString(id),true).orElseThrow(()->error(404,"VD_NOT_FOUND","원본 Device가 없습니다."));
+                if(device.state()!=Device.State.ACTIVE || !requirement.deviceProfileVersionId().equals(device.profileVersionId()) || !requirement.sourceModes().contains(device.sourceMode()))
+                    throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 원본 Device의 규격 또는 상태가 조건과 다릅니다.");
+                if(!selection.properties().isEmpty())throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 UUID 원본은 센서 디바이스로 전환한 뒤 측정 항목을 선택하세요.");
+                sources.put(entry.getKey(),new VDSourceBinding(null,null,null,device.id(),device.profileVersionId(),device.sourceMode(),0,null,null,null));
+            }
         }
-        requested.forEach((key,id)->{
-            var requirement=spec.sources().get(key);var device=sources.get(id);
-            if(!requirement.deviceProfileVersionId().equals(device.profileVersionId()) || !requirement.sourceModes().contains(device.sourceMode()))
-                throw error(409,"VD_SOURCE_INCOMPATIBLE","원본 Device의 Profile 버전 또는 sourceMode가 VD 조건과 다릅니다.");
-        });
         return sources;
     }
     private Instant now(VirtualDevice vd) { var now=clock.instant();return now.isBefore(vd.updatedAt())?vd.updatedAt():now; }

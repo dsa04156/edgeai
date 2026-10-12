@@ -71,13 +71,13 @@ DCGM의 `Hostname`에 exporter Pod 이름이 들어오는 것을 확인했다. �
 
 PromQL 시간 처리 기준: [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/),
 [rate·timestamp 함수](https://prometheus.io/docs/prometheus/latest/querying/functions/).
-검증 범위는 [메트릭 검증 근거](../evidence/node-metrics-2026-10-06.md)에 기록했다.
+검증 범위는 [메트릭 검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/node-metrics-2026-10-06.md)에 기록했다.
 
 ## 장비별 수집 범위
 
 온도·전력·가속기 메모리는 해당 장비와 exporter가 제공하는 항목만 표시합니다.
 사용률이 없어도 신뢰할 수 있는 장착 정보는 목록에 표시할 수 있습니다.
 DeepX 등 새로운 가속기는 호스트 인식과 inventory/exporter 분류를 먼저 확인합니다.
-특정 개발 장비의 관측 결과는 [가속기 검증 기록](../evidence/accelerator-inventory-2026-10-06.md)에 보존합니다.
+특정 개발 장비의 관측 결과는 [가속기 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/accelerator-inventory-2026-10-06.md)에 보존합니다.
 
 다음 단계: [관측값 해석](../concepts/observability.md), [문제 해결](../operations/troubleshooting.md).

@@ -1,4 +1,5 @@
 package io.edgeai.app.service;
+import io.edgeai.app.support.RuntimeParameters;
 
 import io.edgeai.app.support.ServiceExecutionInput;
 import io.edgeai.app.support.RemoteDocuments;
@@ -529,13 +530,10 @@ public class RuntimeLifecycleService {
     }
     private ServiceExecutionSpec spec(Context c) { return ServiceExecutionInput.parseSpec(profiles.find(definition(c).serviceProfileVersionId()).orElseThrow().specJson()); }
     private String parameters(Context c) {
-        return mergeParameters(definition(c).parametersJson(),c.run().parametersJson());
+        return RuntimeParameters.merge(definition(c).parametersJson(),c.run().parametersJson(),executions.vdInput(c.task().id()).orElse(null));
     }
     private static String mergeParameters(String taskParameters,String runParameters) {
-        var merged=new TreeMap<String,Object>();
-        ((Map<?,?>)JSON.decode(taskParameters)).forEach((k,v)->merged.put((String)k,v));
-        ((Map<?,?>)JSON.decode(runParameters)).forEach((k,v)->merged.put((String)k,v));
-        return JSON.boundedCanonical(merged,65536);
+        return RuntimeParameters.merge(taskParameters,runParameters,null);
     }
     private List<InputArtifact> inputs(Context c,ServiceExecutionSpec spec) {
         var tasks=new HashMap<String,Task>();executions.tasks(c.run().id()).forEach(t->tasks.put(t.key(),t));

@@ -35,14 +35,6 @@
     [
       "adr",
       "설계 결정"
-    ],
-    [
-      "evidence",
-      "검증 기록"
-    ],
-    [
-      "history",
-      "과거 기록"
     ]
   ],
   "pages": [
@@ -94,7 +86,7 @@
     {
       "source": "docs/guides/infrastructure-inventory.md",
       "group": "guides",
-      "description": "Kubernetes 노드와 EdgeX 센서 목록을 연결합니다."
+      "description": "Kubernetes 노드와 KubeEdge Mapper 장치 관측을 연결합니다."
     },
     {
       "source": "docs/guides/node-metrics.md",
@@ -104,12 +96,17 @@
     {
       "source": "docs/guides/sensor-registration.md",
       "group": "guides",
-      "description": "지원 수집기를 선택해 센서를 등록하고 실제 수신을 확인합니다."
+      "description": "새 장치 등록과 저장 규격을 이용한 기존 장치 항목 추가·삭제를 안내합니다."
     },
     {
       "source": "docs/guides/sensor-controls-and-vd-deletion.md",
       "group": "guides",
-      "description": "센서 측정 이력과 지원 명령을 사용합니다."
+      "description": "CRD 최신값과 Virtual Device 정리 범위를 확인합니다."
+    },
+    {
+      "source": "docs/guides/service-profile-to-virtual-device.md",
+      "group": "guides",
+      "description": "SERVICE 등록부터 VD 생성까지 원본 없는 계산·실제 장치 원본 예시를 따라 합니다."
     },
     {
       "source": "docs/guides/virtual-devices.md",
@@ -210,6 +207,11 @@
       "source": "docs/guides/web-documentation.md",
       "group": "contributing",
       "description": "웹 문서의 탐색·갱신·배포 방식을 확인합니다."
+    },
+    {
+      "source": "deploy/kubeedge/README.md",
+      "group": "engineering",
+      "description": "Profile→CRD→DMI→Mapper 구조와 프로토콜별 설정을 확인합니다."
     }
   ]
 }

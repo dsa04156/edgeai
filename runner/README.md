@@ -48,7 +48,7 @@ EDGEAI_RUNNER_IMAGE=edgeai-runner:verify bash scripts/test/test-runner.sh
 장애/전환 시험 대기다. 실제 계산 전 기다리고 Runner timeout·취소가 그대로 적용된다. 성능 지표가 아니다.
 
 시험은 결과 byte·digest, commit 재전송, 큰 정수/소수 보존, 잘못된 입력, 누락/링크 출력,
-timeout, SIGTERM, 거절된 claim을 다룬다. 현재 증거는 [M4 기록](../docs/evidence/m4-runtime.md)을 따른다.
+timeout, SIGTERM, 거절된 claim을 다룬다. 현재 증거는 [M4 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m4-runtime.md)을 따른다.
 
 ## 실행 측정
 
@@ -57,7 +57,7 @@ claim 응답의 telemetry.intervalSeconds가 있을 때 Runner는 실행 중 cgr
 속한 cgroup의 값이다. cgroup 미지원·측정 불가·무제한 quota는 null이며 Node 잔여량이나 GPU/NPU
 사용량으로 해석하지 않는다. 프로덕션 sampler는 자기 cgroup membership을 해석하고 host root로 대체하지 않는다.
 STREAM도 계산 시작부터 최종 파일 생성까지 측정하며 한 Attempt의 표본 sequence를 이어간다.
-측정 권한이 차단되면 스트리밍 계산도 종료한다. [STREAM 자동 전환 검증 범위](../docs/evidence/m7-stream-automatic-offload.md).
+측정 권한이 차단되면 스트리밍 계산도 종료한다. [STREAM 자동 전환 검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-automatic-offload.md).
 
 파일 생성 workload에는 `EDGEAI_TELEMETRY_FILE`도 전달한다. 서비스가 직접 측정한 지연을 보고하려면
 다음 형태의 JSON을 임시 파일에 쓴 뒤 해당 경로로 원자적으로 rename한다.
@@ -73,17 +73,17 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 측정을 표시한다. 측정 전송은 best effort이며 손실 가능성이 있다. API 장애나 측정 시각 거절로 계산을
 실패시키지 않지만, producer 인증/claim이 차단되면 workload를 중단한다.
 
-참고: [ADR 0008](../docs/adr/0008-runtime-telemetry.md), [측정 증거](../docs/evidence/m5-runtime-telemetry.md).
+참고: [ADR 0008](../docs/adr/0008-runtime-telemetry.md), [측정 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-runtime-telemetry.md).
 
 ## 지속 VD supervisor (M6 구성 요소)
 
 같은 이미지의 `python3 /opt/edgeai/vd.py`는 지속 Pod 안에서 독립 Runner session을 실행한다.
 `python3 /opt/edgeai/vd.py --ready`는 유효한 runtime lease의 준비 상태만 확인한다.
 VD 자식의 `python -m edgeai_runner.main`도 파일 진입점과 같은 모듈의 main을 호출하여
-스트리밍 SDK와 오류 클래스·취소 상태를 공유한다. [진입점 검증](../docs/evidence/m7-vd-module-entrypoint.md)을 확인한다.
+스트리밍 SDK와 오류 클래스·취소 상태를 공유한다. [진입점 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-vd-module-entrypoint.md)을 확인한다.
 [내부 poll 계약](../contracts/openapi/vd-runtime-api.yaml), [ADR0014](../docs/adr/0014-virtual-device-runtime.md),
-[구성 요소 검증](../docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
-배정 연결까지 [M6 수용](../docs/evidence/m6-completion-audit.md)을 통과했다.
+[구성 요소 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
+배정 연결까지 [M6 수용](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-completion-audit.md)을 통과했다.
 공개 VD 등록 후 별도 실행 시작 API로 기동한다.
 
 | 변수 | 용도 |
@@ -130,7 +130,7 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test/test-stream
 `test-runner.sh`의100개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
 HTTPS/MQTT/계산/Session 통합은 별도50개다. S3 새 볼륨 복원·Attempt 인계 구성 요소도 검증했으며
 실제 Kubernetes의 Pod/Node 전환 연결은 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
-[실제 검증 기록](../docs/evidence/m7-stream-transport.md).
+[실제 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-transport.md).
 
 `stream_assignment.BindingClient`는 검증된 HTTPS API에서 Device/Runner 배정을 조회한다.
 응답의 전체 주체·generation·topic·payload 규격을 확인하고 MQTT 자격은 메모리에만 유지한다.
@@ -139,7 +139,7 @@ step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을
 트랜잭션 도중 만료되면 전체 변경을 롤백한다. 이 조회는 lease를 연장하지 않는다.
 기존 저수준 `Link(journal, endpoint, client_id)`에는 인증 배정/lease 계약이 없으므로 운영 스트림
 실행의 대체 경로로 사용하지 않는다. 계산 프로세스 watchdog은 아래 자동 Session에서 연결한다.
-[설계](../docs/adr/0027-stream-client-lease.md), [검증과 fixture 경계](../docs/evidence/m7-stream-client.md).
+[설계](../docs/adr/0027-stream-client-lease.md), [검증과 fixture 경계](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-client.md).
 
 `BindingClient.heartbeat(generation_id, sequence)`는 `{sequence, assignment}` 결과를 반환한다.
 처음에는 `sequence=0`으로 서버의 현재 순번을 읽고 다음 요청에 `+1`을 사용한다. 응답을 잃으면
@@ -149,7 +149,7 @@ step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을
 기존 기한 전에 완료해야 한다. 같은 주체·세대·broker·규격만 허용하며, 이미 만료된 연결은 새
 배정으로 되살릴 수 없다. VD drain으로 짧아진 기한도 적용한다. HTTP 조회 중에도 원래 기한은
 계속 흐르므로 갱신 루프는 충분한 여유를 둬야 한다. 자동 갱신 스케줄러나 계산 프로세스 종료를
-이 API 자체가 제공하는 것은 아니다. [설계와 검증](../docs/evidence/m7-stream-heartbeat.md).
+이 API 자체가 제공하는 것은 아니다. [설계와 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-heartbeat.md).
 
 ## 자동 세션과 외부 체크포인트
 
@@ -170,20 +170,20 @@ Session은 같은 SQLite 후보로 오류/응답 유실을 재시도하고 인�
 `confirm_checkpoint`를 호출해야 한다. S3 PUT 성공만 전달하면 안 된다.
 로컬 `settled`는 Task/Run의 성공이 아니며 세션은 종료 명령까지 heartbeat를 유지한다.
 [자동 저장 설계](../docs/adr/0033-stream-automatic-checkpoint-publisher.md)와
-[실제 검증 및 남은 연결](../docs/evidence/m7-stream-checkpoint-publisher.md)을 따른다.
+[실제 검증 및 남은 연결](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-publisher.md)을 따른다.
 
 새 private 세션 디렉터리를 준비하고 `Session(..., create=True, durability='EXTERNAL',
 checkpoint_client=checkpoints, restore_latest=True)`를 사용하면 인증 latest의 고정 S3 version을
 검증한 뒤 상태·커서·미확인 출력/END를 복원한다. 실행 digest·전체 binding이 같아야 하고
 기존 journal은 덮어쓰지 않는다. 확정본이 없거나 손상·권한 만료·이력 변경이 있으면 실패하며
 빈 상태로 시작하지 않는다. 이 옵션은 동일 Attempt/세대만 지원하며 새 Pod/Attempt의
-권한 인계는 별도다. [복원 설계·검증](../docs/evidence/m7-stream-checkpoint-recovery.md)을 따른다.
+권한 인계는 별도다. [복원 설계·검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-recovery.md)을 따른다.
 
 제어 서버가 새 Attempt·전체 활성 경로를 준비했다면 위 옵션에 `handover_latest=True`를 추가한다.
 서버가 이전 실행 종료·옛 경로 권한 회수·같은 실행 digest를 확인하고 최신 상태를 현재 배정으로
 인계한 뒤 SDK가 새 고정 version을 복원한다. Device Session 교체는 별도의 순번 연속성 계약이
 필요해 거절한다. 이 옵션은 Task 생성이나 peer journal 전환을 수행하지 않는다.
-[인계 설계·검증](../docs/evidence/m7-stream-checkpoint-handover.md)을 따른다.
+[인계 설계·검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-checkpoint-handover.md)을 따른다.
 
 ## Device 송신과 소비 경로 전환
 
@@ -192,7 +192,7 @@ Run 생성자가 전달한 `run_id`로 `client.device_routes(run_id, limit=100, 
 읽는다. 준비 전 generation은null이며, 필요한 전체 경로가 ACTIVE인지 확인한 뒤 DeviceSource를
 연다. SDK가 실제 배정 API에서 전송 자격과 기한을 다시 확인하므로 조회 응답의 leaseUntil만으로
 송신하지 않는다. 종료된 Run/세대도 읽을 수 있고 이 호출은 lease를 연장하거나 journal을 바꾸지 않는다.
-세션을 교체하면 이전 Run을 승계할 수 없다. [조회 계약·검증](../docs/evidence/m7-device-route-discovery.md).
+세션을 교체하면 이전 Run을 승계할 수 없다. [조회 계약·검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-route-discovery.md).
 
 `stream_source.DeviceSource`는 같은 Device Session의 `BindingClient`, Run과 generation ID 목록을
 받아 인증 배정·heartbeat·TLS MQTT·LOCAL 송신 journal을 관리한다. 0700 디렉터리를 준비하고
@@ -205,7 +205,7 @@ media_type)], state=adapter_cursor_bytes)`는 샘플·순번·adapter 상태를 
 `DeviceSource(..., create=False, handover=True)`를 연다. 같은 Device Session·논리 경로만
 허용하며 미확인 DATA/END·순번·adapter 상태를 보존한다. 장치 세션 변경이나 볼륨 손실을
 자동 재시작으로 대체하지 않는다. `settled`는 END의 처리 확인이며 플랫폼 Run 성공을 뜻하지 않는다.
-자세한 실제/fixture 범위는 [Device source 검증](../docs/evidence/m7-device-source-handover.md)을 따른다.
+자세한 실제/fixture 범위는 [Device source 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-source-handover.md)을 따른다.
 
 자동 전환은 `stream_device_run.DeviceRunSource(client, run_id, route_ids, directory,
 create=True)`로 선택한다. generation ID 대신 고정 논리 route ID를 전달하며, 같은 볼륨 재시작은
@@ -218,7 +218,7 @@ create=True)`로 선택한다. generation ID 대신 고정 논리 route ID를 �
 처리해야 한다. 여러 장치를 한 루프에서 다룰 때는 성공한 샘플을 대기 목록에서 제거하고,
 아직 저장되지 않은 샘플만 원래 제한 시간 안에서 재시도한다. END도 같은 규칙을 따른다.
 대기 중에는 모든 장치의 `step()`을 호출해 다른 장치의 heartbeat를 막지 않는다.
-[자동 재연결 설계·실제 시험](../docs/evidence/m7-device-reconnect.md).
+[자동 재연결 설계·실제 시험](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-reconnect.md).
 
 기본값은 서버 공동 완료 대기다. END를 보낸 뒤 `while not source.completed: source.step()`으로
 진행한다. WAITING 동안 heartbeat를 유지하고 모든 송신 경로의 FINALIZE를 받으면 MQTT를 닫는다.
@@ -228,7 +228,7 @@ create=True)`로 선택한다. generation ID 대신 고정 논리 route ID를 �
 않고 끝낼 수 있다. 서버가 WAITING이면 현재 배정을 새로 받아 heartbeat를 재개한다.
 기존 전달 계층만 시험하는 경우에만 `completion=False`를 명시한다.
 [완료 설계](../docs/adr/0039-device-source-completion.md)와
-[실제 Spring/S3 통합 범위](../docs/evidence/m7-device-source-completion.md)를 따른다.
+[실제 Spring/S3 통합 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-source-completion.md)를 따른다.
 
 ## SERVICE 스트림 실행 owner
 
@@ -258,8 +258,21 @@ AUTO/NODE Kubernetes 데이터 흐름은 검증했다. 공개 STREAM은 명시�
 장치 자동 재연결과 공개 retry를 연결했고 실제 Kubernetes 그룹 장애 복구까지 검증했다.
 계산 중에는 연결된 그룹을 함께 재시도하고 완료 허가 뒤에는 실패한 작업만 복구한다.
 offload/REMOTE/VD는 계속 거절한다. 최종 처리도 실제 Job 유실·새 Pod 복구·기존 결과 보존을
-[Kubernetes에서 검증](../docs/evidence/m7-finalizer-kubernetes.md)했다.
-[공개 재시도 검증](../docs/evidence/m7-public-stream-retry.md)을 따른다.
+[Kubernetes에서 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-finalizer-kubernetes.md)했다.
+[공개 재시도 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-public-stream-retry.md)을 따른다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
-[Runner 검증 범위](../docs/evidence/m7-service-stream-runner.md),
-[서버 완료 검증](../docs/evidence/m7-stream-execution-completion.md)을 따른다.
+[Runner 검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-service-stream-runner.md),
+[서버 완료 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-execution-completion.md)을 따른다.
+
+## VD 센서 BATCH 입력
+
+센서 VD를 대상으로 Run을 생성하면 서버가 선택한 항목을 `EDGEAI_PARAMETERS_FILE`의
+예약 필드 `vdInputs`로 전달합니다. 값·항목별 수신 시각·센서 UID/DeviceModel·binding ID·
+VD revision·고정 시각이 함께 들어갑니다. 같은 Run의 재요청과 재시도에서 센서를 다시 읽지 않습니다.
+사용자 Run/Task 매개변수에 `vdInputs`를 넣으면 실행 생성이 거절됩니다.
+
+`examples/temperature.py`는 Sense HAT `input.temp_humidity`의 고정 섭씨 값을 읽어 화씨로
+변환하고 원본 신원과 시각을 JSON output에 남기는 참조 SERVICE입니다. 기존 Runner 실행 계약을
+사용합니다. 실제 입력과 처리·Result 검증은 `bash scripts/test/test-vd-sensor.sh`이며,
+이 시험의 supervisor/Runner는 호스트 프로세스이고 Pod 인증은 fixture입니다.
+[사용 흐름](../docs/guides/vd-sensor-batch.md)과 [설계](../docs/adr/0117-vd-sensor-batch-inputs.md)를 확인하세요.

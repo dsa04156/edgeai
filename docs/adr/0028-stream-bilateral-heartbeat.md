@@ -1,6 +1,6 @@
 # ADR0028 — 양쪽 주체의 생존 확인으로만 스트림 lease 갱신
 
-상태: 로컬 구성 요소 구현·검증 완료. 공개 STREAM 실행 활성화와 별개이며 구성 요소 검증은 [기록](../evidence/m7-stream-heartbeat.md)을 따른다.
+상태: 로컬 구성 요소 구현·검증 완료. 공개 STREAM 실행 활성화와 별개이며 구성 요소 검증은 [기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-heartbeat.md)을 따른다.
 
 인증된 Device/Runner의 배정 조회는 계속 읽기 전용이다. 별도 `/streams/heartbeat` 요청만
 현재 ACTIVE 세대의 producer 또는 consumer 관측 시각을 갱신한다. 기존 Device 세션 인증,

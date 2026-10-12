@@ -7,7 +7,7 @@ import { compatibleSource, newVDTemplate, sourceRequirements, validateVDTemplate
 type Schema = components["schemas"];
 const profiles = [{ id: "service-1", kind: "SERVICE" }, { id: "device-1", kind: "DEVICE" }] as Schema["ProfileVersion"][];
 function template() {
-  const value = newVDTemplate(); value.serviceProfileVersionId = "service-1"; value.sources.input.deviceProfileVersionId = "device-1"; return value;
+  const value = newVDTemplate(); value.serviceProfileVersionId = "service-1"; value.sources.input.deviceModel = "temperature-model"; return value;
 }
 test("VD template requires published references, source conditions and bounded runtime policy", () => {
   const value = template();
@@ -17,18 +17,17 @@ test("VD template requires published references, source conditions and bounded r
   assert.match(validateVDTemplate({ ...value, sources: {} }, profiles)!, /필수 원본/);
   assert.match(validateVDTemplate({ ...value, runtime: { ...value.runtime, maxConcurrentTasks: 17 } }, profiles)!, /maxConcurrentTasks/);
   assert.match(validateVDTemplate({ ...value, state: { mode: "CHECKPOINT" } }, profiles)!, /STATELESS/);
-  assert.match(validateVDTemplate({ ...value, sources: { input: { ...value.sources.input, sourceModes: ["LIVE", "UNKNOWN"] } } }, profiles)!, /데이터 출처/);
-  assert.match(validateVDTemplate({ ...value, sources: { input: { ...value.sources.input, sourceModes: ["LIVE", "LIVE"] } } }, profiles)!, /데이터 출처/);
+  assert.match(validateVDTemplate({ ...value, apiVersion: "edgeai.vd/v1" }, profiles)!, /새 버전/);
+  assert.match(validateVDTemplate({ ...value, sources: { input: { deviceModel: "", required: true } } }, profiles)!, /DeviceModel/);
   const emulation = { ...newVDTemplate("emulation"), serviceProfileVersionId: "service-1" };
   assert.equal(validateVDTemplate(emulation, profiles), undefined);
 });
-test("source choices distinguish exact profile version, permitted mode and active registration", () => {
+test("VD selects sensor devices by DeviceModel without requiring an app registration", () => {
   const requirement = sourceRequirements(template()).input;
-  const device = { state: "ACTIVE", sourceMode: "LIVE", profileVersionId: "device-1" } as Schema["Device"];
+  const device = { id: "sensehat-001", state: "ONLINE", model: "temperature-model" } as Schema["ManagedDevice"];
   assert.equal(compatibleSource(device, requirement), true);
-  assert.equal(compatibleSource({ ...device, profileVersionId: "device-2" }, requirement), false);
-  assert.equal(compatibleSource({ ...device, sourceMode: "SYNTHETIC" }, requirement), false);
-  assert.equal(compatibleSource({ ...device, state: "RELEASED" }, requirement), false);
+  assert.equal(compatibleSource({ ...device, model: "different-model" }, requirement), false);
+  assert.equal(compatibleSource({ ...device, state: "OFFLINE" }, requirement), true);
   assert.deepEqual(sourceRequirements(null), {});
-  assert.deepEqual(sourceRequirements({ sources: { broken: null } }).broken.sourceModes, []);
+  assert.equal(sourceRequirements({ sources: { broken: null } }).broken.deviceModel, "");
 });

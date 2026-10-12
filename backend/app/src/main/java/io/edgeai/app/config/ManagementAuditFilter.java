@@ -28,7 +28,7 @@ public final class ManagementAuditFilter extends OncePerRequestFilter {
     private final MeterRegistry metrics;
     public ManagementAuditFilter(ManagementAuditService service,MeterRegistry metrics) { this.service=service;this.metrics=metrics; }
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().substring(request.getContextPath().length()).startsWith("/api/v1/");
+        return !request.getRequestURI().substring(request.getContextPath().length()).startsWith("/api/");
     }
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain) throws IOException,ServletException {
         var audit=ManagementAuditRoutes.request(request.getMethod(),request.getRequestURI().substring(request.getContextPath().length()));

@@ -42,4 +42,15 @@ class VirtualDeviceInputTest {
             assertThatThrownBy(()->VirtualDeviceInput.update(update)).isInstanceOf(IllegalArgumentException.class);
         }
     }
+    @Test void managedDeviceNameAndModelCanBeUsedWithoutAnAppDeviceRegistration() {
+        var profile=UUID.randomUUID();
+        var input=VirtualDeviceInput.create(json.canonical(Map.of("key","sensor-vd","displayName","Sensor VD",
+            "profileVersionId",profile.toString(),"sources",List.of(Map.of("sourceKey","input","deviceId","sensehat-001")),"placement",Map.of("mode","AUTO"))));
+        assertThat(input.configuration().sources().get("input").deviceId()).isEqualTo("sensehat-001");
+        var spec=VirtualDeviceInput.spec(json.canonical(Map.of("apiVersion","edgeai.vd/v2","type","sensorMirror",
+            "serviceProfileVersionId",UUID.randomUUID().toString(),"sources",Map.of("input",Map.of("deviceModel","edgeai-model-temperature","required",true)),
+            "state",Map.of("mode","STATELESS"),"runtime",Map.of("maxConcurrentTasks",1,"startupTimeoutSeconds",60,"drainTimeoutSeconds",60))));
+        assertThat(spec.sources().get("input").deviceModel()).isEqualTo("edgeai-model-temperature");
+    }
+
 }

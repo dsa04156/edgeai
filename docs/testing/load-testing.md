@@ -82,8 +82,8 @@ p95가 예산 이내일 때 exit0이며, 임의 CLI 수치를 실제 장비의 �
 전송된 요청은 실제 API/DB로 처리하며, 미발송으로 FAIL을 유지하면서 성공 응답에 해당하는 관측과
 감사 접수 수를 보고서에 보존하는지 확인한다. 이 지연은 회귀 시험 전용이며 기본 부하 설정에 없다.
 GitHub Actions scaffold에도 같은 게이트를 연결한다. 이 회귀 자체의 성공은 전체 규모나
-합의 성능 수용을 뜻하지 않는다. 원시 보고서는 `docs/evidence/runs/*-load-acceptance-*/`에
+합의 성능 수용을 뜻하지 않는다. 원시 보고서는 `output/verification/*-load-acceptance-*/`에
 보존하며 CI의 platform-verification artifact에도 포함한다.
 
-최초 전체 규모 측정과 남은 범위는 [M8 측정 근거](../evidence/m8-management-load.md)를 따른다.
-감사 저장 부하의 추가 진단과 실패 시 보고서 검증은 [후속 근거](../evidence/m8-audit-storage-diagnostics.md)를 따른다.
+최초 전체 규모 측정과 남은 범위는 [M8 측정 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m8-management-load.md)를 따른다.
+감사 저장 부하의 추가 진단과 실패 시 보고서 검증은 [후속 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m8-audit-storage-diagnostics.md)를 따른다.

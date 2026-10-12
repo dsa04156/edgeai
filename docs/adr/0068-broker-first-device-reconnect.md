@@ -23,4 +23,4 @@ TLS·잘못된 응답·신원 오류를 재연결로 바꾸지 않는다. 각 �
 
 브로커 거절 자체는 새 권한이나 완료 증거가 아니다. 기존 처리 ACK·미확인 DATA/END·센서
 커서와 완료 의도 계약을 유지하고, 다른 세션이나 누락된 볼륨으로 자동 전환하지 않는다.
-[검증 근거](../evidence/m7-broker-first-reconnect.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-broker-first-reconnect.md)를 따른다.

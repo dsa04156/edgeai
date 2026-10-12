@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepository {
+    private static final tools.jackson.databind.json.JsonMapper JSON=new tools.jackson.databind.json.JsonMapper();
     private final JdbcTemplate jdbc;
     public JdbcVirtualDeviceRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
     private static Instant time(ResultSet r,String field) throws SQLException {
@@ -23,7 +24,7 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     private static final RowMapper<VDSourceBinding> SOURCE=(r,n)->new VDSourceBinding(r.getObject("id",UUID.class),
         r.getObject("vd_id",UUID.class),r.getString("source_key"),r.getObject("device_id",UUID.class),
         r.getObject("device_profile_version_id",UUID.class),Device.SourceMode.valueOf(r.getString("source_mode")),
-        r.getLong("opened_revision"),r.getObject("closed_revision",Long.class),time(r,"opened_at"),time(r,"closed_at"));
+        r.getLong("opened_revision"),r.getObject("closed_revision",Long.class),time(r,"opened_at"),time(r,"closed_at"),r.getString("managed_device_id"),r.getObject("device_uid",UUID.class),r.getString("device_model"),Arrays.asList(JSON.readValue(r.getString("properties"),String[].class)),r.getInt("max_age_seconds"));
     public boolean create(String key,String name,UUID profileId,UUID serviceId,VirtualDevice.Placement placement,String digest) {
         return jdbc.update("""
             INSERT INTO edgeai.virtual_device(id,vd_key,display_name,profile_version_id,service_profile_version_id,placement_mode,node_id,creation_digest)
@@ -43,6 +44,10 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
         jdbc.update("UPDATE edgeai.virtual_device SET display_name=?,placement_mode=?,node_id=?,state=?,revision=revision+1,updated_at=? WHERE id=?",
             name,placement.mode().name(),placement.nodeId(),state.name(),Timestamp.from(now),id);
     }
+    public void reconfigure(UUID id,String name,UUID profileId,UUID serviceId,VirtualDevice.Placement placement,Instant now) {
+        jdbc.update("UPDATE edgeai.virtual_device SET display_name=?,profile_version_id=?,service_profile_version_id=?,placement_mode=?,node_id=?,revision=revision+1,updated_at=? WHERE id=?",
+            name,profileId,serviceId,placement.mode().name(),placement.nodeId(),Timestamp.from(now),id);
+    }
     public List<VDSourceBinding> activeSources(UUID id) {
         return jdbc.query("SELECT * FROM edgeai.vd_source_binding WHERE vd_id=? AND closed_at IS NULL ORDER BY source_key COLLATE \"C\"",SOURCE,id);
     }
@@ -51,12 +56,19 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
     }
     public void bind(VDSourceBinding b) {
         jdbc.update("""
-            INSERT INTO edgeai.vd_source_binding(id,vd_id,source_key,device_id,device_profile_version_id,source_mode,opened_revision,opened_at)
-            VALUES (?,?,?,?,?,?,?,?)
-            """,b.id(),b.vdId(),b.sourceKey(),b.deviceId(),b.deviceProfileVersionId(),b.sourceMode().name(),b.openedRevision(),Timestamp.from(b.openedAt()));
+            INSERT INTO edgeai.vd_source_binding(id,vd_id,source_key,device_id,device_profile_version_id,source_mode,opened_revision,opened_at,managed_device_id,device_uid,device_model,properties,max_age_seconds)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,CAST(? AS jsonb),?)
+            """,b.id(),b.vdId(),b.sourceKey(),b.deviceId(),b.deviceProfileVersionId(),b.sourceMode().name(),b.openedRevision(),Timestamp.from(b.openedAt()),b.managedDeviceId(),b.deviceUid(),b.deviceModel(),JSON.writeValueAsString(b.properties()),b.maxAgeSeconds());
     }
     public void close(UUID bindingId,long revision,Instant now) {
         jdbc.update("UPDATE edgeai.vd_source_binding SET closed_revision=?,closed_at=? WHERE id=? AND closed_at IS NULL",revision,Timestamp.from(now),bindingId);
+    }
+    public boolean managedSourceInUse(String id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding b WHERE managed_device_id=? AND (closed_at IS NULL OR EXISTS (SELECT 1 FROM edgeai.vd_runtime r WHERE r.vd_id=b.vd_id AND r.observed_state<>'TERMINATED' AND r.configuration->'sources'->>b.source_key=b.id::text)))",Boolean.class,id));
+    }
+    public void lockManagedSources(Collection<String> ids) {
+        // The transaction keeps this lock through Kubernetes validation/mutation and binding commit.
+        ids.stream().distinct().sorted().forEach(id->jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "edgeai.vd-source:"+id));
     }
     public boolean canDeleteRegistration(UUID id) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT edgeai.vd_registration_deletable(?)",Boolean.class,id));

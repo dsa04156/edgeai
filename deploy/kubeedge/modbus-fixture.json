@@ -1,0 +1,73 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "modbus-fixture",
+    "namespace": "edgeai-devices",
+    "labels": {
+      "app.kubernetes.io/part-of": "edgeai",
+      "app.kubernetes.io/managed-by": "edgeai-device-manager",
+      "edgeai.io/test-only": "true"
+    }
+  },
+  "spec": {
+    "replicas": 1,
+    "strategy": {"type": "Recreate"},
+    "selector": {
+      "matchLabels": {
+        "app": "modbus-fixture"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/part-of": "edgeai",
+          "app.kubernetes.io/managed-by": "edgeai-device-manager",
+          "app": "modbus-fixture"
+        }
+      },
+      "spec": {
+        "nodeName": "etri-ser0002-cgnmsb",
+        "hostNetwork": true,
+        "dnsPolicy": "ClusterFirstWithHostNet",
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "name": "fixture",
+            "image": "192.168.0.56:5000/edgeai/modbus-fixture@sha256:8b805071730d8623f4438ea1c0d36e58ff788fa2da34f90c820ee24b8e974770",
+            "ports": [
+              {
+                "containerPort": 1502
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "10m",
+                "memory": "16Mi"
+              },
+              "limits": {
+                "cpu": "100m",
+                "memory": "32Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "readOnlyRootFilesystem": true,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              }
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 1502
+              },
+              "periodSeconds": 3
+            }
+          }
+        ]
+      }
+    }
+  }
+}

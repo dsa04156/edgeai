@@ -10,7 +10,7 @@ import subprocess
 import sys
 import uuid
 
-directory = Path('docs/evidence/runs') / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-load-acceptance-' + uuid.uuid4().hex[:8])
+directory = Path('output/verification') / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-load-acceptance-' + uuid.uuid4().hex[:8])
 directory.mkdir(mode=0o700, parents=True)
 cases = [
     ('measurement', ['--measure-only'], 0, 'MEASURED', 'UNSET'),

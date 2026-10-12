@@ -20,9 +20,10 @@ public class VDLifecycleService {
     private final NodeRepository nodes;
     private final Clock clock;
     private final VDTaskService tasks;
+    private final ManagedDeviceService managed;
     private static final JsonDocuments JSON=new JsonDocuments();
-    public VDLifecycleService(VirtualDeviceRepository vds,VDRuntimeRepository runtimes,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDTaskService tasks) {
-        this.vds=vds;this.runtimes=runtimes;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.tasks=tasks;
+    public VDLifecycleService(VirtualDeviceRepository vds,VDRuntimeRepository runtimes,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDTaskService tasks,ManagedDeviceService managed) {
+        this.vds=vds;this.runtimes=runtimes;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.tasks=tasks;this.managed=managed;
     }
     @Transactional
     public VDOperation provision(UUID id,long revision,String key,RuntimeSettings settings,boolean replace) {
@@ -186,7 +187,9 @@ public class VDLifecycleService {
         var spec=VirtualDeviceInput.spec(profiles.find(vd.profileVersionId()).orElseThrow().specJson());
         ServiceExecutionInput.parseSpec(profiles.find(vd.serviceProfileVersionId()).orElseThrow().specJson());
         String nodeName=vd.placement().nodeId()==null?null:nodes.find(vd.placement().nodeId()).orElseThrow(()->error("VD_NODE_UNAVAILABLE","배치 대상 Node가 없습니다.")).name();
-        return VDRuntimeDocuments.configuration(vd,vds.activeSources(vd.id()),spec,nodeName,settings);
+        var sources=vds.activeSources(vd.id());
+        for(var source:sources)if(source.managedDeviceId()!=null)managed.source(source.managedDeviceId(),source.deviceModel(),source.deviceUid());
+        return VDRuntimeDocuments.configuration(vd,sources,spec,nodeName,settings);
     }
     private VDOperation replay(UUID id,String key,String digest) {
         validateKey(key);var old=runtimes.byKey(id,key).orElse(null);

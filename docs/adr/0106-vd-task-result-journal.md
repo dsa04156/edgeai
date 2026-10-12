@@ -41,4 +41,4 @@ DB transaction 안의 발행은 금지하여 rollback되는 성공 기록을 만
 조건부 쓰기/versioning은 S3 관리자에 대한 Object Lock 보장이 아니다.
 독립 백업과 원본 writer/API 차단, 실제 producer 종료, 복원 DB의 시작/결과 대조,
 STREAM 그룹 및 전체 활성화 절차는 후속이다. 결과 기록만으로 작업을 재개하지 않는다.
-[검증 근거](../evidence/m9-vd-task-result-journal.md)를 따른다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-vd-task-result-journal.md)를 따른다.

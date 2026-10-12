@@ -52,4 +52,4 @@ CREATE/DELETE 명령을 완료 처리한다. 확정 결과·artifact·Task/Attem
 미반영 성공 파일 회수·workflow 상태 확정·재시도·다른 producer/journal·종합 활성화는 남는다.
 전체 복구가 끝나기 전 DB marker 제거·일반 API/worker 기동을 하지 않는다.
 상세 계약은 [ADR0075](../../adr/0075-recovery-remote-retirement.md), 시험은
-`bash scripts/test/test-recovery-remote-retire.sh [--transport compose]`와 [검증 근거](../../evidence/m9-recovery-remote-retirement.md)를 따른다.
+`bash scripts/test/test-recovery-remote-retire.sh [--transport compose]`와 [검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-remote-retirement.md)를 따른다.

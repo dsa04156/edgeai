@@ -1,7 +1,7 @@
 # ADR 0103: DB에 확정된 Kubernetes Result를 독립 기록과 영속 발행 큐에 보존한다
 
 상태: 구현·실제 PG/API/S3 9개, Kubernetes3개, 기존 복구91개 검증 통과. 2026-10-05.
-[검증 근거](../evidence/m9-kubernetes-result-journal.md). 새 원격 CI/배포는 별도다.
+[검증 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-kubernetes-result-journal.md). 새 원격 CI/배포는 별도다.
 
 DB 백업 이후에 확정된 Result를 복구하려면 원래 Result ID·producer와 정확한 출력 버전을
 증명해야 한다. Pod exit 0, 최신 S3 객체, 시작 허가만으로 성공을 만들지 않는다.

@@ -50,4 +50,4 @@ bootstrap Role에 전용 `edgeai-runtimes`의 pods create/watch/delete를 추가
 HTTP 장애 fixture, 실제 PostgreSQL 명령/상태 시험, 실제 클러스터 Pod/scheduler/TokenReview/
 삭제 시험을 구분한다. 마지막 시험도 workload는 대기 프로세스와 제어된 readiness를 사용하므로
 감독 프로세스→poll 서버→VD Task→Result 종단 수용을 대체하지 않는다.
-상세 결과는 [M6 gateway 증거](../evidence/m6-vd-gateway.md)를 따른다.
+상세 결과는 [M6 gateway 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-gateway.md)를 따른다.

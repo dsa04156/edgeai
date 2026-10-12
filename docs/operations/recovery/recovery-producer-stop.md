@@ -48,4 +48,4 @@ bash scripts/test/test-recovery-stop-live.sh --context <시험-context>
 시간 초과·차단 보존·재개·부모/자식 종료·다른 finalizer 보존을 확인한 뒤, 시험이 직접 만든
 namespace의 UID를 확인하고 정리한다. 실제 모델이나 장치 프로토콜 시험은 아니다.
 CI에서는 같은 commit의 검증된 Runner 이미지 digest를 명시해 kind에서 수행한다.
-[범위와 근거](../../evidence/m9-recovery-producer-stop.md).
+[범위와 근거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-recovery-producer-stop.md).

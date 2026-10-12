@@ -4,6 +4,7 @@ import io.edgeai.domain.workflow.*;
 import java.time.Instant;
 import java.util.*;
 public interface ExecutionRepository {
+    void lockRequestKey(UUID key);
     boolean create(WorkflowRun run);
     default void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots){initialize(run,definitions,roots,Map.of());}
     void initialize(WorkflowRun run,List<TaskDefinition> definitions,Set<String> roots,Map<String,io.edgeai.domain.remote.RemoteTarget> taskRemoteTargets);
@@ -12,6 +13,8 @@ public interface ExecutionRepository {
     List<WorkflowRun> runs(int limit, int offset);
     List<Task> tasks(UUID runId);
     Optional<Task> task(UUID id);
+    void saveVDInput(UUID taskId,UUID vdId,String document);
+    Optional<String> vdInput(UUID taskId);
     List<TaskAttempt> attempts(UUID taskId);
     Optional<TaskAttempt> attempt(UUID id);
     void scheduleRetry(TaskRetry retry,Instant now);

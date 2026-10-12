@@ -11,6 +11,210 @@ servers:
 - url: /
 security: []
 paths:
+  /api/devices:
+    get:
+      operationId: listManagedDevices
+      tags: [디바이스 실행 계층]
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDevicePage"
+    post:
+      security: [{csrfToken: []}]
+      operationId: createManagedDevice
+      tags: [디바이스 실행 계층]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedDeviceInput"
+      responses:
+        "201":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDevice"
+  /api/devices/{id}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9.-]*$", maxLength: 63}
+    get:
+      operationId: getManagedDevice
+      tags: [디바이스 실행 계층]
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDevice"
+    put:
+      security: [{csrfToken: []}]
+      operationId: updateManagedDevice
+      tags: [디바이스 실행 계층]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedDeviceInput"
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDevice"
+    delete:
+      security: [{csrfToken: []}]
+      operationId: deleteManagedDevice
+      tags: [디바이스 실행 계층]
+      responses:
+        "204":
+          description: KubeEdge device control result
+  /api/devices/{id}/properties:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9.-]*$", maxLength: 63}
+    post:
+      security: [{csrfToken: []}]
+      operationId: addManagedDeviceProperty
+      tags: [디바이스 실행 계층]
+      summary: 기존 장치에 측정 항목 하나 추가
+      description: 최신 Device Profile에 항목 하나만 추가하고 DeviceModel과 Device CRD를 갱신한다. 기존 연결 설정, 다른 측정 항목과 공유 Mapper는 유지한다. 중복 이름과 동시 변경은409로 거절한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedDeviceProperty'
+      responses:
+        "201":
+          description: 측정 항목 추가 완료. 갱신된 장치를 반환하며 첫 수집값은 아직 없을 수 있다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedDevice'
+        "400":
+          description: 지원하지 않는 항목 설정 또는 항목 수 제한 초과
+        "404":
+          description: 장치 없음
+        "409":
+          description: 중복 항목, 다른 시스템 소유 또는 동시 변경 충돌
+  /api/devices/{id}/properties/{property}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9][a-z0-9.-]*$", maxLength: 63}
+    - in: path
+      name: property
+      required: true
+      schema: {type: string, pattern: "^[a-z][a-z0-9_]*$", maxLength: 63}
+    put:
+      security: [{csrfToken: []}]
+      operationId: updateManagedDeviceProperty
+      tags: [디바이스 실행 계층]
+      summary: 측정 항목 하나의 수집 설정 수정
+      description: 본문의 name은 경로의 property와 같아야 한다. 최신 Device Profile에서 해당 항목만 교체하고 DeviceModel과 Device CRD를 갱신한다. 다른 측정 항목, 연결 설정, 대상 노드, 수집 간격과 공유 Mapper는 유지한다. 동시 변경은 resourceVersion으로 보호한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedDeviceProperty'
+      responses:
+        "200":
+          description: 측정 항목 수정 완료. 갱신된 장치를 반환한다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedDevice'
+        "400":
+          description: 지원하지 않는 항목 설정 또는 이름 변경
+        "404":
+          description: 장치 또는 측정 항목 없음
+        "409":
+          description: 다른 시스템 소유 또는 동시 변경 충돌
+    delete:
+      security: [{csrfToken: []}]
+      operationId: deleteManagedDeviceProperty
+      tags: [디바이스 실행 계층]
+      summary: 측정 항목 하나의 수집 설정 삭제
+      description: 최신 Device Profile에서 지정 항목만 제거하고 DeviceModel과 Device CRD를 갱신한다. 마지막 측정 항목이면 Device 등록을 삭제한다. 공유 Mapper와 저장한 property 규격은 유지한다. 동시 변경은 resourceVersion으로 보호한다. 삭제한 항목은 Workflow 입력에서도 제외한다.
+      responses:
+        "204":
+          description: 측정 항목 삭제 완료
+        "404":
+          description: 장치 또는 측정 항목 없음
+        "409":
+          description: 다른 시스템 소유 또는 동시 변경 충돌
+  /api/device-connections/test:
+    post:
+      security: [{csrfToken: []}]
+      operationId: testDeviceConnection
+      tags: [디바이스 실행 계층]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedDeviceInput"
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceConnectionResult"
+  /api/device-profiles:
+    get:
+      operationId: listManagedDeviceProfiles
+      tags: [디바이스 실행 계층]
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDeviceProfilePage"
+    post:
+      security: [{csrfToken: []}]
+      operationId: createManagedDeviceProfile
+      tags: [디바이스 실행 계층]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedDeviceProfile"
+      responses:
+        "201":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedDeviceProfile"
+  /api/protocols:
+    get:
+      operationId: listDeviceProtocols
+      tags: [디바이스 실행 계층]
+      responses:
+        "200":
+          description: KubeEdge device control result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceProtocolPage"
   /api/v1/platform:
     get:
       operationId: getPlatform
@@ -263,70 +467,30 @@ paths:
           description: 서버 프로세스가 정상 상태가 아님
   /api/v1/devices:
     post:
-      tags:
-      - Device
+      deprecated: true
+      tags: [Device]
       operationId: registerDevice
-      summary: 물리 장치 등록
-      description: DEVICE Profile의 발행 UUID를 참조해 장치를 등록합니다. 같은 key와 동일 생성 입력은 200, 새로운 장치는 201, 다른 생성 입력은 409입니다. LIVE/REPLAY/SYNTHETIC으로
-        데이터 출처를 구분합니다. 등록만으로 실제 연결을 ONLINE으로 표시하지 않습니다. 요청 최대 16 KiB.
-      responses:
-        '200':
-          description: 요청 성공. 재전송은 기존 객체를 반환합니다.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Device'
-        '400':
-          description: 필드·UUID·페이지·JSON 형식을 확인하세요.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '404':
-          description: 장치·노드·참조 Profile이 없습니다.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '503':
-          description: DB 연결 장애. 복구 후 재시도하세요.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '201':
-          description: 새 객체 생성. 기존 객체의 ID는 바뀌지 않습니다.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Device'
-        '403':
-          description: CSRF 토큰·세션 쿠키 누락/불일치
-        '409':
-          description: 현재 상태·버전·세션·sequence 충돌. 상세 조회 후 요청을 확인하세요.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '413':
-          description: 요청 크기 제한을 초과했습니다.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-      security:
-      - csrfToken: []
+      summary: 종료된 앱 장치 등록
+      description: 별도 앱 장치 등록은 종료됐습니다. /api/devices의 센서 디바이스를 VD 원본으로 선택하세요.
+      security: [{csrfToken: []}]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/DeviceCreate'
+            schema: {$ref: '#/components/schemas/DeviceCreate'}
+      responses:
+        '410':
+          description: 앱 장치 등록 종료
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '403': {description: CSRF 토큰·세션 쿠키 누락/불일치}
     get:
       tags:
       - Device
       operationId: listDevices
-      summary: 장치 목록과 연결 상태 조회
+      deprecated: true
+      summary: 이전 앱 장치 이력 조회
       description: key 문자열 오름차순으로 조회합니다. 해제된 장치도 이력 조회를 위해 포함합니다. 활성 세션의 최근 보고가 60초보다 오래되면 STALE이며, 보고 전에는 UNKNOWN입니다.
       responses:
         '200':
@@ -747,11 +911,11 @@ paths:
   /api/v1/infrastructure:
     get:
       operationId: getInfrastructure
-      summary: 엣지 AI 서버·엣지 디바이스 및 EdgeX 센서 목록 조회
+      summary: 엣지 AI 서버·엣지 디바이스 및 KubeEdge 센서 목록 조회
       tags: [인프라]
       responses:
         '200':
-          description: Kubernetes 노드와 EdgeX Core Metadata 목록. EdgeX operatingState는 실측값의 신선도를 의미하지 않는다.
+          description: Kubernetes 노드와 소유 KubeEdge Device/DeviceStatus 관측 목록. 최신값과 유효 연결 상태는 /api/devices에서 조회한다.
           content:
             application/json:
               schema:
@@ -1707,7 +1871,7 @@ paths:
       operationId: updateVirtualDevice
       summary: revision을 확인하여 VD 이름·원본·배치 의도 수정
       description: >-
-        이름·sources 전체 집합·placement를 함께 보내세요. Profile 참조와 vdId는 유지합니다.
+        이름·sources 전체 집합·placement를 함께 보내세요. profileVersionId로 새 템플릿으로 전환할 수 있으며 vdId와 연결 이력은 유지합니다.
         변경하지 않은 slot은 같은 연결 ID를 유지하고 바뀐 원본은 기존 이력을 닫고 새 연결을 만듭니다.
         오래된 revision·해제된 VD는409입니다. 현재 논리 설정 수정이며 실제 Runtime 전환 성공을 뜻하지 않습니다.
         관리 중인 실행이 있으면 원본·배치 변경과 교체 Operation을 같은 트랜잭션에 기록합니다. 이름만 바꾸면 실행을 교체하지 않습니다.
@@ -2029,106 +2193,70 @@ paths:
   /api/v1/sensors/registration-options:
     get:
       operationId: getSensorRegistrationOptions
-      summary: 배포된 수집기의 지원 센서 등록 항목 조회
+      deprecated: true
+      summary: 종료된 센서 API
       tags: [센서]
+      description: 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
       responses:
-        '200':
-          description: 현재 EdgeX 서비스와 프로필이 확인된 지원 항목. 연결 가능 여부나 실측 수신을 보장하지 않는다.
+        '410':
+          description: SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/SensorRegistrationCatalog'}
-        '502': {description: EdgeX 목록 조회 실패 또는 조회 한도 초과}
-        '503': {description: EdgeX 비활성화}
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/sensors/registrations:
     post:
       operationId: registerSensor
-      summary: 지원하는 센서를 EdgeX에 수동 등록
+      deprecated: true
+      summary: 종료된 센서 API
       tags: [센서]
+      description: 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
       security: [{csrfToken: []}]
-      description: >-
-        배포된 Arduino Serial 또는 Sense HAT I2C 프로필을 사용한다. 새 드라이버나 프로필을 설치하지 않는다.
-        동일 이름·연결 정보는 기존 등록을 반환하고 이름 또는 동일 포트의 측정 항목 충돌은409다.
-        등록은 EdgeX DB에 저장되며 레포 YAML에는 자동 반영되지 않는다. 결과 미확인 시 자동 재시도하지 않는다.
-        같은 이름·입력값을 유지한 재요청으로 확인할 수 있다. 등록 완료는 실측 수신 확인과 다르다.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/SensorRegistrationRequest'}
       responses:
-        '201':
-          description: 새 등록 저장과 읽기 확인 완료
+        '410':
+          description: SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/SensorRegistrationResult'}
-        '200':
-          description: 같은 이름·설정으로 이미 등록됨
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/SensorRegistrationResult'}
-        '400': {description: 지원하지 않는 센서 또는 연결 설정}
-        '403': {description: CSRF 검증 실패}
-        '409': {description: 등록 충돌 또는 수집기·프로필 없음}
-        '502': {description: EdgeX 조회 실패 또는 등록 결과 미확인}
-        '503': {description: EdgeX 비활성화}
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/sensors/readings:
     get:
       operationId: getSensorReadings
-      summary: EdgeX 센서의 최근 측정값 조회
+      deprecated: true
+      summary: 종료된 센서 API
       tags: [센서]
-      parameters:
-      - {name: device, in: query, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}}
-      - {name: resource, in: query, schema: {type: string}, description: 특정 측정 항목으로 제한}
-      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      description: 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
       responses:
-        '200':
-          description: 최근 N개 측정값을 측정 시각 오름차순으로 반환. 미수집은 빈 배열이며 0과 구분한다.
+        '410':
+          description: SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/SensorReadings'}
-        '400': {description: 잘못된 조회 조건}
-        '404': {description: 센서 없음}
-        '502': {description: EdgeX 조회 실패}
-        '503': {description: EdgeX 비활성화}
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/sensors/commands:
     get:
       operationId: getSensorCommands
-      summary: 센서가 실제 지원하는 읽기·쓰기 명령 조회
+      deprecated: true
+      summary: 종료된 센서 API
       tags: [센서]
-      parameters:
-      - {name: device, in: query, required: true, schema: {type: string}}
+      description: 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
       responses:
-        '200':
-          description: Core Command에서 조회한 명령. 외부 URL이나 프로토콜 인증 정보는 반환하지 않는다.
+        '410':
+          description: SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/SensorCommands'}
-        '404': {description: 센서 없음}
-        '502': {description: EdgeX 조회 실패}
-        '503': {description: EdgeX 비활성화}
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/sensors/command:
     post:
       operationId: executeSensorCommand
-      summary: EdgeX에 등록된 센서 명령 실행
+      deprecated: true
+      summary: 종료된 센서 API
       tags: [센서]
-      description: CSRF가 필요하다. 명령 지원 여부와 adminState를 실행 전에 재조회한다. GET은 ds-pushevent=false로 직접 읽으며 PUT은 지정된 항목의 문자열 값을 전달한다. 자동 재시도하지 않으며 시간 초과 시 실제 장치 결과를 확인해야 한다.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/SensorCommandRequest'}
+      description: 기존 센서 경로는 종료됐다. 등록과 최신값은 /api/devices, 연결 확인은 /api/device-connections/test를 사용한다.
+      security: [{csrfToken: []}]
       responses:
-        '200':
-          description: EdgeX 명령 응답. PUT 응답은 물리 장치 변경 검증을 뜻하지 않는다.
+        '410':
+          description: SENSOR_API_REPLACED. 새 Device Manager API를 사용하세요.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/SensorCommandResult'}
-        '400': {description: 지원하지 않는 명령 또는 잘못된 값}
-        '403': {description: CSRF 검증 실패}
-        '404': {description: 센서 또는 명령 없음}
-        '409': {description: 장치 잠김}
-        '502': {description: EdgeX 명령 응답 실패 또는 결과 미확인}
-        '503': {description: EdgeX 비활성화}
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/virtual-devices/{vdId}/registration:
     delete:
       operationId: deleteVirtualDeviceRegistration
@@ -2217,6 +2345,118 @@ components:
             code: PROFILE_STORE_UNAVAILABLE
             message: Profile 저장소에 연결할 수 없습니다. 잠시 후 다시 시도하세요.
   schemas:
+    ManagedDeviceProperty:
+      type: object
+      additionalProperties: false
+      required: [name, dataType]
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]*$', maxLength: 63}
+        register: {type: integer, description: 'Holding 40001/input 30001/coil 1 maps to wire address 0.'}
+        dataType: {type: string, enum: [float32, float64, int16, uint16, int32, uint32, bool, string]}
+        nodeId: {type: string, maxLength: 512, description: OPC-UA NodeId, e.g. ns=1;s=temperature}
+        topic: {type: string, maxLength: 256, description: Exact MQTT input topic. Wildcards and edgeai/devices/ output topics are rejected.}
+        jsonPath: {type: string, maxLength: 256, description: Dot-separated JSON object path. Required for Serial JSON and Sense HAT.}
+        sensor: {type: string, maxLength: 63, description: Serial JSON frame sensor selector, e.g. acceleration.}
+        function: {type: string, enum: [holding, input, coil], description: Modbus default holding.}
+        byteOrder: {type: string, enum: [ABCD, BADC, CDAB, DCBA], description: Modbus default ABCD.}
+        scale: {type: number, default: 1}
+        offset: {type: number, default: 0}
+        unit: {type: string}
+    ManagedDeviceInput:
+      type: object
+      additionalProperties: false
+      required: [name, protocol, properties, targetNode]
+      properties:
+        name: {type: string, maxLength: 63}
+        kind: {type: string, enum: [physical, virtual], default: physical}
+        protocol: {type: string, enum: [modbus-tcp, opc-ua, mqtt, virtual, serial-json, sensehat]}
+        host: {type: string, maxLength: 253, description: Required for network protocols; omitted for local hardware.}
+        port: {type: integer, minimum: 1, maximum: 65535, description: 'Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080.'}
+        targetNode: {type: string, maxLength: 63}
+        collectionInterval: {type: integer, minimum: 100, maximum: 60000, default: 1000}
+        protocolConfig:
+          type: object
+          additionalProperties: false
+          properties:
+            devicePath: {type: string, maxLength: 80, description: Serial JSON /dev/edgeai/<endpoint> or Sense HAT /dev/i2c-1.}
+            deviceId: {type: string, maxLength: 63, description: Expected physical source device_id in JSON frames.}
+            baudRate: {type: integer, enum: [9600, 19200, 38400, 57600, 115200], description: Serial JSON defaults to 115200.}
+            unitId: {type: integer, minimum: 1, maximum: 247, description: Modbus unit ID (default 1).}
+            timeoutMs: {type: integer, minimum: 100, maximum: 5000, default: 1000}
+            securityMode: {type: string, enum: [None], description: Initial OPC-UA driver supports anonymous SecurityMode None only.}
+            path: {type: string, maxLength: 512, description: OPC-UA endpoint path or Virtual runtime JSON path (default /properties).}
+            staleMs: {type: integer, minimum: 100, maximum: 60000, description: MQTT input message freshness limit.}
+        properties:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/components/schemas/ManagedDeviceProperty'}
+    ManagedDevice:
+      type: object
+      required: [id, uid, profile, model, targetNode, state, lastSeen, properties, mapper, resourceVersion]
+      properties:
+        id: {type: string}
+        uid: {type: string, format: uuid}
+        profile: {$ref: '#/components/schemas/ManagedDeviceInput'}
+        model: {type: string}
+        targetNode: {type: string}
+        state: {type: string}
+        observedState: {type: string, description: Raw DeviceStatus state}
+        stateReason: {type: string, enum: [DMI, STALE_DMI_REPORT, MAPPER_NOT_READY]}
+        lastSeen: {type: integer, format: int64}
+        resourceVersion: {type: string}
+        mapper:
+          type: object
+          required: [name, ready]
+          properties:
+            name: {type: string}
+            ready: {type: boolean}
+        properties:
+          type: object
+          additionalProperties:
+            type: object
+            required: [value, timestamp]
+            properties:
+              value: {type: string}
+              timestamp: {type: integer, format: int64}
+    ManagedDevicePage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ManagedDevice'}}
+    ManagedDeviceProfile:
+      type: object
+      additionalProperties: false
+      required: [name, protocol, properties]
+      properties:
+        name: {type: string, maxLength: 63}
+        protocol: {type: string, enum: [modbus-tcp, opc-ua, mqtt, virtual, serial-json, sensehat]}
+        properties: {type: array, items: {$ref: '#/components/schemas/ManagedDeviceProperty'}}
+    ManagedDeviceProfilePage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ManagedDeviceProfile'}}
+    DeviceConnectionResult:
+      type: object
+      required: [connected]
+      properties:
+        connected: {type: boolean}
+        value: {type: string}
+        error: {type: string}
+    DeviceProtocolPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, available, kind]
+            properties:
+              id: {type: string}
+              available: {type: boolean}
+              kind: {type: string, enum: [physical, virtual]}
     SensorRegistrationTemplate:
       type: object
       required: [id, label, serviceName, nodeName, profileName, protocol, resources, endpoint, baudRates]
@@ -3343,6 +3583,14 @@ components:
       - execution
       - parameters
       properties:
+        device:
+          type: object
+          additionalProperties: false
+          required: [id, outputs]
+          description: 'CRD device reference; resolved to parameters.device values at Run admission. No protocol settings.'
+          properties:
+            id: {type: string}
+            outputs: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string}}
         workflowVersionId:
           type: string
           format: uuid
@@ -3652,7 +3900,11 @@ components:
       - attempts
       - offloads
       - telemetry
+      - vdInputs
       properties:
+        vdInputs:
+          description: 실행 생성 시 고정한 VD 센서 입력. 같은 요청의 재호출·재시도에 유지됩니다.
+          oneOf: [{$ref: '#/components/schemas/VDSensorInput'}, {type: 'null'}]
         telemetry:
           description: 최신 Attempt의 최신 측정. 미수집은 null이며 과거 Attempt의 값으로 대체하지 않습니다.
           oneOf:
@@ -3929,7 +4181,42 @@ components:
         required: [sourceKey, deviceId]
         properties:
           sourceKey: {$ref: '#/components/schemas/ProfileKey'}
-          deviceId: {type: string, format: uuid}
+          deviceId: {type: string, maxLength: 253, description: KubeEdge 센서 Device 이름}
+          properties: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*$', maxLength: 63}, description: BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다.}
+          maxAgeSeconds: {type: integer, minimum: 1, maximum: 300, default: 30, description: 항목별 최신 수신값의 최대 허용 경과 시간(초)}
+    VDSensorInput:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, vdId, vdRevision, capturedAt, sources]
+      properties:
+        apiVersion: {const: edgeai.vd-input/v1}
+        vdId: {type: string, format: uuid}
+        vdRevision: {type: integer, format: int64}
+        capturedAt: {type: string, format: date-time}
+        sources:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/VDSensorSourceReading'}
+    VDSensorSourceReading:
+      type: object
+      additionalProperties: false
+      required: [bindingId, deviceId, deviceUid, deviceModel, maxAgeSeconds, properties]
+      properties:
+        bindingId: {type: string, format: uuid}
+        deviceId: {type: string}
+        deviceUid: {type: string, format: uuid}
+        deviceModel: {type: string}
+        maxAgeSeconds: {type: integer, minimum: 1, maximum: 300}
+        properties:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [value, dataType, unit, observedAt]
+            properties:
+              value: {type: [string, number, boolean]}
+              dataType: {type: string, description: 센서의 원시 자료형. value는 Mapper scale/offset 적용 후 공학 단위값입니다.}
+              unit: {type: string}
+              observedAt: {type: string, format: date-time}
     VirtualDevicePlacement:
       oneOf:
       - type: object
@@ -3951,7 +4238,7 @@ components:
       properties:
         key: {$ref: '#/components/schemas/ProfileKey'}
         displayName: {type: string, minLength: 1, maxLength: 128}
-        profileVersionId: {type: string, format: uuid, description: edgeai.vd/v1 규격의 발행된 VD Profile UUID}
+        profileVersionId: {type: string, format: uuid, description: edgeai.vd/v2 센서 원본 템플릿 UUID}
         sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
         placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
     VirtualDeviceUpdate:
@@ -3959,6 +4246,7 @@ components:
       additionalProperties: false
       required: [revision, displayName, sources, placement]
       properties:
+        profileVersionId: {type: string, format: uuid, description: 새 VD 템플릿 버전. 생략하면 현재 버전을 유지합니다.}
         revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
         displayName: {type: string, minLength: 1, maxLength: 128}
         sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
@@ -3979,14 +4267,17 @@ components:
         updatedAt: {type: string, format: date-time}
     VDSourceBinding:
       type: object
-      required: [id, vdId, sourceKey, deviceId, deviceProfileVersionId, sourceMode, openedRevision, closedRevision, openedAt, closedAt]
+      required: [id, vdId, sourceKey, deviceId, deviceUid, deviceModel, sourceKind, openedRevision, closedRevision, openedAt, closedAt, properties, maxAgeSeconds]
       properties:
         id: {type: string, format: uuid}
         vdId: {type: string, format: uuid}
         sourceKey: {type: string}
-        deviceId: {type: string, format: uuid}
-        deviceProfileVersionId: {type: string, format: uuid}
-        sourceMode: {type: string, enum: [LIVE, REPLAY, SYNTHETIC]}
+        deviceId: {type: string, description: 센서 Device 이름. legacy 이력은 이전 앱 UUID.}
+        deviceUid: {type: [string, 'null'], format: uuid}
+        deviceModel: {type: [string, 'null']}
+        sourceKind: {type: string, enum: [physical, virtual, legacy]}
+        properties: {type: array, maxItems: 64, items: {type: string}}
+        maxAgeSeconds: {type: integer, minimum: 1, maximum: 300}
         openedRevision: {type: integer, format: int64}
         closedRevision: {type: [integer, 'null'], format: int64}
         openedAt: {type: string, format: date-time}

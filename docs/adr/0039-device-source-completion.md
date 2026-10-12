@@ -33,7 +33,7 @@ WAITING이면 명시적으로 재시작한 owner만 현재 배정을 새로 조�
 
 ## 검증 범위와 남은 작업
 
-[DeviceSource 완료 검증](../evidence/m7-device-source-completion.md)에 실제/fixture 경계를 기록한다.
+[DeviceSource 완료 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-device-source-completion.md)에 실제/fixture 경계를 기록한다.
 새 Spring 통합시험은 장치 SDK·TLS MQTT·독립 계산 프로세스·고정 S3 체크포인트·DB 완료 허가·
 Result 저장과 경로 회수 후 장치 복구를 연결한다. Kubernetes Pod 생성/신원은 명시적 fixture이고,
 공개 Run 생성과 전체 Runner 최종 파일 실행까지 합친 Kubernetes 수용시험은 아니다.

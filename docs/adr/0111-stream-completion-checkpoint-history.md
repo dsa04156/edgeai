@@ -37,5 +37,5 @@ V38은 기존 outbox에 `checkpoint_history_completed=false`를 추가한다. �
 원자적으로 반영하는 소비 CLI도 아직 남는다. 그 CLI는 원래 시작 허가·작업 계약·
 producer 종료와 broker 차단을 별도로 대조해야 한다. 이 reader만으로 실행을 허가하지 않는다.
 
-검증은 [증거 문서](../evidence/m9-stream-completion-checkpoint-history.md)에 기록한다.
+검증은 [증거 문서](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m9-stream-completion-checkpoint-history.md)에 기록한다.
 실패한 시도와 후속 검증, 원격 CI·실제 배포의 범위는 구분한다.

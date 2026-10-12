@@ -19,11 +19,13 @@ readiness 실패와 브라우저 화면 로딩 성공은 동시에 발생할 수
 | 노드 조회 DISABLED | `EDGEAI_INFRASTRUCTURE_SOURCE`와 개발 스크립트/IDE 실행 차이 |
 | 노드 조회 UNAVAILABLE | 선택한 context 또는 API 주소, get/list 권한, 네트워크 |
 | 서버·엣지 분류 불명 | 역할 라벨 누락 또는 서로 충돌하는 라벨 |
-| 센서 목록 없음 | EdgeX 활성화, Core Metadata 주소와 장치 등록 |
-| 한 보드가 여러 행 | 채널별 EdgeX 논리 장치인지 확인 |
+| 센서 목록 없음 | `EDGEAI_DEVICE_NAMESPACE`, 소유 Device CRD, API의 get/list 권한과 `/api/devices` 응답 |
+| 센서 OFFLINE / MAPPER_NOT_READY | 대상 노드·이미지 아키텍처·digest, Mapper Pod readiness, DMI socket 접근 |
+| 센서 OFFLINE / STALE_DMI_REPORT | DeviceStatus heartbeat, DMI 연결·노드 공통 요청 예산·보고 지연 |
+| 한 보드가 여러 행 | 같은 장치 ID의 property별 측정 행인지 확인; 보드를 여러 번 등록한 뜻은 아님 |
 
 [인프라 연결](../guides/infrastructure-inventory.md)의 원본을 기준으로 비교합니다.
-앱 장치를 등록했다고 EdgeX 목록에 자동 등록되지는 않습니다.
+UUID 앱 장치 등록과 KubeEdge Device CRD는 별도 신원입니다. 앱 장치 등록만으로 Mapper 수집 설정이 생기지 않습니다.
 
 ## GPU·NPU 또는 메모리 값이 없음
 
@@ -35,11 +37,20 @@ readiness 실패와 브라우저 화면 로딩 성공은 동시에 발생할 수
 미수집 값을 0으로 처리하지 않습니다. 하드웨어가 호스트에 인식되지 않으면 화면 수정으로 해결할 수 없습니다.
 자세한 지표는 [메트릭 연결](../guides/node-metrics.md)을 참조합니다.
 
-## 센서는 UP인데 측정값이 오래됨
+## 센서는 ONLINE인데 값의 시각이 오래됨
 
-UP은 EdgeX 운영 상태이며 Reading 수신 시각이 아닙니다. Core Data의 최신 Reading과
-Device Service의 수집 상태를 확인합니다. **지금 읽기** 결과와 저장 이력도 서로 다릅니다.
-쓰기 버튼이 없다면 Core Command의 `set` 지원과 프로필의 읽기 전용 설정을 확인합니다.
+ONLINE은 DMI 연결 보고와 Mapper 준비 상태를 반영하며 항목별 값의 갱신 시각과 다릅니다.
+동일 값이면 KubeEdge가 Twin을 다시 갱신하지 않을 수 있습니다. DeviceStatus heartbeat와
+해당 노드의 MQTT 수신을 함께 확인하고, Twin 시각만으로 수집 중단을 단정하지 않습니다.
+**연결 테스트**는 대상 Mapper에서 실제 항목 하나를 읽으며 저장 이력을 조회하는 기능이 아닙니다.
+장치 읽기 실패나 MQTT 입력 만료 때는 마지막 값을 보존하면서 OFFLINE을 보고합니다.
+
+여러 Mapper가 노드의 DMI 요청 예산을 공유하므로 항목이 늘면 보고 지연도 늘어납니다.
+EdgeCore가 `dmi.sock`을 재생성한 뒤 연결 실패가 계속되면 Mapper 로그·socket mount와 liveness를 확인합니다.
+실제 소켓 장애와 복구 범위는 [Mapper 실행 안내](../../deploy/kubeedge/README.md#모델과-mapper)를 따릅니다.
+
+현재 드라이버는 읽기 전용입니다. 장치 명령 쓰기와 영속 이력은 제공하지 않으며,
+이전 센서 API의 410 `SENSOR_API_REPLACED`는 [새 장치 API](../reference/api.md#장치-api-선택)로 전환하라는 응답입니다.
 
 ## 삭제가 409로 거절됨
 
