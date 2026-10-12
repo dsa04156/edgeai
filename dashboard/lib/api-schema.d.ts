@@ -807,6 +807,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/virtual-devices/processing-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공통 센서 처리 실행 모듈 준비 상태 */
+        get: operations["getProcessingCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/processing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 센서와 처리 선택으로 가상 장치 등록
+         * @description 공통 SERVICE와 VD 템플릿을 내용 기반으로 재사용하며 원본 연결과 함께 하나의 트랜잭션으로 등록합니다. 이미지와 프로필 UUID는 서버가 선택합니다. 동일한 키와 입력의 재요청은 기존 등록을 반환합니다.
+         */
+        post: operations["createProcessingVirtualDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/virtual-devices": {
         parameters: {
             query?: never;
@@ -2426,6 +2463,21 @@ export interface components {
             mode: "NODE";
             /** Format: uuid */
             nodeId: string;
+        };
+        ProcessingCatalog: {
+            ready: boolean;
+            architectures: ("amd64" | "arm64")[];
+            operations: ("filter" | "movingAverage" | "rms" | "fft" | "threshold")[];
+        };
+        ProcessingVirtualDeviceCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** @description 등록된 센서 디바이스 이름 */
+            deviceId: string;
+            maxAgeSeconds: number;
+            /** @description outputPort는 output, 모든 파이프라인은 input 원본 슬롯의 숫자 측정 항목을 사용합니다. */
+            processing: components["schemas"]["ProcessingSpec"];
+            placement: components["schemas"]["VirtualDevicePlacement"];
         };
         VirtualDeviceCreate: {
             key: components["schemas"]["ProfileKey"];
@@ -4937,6 +4989,71 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getProcessingCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 서버에 고정된 실행 이미지의 준비 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingCatalog"];
+                };
+            };
+        };
+    };
+    createProcessingVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessingVirtualDeviceCreate"];
+            };
+        };
+        responses: {
+            /** @description 동일 등록 재조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            /** @description 센서 처리 장치 등록 완료 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            413: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
         };
     };
     listVirtualDevices: {

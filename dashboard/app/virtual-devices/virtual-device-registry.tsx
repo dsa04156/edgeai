@@ -11,6 +11,7 @@ import { hardwareLabel } from "../../lib/hardware";
 import { ConnectionPanel } from "../components/connection-panel";
 import { VDPrerequisites } from "./vd-prerequisites";
 import { readProfilePage } from "../../lib/profile-version";
+import { SensorProcessingRegistration } from "./sensor-processing-registration";
 
 type Schema = components["schemas"];
 type VD = Schema["VirtualDevice"];
@@ -91,6 +92,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   const [selectedProfile, setSelectedProfile] = useState("");
   const [updateProfile, setUpdateProfile] = useState("");
   const [initialDevice, setInitialDevice] = useState("");
+  const [processingReady, setProcessingReady] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [sourceSelections, setSourceSelections] = useState<Record<string, string>>({});
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
@@ -130,6 +132,8 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", path => api(path, undefined, authorization), readProfilePage),
       ]);
       setServiceProfiles(serviceItems); setProfiles(profileItems); setDevices(deviceItems); setNodes(nodeItems);
+      try { setProcessingReady((await (await api("virtual-devices/processing-catalog", undefined, authorization)).json()).ready === true); }
+      catch { setProcessingReady(false); }
       const query = new URLSearchParams(window.location.search);
       setSelectedProfile(query.get("profile") || ""); setInitialDevice(query.get("device") || "");
       setCreateOpen(query.has("profile") || query.has("device") || query.get("create") === "1");
@@ -179,6 +183,17 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
     if (profile.kind === "SERVICE") setServiceProfiles(update);
     else { setProfiles(update); setSelectedProfile(profile.id); setSourceSelections({}); }
   }
+  async function onProcessingRegistered(vd: VD) {
+    const feedback: SaveFeedback = { scope: "register", state: "success", displayName: vd.displayName, message: "센서 처리 장치를 등록했습니다." };
+    setSaveFeedback(feedback); setCreateOpen(false); setFormVersion(value => value + 1);
+    try {
+      const [templates, services] = await Promise.all([
+        registryItems<Schema["ProfileVersion"]>("profiles/VD", path => api(path), readProfilePage),
+        registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", path => api(path), readProfilePage),
+      ]);
+      setProfiles(templates); setServiceProfiles(services); await show(vd.id); await load(0);
+    } catch { setSaveFeedback({ ...feedback, refreshError: "등록은 완료됐지만 저장된 상태 조회에 실패했습니다. 새로고침으로 확인하세요." }); }
+  }
   function invalid(scope: "register" | "update") {
     setSaveFeedback({ scope, state: "error", message: "필수 입력과 형식을 확인하세요. 원본이 필수인 템플릿은 호환 장치를 선택해야 합니다." });
   }
@@ -198,7 +213,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
       <div className="registry-workspace"><section aria-labelledby="vds-title" aria-busy={busy}>
         <div className="toolbar"><h2 id="vds-title">등록된 가상 장치</h2><div className="toolbar"><button disabled={busy} onClick={() => void run(async () => { await load(); if (detail) await show(detail.vd.id); })}>새로고침</button><button className="primary" disabled={busy} onClick={openCreatePanel}>가상 장치 등록</button></div></div>
         {busy && <p role="status">처리 중…</p>}
-        {page?.items.length === 0 && <EmptyState title="등록된 가상 장치가 없습니다" description="템플릿과 원본 장치를 같은 화면에서 준비해 가상 장치를 구성하세요." action={<button disabled={busy} onClick={openCreatePanel}>첫 가상 장치 등록</button>} />}
+        {page?.items.length === 0 && <EmptyState title="등록된 가상 장치가 없습니다" description="센서와 처리 기능을 선택해 가상 장치를 구성하세요." action={<button disabled={busy} onClick={openCreatePanel}>첫 가상 장치 등록</button>} />}
         {!!page?.items.length && <div className="table-scroll"><table className="vd-table"><caption className="sr-only">가상 장치 목록</caption><thead><tr><th>가상 장치</th><th>상태</th><th>변경 버전</th><th>배치 의도</th><th>등록 관리</th></tr></thead>
           <tbody>{page.items.map(vd => <tr key={vd.id}><td><button className="version-link" disabled={busy} onClick={() => void run(() => show(vd.id))}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td>{stateNames[vd.state]}</td><td>{vd.revision}</td><td>{vd.placement.mode === "AUTO" ? "자동" : "노드 지정"}</td><td>
             {vd.state !== "RELEASED" ? <button disabled={busy} onClick={() => void run(async () => { await show(vd.id); setNotice("상세 화면에서 VD를 해제한 뒤 미사용 등록을 삭제할 수 있습니다."); })}>해제 관리</button>
@@ -231,6 +246,9 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         {detail.vd.state === "REGISTERED" && <div className="release-controls">{confirmRelease ? <><p>이 VD의 원본 연결을 종료합니다. VD ID와 연결 이력, 원본 장치는 보존됩니다.</p><div className="toolbar"><button disabled={busy} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); setNotice("가상 장치를 해제했습니다."); })}>VD 해제 확정</button><button disabled={busy} onClick={() => setConfirmRelease(false)}>계속 사용</button></div></> : <button disabled={busy} onClick={() => setConfirmRelease(true)}>VD 해제</button>}</div>}
       </section>}
       </div><details className="create-panel" ref={createPanel} open={createOpen} onToggle={event => setCreateOpen(event.currentTarget.open)}><summary><h2 id="vd-register-title">새 가상 장치 등록</h2></summary>
+        <SensorProcessingRegistration key={`processing-${formVersion}-${initialDevice}`} devices={devices} initialDevice={initialDevice} ready={processingReady} busy={busy} onBusy={setBusy}
+          create={async body => (await api("virtual-devices/processing", write("POST", body))).json()} onRegistered={onProcessingRegistered} />
+        <details open={!!selectedProfile}><summary>템플릿으로 등록 · 고급 설정</summary>
         <fieldset disabled={busy} className="publish-fields"><VDPrerequisites profiles={[...serviceProfiles, ...profiles]} nodes={nodes} template={template}
           write={(path, body) => api(path, write("POST", body))} onProfileRegistered={onProfileRegistered} onBusy={setBusy} /></fieldset>
         <h3>가상 장치 구성</h3>
@@ -245,7 +263,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
           </>}
           {registrationFeedback && registrationFeedback.state !== "success" && <p ref={registerError} tabIndex={-1} role={registrationFeedback.state === "error" ? "alert" : "status"} className={registrationFeedback.state === "error" ? "error" : "hint"}>{registrationFeedback.message}</p>}
           <button className="primary" disabled={!template}>{registrationFeedback?.state === "pending" ? "등록 중…" : "VD 등록"}</button>
-        </fieldset></form>
+        </fieldset></form></details>
       </details>
     </>}
   </>;

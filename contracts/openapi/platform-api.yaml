@@ -1833,6 +1833,46 @@ paths:
         '400': {description: UUID 형식 오류}
         '404': {description: Operation이 없습니다.}
         '503': {description: 저장소 연결 실패}
+  /api/v1/virtual-devices/processing-catalog:
+    get:
+      tags: [VD]
+      operationId: getProcessingCatalog
+      summary: 공통 센서 처리 실행 모듈 준비 상태
+      responses:
+        '200':
+          description: 서버에 고정된 실행 이미지의 준비 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProcessingCatalog'}
+  /api/v1/virtual-devices/processing:
+    post:
+      tags: [VD]
+      operationId: createProcessingVirtualDevice
+      summary: 센서와 처리 선택으로 가상 장치 등록
+      description: 공통 SERVICE와 VD 템플릿을 내용 기반으로 재사용하며 원본 연결과 함께 하나의 트랜잭션으로 등록합니다. 이미지와 프로필 UUID는 서버가 선택합니다. 동일한 키와 입력의 재요청은 기존 등록을 반환합니다.
+      security: [{csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProcessingVirtualDeviceCreate'}
+      responses:
+        '201':
+          description: 센서 처리 장치 등록 완료
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '200':
+          description: 동일 등록 재조회
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualDevice'}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '403': {description: CSRF 쿠키/토큰 필요}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '413': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
   /api/v1/virtual-devices:
     post:
       tags: [VD]
@@ -4413,6 +4453,27 @@ components:
           mode: {const: NODE}
           nodeId: {type: string, format: uuid}
       description: 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다.
+    ProcessingCatalog:
+      type: object
+      additionalProperties: false
+      required: [ready, architectures, operations]
+      properties:
+        ready: {type: boolean}
+        architectures: {type: array, items: {type: string, enum: [amd64, arm64]}}
+        operations: {type: array, items: {type: string, enum: [filter, movingAverage, rms, fft, threshold]}}
+    ProcessingVirtualDeviceCreate:
+      type: object
+      additionalProperties: false
+      required: [key, displayName, deviceId, maxAgeSeconds, processing, placement]
+      properties:
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        deviceId: {type: string, maxLength: 253, description: 등록된 센서 디바이스 이름}
+        maxAgeSeconds: {type: integer, minimum: 1, maximum: 300}
+        processing:
+          $ref: '#/components/schemas/ProcessingSpec'
+          description: outputPort는 output, 모든 파이프라인은 input 원본 슬롯의 숫자 측정 항목을 사용합니다.
+        placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
     VirtualDeviceCreate:
       type: object
       additionalProperties: false

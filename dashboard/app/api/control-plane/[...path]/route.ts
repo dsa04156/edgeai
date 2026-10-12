@@ -14,6 +14,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const allowed = request.method === "GET" ? target === "csrf" || target === "node-metrics" || target === "infrastructure"
+    || target === "virtual-devices/processing-catalog"
     || ["sensors/readings", "sensors/commands", "sensors/registration-options"].includes(target)
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)
     || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
@@ -22,7 +23,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     || new RegExp(`^tasks/${uuid}/results/[a-z][a-z0-9_]*/content$`).test(target)
     || new RegExp(`^(devices|nodes|virtual-devices)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "virtual-devices/processing", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
     : request.method === "DELETE" ? new RegExp(`^(devices|virtual-devices)/${uuid}(/registration)?$`).test(target)
       || /^profiles\/(DEVICE|SERVICE|VD)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)

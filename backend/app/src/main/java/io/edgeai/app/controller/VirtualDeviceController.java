@@ -2,6 +2,7 @@ package io.edgeai.app.controller;
 
 import io.edgeai.app.dto.*;
 import io.edgeai.app.service.VirtualDeviceService;
+import io.edgeai.app.service.ProcessingRegistrationService;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +12,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/virtual-devices")
 public class VirtualDeviceController {
     private final VirtualDeviceService service;
-    public VirtualDeviceController(VirtualDeviceService service) { this.service=service; }
+    private final ProcessingRegistrationService processing;
+    public VirtualDeviceController(VirtualDeviceService service,ProcessingRegistrationService processing) { this.service=service;this.processing=processing; }
+    @GetMapping("/processing-catalog")
+    public java.util.Map<String,Object> processingCatalog() {return processing.catalog();}
+    @PostMapping(value="/processing",consumes="application/json")
+    public ResponseEntity<VirtualDeviceResponse> createProcessing(@RequestBody String body) {
+        var result=processing.create(body);
+        return ResponseEntity.status(result.created()?201:200).location(URI.create("/api/v1/virtual-devices/"+result.value().id())).body(VirtualDeviceResponse.from(result.value()));
+    }
     @PostMapping(consumes="application/json")
     public ResponseEntity<VirtualDeviceResponse> create(@RequestBody String body) {
         var result=service.create(body);

@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class VirtualDeviceControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean VirtualDeviceService service;
+    @MockitoBean io.edgeai.app.service.ProcessingRegistrationService processing;
     @Test void writesRequireCsrf() throws Exception {
         String path="/api/v1/virtual-devices",detail=path+"/"+UUID.randomUUID();
         for(var request:List.of(post(path),patch(detail),delete(detail),delete(detail+"/registration")))

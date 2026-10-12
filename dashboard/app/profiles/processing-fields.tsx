@@ -4,8 +4,8 @@ import { record } from "../../lib/vd-profile";
 import { newProcessingStep, processingNames } from "../../lib/processing";
 import type { components } from "../../lib/api-schema";
 
-type Props = { spec: Record<string, unknown>; devices: components["schemas"]["ManagedDevice"][]; update: (patch: Record<string, unknown>) => void };
-export function ProcessingFields({ spec, devices, update }: Props) {
+type Props = { spec: Record<string, unknown>; devices: components["schemas"]["ManagedDevice"][]; update: (patch: Record<string, unknown>) => void; sensorOnly?: boolean };
+export function ProcessingFields({ spec, devices, update, sensorOnly = false }: Props) {
   const config = record(spec.processing), pipelines = Array.isArray(config.pipelines) ? config.pipelines.map(record) : [];
   const sources = Object.keys(record(spec.sources));
   const change = (patch: Record<string, unknown>) => update({ processing: { ...config, ...patch } });
@@ -16,7 +16,7 @@ export function ProcessingFields({ spec, devices, update }: Props) {
     ] } })}>공통 처리 설정 추가</button> : <>
       <p className="hint">단계를 위에서 아래로 실행합니다. 센서 값은 Mapper의 배율·보정 적용값이며 다시 변환하지 않습니다.</p>
       <div className="form-row"><label>처리 표본 수<input aria-label="처리 표본 수" required type="number" min={1} max={1024} step={1} value={String(config.sampleCount ?? "")} onChange={e => change({ sampleCount: Number(e.target.value) })} /></label>
-        <label>처리 출력 포트<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(config.outputPort || "")} onChange={e => change({ outputPort: e.target.value })} /></label></div>
+        {!sensorOnly && <label>처리 출력 포트<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(config.outputPort || "")} onChange={e => change({ outputPort: e.target.value })} /></label>}</div>
       <p className="hint">서로 다른 관측 시각의 표본이 모두 준비되면 실행할 수 있습니다. 허용 수신 시간 안에 표본 창이 들어와야 합니다.</p>
       {pipelines.map((value, index) => {
         const prefix = `처리 ${index + 1}`, input = record(value.input), steps = Array.isArray(value.steps) ? value.steps.map(record) : [];
@@ -27,11 +27,11 @@ export function ProcessingFields({ spec, devices, update }: Props) {
         }))];
         const setStep = (position: number, patch: Record<string, unknown>, replace = false) => pipeline(index, { steps: steps.map((v, i) => i === position ? replace ? patch : { ...v, ...patch } : v) });
         return <fieldset className="publish-fields" key={index}><legend>{prefix}</legend>
-          <label>{prefix} · 결과 이름<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(value.name || "")} onChange={e => pipeline(index, { name: e.target.value })} /></label>
+          {!sensorOnly && <><label>{prefix} · 결과 이름<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(value.name || "")} onChange={e => pipeline(index, { name: e.target.value })} /></label>
           <label>{prefix} · 입력 종류<select value={"port" in input ? "artifact" : "sensor"} onChange={e => pipeline(index, { input: e.target.value === "artifact" ? { port: "input", output: "signal" } : { sourceKey: sources[0] || "", property: "" } })}>
-            <option value="sensor">원본 센서 측정값</option><option value="artifact">다른 VD의 처리 결과</option></select></label>
+            <option value="sensor">원본 센서 측정값</option><option value="artifact">다른 VD의 처리 결과</option></select></label></>}
           {"port" in input ? <div className="form-row">{(["port", "output"] as const).map(key => <label key={key}>{prefix} · {key === "port" ? "입력 포트" : "원본 결과 이름"}<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(input[key] || "")} onChange={e => pipeline(index, { input: { ...input, [key]: e.target.value } })} /></label>)}</div> : <div className="form-row">
-            <label>{prefix} · 원본 슬롯<select required value={String(input.sourceKey || "")} onChange={e => pipeline(index, { input: { ...input, sourceKey: e.target.value } })}><option value="">원본 선택</option>{sources.map(key => <option key={key}>{key}</option>)}</select></label>
+            {!sensorOnly && <label>{prefix} · 원본 슬롯<select required value={String(input.sourceKey || "")} onChange={e => pipeline(index, { input: { ...input, sourceKey: e.target.value } })}><option value="">원본 선택</option>{sources.map(key => <option key={key}>{key}</option>)}</select></label>}
             <label>{prefix} · 측정 항목<select required value={String(input.property || "")} onChange={e => pipeline(index, { input: { ...input, property: e.target.value } })}><option value="">숫자 측정 항목 선택</option>{Boolean(input.property) && !properties.includes(String(input.property)) && <option value={String(input.property)}>{String(input.property)} · 규격 확인 필요</option>}{properties.map(property => <option key={property}>{property}</option>)}</select></label></div>}
           {steps.map((step, position) => {
             const label = `${prefix} · 단계 ${position + 1}`;
@@ -52,7 +52,7 @@ export function ProcessingFields({ spec, devices, update }: Props) {
         </fieldset>;
       })}
       <button type="button" disabled={pipelines.length >= 16} onClick={() => change({ pipelines: [...pipelines, { name: `signal${pipelines.length + 1}`, input: { sourceKey: sources[0] || "", property: "" }, steps: [newProcessingStep("threshold")] }] })}>처리 파이프라인 추가</button>
-      <p className="hint">다른 VD의 결과는 Workflow Builder에서 앞 작업의 출력 포트를 이 SERVICE 입력 포트에 연결합니다. AI 작업도 같은 출력 파일을 입력으로 사용할 수 있습니다.</p>
+      {!sensorOnly && <p className="hint">다른 VD의 결과는 Workflow Builder에서 앞 작업의 출력 포트를 이 SERVICE 입력 포트에 연결합니다. AI 작업도 같은 출력 파일을 입력으로 사용할 수 있습니다.</p>}
     </>}
   </fieldset>;
 }
