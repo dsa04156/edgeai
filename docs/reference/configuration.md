@@ -61,7 +61,7 @@ Mapper 이미지의 저장소 기본값은 현재 개발 registry를 사용합�
 활성화 값만으로 필요한 키·broker·저장소·ServiceAccount를 생성하지 않습니다.
 Runtime 상세는 `.env.example`과 `backend/app/src/main/resources/application.yml`,
 Remote는 [설정 안내](../operations/remote.md), 복원은 [복구 안내](../operations/backup-and-recovery.md)를 확인합니다.
-연속 계산 결과 보관에는 `EDGEAI_HISTORY_DB_URL`, `EDGEAI_HISTORY_DB_USER`(기본 `edgeai_history`), `EDGEAI_HISTORY_DB_PASSWORD`로 전용 history DB를 연결합니다. URL/암호는 기본 빈 값이며 관리 DB와 분리합니다. eKuiper·Agent·TLS·history 배포와 실제 활성화 순서는 [연속 센서 가이드](../guides/vd-processing.md)를 따릅니다.
+센서 원본과 연속 계산 결과는 `EDGEAI_INFLUX_URL`, `EDGEAI_INFLUX_ORG`(기본 `edgeai`), `EDGEAI_INFLUX_TOKEN_FILE`로 InfluxDB에 연결합니다. 원본 bucket은 `EDGEAI_INFLUX_RAW_BUCKET`(기본 `sensor-originals`), 결과 bucket prefix는 `EDGEAI_INFLUX_RESULT_PREFIX`(기본 `vd-results-`)입니다. URL과 token 파일이 준비돼야 이력 API를 사용할 수 있습니다. 처리 정의·실행 설정·결과 전달 대기열은 관리 PostgreSQL에 유지합니다. 기존 `EDGEAI_HISTORY_DB_*` 설정은 현재 이력 저장소의 연결 기준이 아닙니다. eKuiper·Agent·TLS·원본 수집·InfluxDB 준비와 실제 계산 활성화 순서는 [연속 센서 가이드](../guides/vd-processing.md)를 따릅니다.
 
 ## DDS 배포 서비스
 

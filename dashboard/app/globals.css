@@ -15,6 +15,7 @@ html { scrollbar-gutter: stable; }
 .registration-dialog-header, .registration-dialog-footer { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; }
 .registration-dialog-header { border-bottom: 1px solid var(--line); }
 .registration-dialog-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.registration-dialog-header > button { flex-shrink: 0; white-space: nowrap; }
 .registration-dialog-body { min-height: 0; min-width: 0; padding: 24px; overflow: auto; overscroll-behavior: contain; }
 .registration-dialog-footer { border-top: 1px solid var(--line); justify-content: flex-end; }
 .registration-dialog-body > .panel { margin: 0; border: 0; padding: 0; }

@@ -21,7 +21,7 @@ flowchart TB
   PA --> EK[공유 eKuiper]
   EK --> PA
   PA --> API
-  API -. 계산 결과 보관 .-> HIST[(전용 history PostgreSQL)]
+  API -. 원본·계산 결과 보관 .-> HIST[(InfluxDB)]
   API --> K[Kubernetes API]
   K --> RUN[일반 SERVICE Runner]
   RUN --> OBJ[MinIO 검증 결과]
