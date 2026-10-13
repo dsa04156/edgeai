@@ -18,6 +18,7 @@ patches:
       EDGEAI_INFLUX_TOKEN_FILE: /var/run/edgeai-influx/api-token
       EDGEAI_INFLUX_URL: http://edgeai-influxdb-hdd:8086
       EDGEAI_RAW_HISTORY_ENABLED: 'false'
+      EDGEAI_RUNTIME_ENABLED: 'false'
     kind: ConfigMap
     metadata:
       name: edgeai-config

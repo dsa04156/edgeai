@@ -68,7 +68,8 @@ kubectl --context <대상-context> apply -f deploy/kubernetes/bootstrap/hdd-stor
 edgeai-api·전용 백업/복원 Pod와 현재 웹 API 호스트(192.168.0.56)만 허용한다.
 호스트 API는 해당 Service의 ClusterIP를 사용한다. Service를 재생성하면 IP와 호스트 설정을
 함께 갱신한다. 현재 웹 API가 유일한 원본 수집기이고 클러스터 API의 RAW_HISTORY_ENABLED는
-false다. 수집기를 이전할 때 기존 수집기를 종료한 후 새 수집기를 활성화해 MQTT client 충돌을 막는다.
+false다. 현재 웹의 실행 설정에 맞춰 클러스터 API의 RUNTIME_ENABLED도 false로 유지해
+이전된 실행 이력에 새 실행 권한을 부여하지 않는다. 수집기를 이전할 때 기존 수집기를 종료한 후 새 수집기를 활성화해 MQTT client 충돌을 막는다.
 VD 처리 엔진의 활성화 여부는 이번 DB 이전과 별개로 유지한다.
 
 매일 한국 시간 03:00 PostgreSQL, 03:30 InfluxDB를 백업한다. 완료 표시·체크섬을 기록한 뒤
