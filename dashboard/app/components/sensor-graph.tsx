@@ -66,7 +66,7 @@ export function SensorGraph({ device, deviceUid, property, failed }: {
     <details className="sensor-graph-info"><summary>센서·수집 정보</summary>
       <dl><dt>센서</dt><dd>{device?.id ?? "현재 등록에서 찾지 못함"}</dd><dt>노드</dt><dd>{device?.targetNode ?? "—"}</dd><dt>원본 최신값</dt><dd>{latest?.value ?? "—"} {property.unit}</dd><dt>센서 UID</dt><dd>{deviceUid}</dd><dt>보관 기간</dt><dd>{retentionDays}일</dd></dl>
       <p className="hint">InfluxDB에 저장된 센서 원본을 조회합니다. 페이지를 닫거나 새로고침해도 저장된 이력은 유지됩니다.</p>
-      <p className="hint">툴팁과 기록 표에서 정확한 값을 확인합니다. 그래프 위에서 값을 확인하고 아래 슬라이더로 구간을 확대합니다. 수신 간격이 크게 벌어지거나 수집 설정·세대가 바뀐 구간은 선을 끊습니다.</p>
+      <p className="hint">툴팁과 기록 표에서 정확한 값을 확인합니다. 그래프 위에서 값을 확인하고 아래 슬라이더로 구간을 확대합니다. 조회한 원본 측정값을 시간순으로 연결합니다.</p>
     </details>
   </section>;
 }
