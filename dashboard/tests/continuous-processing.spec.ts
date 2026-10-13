@@ -76,7 +76,7 @@ test("multiple sensors and outputs preserve a failed registration without requir
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {
   await fixture(page, true);
   await page.goto("/virtual-devices");
-  await page.getByRole("button", { name: /^온도 계산\s*temperature-calculations$/ }).click();
+  await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
   const results = page.getByRole("region", { name: "연속 처리 결과", exact: true });
   await expect(results.getByRole("table").getByRole("row")).toHaveCount(4);
   await expect(results.getByText("기록 저장 누락", { exact: true })).toBeVisible();

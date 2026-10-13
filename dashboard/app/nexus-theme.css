@@ -13,6 +13,9 @@
 .continuous-axis { fill: none; stroke: var(--line); }
 .continuous-line { fill: none; stroke: var(--signal); stroke-width: 2; }
 .continuous-dot { fill: var(--signal); }
+.sensor-live-chart svg { min-width: 0; }
+.graph-latest { font-variant-numeric: tabular-nums; }
+.graph-latest strong { font-size: 28px; }
 .continuous-gap { fill: var(--warning-surface); }
 .continuous-flow { margin-block: 16px 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .continuous-flow h2 { margin: 0; font-size: 14px; }

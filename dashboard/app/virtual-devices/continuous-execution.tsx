@@ -38,40 +38,52 @@ function HistoryChart({ history, interval }: { history: History; interval: numbe
   </svg><figcaption>기록 누락·연결 변경 구간은 선을 이어 표시하지 않습니다.{history.aggregation && ` ${history.aggregation.bucketSeconds}초 구간 평균이며 원본 결과는 보존됩니다.`}</figcaption></figure>;
 }
 
-export function ContinuousExecution({ vd, auth, csrf, disabled }: { vd: Schema["VirtualDevice"]; auth: string; csrf: string; disabled: boolean }) {
+export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = false }: { vd: Schema["VirtualDevice"]; auth: string; csrf: string; disabled: boolean; graphOnly?: boolean }) {
   const [data, setData] = useState<Schema["VDExecution"] | null>(null); const [outputs, setOutputs] = useState<Schema["ContinuousOutputs"] | null>(null);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<{ action: "provision" | "drain"; key: string; revision: number } | null>(null);
   const [selected, setSelected] = useState(""); const [hours, setHours] = useState(1); const [history, setHistory] = useState<History | null>(null); const [historyError, setHistoryError] = useState("");
-  const sequence = useRef({ value: 0 }), chartSequence = useRef(0), commandBusy = useRef(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const sequence = useRef({ value: 0 }), chartSequence = useRef({ value: 0 }), commandBusy = useRef(false);
   const api = useCallback(async (path: string, init?: RequestInit) => { const response = await fetch(`/api/control-plane/virtual-devices/${vd.id}/${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000), ...init, headers: { Authorization: auth, ...init?.headers } }); const value = await response.json(); if (!response.ok) throw new Error(value.message || "조회하지 못했습니다."); return value; }, [vd.id, auth]);
-  const refresh = useCallback(async () => { const request = ++sequence.current.value; try { const [execution, rows] = await Promise.all([api("execution"), api("outputs")]); if (request === sequence.current.value) { setData(execution); setOutputs(rows); setError(""); } } catch (error) { if (request === sequence.current.value) setError(error instanceof Error ? error.message : "조회하지 못했습니다."); } }, [api]);
+  const refresh = useCallback(async () => { const request = ++sequence.current.value; try { const [execution, rows] = await Promise.all([api("execution"), api("outputs")]); if (request === sequence.current.value) { setData(execution); setOutputs(rows); setError(""); if (graphOnly) setSelected(current => rows.historyEnabled ? rows.items.some((row: Schema["ContinuousOutputs"]["items"][number]) => row.outputId === current) ? current : rows.items[0]?.outputId ?? "" : ""); } } catch (error) { if (request === sequence.current.value) setError(error instanceof Error ? error.message : "조회하지 못했습니다."); } }, [api, graphOnly]);
   useEffect(() => { const requests = sequence.current; let stopped = false; let timer: ReturnType<typeof setTimeout>; const poll = async () => { await refresh(); if (!stopped) timer = setTimeout(poll, 3000); }; void poll(); return () => { stopped = true; ++requests.value; clearTimeout(timer); }; }, [refresh, vd.revision]);
-  async function chart(outputId = selected) {
-    if (!outputId) return; const request = ++chartSequence.current; setSelected(outputId); setHistoryError(""); setHistory(null);
-    try { const period = Math.min(hours, (outputs?.retentionDays || 7) * 24); const to = new Date(), from = new Date(to.getTime() - period * 3600000); const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), limit: "2000", bucketSeconds: String(Math.max(outputs?.intervalSeconds || 1, Math.ceil(period * 3600 / 1000))) });
-      const value: History = await api(`outputs/${outputId}/history?${query}`); if (request === chartSequence.current) setHistory(value);
-    } catch (error) { if (request === chartSequence.current) setHistoryError(error instanceof Error ? error.message : "기록을 조회하지 못했습니다."); }
-  }
+  const retentionDays = outputs?.retentionDays || 7, intervalSeconds = outputs?.intervalSeconds || 1;
+  const chart = useCallback(async (outputId = selected, reset = true) => {
+    if (!outputId) return; const request = ++chartSequence.current.value; setSelected(outputId); if (reset) { setHistoryError(""); setHistory(null); }
+    try { const period = Math.min(hours, retentionDays * 24); const to = new Date(), from = new Date(to.getTime() - period * 3600000); const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), limit: "2000", bucketSeconds: String(Math.max(intervalSeconds, Math.ceil(period * 3600 / 1000))) });
+      const value: History = await api(`outputs/${outputId}/history?${query}`); if (request === chartSequence.current.value) { setHistory(value); setHistoryError(""); }
+    } catch (error) { if (request === chartSequence.current.value) setHistoryError(error instanceof Error ? error.message : "기록을 조회하지 못했습니다."); }
+  }, [api, selected, hours, retentionDays, intervalSeconds]);
+  useEffect(() => {
+    if (!graphOnly || !selected || !outputs?.historyEnabled) return;
+    const requests = chartSequence.current;
+    let stopped = false, first = true; let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => { await chart(selected, first); first = false; if (!stopped) timer = setTimeout(poll, 5000); };
+    void poll(); return () => { stopped = true; ++requests.value; clearTimeout(timer); };
+  }, [graphOnly, selected, outputs?.historyEnabled, chart, historyRefresh]);
+  useEffect(() => { const requests = chartSequence.current; return () => { ++requests.value; }; }, []);
   async function submit() { if (!draft || commandBusy.current) return; commandBusy.current = true; setBusy(true); setNotice("");
     try { await api(draft.action, { method: "POST", headers: { "X-CSRF-TOKEN": csrf, "Idempotency-Key": draft.key, "Content-Type": "application/json" }, body: JSON.stringify({ revision: draft.revision }) }); setDraft(null); setNotice("실행 요청을 저장했습니다."); await refresh(); }
     catch (error) { setNotice(error instanceof Error ? error.message : "실행 요청에 실패했습니다. 같은 요청을 다시 보낼 수 있습니다."); }
     finally { commandBusy.current = false; setBusy(false); }
   }
   const execution = data?.continuous;
-  return <section aria-label="연속 처리 결과"><div className="toolbar"><h3>연속 처리</h3><button disabled={busy || disabled} onClick={() => void refresh()}>결과 새로고침</button></div>
-    <ProcessingVersions key={vd.id} vdId={vd.id} auth={auth} />
+  return <section aria-label="연속 처리 결과"><div className="toolbar"><h3>{graphOnly ? "출력별 결과 그래프" : "연속 처리"}</h3><button disabled={busy || disabled} onClick={() => void refresh()}>결과 새로고침</button></div>
+    {!graphOnly && <ProcessingVersions key={vd.id} vdId={vd.id} auth={auth} />}
     {error && <p role="alert" className="error">{error} 마지막 조회 값을 표시합니다.</p>}
     {!data && !error && <p role="status">실행 상태 조회 중…</p>}
     {execution && <><p className="stage">{error ? "상태 확인 필요" : stateNames[execution.state]} · {reasons[execution.reason] || "상태 확인 중"}</p>
-      <p className="hint">모든 입력이 유효할 때 {outputs?.intervalSeconds || 1}초마다 계산합니다. 보관 기간 {outputs?.retentionDays || 7}일.</p>
-      {!draft ? <div className="toolbar"><button disabled={busy || disabled || !!error || !execution.enabled || vd.state !== "REGISTERED" || execution.desiredRunning} onClick={() => setDraft({ action: "provision", key: requestKey(), revision: vd.revision })}>계산 시작</button><button disabled={busy || disabled || !!error || !execution.enabled || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>계산 중지</button></div>
-        : <div className="toolbar"><button disabled={busy || disabled} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "계산 시작 요청" : "계산 중지 요청"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>}
+      {!execution.enabled && <p className="notice">연속 처리가 비활성 상태입니다. 저장된 결과가 있으면 조회할 수 있습니다.</p>}
+      <p className="hint">{graphOnly ? "저장된 출력 이력을 조회하며, 그래프는 5초마다 갱신합니다." : `모든 입력이 유효할 때 ${intervalSeconds}초마다 계산합니다.`} 보관 기간 {retentionDays}일.</p>
+      {!graphOnly && (!draft ? <div className="toolbar"><button disabled={busy || disabled || !!error || !execution.enabled || vd.state !== "REGISTERED" || execution.desiredRunning} onClick={() => setDraft({ action: "provision", key: requestKey(), revision: vd.revision })}>계산 시작</button><button disabled={busy || disabled || !!error || !execution.enabled || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>계산 중지</button></div>
+        : <div className="toolbar"><button disabled={busy || disabled} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "계산 시작 요청" : "계산 중지 요청"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>)}
     </>}
     {notice && <p role="status" className="notice">{notice}</p>}
-    {outputs && <div className="table-scroll"><table className="registry-table"><caption className="sr-only">계산 출력 항목별 최신 결과</caption><thead><tr><th>출력 항목</th><th>최신값</th><th>계산 시각</th><th>상태</th><th>기록</th></tr></thead><tbody>{outputs.items.map(row => <tr key={row.outputId}><td><strong>{row.name}</strong><span className="block muted">{row.expression}</span></td><td>{displayValue(row.latest?.value)} {row.unit}</td><td>{row.latest ? new Date(row.latest.evaluationAt).toLocaleString() : "미계산"}</td><td>{error ? "조회 확인 필요" : { VALID: "유효", STALE: "마지막 값", NOT_AVAILABLE: "미수신" }[row.quality]}{row.latest && <span className="block muted">{row.latest.storageStatus === "SKIPPED" ? "저장 정책 제외" : row.latest.historyStored ? "저장 완료" : row.latest.storageStatus === "PENDING" ? "저장 대기" : row.latest.storageStatus === "EXPIRED" ? "보관 기간 만료" : "기록 저장 누락"}</span>}</td><td><button disabled={busy || !outputs.historyEnabled} onClick={() => void chart(row.outputId)}>{row.name} 그래프</button></td></tr>)}</tbody></table></div>}
+    {outputs && <div className="table-scroll"><table className="registry-table"><caption className="sr-only">계산 출력 항목별 최신 결과</caption><thead><tr><th>출력 항목</th><th>최신값</th><th>계산 시각</th><th>상태</th><th>기록</th></tr></thead><tbody>{outputs.items.map(row => <tr key={row.outputId}><td><strong>{row.name}</strong><span className="block muted">{row.expression}</span></td><td>{displayValue(row.latest?.value)} {row.unit}</td><td>{row.latest ? new Date(row.latest.evaluationAt).toLocaleString() : "미계산"}</td><td>{error ? "조회 확인 필요" : { VALID: "유효", STALE: "마지막 값", NOT_AVAILABLE: "미수신" }[row.quality]}{row.latest && <span className="block muted">{row.latest.storageStatus === "SKIPPED" ? "저장 정책 제외" : row.latest.historyStored ? "저장 완료" : row.latest.storageStatus === "PENDING" ? "저장 대기" : row.latest.storageStatus === "EXPIRED" ? "보관 기간 만료" : "기록 저장 누락"}</span>}</td><td><button disabled={busy || !outputs.historyEnabled} aria-pressed={selected === row.outputId} onClick={() => { if (graphOnly) { setSelected(row.outputId); setHistoryRefresh(value => value + 1); } else void chart(row.outputId); }}>{row.name} 그래프</button></td></tr>)}</tbody></table></div>}
+    {outputs?.items.length === 0 && <p className="empty">등록된 출력 항목이 없습니다.</p>}
     {outputs && !outputs.historyEnabled && <p className="notice">기록 저장소가 연결되지 않았습니다. 최신 결과는 계속 표시됩니다.</p>}
-    {selected && <section aria-label={`${selected} 기록`}><div className="toolbar"><h4>{selected} 기록</h4><label>조회 기간<select value={Math.min(hours, (outputs?.retentionDays || 7) * 24)} onChange={event => setHours(Number(event.target.value))}>{[1, 6, 24, 168, 720].filter(value => value <= (outputs?.retentionDays || 7) * 24).map(value => <option key={value} value={value}>{value}시간</option>)}</select></label><button onClick={() => void chart()}>그래프 조회</button></div>
+    {selected && <section aria-label={`${selected} 기록`}><div className="toolbar"><h4>{selected} 기록 · {outputs?.items.find(row => row.outputId === selected)?.unit || "값"}</h4><label>조회 기간<select value={Math.min(hours, retentionDays * 24)} onChange={event => setHours(Number(event.target.value))}>{[1, 6, 24, 168, 720].filter(value => value <= retentionDays * 24).map(value => <option key={value} value={value}>{value}시간</option>)}</select></label><button onClick={() => { if (graphOnly) setHistoryRefresh(value => value + 1); else void chart(); }}>그래프 조회</button></div>
       {historyError && <p role="alert" className="error">{historyError}</p>}{history && <><HistoryChart history={history} interval={outputs?.intervalSeconds || 1} />
         {history.gaps.length > 0 && <ul className="history-list">{history.gaps.map((gap, index) => <li key={index}>{reasons[gap.reason] || "결과 기록 누락"} · {new Date(gap.from).toLocaleString()} → {gap.to ? new Date(gap.to).toLocaleString() : "계속 중"}</li>)}</ul>}
         <details><summary>기록 표 · {history.items.length}개</summary><div className="table-scroll"><table className="registry-table"><thead><tr><th>계산 시각</th><th>값 / 평균</th><th>최솟값</th><th>최댓값</th><th>표본 수</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.evaluationAt).toLocaleString()}</td><td>{displayValue(row.average ?? row.value)}</td><td>{displayValue(row.min)}</td><td>{displayValue(row.max)}</td><td>{row.count || 1}</td></tr>)}</tbody></table></div></details>
