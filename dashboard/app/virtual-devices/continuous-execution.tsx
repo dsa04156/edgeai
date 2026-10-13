@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { ProcessingVersions } from "./processing-versions";
 import { HistoryChart as InteractiveHistoryChart } from "../components/history-chart";
+import { formatMeasurementValue as displayValue } from "../../lib/measurement-value";
 
 type Schema = components["schemas"];
 type History = Schema["ContinuousHistory"];
 const stateNames = { STOPPED: "중지됨", STARTING: "시작 대기", RUNNING: "계산 중", WAITING_INPUT: "입력·창 대기", STOPPING: "중지 중", ERROR: "확인 필요" };
 const reasons: Record<string, string> = { HEALTHY: "정상", INPUT_MISSING: "입력 미수신", INPUT_STALE: "입력 유효 시간 초과", WINDOW_WARMING: "창 표본 수집 중", RULE_UNAVAILABLE: "계산 엔진 확인 필요", SOURCE_CONFIGURATION_UNAVAILABLE: "센서 연결 확인 필요", STOPPED: "중지됨", ENGINE_BACKPRESSURE: "처리 지연", EVALUATION_TIMEOUT: "계산 응답 지연", HISTORY_UNAVAILABLE: "기록 저장 중단", INPUT_UNAVAILABLE: "입력 수신 중단", WINDOW_RESET: "계산 창 초기화", ENGINE_UNAVAILABLE: "계산 엔진 연결 중단", AWAITING_ENGINE: "계산 엔진 연결 대기" };
-const displayValue = (value: number | boolean | undefined) => typeof value === "boolean" ? value ? "참" : "거짓" : value === undefined ? "—" : Number(value.toPrecision(8)).toLocaleString();
 function requestKey() { const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = bytes[6] & 15 | 64; bytes[8] = bytes[8] & 63 | 128; const value = [...bytes].map(n => n.toString(16).padStart(2, "0")).join(""); return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`; }
 
 function HistoryChart({ history, interval, unit }: { history: History; interval: number; unit: string }) {

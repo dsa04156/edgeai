@@ -1,0 +1,1 @@
+export const formatMeasurementValue = (value: string | number | boolean | undefined) => typeof value === "boolean" ? value ? "참" : "거짓" : value === undefined ? "—" : typeof value === "number" ? value.toLocaleString(undefined, { maximumSignificantDigits: 21 }) : value;

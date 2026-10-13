@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { OriginalChart } from "../components/sensor-original-chart";
+import { formatMeasurementValue as display } from "../../lib/measurement-value";
 
 type Schema = components["schemas"];
 type Sensor = Schema["DataStoreCatalog"]["sensors"][number];
 type History = Schema["SensorOriginalHistory"];
 const collectionNames: Record<string, string> = { DISABLED: "원본 수집 비활성", COLLECTING: "원본 수집 연결됨", CONNECTING: "수집 연결 중", PARTIAL: "일부 센서 경로 확인 필요", NO_SOURCES: "수집 대상 없음", CATALOG_UNAVAILABLE: "센서 목록 확인 필요", STORE_UNAVAILABLE: "저장 대기" };
-const display = (value: string | number | boolean) => typeof value === "boolean" ? value ? "참" : "거짓" : typeof value === "number" ? value.toLocaleString(undefined, { maximumSignificantDigits: 8 }) : value;
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
