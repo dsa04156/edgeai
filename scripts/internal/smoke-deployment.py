@@ -62,7 +62,7 @@ assert request(api + "/swagger-ui/index.html")[0] == 200
 assert request(api + "/swagger-ui/index.html", authenticated=True)[0] == 200
 status, contract = request(api + "/openapi.yaml", authenticated=True)
 assert status == 200 and b"publishProfile" in contract
-url = ui + "/api/control-plane/profiles/DEVICE"
+url = ui + "/api/control-plane/profiles/SERVICE"
 assert request(url)[0] == 200
 status, body = request(ui + "/api/control-plane/csrf", authenticated=True)
 assert status == 200

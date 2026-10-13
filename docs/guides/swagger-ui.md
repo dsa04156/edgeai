@@ -17,7 +17,7 @@ Swagger에서 관리 API의 입력·응답·오류를 확인하고 실행할 수
 
 ```bash
 curl --fail-with-body http://127.0.0.1:18080/api/v1/platform
-curl --fail-with-body http://127.0.0.1:18080/api/v1/profiles/DEVICE
+curl --fail-with-body http://127.0.0.1:18080/api/v1/profiles/SERVICE
 ```
 
 페이지 크기와 필터는 각 endpoint의 매개변수를 확인합니다.

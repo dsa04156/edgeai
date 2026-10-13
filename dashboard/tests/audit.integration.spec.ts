@@ -9,7 +9,7 @@ test("real profile mutation audit ID survives proxy and is searchable in the aud
   expect(tokenResponse.status()).toBe(200);
   const token = (await tokenResponse.json()).token;
   const forged = randomUUID();
-  const response = await page.request.post("/api/control-plane/profiles/DEVICE", { headers: { authorization, "X-CSRF-TOKEN": token, "X-EdgeAI-Audit-Id": forged },
+  const response = await page.request.post("/api/control-plane/profiles/SERVICE", { headers: { authorization, "X-CSRF-TOKEN": token, "X-EdgeAI-Audit-Id": forged },
     data: { key: `audit-browser-${randomUUID()}`, version: "1.0.0", spec: { source: "SYNTHETIC" } } });
   expect(response.status()).toBe(201);
   const auditId = response.headers()["x-edgeai-audit-id"];

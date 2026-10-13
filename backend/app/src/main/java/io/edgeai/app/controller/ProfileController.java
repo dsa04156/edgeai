@@ -2,6 +2,7 @@ package io.edgeai.app.controller;
 
 import io.edgeai.app.dto.ProfilePageResponse;
 import io.edgeai.app.dto.ProfileVersionResponse;
+import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.app.service.ProfileService;
 import io.edgeai.app.support.ProfileJson;
 import io.edgeai.domain.profile.ProfileIdentity;
@@ -19,6 +20,10 @@ public class ProfileController {
 
     @PostMapping(consumes = "application/json")
     public ResponseEntity<ProfileVersionResponse> publish(@PathVariable ProfileIdentity.Kind kind, @RequestBody String body) {
+        if (kind == ProfileIdentity.Kind.DEVICE) {
+            throw new ControlPlaneException(410, "DEVICE_PROFILE_RETIRED",
+                "기존 앱 장치 프로필 등록은 종료됐습니다. 센서 화면에서 장치와 측정 항목을 등록하세요.");
+        }
         var result = service.publish(kind, body);
         var identity = result.version().identity();
         var location = URI.create("/api/v1/profiles/" + kind + "/" + identity.key() + "/versions/" + identity.version());

@@ -1,11 +1,9 @@
 "use client";
 import { parse, stringify } from "lossless-json";
-import type { components } from "../../lib/api-schema";
-type Profile = components["schemas"]["ProfileVersion"];
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 
 /** Structured entry for common profiles; the advanced editor preserves the complete spec. */
-export function ProfileFields({ kind, value, onChange }: { kind: Profile["kind"]; value: string; onChange: (value: string) => void }) {
+export function ProfileFields({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   let spec: Record<string, unknown>;
   try { spec = parse(value || "{}") as Record<string, unknown>; if (!spec || Array.isArray(spec) || typeof spec !== "object") return null; }
   catch { return null; }
@@ -13,9 +11,8 @@ export function ProfileFields({ kind, value, onChange }: { kind: Profile["kind"]
   const service = () => ({ apiVersion: "edgeai/v1", image: "", command: ["python3", "/opt/edgeai/examples/linear.py"], args: [],
     resources: { requests: { cpu: "100m", memory: "64Mi" }, limits: { cpu: "1", memory: "256Mi" } },
     platform: { os: "linux", architectures: ["amd64"] }, inputs: {}, outputs: { output: { mediaType: "application/json", maxBytes: 1048576 } }, timeoutSeconds: 120, qos: "Burstable" });
-  return <div className="publish-fields"><div className="toolbar"><button type="button" onClick={() => onChange(stringify(kind === "SERVICE" ? service() : { protocol: "mqtt" }, null, 2) || "")}>{kind} 기본 양식 채우기</button></div>
-    {kind === "DEVICE" && <label>장치 프로토콜<input value={String(spec.protocol || "")} onChange={e => update({ protocol: e.target.value })} placeholder="mqtt / http / usb" /></label>}
-    {kind === "SERVICE" && spec.apiVersion === "edgeai/v1" && <>
+  return <div className="publish-fields"><div className="toolbar"><button type="button" onClick={() => onChange(stringify(service(), null, 2) || "")}>실행 모듈 기본 양식 채우기</button></div>
+    {spec.apiVersion === "edgeai/v1" && <>
       <label>실행 이미지<input value={String(spec.image || "")} onChange={e => update({ image: e.target.value })} placeholder="registry/image@sha256:…" /></label>
       <p className="hint">기존 Runner가 포함된 실행 이미지를 사용하세요. 이미지 digest와 장비 아키텍처가 맞아야 합니다.</p>
       <label>실행 명령 · 한 줄에 인자 하나<textarea rows={3} value={(Array.isArray(spec.command) ? spec.command : []).join("\n")} onChange={e => update({ command: e.target.value.split("\n") })} /></label>

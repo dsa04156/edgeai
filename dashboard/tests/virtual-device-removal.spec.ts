@@ -23,10 +23,11 @@ test("overview, profiles and workflow retain ordinary features without virtual d
   await expect(page.locator('.metric-strip')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('a[href^="/virtual-devices"]')).toHaveCount(0);
   await page.locator('.metric-strip').screenshot({ path: testInfo.outputPath("overview.png"), animations: "disabled" });
-  await page.goto("/profiles");
-  await expect(page.getByRole("radio")).toHaveCount(2);
-  await expect(page.getByRole("radio", { name: /장치/ })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /실행 모듈/ })).toBeVisible();
+  await page.goto("/profiles?kind=DEVICE");
+  await expect(page.getByRole("heading", { name: "실행 모듈 관리", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "실행 모듈 등록", exact: true })).toBeVisible();
+  expect(requested.some(path => path.startsWith("profiles/DEVICE"))).toBe(false);
   await page.goto("/workflows");
   await page.getByRole("button", { name: "일반 워크플로 remaining", exact: true }).click();
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
@@ -47,4 +48,62 @@ test("removed page and management routes return 404", async ({ page, request }) 
     expect((await request.get(`/api/control-plane/${path}`)).status()).toBe(404);
     expect((await request.post(`/api/control-plane/${path}`, { headers: { Origin: "http://127.0.0.1:13081" }, data: {} })).status()).toBe(404);
   }
+});
+
+test("service modules publish, retain old versions and protect referenced versions", async ({ page }, testInfo) => {
+  type Module = { id: string; kind: "SERVICE"; key: string; version: string; spec: Record<string, unknown>; digest: string; createdAt: string };
+  let modules: Module[] = [];
+  const requested: string[] = [], errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/api/health", route => route.fulfill({ json: { status: "UP" } }));
+  await page.route("**/api/control-plane/**", async route => {
+    const request = route.request(), url = new URL(request.url());
+    const path = url.pathname.replace("/api/control-plane/", "");
+    requested.push(path);
+    if (path === "csrf") return route.fulfill({ json: { token: "fixture" } });
+    if (path.startsWith("profiles/SERVICE") && request.method() === "POST") {
+      const data = request.postDataJSON();
+      const saved: Module = { ...data, kind: "SERVICE", id: data.version === "1.0.0" ? workflowId : versionId,
+        digest: "sha256:" + "a".repeat(64), createdAt: "2026-10-13T00:00:00Z" };
+      modules.push(saved);
+      return route.fulfill({ status: 201, json: saved });
+    }
+    if (path.startsWith("profiles/SERVICE/") && request.method() === "DELETE") {
+      if (path.endsWith("1.0.0")) return route.fulfill({ status: 409, json: { code: "PROFILE_IN_USE", message: "워크플로에서 사용 중인 버전입니다." } });
+      modules = modules.filter(module => !path.endsWith(module.version));
+      return route.fulfill({ status: 204 });
+    }
+    return route.fulfill({ json: { items: path === "profiles/SERVICE" ? modules : [], nextOffset: null } });
+  });
+  await page.goto("/profiles");
+  await page.getByRole("button", { name: "실행 모듈 등록", exact: true }).click();
+  await page.getByLabel("모듈 키", { exact: true }).fill("temperature-average");
+  await page.getByLabel("버전", { exact: true }).fill("1.0.0");
+  await page.getByRole("button", { name: "실행 모듈 기본 양식 채우기", exact: true }).click();
+  await page.getByLabel("실행 이미지", { exact: true }).fill("registry.example/temperature-average@sha256:" + "1".repeat(64));
+  await page.getByRole("button", { name: "버전 발행", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "temperature-average · 1.0.0", exact: true })).toBeFocused();
+  await expect(page.getByRole("link", { name: "워크플로에서 사용 →", exact: true })).toHaveAttribute("href", `/workflows?service=${workflowId}`);
+  await page.getByRole("button", { name: "새 버전으로 수정", exact: true }).click();
+  await expect(page.getByLabel("버전", { exact: true })).toHaveValue("1.0.1");
+  await page.getByLabel("실행 제한 시간(초)", { exact: true }).fill("300");
+  await page.getByRole("button", { name: "버전 발행", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "temperature-average · 1.0.1", exact: true })).toBeFocused();
+  expect(modules.map(module => module.spec.timeoutSeconds)).toEqual([120, 300]);
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(3);
+  await page.screenshot({ path: testInfo.outputPath("service-modules.png"), fullPage: true });
+  const oldRow = page.getByRole("row").filter({ has: page.getByRole("button", { name: "temperature-average 1.0.0", exact: true }) });
+  await oldRow.getByRole("button", { name: "temperature-average 1.0.0 삭제", exact: true }).click();
+  await oldRow.getByRole("button", { name: "삭제 확인", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("워크플로에서 사용 중");
+  await expect(oldRow).toBeVisible();
+  await oldRow.getByRole("button", { name: "취소", exact: true }).click();
+  const newRow = page.getByRole("row").filter({ has: page.getByRole("button", { name: "temperature-average 1.0.1", exact: true }) });
+  await newRow.getByRole("button", { name: "temperature-average 1.0.1 삭제", exact: true }).click();
+  await newRow.getByRole("button", { name: "삭제 확인", exact: true }).click();
+  await expect(page.getByRole("button", { name: "temperature-average 1.0.1", exact: true })).toHaveCount(0);
+  await expect(oldRow).toBeVisible();
+  expect(requested.some(path => path.startsWith("profiles/DEVICE"))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  expect(errors).toEqual([]);
 });

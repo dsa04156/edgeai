@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default function Profiles() {
 
   return <main id="main-content" className="management-page profiles-page">
-    <PageHeading eyebrow="MANAGEMENT / PROFILES" title="프로필 관리" description="DEVICE 장치 규격과 SERVICE 실행 모듈을 발행합니다. 발행된 버전은 유지하고 변경은 새 버전으로 등록합니다." />
+    <PageHeading eyebrow="MANAGEMENT / MODULES" title="실행 모듈 관리" description="워크플로에서 실행할 프로그램의 이미지·명령·입출력·CPU·메모리 설정을 저장합니다. 예를 들어 온도 평균 계산이나 AI 추론 프로그램을 등록한 뒤 워크플로에서 선택해 실행합니다." />
     <ProfileRegistry workflows={workflowsEnabled()} />
   </main>;
 }
