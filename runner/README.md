@@ -75,38 +75,6 @@ sequence는 workload 안에서 증가시키고 observedAt은 실제 UTC 측정 �
 
 참고: [ADR 0008](../docs/adr/0008-runtime-telemetry.md), [측정 증거](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m5-runtime-telemetry.md).
 
-## 지속 VD supervisor (M6 구성 요소)
-
-같은 이미지의 `python3 /opt/edgeai/vd.py`는 지속 Pod 안에서 독립 Runner session을 실행한다.
-`python3 /opt/edgeai/vd.py --ready`는 유효한 runtime lease의 준비 상태만 확인한다.
-VD 자식의 `python -m edgeai_runner.main`도 파일 진입점과 같은 모듈의 main을 호출하여
-스트리밍 SDK와 오류 클래스·취소 상태를 공유한다. [진입점 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-vd-module-entrypoint.md)을 확인한다.
-[내부 poll 계약](../contracts/openapi/vd-runtime-api.yaml), [ADR0014](../docs/adr/0014-virtual-device-runtime.md),
-[구성 요소 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-runtime.md)을 따른다. 서버의 runtime 저장·poll·Pod 인증·VD Task
-배정 연결까지 [M6 수용](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-completion-audit.md)을 통과했다.
-공개 VD 등록 후 별도 실행 시작 API로 기동한다.
-
-| 변수 | 용도 |
-|---|---|
-| `EDGEAI_VD_ID` / `EDGEAI_VD_RUNTIME_ID` | 영속 VD와 해당 실행 세대의 서로 다른 UUID |
-| `EDGEAI_VD_GENERATION` | 1부터 증가하는 실행 세대 |
-| `EDGEAI_VD_MAX_CONCURRENT_TASKS` | 같은 Pod 자원을 공유하는 1–16개 동시 작업 slot |
-| `EDGEAI_VD_STARTUP_SECONDS` / `EDGEAI_VD_DRAIN_SECONDS` | 준비·drain 제한 시간, 각각 1–600초 |
-| `EDGEAI_VD_CLAIM_FILE` | 요청마다 읽는 runtime credential 파일 |
-| `EDGEAI_POD_TOKEN_FILE` | audience=edgeai-vd인 projected Pod token 파일 |
-| `EDGEAI_POD_UID` / `EDGEAI_CONTROL_PLANE_URL` / `EDGEAI_WORK_DIR` | 실제 Pod 신원, 내부 origin, 전용 쓰기 가능한 volume |
-
-작업별 임시 claim과 디렉터리는 private mode로 만들고 종료 시 제거한다. 같은 volume의 supervisor
-재시작은 거절하며 새 runtime generation과 새 Pod를 만들어야 한다. 같은 Attempt 재배정은 실행하지
-않는다. 일시 장애는 readiness를 제거하고, lease 만료·인증 거절·STOP은 작업을 종료한다. DRAIN은
-신규 작업 없이 완료 보고의 확인을 기다리고, 작업이 없어도 서버의 STOP까지 poll을 계속하며 제한 시간을 적용한다. 한 작업 취소는 해당 session만
-정리하며 다른 작업은 유지한다. Linux의 subreaper/pidfd를 사용해 Runner 강제 종료 후 자식도 정리한다.
-100,000개 실행 이력 상한에 도달하면 마지막 수락 작업부터 drain을 알리고 새 배정을 받지 않는다.
-
-동시 작업의 cgroup 측정은 공유 VD 컨테이너 전체 사용량이다. 서비스 지연 파일만 작업별 측정이며
-CPU/GPU 자원을 각 작업에 독점 할당하거나 서로 신뢰하지 않는 workload를 격리하는 기능은 아니다.
-`test-runner.sh`는 기존 Runner와 VD 시험을 함께 수행하며 CI에서는 UID10001의 실제 이미지도 시험한다.
-
 ## 스트림 전달 구성 요소 (M7 진행 중)
 
 `stream_protocol`은 [frame](../contracts/streams/frame.schema.json)과
@@ -127,7 +95,7 @@ EDGEAI_STREAM_PYTHON=.tools/stream-venv/bin/python bash scripts/test/test-stream
 시험은 임의 loopback 포트에 private credential/정확한 topic ACL을 가진 전용 broker를 만들고
 종료 시 정리한다. TLS 시험도 포함하며 기존 Compose broker 설정은 사용하거나 수정하지 않는다.
 
-`test-runner.sh`의100개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
+`test-runner.sh`의95개에는 SDK·codec·실제 SQLite/프로세스 강제 종료·외부 checkpoint 시험이 포함된다.
 HTTPS/MQTT/계산/Session 통합은 별도50개다. S3 새 볼륨 복원·Attempt 인계 구성 요소도 검증했으며
 실제 Kubernetes의 Pod/Node 전환 연결은 남았다. [설계 경계](../docs/adr/0022-stream-processing-journal.md),
 [실제 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-transport.md).
@@ -147,7 +115,7 @@ step·journal 쓰기에서 요청 경과 시간을 차감한 monotonic 기한을
 각자 새 순번으로 응답해야 양쪽 중 더 오래된 생존 시각+고정 window까지 기한이 늘어난다.
 `Link.refresh(assignments)`에는 모든 경로의 최신 배정을 전달한다. 호출은 `step`과 같은 스레드에서
 기존 기한 전에 완료해야 한다. 같은 주체·세대·broker·규격만 허용하며, 이미 만료된 연결은 새
-배정으로 되살릴 수 없다. VD drain으로 짧아진 기한도 적용한다. HTTP 조회 중에도 원래 기한은
+배정으로 되살릴 수 없다. HTTP 조회 중에도 원래 기한은
 계속 흐르므로 갱신 루프는 충분한 여유를 둬야 한다. 자동 갱신 스케줄러나 계산 프로세스 종료를
 이 API 자체가 제공하는 것은 아니다. [설계와 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-heartbeat.md).
 
@@ -257,22 +225,14 @@ Python SSL_CERT_FILE로 제공한다. broker CA는 인증 배정에서 받는다
 AUTO/NODE Kubernetes 데이터 흐름은 검증했다. 공개 STREAM은 명시적 opt-in이며 기본501이다.
 장치 자동 재연결과 공개 retry를 연결했고 실제 Kubernetes 그룹 장애 복구까지 검증했다.
 계산 중에는 연결된 그룹을 함께 재시도하고 완료 허가 뒤에는 실패한 작업만 복구한다.
-offload/REMOTE/VD는 계속 거절한다. 최종 처리도 실제 Job 유실·새 Pod 복구·기존 결과 보존을
+offload/REMOTE는 계속 거절한다. 최종 처리도 실제 Job 유실·새 Pod 복구·기존 결과 보존을
 [Kubernetes에서 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-finalizer-kubernetes.md)했다.
 [공개 재시도 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-public-stream-retry.md)을 따른다.
 [실행 설계](../docs/adr/0037-service-stream-runner-execution.md),
 [Runner 검증 범위](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-service-stream-runner.md),
 [서버 완료 검증](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m7-stream-execution-completion.md)을 따른다.
 
-## VD 센서 BATCH 입력
 
-센서 VD를 대상으로 Run을 생성하면 서버가 선택한 항목을 `EDGEAI_PARAMETERS_FILE`의
-예약 필드 `vdInputs`로 전달합니다. 값·항목별 수신 시각·센서 UID/DeviceModel·binding ID·
-VD revision·고정 시각이 함께 들어갑니다. 같은 Run의 재요청과 재시도에서 센서를 다시 읽지 않습니다.
-사용자 Run/Task 매개변수에 `vdInputs`를 넣으면 실행 생성이 거절됩니다.
-
-`examples/temperature.py`는 Sense HAT `input.temp_humidity`의 고정 섭씨 값을 읽어 화씨로
-변환하고 원본 신원과 시각을 JSON output에 남기는 참조 SERVICE입니다. 기존 Runner 실행 계약을
-사용합니다. 실제 입력과 처리·Result 검증은 `bash scripts/test/test-vd-sensor.sh`이며,
-이 시험의 supervisor/Runner는 호스트 프로세스이고 Pod 인증은 fixture입니다.
-[사용 흐름](../docs/guides/vd-sensor-batch.md)과 [설계](../docs/adr/0117-vd-sensor-batch-inputs.md)를 확인하세요.
+기존 VD 센서 BATCH 입력 생성은 제거했습니다. 저장된 입력은 실행 이력에서만 조회할 수 있으며,
+과거 VD 작업은 NODE/REMOTE로 전환된 경우에도 새 배정이나 재시도를 허용하지 않습니다.
+[제거 결정](../docs/adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.

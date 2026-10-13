@@ -15,11 +15,11 @@ public class ContinuousRegistrationService {
     private final VirtualDeviceRepository registrations;
     private final VirtualDeviceService vds;
     private final ManagedDeviceService sensors;
-    private final ProfileService profiles;
+    private final io.edgeai.domain.repository.ProfileRepository profiles;
     private final boolean enabled;
     private final ProcessingEngineService engine;
     public ContinuousRegistrationService(VirtualDeviceRepository registrations,VirtualDeviceService vds,ManagedDeviceService sensors,
-            ProfileService profiles,ProcessingEngineService engine,@Value("${edgeai.continuous.enabled:false}") boolean enabled) {
+            io.edgeai.domain.repository.ProfileRepository profiles,ProcessingEngineService engine,@Value("${edgeai.continuous.enabled:false}") boolean enabled) {
         this.registrations=registrations;this.vds=vds;this.sensors=sensors;this.profiles=profiles;this.enabled=enabled;this.engine=engine;
     }
     public Map<String,Object> catalog(){return Map.of("enabled",enabled,"executionMode","CONTINUOUS_EKUIPER","operations",List.of("scalar","movingAverage","minimum","maximum","threshold","filter"),"maxInputs",16,"maxOutputs",16,"inputs",enabled?engine.inputCatalog():List.of());}
@@ -46,7 +46,7 @@ public class ContinuousRegistrationService {
         }
         var spec=Map.of("apiVersion","edgeai.vd/v3","type","processing","executionMode","CONTINUOUS_EKUIPER","sources",sources,"continuous",JSON.decode(config));
         String profileKey="continuous-"+JSON.digest("edgeai.continuous-profile/v1",spec).substring(7);
-        var profile=profiles.publish(ProfileIdentity.Kind.VD,JSON.canonical(Map.of("key",profileKey,"version","1.0.0","spec",spec))).version();
+        var profile=profiles.publish(new ProfileIdentity(ProfileIdentity.Kind.VD,profileKey,"1.0.0"),JSON.canonical(spec),JSON.digest("edgeai-profile-v1\nVD",spec)).version();
         request.put("profileVersionId",profile.id().toString());
         var created=vds.create(JSON.canonical(request));registrations.recordProcessingCreation(created.value().id(),digest);return created;
     }
@@ -66,7 +66,7 @@ public class ContinuousRegistrationService {
         }
         var spec=Map.of("apiVersion","edgeai.vd/v3","type","processing","executionMode","CONTINUOUS_EKUIPER","sources",sources,"continuous",JSON.decode(config));
         String profileKey="continuous-"+JSON.digest("edgeai.continuous-profile/v1",spec).substring(7);
-        var profile=profiles.publish(ProfileIdentity.Kind.VD,JSON.canonical(Map.of("key",profileKey,"version","1.0.0","spec",spec))).version();
+        var profile=profiles.publish(new ProfileIdentity(ProfileIdentity.Kind.VD,profileKey,"1.0.0"),JSON.canonical(spec),JSON.digest("edgeai-profile-v1\nVD",spec)).version();
         request.remove("key");request.put("revision",input.get("revision"));request.put("profileVersionId",profile.id().toString());return vds.update(id,JSON.canonical(request));
     }
 }

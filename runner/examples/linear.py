@@ -13,13 +13,6 @@ if type(delay) is not int or not 0 <= delay <= 60000:
 time.sleep(delay / 1000)
 input_path = Path(os.environ["EDGEAI_INPUT_DIR"]) / "input"
 data = json.loads(input_path.read_text()) if input_path.exists() else parameters
-source_mode = "SYNTHETIC"
-if data.get("apiVersion") == "edgeai.processing-output/v1":
-    pipeline = parameters.get("inputPipeline")
-    if not isinstance(pipeline, str) or pipeline not in data["outputs"]:
-        raise ValueError("Select a VD processing output")
-    data = {"features": data["outputs"][pipeline]["values"]}
-    source_mode = "VD"
 features, weights = data["features"], parameters["weights"]
 if not features or len(features) != len(weights) or len(features) > 4096:
     raise ValueError("Invalid feature/weight dimensions")
@@ -27,5 +20,5 @@ numbers = [float(value) for value in [*features, *weights, parameters.get("bias"
 if not all(math.isfinite(value) for value in numbers):
     raise ValueError("Non-finite model input")
 score = sum(float(x) * float(w) for x, w in zip(features, weights)) + float(parameters.get("bias", 0))
-result = {"sourceMode": source_mode, "score": score, "prediction": int(score >= 0), "features": features}
+result = {"sourceMode": "SYNTHETIC", "score": score, "prediction": int(score >= 0), "features": features}
 (Path(os.environ["EDGEAI_OUTPUT_DIR"]) / "output").write_text(json.dumps(result, allow_nan=False))

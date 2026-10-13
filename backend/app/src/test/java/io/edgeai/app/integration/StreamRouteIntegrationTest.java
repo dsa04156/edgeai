@@ -44,8 +44,6 @@ class StreamRouteIntegrationTest {
     @Autowired WorkflowRepository definitions;
     @Autowired DeviceService devices;
     @Autowired DeviceRepository deviceRepository;
-    @Autowired VirtualDeviceService virtualDevices;
-    @Autowired VirtualDeviceRepository vds;
     @Autowired ExecutionRepository executions;
     @Autowired ExecutionService executionApi;
     @Autowired DataRouteService service;
@@ -60,8 +58,7 @@ class StreamRouteIntegrationTest {
     @BeforeEach void resetClock(){clock.offset.set(0);}
     private <T>T transaction(java.util.function.Supplier<T> action){return new TransactionTemplate(transactions).execute(s->action.get());}
     private UUID publish(ProfileIdentity.Kind kind,Object spec){return profiles.publish(kind,json.canonical(Map.of("key","stream-"+UUID.randomUUID(),"version","1.0.0","spec",spec))).version().id();}
-    private Fixture fixture()throws Exception{return fixture(false);}
-    private Fixture fixture(boolean vd)throws Exception {
+    private Fixture fixture()throws Exception {
         var spec=new HashMap<String,Object>();
         ((Map<?,?>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")))).forEach((k,v)->spec.put((String)k,v));
         spec.put("inputs",Map.of("input",Map.of("mediaType","application/json","maxBytes",262144,"required",true)));
@@ -69,20 +66,13 @@ class StreamRouteIntegrationTest {
         UUID dp=publish(ProfileIdentity.Kind.DEVICE,Map.of("protocol","mqtt"));
         var device=devices.create(json.canonical(Map.of("key","stream-"+UUID.randomUUID(),"displayName","Stream source fixture","profileVersionId",dp.toString(),"sourceMode","SYNTHETIC"))).value();
         var session=devices.openSession(device.id(),json.canonical(Map.of("bootId",UUID.randomUUID().toString()))).value();
-        UUID vdId=null;
-        if(vd){
-            UUID vp=publish(ProfileIdentity.Kind.VD,Map.of("apiVersion","edgeai.vd/v1","type","emulation","serviceProfileVersionId",sp.toString(),"sources",Map.of(),"state",Map.of("mode","STATELESS"),
-                "runtime",Map.of("maxConcurrentTasks",2,"startupTimeoutSeconds",60,"drainTimeoutSeconds",30)));
-            vdId=virtualDevices.create(json.canonical(Map.of("key","stream-"+UUID.randomUUID(),"displayName","Stream lock fixture","profileVersionId",vp.toString(),"sources",List.of(),"placement",Map.of("mode","AUTO")))).value().id();
-        }
         var workflow=workflows.create(json.canonical(Map.of("key","stream-"+UUID.randomUUID(),"displayName","Stream fixture"))).value();
         var nodes=List.of("source","sink","device").stream().map(k->Map.of("key",k,"serviceProfileVersionId",sp.toString(),"parameters",Map.of())).toList();
         var edge=Map.of("fromTask","source","fromPort","output","toTask","sink","toPort","input","mode","STREAM");
         var version=workflows.publish(workflow.id(),json.canonical(Map.of("version","1.0.0","tasks",nodes,"dependencies",List.of(edge)))).value();
         var now=clock.instant();
-        var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("stream-fixture",Map.of("version",version.id().toString())),vd?"VD":"AUTO",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now,null,vdId);
+        var run=new WorkflowRun(UUID.randomUUID(),version.id(),UUID.randomUUID(),json.digest("stream-fixture",Map.of("version",version.id().toString())),"AUTO",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now,null,null);
         transaction(()->{
-            if(run.vdId()!=null)vds.find(run.vdId(),true).orElseThrow();
             assertThat(executions.create(run)).isTrue();
             // Explicit fixture: the public runtime still rejects STREAM until the data plane is connected.
             executions.initialize(run,definitions.definitions(version.id()),Set.of("source","sink","device"));return null;
@@ -238,19 +228,6 @@ class StreamRouteIntegrationTest {
         var inactive=deviceRoute(f);devices.release(f.device().id());
         conflict("PRODUCER_CHANGED",()->prepare(inactive,session(f),f.actors().get("device")));
     }
-    @Test void routeAdministrationDoesNotAcquireTheRunDefaultVdMutex()throws Exception {
-        var f=fixture(true);var route=deviceRoute(f);
-        try(var pool=Executors.newSingleThreadExecutor()){
-            transaction(()->{
-                vds.find(f.run().vdId(),true).orElseThrow();
-                var future=pool.submit(()->prepare(route,session(f),f.actors().get("device")));
-                try{assertThat(future.get(8,TimeUnit.SECONDS).state()).isEqualTo("PREPARING");}
-                catch(Exception e){throw new AssertionError("Route administration acquired a VD mutex",e);}
-                jdbc.queryForObject("SELECT id FROM edgeai.device WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.device().id());
-                jdbc.queryForObject("SELECT id FROM edgeai.workflow_run WHERE id=? FOR UPDATE NOWAIT",UUID.class,f.run().id());return null;
-            });
-        }
-    }
     @Test void heartbeatExtendsOnlyTheOlderActorObservationAndReplaysAreReadOnly()throws Exception {
         var f=fixture();running(f);var route=taskRoute(f);var g=activate(prepare(route,f.actors().get("source"),f.actors().get("sink")));
         var p=new StreamBrokerGateway.Permission(route,g);var initial=routes.heartbeat(g.id());
@@ -291,7 +268,7 @@ class StreamRouteIntegrationTest {
             for(var job:jobs)assertThat(job.get(15,TimeUnit.SECONDS).sequence()).isEqualTo(1);
         }
         var seen=routes.heartbeat(g.id());assertThat(seen.producerSequence()).isEqualTo(1);assertThat(seen.consumerSequence()).isZero();
-        var fresh=new DataRouteService(routes,executions,definitions,deviceRepository,vds,streamProfiles,clock,streamExecutions);
+        var fresh=new DataRouteService(routes,executions,definitions,deviceRepository,streamProfiles,clock,streamExecutions);
         assertThat(transaction(()->fresh.heartbeat(g.id(),caller,0)).sequence()).isEqualTo(1);assertThat(routes.heartbeat(g.id())).isEqualTo(seen);
     }
     @Test void heartbeatDatabaseEnforcesOneActorSequenceWindowAndRetainedHistory()throws Exception {

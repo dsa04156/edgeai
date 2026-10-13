@@ -1,7 +1,6 @@
 package io.edgeai.app.controller;
 import io.edgeai.app.dto.OffloadOperationResponse;
 import io.edgeai.app.dto.OperationResponse;
-import io.edgeai.app.service.VDExecutionService;
 import io.edgeai.app.service.OffloadService;
 import java.net.URI;
 import java.util.UUID;
@@ -12,10 +11,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1")
 public class OperationController {
     private final OffloadService service;
-    private final VDExecutionService vds;
-    public OperationController(OffloadService service,VDExecutionService vds){this.service=service;this.vds=vds;}
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private io.edgeai.app.service.ContinuousExecutionService continuous;
+    public OperationController(OffloadService service){this.service=service;}
     @GetMapping("/operations/{operationId}")
-    public OperationResponse detail(@PathVariable UUID operationId){return vds.operation(operationId).<OperationResponse>map(o->o).orElseGet(()->OffloadOperationResponse.from(service.find(operationId)));}
+    public OperationResponse detail(@PathVariable UUID operationId){return continuous==null?OffloadOperationResponse.from(service.find(operationId)):continuous.operation(operationId).<OperationResponse>map(v->v).orElseGet(()->OffloadOperationResponse.from(service.find(operationId)));}
     @PostMapping(value="/tasks/{taskId}/offload",consumes="application/json")
     public ResponseEntity<OffloadOperationResponse> offload(@PathVariable UUID taskId,@RequestHeader("Idempotency-Key") String key,@RequestBody String body) {
         var result=service.request(taskId,key,body);

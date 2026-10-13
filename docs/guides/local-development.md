@@ -73,7 +73,7 @@ Dashboard의 서버 연결 상태와 API readiness를 함께 확인합니다. �
 - DDS 배포: [워크플로 배포](workflow-editor-integration.md)
 - Runner 결과 저장: `make storage`로 MinIO를 준비한 뒤 [실행 조건](../reference/support.md)을 확인
 
-워크플로 화면의 활성화와 Runner·VD·STREAM 실행 활성화는 별도 설정입니다.
+워크플로 화면의 활성화와 Runner·STREAM 실행 활성화는 별도 설정입니다.
 `.env`를 바꾸면 해당 프로세스를 다시 실행해야 합니다.
 
 ## 종료

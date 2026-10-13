@@ -31,14 +31,24 @@ class ProfileIntegrationTest {
     private String body(String key, String version, String spec) {
         return "{\"key\":\"" + key + "\",\"version\":\"" + version + "\",\"spec\":" + spec + "}";
     }
-    @Test void publishesAllKindsWithActualCsrfAndReadsThemBack() throws Exception {
+    @Test void retiredDevicePublicationPreservesExistingVersionAndCreatesNoNewVersion() throws Exception {
+        String key = key(), url = "/api/v1/profiles/DEVICE";
+        var legacy = service.publish(ProfileIdentity.Kind.DEVICE, body(key, "1.0.0", "{\"protocol\":\"mqtt\"}")).version();
+        mvc.perform(post(url).with(csrf()).contentType("application/json").content(body(key, "1.0.1", "{\"protocol\":\"http\"}")))
+            .andExpect(status().isGone()).andExpect(jsonPath("$.code").value("DEVICE_PROFILE_RETIRED"));
+        mvc.perform(get(url + "/" + key + "/versions/1.0.0"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(legacy.id().toString()))
+            .andExpect(jsonPath("$.spec.protocol").value("mqtt"));
+        mvc.perform(get(url + "/" + key + "/versions/1.0.1")).andExpect(status().isNotFound());
+    }
+    @Test void publishesServiceWithActualCsrfAndReadsItBack() throws Exception {
         var tokenResponse = mvc.perform(get("/api/v1/csrf").with(httpBasic("profile-test", "profile-test-only")))
             .andExpect(status().isOk()).andReturn();
         var session = (MockHttpSession) tokenResponse.getRequest().getSession(false);
         String token = json.readTree(tokenResponse.getResponse().getContentAsString()).get("token").asText();
         mvc.perform(get("/api/v1/profiles/DEVICE").session(session)).andExpect(status().isOk());
         String key = key();
-        for (String kind : List.of("DEVICE", "SERVICE", "VD")) {
+        for (String kind : List.of("SERVICE")) {
             String url = "/api/v1/profiles/" + kind;
             String body = body(key, "1.0.0", "{\"protocol\":\"mqtt\",\"value\":1}");
             var response = mvc.perform(post(url).session(session).with(httpBasic("profile-test", "profile-test-only"))
@@ -59,9 +69,9 @@ class ProfileIntegrationTest {
         }
     }
     @Test void paginatesVersionsAndValidatesRequests() throws Exception {
-        String key = key(), url = "/api/v1/profiles/DEVICE";
+        String key = key(), url = "/api/v1/profiles/SERVICE";
         for (String version : List.of("1.0.0", "2.0.0", "10.0.0"))
-            service.publish(ProfileIdentity.Kind.DEVICE, body(key, version, "{\"n\":1}"));
+            service.publish(ProfileIdentity.Kind.SERVICE, body(key, version, "{\"n\":1}"));
         mvc.perform(get(url + "?key=" + key + "&limit=2").with(user("test")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].version").value("1.0.0"))
             .andExpect(jsonPath("$.items[1].version").value("10.0.0")).andExpect(jsonPath("$.nextOffset").value(2));
@@ -111,7 +121,7 @@ class ProfileIntegrationTest {
         }
     }
     @Test void databaseRejectsMutationAndDuplicateIdentities() {
-        var value = service.publish(ProfileIdentity.Kind.VD, body(key(), "1.0.0", "{\"type\":\"sensorMirror\"}")).version();
+        var value = service.publish(ProfileIdentity.Kind.DEVICE, body(key(), "1.0.0", "{\"protocol\":\"mqtt\"}")).version();
         assertThatThrownBy(() -> jdbc.update("UPDATE edgeai.profile_version SET spec = '{\"changed\":true}' WHERE id = ?", value.id()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)

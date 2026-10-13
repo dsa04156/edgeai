@@ -3,32 +3,6 @@
 상태: M6 구현 중. ADR0013의 등록과 별도로 runtime 세대와 실제 Pod 신원을 관리한다.
 이 문서는 최종 연결 계약이며 구현·검증 완료 여부는 evidence를 따른다.
 
-## 공유 연속 처리 모드 추가 (2026-10-13)
-
-사용자가 승인한 `CONTINUOUS_EKUIPER` 모드는 아래 SERVICE supervisor 계약과 별도의 실행 경로다.
-v3 VD 프로필은 SERVICE를 요구하지 않으며, namespace `ekuiper`의 일반 AMD64 worker CG004에
-설치된 eKuiper2.4.2와 단일 sidecar agent를 공유한다. VD마다 Pod를 생성하지 않는다.
-실제 공유 Pod UID·ServiceAccount·projected token audience를 검증한 session/15초 lease와
-VD별 generation이 계산과 결과를 제한한다. 내부 계약은
-[processing-engine-api.yaml](../../contracts/openapi/processing-engine-api.yaml)이다.
-
-물리 센서는 프로토콜과 관계없이 측정 항목별 Device/DeviceStatus를 유지한다. 계산 입력은
-Mapper가 원래 측정 시각·적용 설정 해시·sourceGeneration·session/sequence를 함께 보내는
-qualified observation이다. raw MQTT/DMI 보고를 유지하며 추가 물리 수집은 하지 않는다.
-새 센서 목록 조회는 읽기만 한다. 이전 센서의 qualified 설정 준비는 사용자 POST/PATCH에서
-센서 이름 순서의 PostgreSQL 잠금을 얻고 수행한다. 현재 UID/model과 기존 연결은 보존한다.
-
-하나의 센서를 여러 VD에 연결할 수 있고, 한 VD는 입력16개/출력16개까지 가진다.
-계산 결과는 웹의 항목별 행과 전용 history DB에 저장하며 파생 CRD는 생성하지 않는다.
-입력 누락·stale·설정 변경·엔진 단절·전송 누락은 계산 세대/창을 초기화하고 조회 가능한
-공백을 남긴다. history 장애는 live 값을 계속 받아 표시하되 복구 후 소급 채우지 않는다.
-집계 그래프는 generation별로 분리하고 원본 기록을 수정하지 않는다.
-
-주 DB5Gi는 제어 정보만 관리한다. 별도 history PostgreSQL은 CG002의400Gi local-path PVC를
-사용하며 실제 해당 파일시스템 free-space와80Gi reserve를 확인한 뒤 적용한다.
-기능은 기본 비활성화다.17개 실센서·전체 프로토콜 simulator·500항목/200VD/500rule 부하 및
-실제24시간 soak 검증을 완료하기 전 운영 수용 완료로 간주하지 않는다.
-
 ## 수명과 소유
 
 VirtualDevice는 고정 UUID이고 한 실행 세대의 VDRuntime은 별도 UUID/generation을 가진다.

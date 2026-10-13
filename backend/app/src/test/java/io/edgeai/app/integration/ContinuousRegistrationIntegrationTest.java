@@ -41,6 +41,14 @@ class ContinuousRegistrationIntegrationTest {
     final JsonDocuments json=new JsonDocuments();
     static final UUID uid=UUID.randomUUID();
     final UUID podUid=UUID.randomUUID();
+    @Test void retiredProfilesAndBatchRegistrationRemainUnavailable() throws Exception {
+        mvc.perform(post("/api/v1/profiles/VD").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/virtual-devices").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isMethodNotAllowed());
+        mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isMethodNotAllowed());
+    }
     static final UUID sourceGeneration=UUID.randomUUID();
     @BeforeEach void source() {
         when(engine.authenticate(eq("test-pod-token"))).thenReturn(new ProcessingEngineGateway.Identity(podUid,"my-ekuiper-0","worker"));

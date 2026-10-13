@@ -18,17 +18,16 @@ public final class RunnerApiService {
     private final Clock clock;
     private final RuntimeStartJournal starts;
     private final RuntimeResultPublisher results;
-    private final VDTaskStartJournal vdStarts;
     private final StreamCompletionPublisher completions;
-    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results,VDTaskStartJournal vdStarts,StreamCompletionPublisher completions) {
-        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;this.vdStarts=vdStarts;
+    public RunnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore storage,ArtifactCommitService commits,Clock clock,RuntimeStartJournal starts,RuntimeResultPublisher results,StreamCompletionPublisher completions) {
+        this.lifecycle=lifecycle;this.runtimes=runtimes;this.storage=storage;this.commits=commits;this.clock=clock;this.starts=starts;this.results=results;
         this.completions=completions;
     }
     public Object claim(RunnerPrincipal principal,String body) {
         RunnerInput.parse(body,principal);
         var current=runtimes.byAttempt(principal.attemptId()).orElseThrow();
-        if(!current.vd() && current.jobUid()==null)lifecycle.submitted(principal.attemptId(),principal.pod().jobUid());
-        var assignment=current.vd()?lifecycle.claimVD(principal.attemptId(),principal.epoch(),principal.vdProducer()):lifecycle.claim(principal.attemptId(),principal.epoch(),principal.pod());var runtime=assignment.runtime();
+        if(current.jobUid()==null)lifecycle.submitted(principal.attemptId(),principal.pod().jobUid());
+        var assignment=lifecycle.claim(principal.attemptId(),principal.epoch(),principal.pod());var runtime=assignment.runtime();
         var inputs=new TreeMap<String,Object>();
         for(var input:assignment.inputs()) {
             var artifact=input.artifact();var grant=storage.download(artifact);
@@ -46,8 +45,7 @@ public final class RunnerApiService {
                 "stepTimeoutSeconds",stream.stepTimeoutSeconds(),"limits",Map.of("maxFrames",limits.maxFrames(),
                     "maxBufferBytes",limits.maxBufferBytes(),"maxStateBytes",limits.maxStateBytes())));
         }
-        if(runtime.vd())vdStarts.retainVDStart(Objects.requireNonNull(assignment.vdStartAuthority()));
-        else starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
+        starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
         // External persistence must not let concurrent cancellation or lease expiry issue a stale response.
         lifecycle.authorize(principal.attemptId(),principal.epoch(),principal.podUid());
         response.put("timeoutSeconds",Math.max(1,Math.min(assignment.spec().timeoutSeconds(),Duration.between(clock.instant(),runtime.expiresAt()).toSeconds())));

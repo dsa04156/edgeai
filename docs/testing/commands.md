@@ -55,7 +55,7 @@ Runner·STREAM·Remote는 `test-runner.sh`, `test-stream.sh`, `test-remote.sh`,
 원시 로그의 비밀·개인정보는 공개 문서에서 제외합니다. 일회성 로그·스크린샷·보고서는 Git에서 제외한 `output/`에 보관합니다.
 현재 상태는 `PROGRESS.md`, 재사용할 사용법은 해당 가이드에 기록합니다.
 
-VD 센서 BATCH의 실장비 입력 수용은 `bash scripts/test/test-vd-sensor.sh`로 실행합니다.
+기존 VD 센서 수용시험은 제거했습니다. 현재 제거 회귀는 `VirtualDeviceRemovalIntegrationTest`를 사용합니다.
 선택한 kubectl context의 `edgeai-devices/sensehat-001`을 읽고, 별도 PostgreSQL DB와
 MinIO 시험 bucket에서 실제 Python supervisor·Runner·온도 변환·Result 검증을 수행합니다.
 센서 CRD는 읽기만 하며 Kubernetes Pod 인증은 fixture입니다. 실제 Pod 배포 수용과 구분합니다.

@@ -12,6 +12,8 @@ public interface DeviceRepository {
     void release(UUID id, Instant now);
     void delete(UUID id);
     boolean hasVirtualDeviceBindings(UUID id);
+    boolean hasHistoricalManagedDeviceReferences(String id);
+    void lockManagedDeviceReferences(java.util.Collection<String> ids);
     void advanceEpoch(UUID id, Instant now);
     List<DeviceAttachment> attachments(UUID deviceId);
     Optional<DeviceAttachment> activeAttachment(UUID deviceId);

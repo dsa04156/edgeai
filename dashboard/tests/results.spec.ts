@@ -12,10 +12,11 @@ test("result view distinguishes pending, verified metadata and unavailable stora
     const task = { id: taskId, runId, key: "analyze", state: phase === "verified" ? "SUCCEEDED" : phase === "retry" ? "RETRY_WAIT" : "RUNNING", createdAt: now, updatedAt: now };
     let body: unknown;
     if (path === "csrf") body = { token: "ui-fixture" };
-    else if (["workflows", "profiles/SERVICE", "nodes", "virtual-devices"].includes(path)) body = { items: [], nextOffset: null };
+    else if (path === "workflows" || path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflow-runs") body = { items: [run], nextOffset: null };
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
-    else if (path === `workflow-runs/${runId}/placements`) body=[];
+    else if (path === `workflow-runs/${runId}/placements`) body = [];
+    else if (path === `tasks/${taskId}/results/output/content`) body = { value: 42 };
     else if (path === `tasks/${taskId}`) body = { task, attempts: [{ id: attemptId, taskId, number: 1, epoch: 1, state: phase === "retry" ? "FAILED" : task.state }] };
     else if (path === `tasks/${taskId}/results`) {
       if (phase === "unavailable") return route.fulfill({ status: 503, json: { code: "RESULT_STORE_UNAVAILABLE", message: "결과 저장소에 연결할 수 없습니다. 복구 후 다시 시도하세요." } });
@@ -55,6 +56,11 @@ test("result view distinguishes pending, verified metadata and unavailable stora
   await expect(results.getByText("RemoteAllocation 55555555-5555-4555-8555-555555555555", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await results.screenshot({ path: testInfo.outputPath("remote-reference-result.png") });
+  await results.getByRole("button", { name: "output · 결과 내용 조회", exact: true }).click();
+  await expect(results.getByText("output · 결과 JSON", { exact: true })).toBeVisible();
+  await results.getByText("output · 결과 JSON", { exact: true }).click();
+  await expect(results.locator("pre")).toContainText("42");
+
   phase = "unavailable";
   await results.getByRole("button", { name: "결과 새로고침", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "결과 저장소에 연결할 수 없습니다." })).toBeVisible();

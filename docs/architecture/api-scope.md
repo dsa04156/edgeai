@@ -15,6 +15,6 @@ Spring Run 생성이나 Result commit으로 변환되지 않습니다. [워크�
 
 ## 내부 계약
 
-Runner·VD·Device stream·참조 Remote는 별도의 OpenAPI와 인증·수명 계약을 사용합니다.
+Runner·Device stream·참조 Remote는 별도의 OpenAPI와 인증·수명 계약을 사용합니다.
 TaskAttempt 생성은 재시도·전환 정책이 관리하며 사용자가 임의로 생성하는 API가 아닙니다.
 외부 제공자와 실장비 수용은 구현된 참조 계약과 구분합니다.

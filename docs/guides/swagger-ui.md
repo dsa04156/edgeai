@@ -11,13 +11,13 @@ Swagger에서 관리 API의 입력·응답·오류를 확인하고 실행할 수
 
 현재 일반 관리 API와 Swagger는 Basic 로그인을 요구하지 않습니다.
 예전 배포가 인증을 요구한다면 소스와 실행 중 이미지·설정의 차이를 먼저 확인합니다.
-내부 Runner·VD·스트림 인증은 별도의 계약을 따릅니다.
+내부 Runner·스트림 인증은 별도의 계약을 따릅니다.
 
 ## 조회 호출
 
 ```bash
 curl --fail-with-body http://127.0.0.1:18080/api/v1/platform
-curl --fail-with-body http://127.0.0.1:18080/api/v1/profiles/DEVICE
+curl --fail-with-body http://127.0.0.1:18080/api/v1/profiles/SERVICE
 ```
 
 페이지 크기와 필터는 각 endpoint의 매개변수를 확인합니다.

@@ -15,7 +15,7 @@
 **/*.tsbuildinfo
 **/__pycache__
 deploy/*
-!deploy/edgex
-deploy/edgex/*
-!deploy/edgex/README.md
+!deploy/kubeedge
+deploy/kubeedge/*
+!deploy/kubeedge/README.md
 .idea

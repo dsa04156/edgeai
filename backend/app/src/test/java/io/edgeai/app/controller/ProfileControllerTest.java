@@ -35,13 +35,18 @@ class ProfileControllerTest {
             .andExpect(status().isForbidden());
         verifyNoInteractions(service);
     }
+    @Test void retiredDeviceProfilesCannotPublishNewVersions() throws Exception {
+        mvc.perform(post("/api/v1/profiles/DEVICE").with(csrf()).contentType("application/json")
+                .content("{\"key\":\"old-device\",\"version\":\"1.0.0\",\"spec\":{\"protocol\":\"mqtt\"}}"))
+            .andExpect(status().isGone()).andExpect(jsonPath("$.code").value("DEVICE_PROFILE_RETIRED"));
+    }
     @Test void rejectsUnknownKindAndInvalidPaginationTypes() throws Exception {
         mvc.perform(get("/api/v1/profiles/UNKNOWN")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/profiles/DEVICE?limit=abc")).andExpect(status().isBadRequest());
     }
     @Test void exposesStableErrorsWithoutStorageDetails() throws Exception {
         when(service.publish(any(), anyString())).thenThrow(new ProfileConflictException());
-        mvc.perform(post("/api/v1/profiles/DEVICE").with(csrf()).contentType("application/json").content("{}"))
+        mvc.perform(post("/api/v1/profiles/SERVICE").with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PROFILE_CONFLICT"));
         when(service.list(any(), any(), anyInt(), anyInt())).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("secret connection details"));
         mvc.perform(get("/api/v1/profiles/DEVICE"))

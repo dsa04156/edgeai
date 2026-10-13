@@ -66,35 +66,11 @@ public final class VirtualDeviceInput {
             parameters(map.get("sources")).forEach((alias,raw)->{
                 var source=object(raw,"deviceModel","required");
                 if(!Boolean.TRUE.equals(source.get("required")))throw new IllegalArgumentException("Continuous inputs are required");
-                sources.put(text(alias,32),new VDProfileSpec.Source(null,true,Set.of(),deviceName(source.get("deviceModel"))));
+                sources.put(text(alias,32),new VDProfileSpec.Source(deviceName(source.get("deviceModel")),true));
             });
-            return new VDProfileSpec("processing",null,sources,0,60,15,null,ContinuousInput.parse(map.get("continuous"),sources.keySet()));
+            return new VDProfileSpec(sources,ContinuousInput.parse(map.get("continuous"),sources.keySet()));
         }
-        var fields=new ArrayList<>(List.of("apiVersion","type","serviceProfileVersionId","sources","state","runtime"));
-        if(map.containsKey("processing"))fields.add("processing");object(map,fields.toArray(String[]::new));
-        boolean managed="edgeai.vd/v2".equals(map.get("apiVersion"));
-        if(!managed && !"edgeai.vd/v1".equals(map.get("apiVersion")))throw new IllegalArgumentException("Unsupported VD profile apiVersion");
-        String type=text(map.get("type"),16);
-        if(!Set.of("sensorMirror","processing","emulation").contains(type))throw new IllegalArgumentException("Unsupported VD type");
-        var raw=parameters(map.get("sources"));if(raw.size()>16)throw new IllegalArgumentException("At most 16 source declarations");
-        var sources=new TreeMap<String,VDProfileSpec.Source>();
-        raw.forEach((k,v)->{
-            var source=object(v,managed?new String[]{"deviceModel","required"}:new String[]{"deviceProfileVersionId","required","sourceModes"});
-            if(!(source.get("required") instanceof Boolean required))throw new IllegalArgumentException("required must be boolean");
-            if(managed) { sources.put(key(k),new VDProfileSpec.Source(null,required,Set.of(),deviceName(source.get("deviceModel")))); return; }
-            if(!(source.get("sourceModes") instanceof List<?> modes) || modes.isEmpty() || modes.size()>3)throw new IllegalArgumentException("sourceModes required");
-            var allowed=EnumSet.noneOf(Device.SourceMode.class);
-            for(var mode:modes)if(!allowed.add(Device.SourceMode.valueOf(text(mode,16))))throw new IllegalArgumentException("Duplicate sourceMode");
-            sources.put(key(k),new VDProfileSpec.Source(uuid(source.get("deviceProfileVersionId")),required,allowed));
-        });
-        String processing=map.containsKey("processing")?ProcessingInput.parse(map.get("processing"),sources.keySet()):null;
-        if(processing!=null && (!managed || !type.equals("processing")))throw new IllegalArgumentException("Processing requires a v2 processing VD");
-        if(!type.equals("emulation") && sources.values().stream().noneMatch(VDProfileSpec.Source::required) && !(processing!=null && sources.isEmpty()))throw new IllegalArgumentException("Required source missing");
-        if(!"STATELESS".equals(object(map.get("state"),"mode").get("mode")))throw new IllegalArgumentException("Only STATELESS is supported");
-        var runtime=object(map.get("runtime"),"maxConcurrentTasks","startupTimeoutSeconds","drainTimeoutSeconds");
-        return new VDProfileSpec(type,uuid(map.get("serviceProfileVersionId")),sources,
-            (int)number(runtime.get("maxConcurrentTasks"),1,16),(int)number(runtime.get("startupTimeoutSeconds"),1,600),
-            (int)number(runtime.get("drainTimeoutSeconds"),1,600),processing);
+        throw new IllegalArgumentException("Only edgeai.vd/v3 continuous profiles are supported");
     }
     private static String deviceName(Object value) {
         String name=text(value,253);io.edgeai.domain.runtime.RuntimeNames.dns(name,253);return name;

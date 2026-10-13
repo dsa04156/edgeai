@@ -1,5 +1,7 @@
 # 아키텍처
 
+> 2026-10-12: 기존 VD 기능을 제거했습니다. 아래 VD 설명·검증은 이전 버전의 이력입니다. 현재 범위는 [제거 결정](../adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
+
 EdgeAI의 관리 API는 Spring Boot modular monolith이고, Dashboard는 Next.js입니다.
 앱의 프로필·UUID 장치·VD·실행 기록은 PostgreSQL에 저장합니다. Mapper 장치의 설정과
 최신 관측은 KubeEdge CRD를 기준으로 하며 외부 시스템과의 통신은 adapter 계층에서 처리합니다.

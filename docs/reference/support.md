@@ -13,8 +13,6 @@
 | 측정 항목 추가·삭제 | 기존 Mapper 장치와 호환 항목 규격 | 연결 설정을 재사용; 마지막 항목 삭제는 장치 등록도 삭제 |
 | 매 수집 데이터 전달 | Mapper에서 접근할 MQTT broker | QoS 1 발행; 영속 재전송·이력 consumer는 별도 구현 필요 |
 | Mapper 장치의 BATCH 입력 | ONLINE 장치와 존재하는 property, 활성 Workflow API | Run 접수 시 최신값 고정; 연속 STREAM 입력으로 자동 연결하지 않음 |
-| VD 등록 | VD·SERVICE 프로필과 필수 원본 | 등록과 실행 Ready는 다름 |
-| VD 실제 실행 | VD·Runtime·클러스터·키·저장소 | 실행 이력은 등록 영구 삭제를 제한 |
 | DDS 배포 | Platform-Service·Gitea·Argo CD·이미지 | 캔버스 연결선은 실행 의존성이 아님 |
 | Spring DAG 실행 | Runtime·Runner·저장소·클러스터 | 요청 접수와 검증된 Result는 다름 |
 | Remote | 설정된 참조 제공자와 고정 계약 | 실제 외부 업체 API·상태형 복원 수용 별도 |

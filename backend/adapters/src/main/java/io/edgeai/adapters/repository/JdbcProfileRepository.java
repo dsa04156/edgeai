@@ -39,12 +39,12 @@ public final class JdbcProfileRepository implements ProfileRepository {
 
     @Override
     public Optional<ProfileVersion> find(UUID id) {
-        return jdbc.query("SELECT * FROM edgeai.profile_version WHERE id=?", ROW, id).stream().findFirst();
+        return jdbc.query("SELECT * FROM edgeai.profile_version WHERE id=? AND (kind IN ('DEVICE','SERVICE') OR (kind='VD' AND spec->>'apiVersion'='edgeai.vd/v3' AND spec->>'executionMode'='CONTINUOUS_EKUIPER'))", ROW, id).stream().findFirst();
     }
 
     @Override
     public boolean delete(ProfileIdentity identity) {
-        // Serialize against publication of VD specs whose references live in JSON.
+        // Preserve legacy profile-reference protection while deleting unused versions.
         // FK references from devices/workflows remain protected by PostgreSQL.
         jdbc.execute("SET LOCAL lock_timeout='3s'");
         jdbc.execute("LOCK TABLE edgeai.profile_version IN SHARE ROW EXCLUSIVE MODE");

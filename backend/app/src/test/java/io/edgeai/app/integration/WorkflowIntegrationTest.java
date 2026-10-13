@@ -98,10 +98,10 @@ class WorkflowIntegrationTest {
         perform(post("/api/v1/workflow-runs").header("Idempotency-Key",missing).contentType("application/json").content(encode(request)),404);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(missing))).isZero();
         request.put("taskExecutions",Map.of("root",Map.of("mode","AUTO")));
-        for(var policy:List.of(Map.of("mode","REMOTE","providerKey","fixture"),Map.of("mode","VD","vdId",UUID.randomUUID().toString()))) {
+        for(var policy:List.of(Map.of("mode","REMOTE","providerKey","fixture"))) {
             request.put("execution",policy);String key=UUID.randomUUID().toString();
             var error=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(encode(request)),503));
-            assertThat(error.path("code").asText()).isIn("RUNTIME_DISABLED","VD_EXECUTION_DISABLED");
+            assertThat(error.path("code").asText()).isEqualTo("RUNTIME_DISABLED");
             assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run WHERE idempotency_key=?",Integer.class,UUID.fromString(key))).isZero();
         }
     }

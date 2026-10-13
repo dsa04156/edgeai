@@ -142,7 +142,7 @@ def main():
             literal(str(uuid.uuid4()))+"::uuid,'RUNNING','PENDING',now(),now())",source)
         device_profile=api.request('POST','profiles/DEVICE',{'key':'retire-device','version':'1.0.0','spec':{'protocol':'synthetic'}},201)
         device=api.request('POST','devices',{'key':'retire-source','displayName':'Source','profileVersionId':device_profile['id'],'sourceMode':'SYNTHETIC'},201)
-        spec=json.loads((ROOT/'contracts/profiles/vd-profile.example.json').read_text())
+        spec={'apiVersion': 'edgeai.vd/v1', 'type': 'processing', 'serviceProfileVersionId': '11111111-1111-4111-8111-111111111111', 'sources': {'input': {'deviceProfileVersionId': '22222222-2222-4222-8222-222222222222', 'required': True, 'sourceModes': ['SYNTHETIC']}}, 'state': {'mode': 'STATELESS'}, 'runtime': {'maxConcurrentTasks': 1, 'startupTimeoutSeconds': 120, 'drainTimeoutSeconds': 120}}
         spec['serviceProfileVersionId']=service['id']; spec['sources']['input']['deviceProfileVersionId']=device_profile['id']
         if args.vd_tasks: spec['runtime']['maxConcurrentTasks']=4
         vd_profile=api.request('POST','profiles/VD',{'key':'retire-vd-profile','version':'1.0.0','spec':spec},201)

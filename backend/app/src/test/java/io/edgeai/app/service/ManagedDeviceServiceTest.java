@@ -29,7 +29,7 @@ class ManagedDeviceServiceTest {
     final Instant now=Instant.parse("2026-10-07T04:30:00Z");
     final DeviceResourceGateway gateway=mock(DeviceResourceGateway.class);
     @SuppressWarnings("unchecked") final ObjectProvider<DeviceResourceGateway> provider=mock(ObjectProvider.class);
-    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","",mock(io.edgeai.domain.repository.VirtualDeviceRepository.class));}
+    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","",mock(io.edgeai.domain.repository.VirtualDeviceRepository.class),mock(io.edgeai.domain.repository.DeviceRepository.class));}
     void read(String path,Object data){when(gateway.request("GET",path,null)).thenReturn(new DeviceResourceGateway.Reply(200,DeviceProfileCompiler.JSON.canonical(data)));}
     String path(String kind,String id){return "/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/"+kind+"/"+id;}
     void device(boolean ready,String state,Instant heartbeat){
@@ -52,7 +52,6 @@ class ManagedDeviceServiceTest {
         read("/apis/apps/v1/namespaces/edgeai-devices/deployments/"+MapperDeployment.nameFor("edge-a"),Map.of("status",Map.of("readyReplicas",1)));
         var device=service().get("sensor");var reading=DeviceProfileCompiler.map(DeviceProfileCompiler.map(device.get("properties")).get("temperature"));
         assertEquals("0",reading.get("value"));assertEquals(collected,reading.get("timestamp"));assertEquals(applied,reading.get("configurationSha256"));
-        assertTrue(SensorHistoryService.currentConfiguration(device,reading,Instant.ofEpochMilli(collected)));
     }
     @Test void workflowReferencesRejectProtocolFieldsAndMissingProperties(){device(true,"online",now);assertThrows(IllegalArgumentException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("temperature"),"host","private")));assertThrows(ControlPlaneException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("missing"))));}
     @Test void resourcesFromAnotherOwnerAreNeverAdopted(){device(true,"online",now);read(path("devices","sensor"),Map.of("metadata",Map.of("labels",Map.of("app.kubernetes.io/part-of","other"))));assertEquals(409,assertThrows(ControlPlaneException.class,()->service().delete("sensor")).status());verify(gateway,never()).request(eq("DELETE"),anyString(),any());}

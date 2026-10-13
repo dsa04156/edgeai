@@ -61,7 +61,7 @@
     {
       "source": "docs/concepts/resources.md",
       "group": "concepts",
-      "description": "규격, 장치, 노드, 가상 장치의 관계를 이해합니다."
+      "description": "규격, 장치, 노드의 관계를 이해합니다."
     },
     {
       "source": "docs/concepts/workflows.md",
@@ -104,19 +104,10 @@
       "description": "CRD 최신값과 Virtual Device 정리 범위를 확인합니다."
     },
     {
-      "source": "docs/guides/service-profile-to-virtual-device.md",
-      "group": "guides",
-      "description": "SERVICE 등록부터 VD 생성까지 원본 없는 계산·실제 장치 원본 예시를 따라 합니다."
-    },
-    {
       "source": "docs/guides/virtual-devices.md",
       "group": "guides",
-      "description": "가상 장치 등록·실행·해제·삭제 순서를 확인합니다."
-    },
-    {
-      "source": "docs/guides/vd-processing.md",
-      "group": "guides",
-      "description": "센서 표본에 필터·이동평균·RMS·FFT·임계값을 조합하고 다른 VD·AI로 결과를 연결합니다."
+      "description": "제거된 기능과 보존되는 과거 데이터의 범위",
+      "title": "기존 가상 장치 제거"
     },
     {
       "source": "docs/guides/workflow-editor-integration.md",

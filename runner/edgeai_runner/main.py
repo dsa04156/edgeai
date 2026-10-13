@@ -25,7 +25,6 @@ from pathlib import Path
 from edgeai_runner.telemetry import Sampler, own_cgroup
 
 MAX_JSON = 262144
-MAX_ASSIGNMENT = 2097152
 MAX_FILE = 268435456
 PORT = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\Z")
 
@@ -169,9 +168,8 @@ class Runner:
                 request = urllib.request.Request(self.base + "/" + operation, data=body, method="POST",
                     headers={"Authorization": "Bearer " + self.token, "X-EdgeAI-Pod-Token": pod_token, "Content-Type": "application/json"})
                 with self.http.open(request, timeout=self.timeout(request_timeout)) as response:
-                    maximum = MAX_ASSIGNMENT if operation == "claim" else MAX_JSON
-                    content = response.read(maximum + 1)
-                    if len(content) > maximum:
+                    content = response.read(MAX_JSON + 1)
+                    if len(content) > MAX_JSON:
                         raise RunnerError("INVALID_RESPONSE")
                     return json_decode(content)
             except urllib.error.HTTPError as error:
@@ -231,16 +229,13 @@ class Runner:
             raise RunnerError("INVALID_RESPONSE")
         env = {k: v for k, v in os.environ.items() if not k.startswith("EDGEAI_")}
         env.update(EDGEAI_INPUT_DIR=str(self.work / "inputs"), EDGEAI_OUTPUT_DIR=str(self.work / "outputs"),
-            EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), EDGEAI_TELEMETRY_FILE=str(self.work / "telemetry.json"), TMPDIR=str(self.work / "tmp"),
-            PYTHONPATH=os.pathsep.join(filter(None, (str(Path(__file__).resolve().parents[1]), env.get("PYTHONPATH")))))
+            EDGEAI_PARAMETERS_FILE=str(self.work / "parameters.json"), EDGEAI_TELEMETRY_FILE=str(self.work / "telemetry.json"), TMPDIR=str(self.work / "tmp"))
         if state_file is not None:
             env['EDGEAI_STATE_FILE'] = str(state_file)
         process = None
         try:
-            supervised = os.environ.get("EDGEAI_VD_SUPERVISED") == "true"
             process = subprocess.Popen(command, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=not supervised,
-                process_group=0 if supervised else None)
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             while process.poll() is None:
                 self.timeout()
                 cancelled.wait(0.05)
@@ -358,26 +353,6 @@ class Runner:
             (self.work / folder).mkdir(mode=0o700)
         (self.work / "parameters.json").write_bytes(json_encode(assignment["parameters"]))
         self.download(assignment, self.work / "inputs")
-        frame = assignment["parameters"].get("vdInputs")
-        if isinstance(frame, dict) and "processing" in frame:
-            from edgeai_runner.processing import process, ProcessingError
-            try:
-                artifacts = {}
-                for pipeline in frame["processing"]["pipelines"]:
-                    source = pipeline["input"]
-                    if "port" in source:
-                        name = port_name(source["port"])
-                        if assignment["inputs"][name]["bytes"] > MAX_ASSIGNMENT:
-                            raise ProcessingError("Processing artifact exceeds input limit")
-                        raw = (self.work / "inputs" / name).read_bytes()
-                        if len(raw) > MAX_ASSIGNMENT:
-                            raise ProcessingError("Processing artifact exceeds input limit")
-                        artifacts[name] = json_decode(raw)
-                assignment["parameters"]["vdProcessed"] = process(frame["processing"], frame, artifacts,
-                    {port: assignment["inputs"][port]["sha256"] for port in artifacts})
-                (self.work / "parameters.json").write_bytes(json_encode(assignment["parameters"]))
-            except (ProcessingError, KeyError, TypeError, ValueError, OSError, OverflowError):
-                raise RunnerError("PROCESSING_INVALID") from None
         fd = os.open(self.work / "outputs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             print("RUNNER_WORKLOAD_START", flush=True)

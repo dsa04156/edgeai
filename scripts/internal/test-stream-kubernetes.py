@@ -19,9 +19,7 @@ import tempfile
 import time
 import urllib.request
 import uuid
-from vd_acceptance import ROOT, wait
-from vd_stream_acceptance import CASES as VD_CASES
-from vd_stream_kubernetes import VDStreamObserver
+from kubernetes_test_support import ROOT, wait
 from image_identity import verify_image_id
 
 CASES = ('auto', 'node', 'recover', 'finalizer', 'cancel', 'offload', 'offload-cancel', 'offload-automatic', 'offload-automatic-cancel', 'placement', 'placement-recover')
@@ -56,7 +54,7 @@ def main():
     parser.add_argument('--api-source', help='Full source commit for the explicit API image')
     parser.add_argument('--minio-image', help='Explicit CI-tested project MinIO digest')
     parser.add_argument('--report', type=Path, default=ROOT / '.tools/stream-kubernetes.json')
-    parser.add_argument('--cases', nargs='+', choices=CASES + VD_CASES, default=list(CASES + VD_CASES), help='Explicit subset for diagnosis; CI defaults to every case')
+    parser.add_argument('--cases', nargs='+', choices=CASES, default=list(CASES), help='Explicit subset for diagnosis; CI defaults to every case')
     args = parser.parse_args()
     if len(args.cases) != len(set(args.cases)):
         parser.error('Duplicate acceptance cases')
@@ -79,7 +77,6 @@ def main():
     labels = {'app.kubernetes.io/part-of': 'edgeai', 'app.kubernetes.io/managed-by': 'edgeai-stream-test', 'edgeai.io/test-id': root}
     api, db, storage, broker, driver = [root + '-' + name for name in ('api', 'db', 'storage', 'broker', 'driver')]
     run_ids = set()
-    vd_ids = set()
     seen = {}
     held_jobs, private_producers = {}, {}
     succeeded = False
@@ -264,36 +261,11 @@ with response: print(response.status)
         def query(sql):
             return call(['-n', 'edgeai', 'exec', db, '--', 'psql', '-U', 'edgeai', '-d', 'edgeai', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', sql]).decode().strip()
 
-        held_vds = {}
-        def hold_vd(identity, enabled):
-            identity = str(uuid.UUID(identity))
-            application = 'edgeai-vd-hold-' + identity
-            if enabled:
-                assert identity not in held_vds and identity in vd_ids
-                process = subprocess.Popen(k + ['-n', 'edgeai', 'exec', '-i', db, '--', 'psql', '-U', 'edgeai', '-d', 'edgeai', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1'],
-                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                held_vds[identity] = process
-                # Permit the offload member's VD foreign-key check while blocking the poll row mutex.
-                process.stdin.write(("SET application_name='" + application + "'; BEGIN; SELECT id FROM edgeai.virtual_device WHERE id='" + identity + "' FOR NO KEY UPDATE;\n").encode())
-                process.stdin.flush()
-                def locked():
-                    assert process.poll() is None, 'Owned VD barrier session exited'
-                    return query("SELECT count(*) FROM pg_stat_activity WHERE application_name='" + application + "' AND state='idle in transaction'") == '1'
-                wait(locked, 15, 'Owned VD poll receipt barrier did not acquire')
-            else:
-                process = held_vds[identity]
-                if process.poll() is None:
-                    process.communicate(b'ROLLBACK;\n', timeout=15)
-                assert process.returncode == 0, 'Owned VD barrier did not release'
-                held_vds.pop(identity)
 
         def resources(run):
             uuid.UUID(run)
             return read(['-n', 'edgeai-runtimes', 'get', 'pods,jobs,secrets', '-l', 'edgeai.io/run-id=' + run, '-o', 'json'])['items']
 
-        def vd_resources(vd):
-            uuid.UUID(vd)
-            return read(['-n', 'edgeai-runtimes', 'get', 'pods,jobs,secrets', '-l', 'edgeai.io/vd-id=' + vd, '-o', 'json'])['items']
 
         def observe(run):
             for pod in resources(run):
@@ -363,13 +335,6 @@ with response: print(response.status)
                 env('EDGEAI_STREAM_CA_FILE', '/tmp/identity/server.crt'), env('EDGEAI_STREAM_ADMIN_PASSWORD_FILE', '/tmp/identity/admin.password'),
                 env('EDGEAI_STREAM_PRINCIPAL_KEY_FILE', '/tmp/identity/principal.key'), env('EDGEAI_STREAM_DEVICE_KEY_FILE', '/tmp/identity/device.key')]
             api_env += [secret_env(name) for name in ('EDGEAI_API_USER', 'EDGEAI_API_PASSWORD', 'EDGEAI_DB_PASSWORD', 'EDGEAI_MINIO_USER', 'EDGEAI_MINIO_PASSWORD')]
-            if any(name in VD_CASES for name in args.cases):
-                api_env += [env('EDGEAI_VD_ENABLED', 'true'), env('EDGEAI_VD_LEASE_SECONDS', '60')]
-            if any(name in ('vd-distinct-offload', 'vd-shared-offload-pending-cancel') for name in args.cases):
-                # The injected row lock deliberately holds several poll/child requests; reserve
-                # connections for the public command and readiness while those transactions wait.
-                api_env += [env('SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE', '20')]
-                snapshot['vdOffloadBarrierPoolSize'] = 20
             jar_path = '/app/app.jar' if jar is None else '/tmp/current-api.jar'
             api_command = 'umask 077; mkdir -p /tmp/identity; cp /bootstrap/* /tmp/identity/; chmod 600 /tmp/identity/*; '
             if jar is not None:
@@ -404,15 +369,7 @@ with response: print(response.status)
                 return pod['metadata']['uid']
 
             api_uid = start_api()
-            def restart_vd_api(abrupt=False):
-                nonlocal api_uid
-                old = api_uid
-                remove('pod', 'edgeai', api, old, grace_seconds=0 if abrupt else None); records.remove(('pod', 'edgeai', api, old))
-                api_uid = start_api()
-                assert api_uid != old
-                return {'oldUid': old, 'newUid': api_uid, 'kind': 'actual-kubernetes-api-pod', 'abrupt': abrupt}
 
-            vd_observer = VDStreamObserver(read, call, query, snapshot, vd_resources, runner_digest, root + '-ca', restart_vd_api, hold_vd)
             forward(api, 18443, '/actuator/health/readiness')
             nodes = read(['get', 'nodes', '-o', 'json'])['items']
             eligible = [n for n in nodes if n['status']['nodeInfo']['architecture'] == 'amd64' and not n['spec'].get('unschedulable')
@@ -432,7 +389,7 @@ with response: print(response.status)
                       'memoryPressureCommand': "import runpy,threading,time\nfrom pathlib import Path\ndef pressure():\n global allocation\n while not Path('/work/automatic-pressure').exists(): time.sleep(.05)\n allocation=bytearray(b'x')*(320*1024*1024)\nthreading.Thread(target=pressure,daemon=True).start()\nrunpy.run_path('/opt/edgeai/examples/stream_sum.py',run_name='__main__')\n",
                       'reportCommand': 'import time; time.sleep(2)\n' + (ROOT / 'runner/examples/stream_report.py').read_text()}
             create('ConfigMap', root + '-scenario', immutable=True, data={'driver.py': (ROOT / 'scripts/internal/stream_acceptance.py').read_text(),
-                'vd_stream_acceptance.py': (ROOT / 'scripts/internal/vd_stream_acceptance.py').read_text(), 'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
+                'config.json': json.dumps(config), 'ca.crt': credentials['server.crt']})
             create('Pod', driver, spec=pod_spec([{'name': 'source-driver', 'image': snapshot['runnerImage'], 'command': ['python3', '-B', '/scenario/driver.py'],
                 'env': [secret_env('EDGEAI_API_USER'), secret_env('EDGEAI_API_PASSWORD'), env('SSL_CERT_FILE', '/scenario/ca.crt')], 'securityContext': security,
                 'resources': {'requests': {'cpu': '100m', 'memory': '128Mi'}, 'limits': {'cpu': '1', 'memory': '512Mi'}},
@@ -453,9 +410,6 @@ with response: print(response.status)
                 current = state.get('phase')
                 if current:
                     run = current['runId'];uuid.UUID(run);run_ids.add(run);observe(run)
-                    if current['case'] in VD_CASES:
-                        vd_ids.update(current['vdTargets'])
-                        vd_observer.observe(current)
                     phase = current['phase']
                     if phase not in completed and ('expectedStates' in current or phase.endswith(('-done', '-children-exited', '-finalizer-granted', '-finalizer-restoring', '-draining', '-releasing', '-cancelling'))):
                         if 'expectedStates' in current:
@@ -574,7 +528,7 @@ with response: print(response.status)
                                 proof['budgetAlternativeNodeId'] = destination['metadata']['uid']
                                 call(['-n', 'edgeai-runtimes', 'exec', replacement['metadata']['name'], '--', 'python3', '-c',
                                     "from pathlib import Path;p=Path('/work/automatic-pressure');assert not p.exists();p.touch()"])
-                        elif phase.endswith(('-draining', '-releasing', '-cancelling')) and current['case'] not in VD_CASES:
+                        elif phase.endswith(('-draining', '-releasing', '-cancelling')):
                             assert current['case'].startswith('offload')
                             proof = snapshot['offloads'][current['case']]
                             operation = str(uuid.UUID(current['offload']['id']))
@@ -613,7 +567,7 @@ with response: print(response.status)
                                 for (name, uid), held_run in list(held_jobs.items()):
                                     if held_run == run:
                                         hold_job(name, uid, run, False)
-                        elif phase.endswith('-finalizer-granted') and current['case'] not in VD_CASES:
+                        elif phase.endswith('-finalizer-granted'):
                             sink = str(uuid.UUID(current['tasks']['sink']))
                             owned = resources(run)
                             pod = next(p for p in owned if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink)
@@ -633,7 +587,7 @@ with response: print(response.status)
                                 'checkpointIds': query("SELECT id FROM edgeai.stream_checkpoint WHERE run_id='" + run + "' ORDER BY id").splitlines()}
                             call(['delete', '--raw', '/apis/batch/v1/namespaces/edgeai-runtimes/jobs/' + jm['name'], '-f', '-'],
                                 {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground', 'preconditions': {'uid': jm['uid']}})
-                        elif phase.endswith('-finalizer-restoring') and current['case'] not in VD_CASES:
+                        elif phase.endswith('-finalizer-restoring'):
                             fault = snapshot['finalizerFault'];old_attempt = fault['oldAttemptId']
                             sink = str(uuid.UUID(current['tasks']['sink']))
                             candidates = [p for p in resources(run) if p['kind'] == 'Pod' and p['metadata']['labels']['edgeai.io/task-id'] == sink
@@ -667,8 +621,6 @@ with response: print(response.status)
                                 assert query("SELECT state FROM edgeai.task_offload WHERE id='" + str(uuid.UUID(proof['operationId'])) + "'") == 'CANCELLED'
                                 assert query("SELECT count(*) FROM edgeai.task_attempt a JOIN edgeai.task t ON a.task_id=t.id WHERE t.run_id='" + run + "'") == '2'
                                 proof['cancelledWithoutNewAttempt'] = True
-                        if current['case'] in VD_CASES:
-                            vd_observer.boundary(current)
                         call(['-n', 'edgeai', 'exec', driver, '--', 'touch', '/work/' + phase + '.continue'])
                         completed.add(phase)
                         print('PASS: actual Kubernetes stream boundary ' + phase, flush=True)
@@ -699,14 +651,8 @@ with response: print(response.status)
                     for case in snapshot['cases']:
                         for row in case['results']:
                             result = row['result']
-                            if case['case'] in VD_CASES and case['taskExecutions'][row['task']]['mode'] == 'VD':
-                                vd_observer.result(case, row)
-                                artifacts.append({'artifact': result['artifacts'][0], 'expected': row['expected']})
-                                continue
                             observed = seen[result['producerPodUid']]
                             assert observed['runId'] == case['runId'] and observed['attemptId'] == result['attemptId']
-                            if case['case'] in VD_CASES:
-                                assert observed['nodeUid'] == case['taskExecutions'][row['task']]['nodeId']
                             if case['case'].startswith('placement'):
                                 assert observed['nodeUid'] == case['taskExecutions'][row['task']]['nodeId']
                             if case['placement']['mode'] == 'NODE':
@@ -744,29 +690,6 @@ with response: print(response.status)
                     assert result.returncode == 0, 'Actual Kubernetes start records differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedStartJournals'] = len(starts)
-                    vd_starts = json.loads(query("""
-                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                            'runtimeId',r.id,'runId',r.run_id,'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,
-                            'namespace',r.namespace,'vdId',a.vd_id,'allocationId',a.id,'vdRuntimeId',a.vd_runtime_id,
-                            'generation',a.generation,'sessionId',a.session_id,'podName',v.pod_name,'podUid',a.pod_uid,
-                            'nodeUid',r.node_uid,'nodeName',r.node_name,'slot',a.slot,'assignedSequence',a.assigned_sequence,
-                            'assignedAt',a.assigned_at,'configurationDigest',v.configuration_digest,'readyAt',v.ready_at,
-                            'expiresAt',r.expires_at,'createdAt',r.created_at,'drainDeadline',v.drain_deadline,
-                            'offloadId',o.id,'startDeadline',o.start_deadline)), '[]'::jsonb)
-                        FROM edgeai.runtime_instance r JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id
-                        JOIN edgeai.vd_runtime v ON v.id=a.vd_runtime_id LEFT JOIN edgeai.task_offload o ON
-                            (o.target_attempt_id=r.attempt_id OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m
-                             WHERE m.operation_id=o.id AND m.target_attempt_id=r.attempt_id))
-                        WHERE r.producer_pod_uid IS NOT NULL
-                        """))
-                    for receipt in vd_starts:
-                        observed = vd_observer.pods[receipt['podUid']]
-                        assert receipt['vdRuntimeId'] == observed['runtimeId'] and receipt['vdId'] == observed['vdId']
-                        assert receipt['nodeUid'] == observed['nodeUid'] and receipt['nodeName'] == observed['nodeName']
-                    result = subprocess.run(['node', 'scripts/internal/verify-vd-start-journals.mjs'], input=json.dumps(vd_starts).encode(), env=verify_env, capture_output=True, timeout=60)
-                    assert result.returncode == 0, 'Actual VD child start records differed; private output suppressed'
-                    print(result.stdout.decode().strip(), flush=True)
-                    snapshot['verifiedVDStartJournals'] = len(vd_starts)
                     wait(lambda: query("SELECT count(*) FROM edgeai.runtime_result_publication WHERE NOT completed") == '0',
                         60, 'Committed Result publication queue did not drain')
                     results = json.loads(query("""
@@ -785,30 +708,7 @@ with response: print(response.status)
                     assert result.returncode == 0, 'Actual Kubernetes committed Result records differed; private output suppressed'
                     print(result.stdout.decode().strip(), flush=True)
                     snapshot['verifiedResultJournals'] = len(results)
-                    vd_results = json.loads(query("""
-                        SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                            'apiVersion','edgeai.vd.task.result/v1','resultId',s.id,'runtimeId',r.id,'runId',r.run_id,
-                            'taskId',r.task_id,'attemptId',r.attempt_id,'epoch',r.epoch,'namespace',r.namespace,
-                            'vdId',a.vd_id,'allocationId',a.id,'vdRuntimeId',a.vd_runtime_id,'generation',a.generation,
-                            'sessionId',a.session_id,'podName',v.pod_name,'podUid',r.producer_pod_uid,'nodeUid',r.node_uid,'nodeName',r.node_name,
-                            'slot',a.slot,'assignedSequence',a.assigned_sequence,'assignedAt',a.assigned_at,'configurationDigest',v.configuration_digest,
-                            'startKey','authority/vd-task-start/'||r.id||'.json','manifestDigest',s.manifest_digest,'committedAt',s.created_at,
-                            'outputs',(SELECT jsonb_agg(jsonb_build_object('port',o.port,'bucket',o.bucket,'objectKey',o.object_key,
-                                'versionId',o.object_version,'bytes',o.bytes,'sha256',o.sha256,'mediaType',o.media_type) ORDER BY o.port)
-                                FROM edgeai.result_artifact o WHERE o.result_id=s.id))), '[]'::jsonb)
-                        FROM edgeai.task_result s JOIN edgeai.runtime_instance r ON r.id=s.runtime_id
-                        JOIN edgeai.vd_task_allocation a ON a.runtime_id=r.id JOIN edgeai.vd_runtime v ON v.id=a.vd_runtime_id
-                        WHERE s.committed AND s.vd_runtime_id IS NOT NULL
-                        """))
-                    for receipt in vd_results:
-                        observed = vd_observer.pods[receipt['podUid']]
-                        assert receipt['vdRuntimeId'] == observed['runtimeId'] and receipt['vdId'] == observed['vdId']
-                        assert receipt['nodeUid'] == observed['nodeUid'] and receipt['nodeName'] == observed['nodeName']
-                    result = subprocess.run(['node', 'scripts/internal/verify-runtime-result-journals.mjs', '--vd'], input=json.dumps(vd_results).encode(), env=verify_env, capture_output=True, timeout=60)
-                    assert result.returncode == 0, 'Actual VD committed Result records differed; private output suppressed'
-                    print(result.stdout.decode().strip(), flush=True)
-                    snapshot['verifiedVDResultJournals'] = len(vd_results)
-                    assert len(results) + len(vd_results) == len(artifacts)
+                    assert len(results) == len(artifacts)
                     snapshot['pendingResultPublications'] = 0
                     report_path.write_text(json.dumps(snapshot, indent=2) + '\n')
                     succeeded = True
@@ -851,8 +751,6 @@ with response: print(response.status)
                 try:
                     rows = query('SELECT id FROM edgeai.workflow_run')
                     run_ids.update(str(uuid.UUID(row)) for row in rows.splitlines())
-                    rows = query('SELECT id FROM edgeai.virtual_device')
-                    vd_ids.update(str(uuid.UUID(row)) for row in rows.splitlines())
                 except (AssertionError, OSError, subprocess.TimeoutExpired):
                     pass
             try:
@@ -863,10 +761,7 @@ with response: print(response.status)
                             remove(*record)
                 for (name, uid), run in list(held_jobs.items()):
                     hold_job(name, uid, run, False)
-                for identity in list(held_vds):
-                    hold_vd(identity, False)
                 owned = [('edgeai.io/run-id', run, resources, 'edgeai-runtime-controller') for run in run_ids]
-                owned += [('edgeai.io/vd-id', vd, vd_resources, 'edgeai-vd-controller') for vd in vd_ids]
                 for label, identity, lookup, manager in owned:
                     for item in lookup(identity):
                         meta = item['metadata'];assert meta['labels'][label] == identity

@@ -20,9 +20,10 @@ public class ManagedDeviceService {
     private final String ns,broker,armImage,amdImage,sensehatImage;
     private final Clock clock;
     private final VirtualDeviceRepository vds;
+    private final io.edgeai.domain.repository.DeviceRepository devices;
     public ManagedDeviceService(ObjectProvider<DeviceResourceGateway> gateways,Clock clock,
         @Value("${edgeai.devices.namespace:edgeai-devices}") String ns,@Value("${edgeai.devices.data-broker:tcp://127.0.0.1:1883}") String broker,
-        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,VirtualDeviceRepository vds){this.vds=vds;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;}
+        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,VirtualDeviceRepository vds,io.edgeai.domain.repository.DeviceRepository devices){this.devices=devices;this.vds=vds;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;}
     private String path(String resource){return "/apis/"+API+"/namespaces/"+ns+"/"+resource;}
     private String core(String resource){return "/api/v1/namespaces/"+ns+"/"+resource;}
     private String deployments(){return "/apis/apps/v1/namespaces/"+ns+"/deployments";}
@@ -183,6 +184,7 @@ public class ManagedDeviceService {
     }
     public Map<String,Object> get(String id){var resource=request("GET",path("devices")+"/"+name(id),null,200);owned(resource);return view(resource);}
     private void requireUnused(String id) {
+        if(devices.hasHistoricalManagedDeviceReferences(id))throw error(409,"DEVICE_IN_USE","과거 실행 이력이 참조하는 센서입니다. 기존 연결·실행 종료를 확인하세요.");
         if(vds.managedSourceInUse(id))throw error(409,"DEVICE_IN_USE","VD 원본으로 사용 중인 센서입니다. VD 원본을 교체하고 이전 실행의 종료를 확인하세요.");
     }
     public Map<String,Object> source(String id,String model,UUID uid) {

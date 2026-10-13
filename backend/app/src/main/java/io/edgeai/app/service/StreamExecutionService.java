@@ -16,22 +16,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static io.edgeai.app.support.WorkflowInput.*;
 
-/** VD -> all Devices -> Run locks serialize membership, terminal reports and component grants. */
+/** Devices -> Run locks serialize membership, terminal reports and component grants. */
 @Service
 public class StreamExecutionService {
     private final StreamExecutionRepository store;private final StreamCheckpointRepository checkpoints;
     private final DataRouteRepository routeStore;private final DataRouteService routes;
     private final ExecutionRepository executions;private final RuntimeRepository runtimes;
     private final WorkflowRepository workflows;private final ProfileRepository profiles;
-    private final DeviceRepository devices;private final VirtualDeviceRepository vds;
+    private final DeviceRepository devices;
     private final RuntimeLifecycleService lifecycle;private final Clock clock;
     private record Context(WorkflowRun run,List<DataRoute> routes) {}
     public StreamExecutionService(StreamExecutionRepository store,StreamCheckpointRepository checkpoints,
             DataRouteRepository routeStore,DataRouteService routes,ExecutionRepository executions,RuntimeRepository runtimes,
-            WorkflowRepository workflows,ProfileRepository profiles,DeviceRepository devices,VirtualDeviceRepository vds,
+            WorkflowRepository workflows,ProfileRepository profiles,DeviceRepository devices,
             RuntimeLifecycleService lifecycle,Clock clock) {
         this.store=store;this.checkpoints=checkpoints;this.routeStore=routeStore;this.routes=routes;this.executions=executions;
-        this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.devices=devices;this.vds=vds;this.lifecycle=lifecycle;this.clock=clock;
+        this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.devices=devices;this.lifecycle=lifecycle;this.clock=clock;
     }
     @Transactional
     public Object execution(RunnerPrincipal principal,String body) {
@@ -210,8 +210,6 @@ public class StreamExecutionService {
     private Context lock(UUID runId,boolean completedReplay,UUID callerAttempt) {
         var initial=routeStore.forRun(runId,StreamRunPlan.MAX_ROUTES+1,0);
         if(initial.size()>StreamRunPlan.MAX_ROUTES)throw conflict("STREAM_ROUTE_LIMIT");
-        if(callerAttempt!=null){var attempt=executions.attempt(callerAttempt).orElseThrow();
-            if(attempt.vdId()!=null)vds.find(attempt.vdId(),true).orElseThrow();}
         initial.stream().map(DataRoute::sourceDeviceId).filter(Objects::nonNull).distinct().sorted().forEach(id->devices.find(id,true).orElseThrow());
         var run=executions.run(runId,true).orElseThrow();
         if(!Set.of("PENDING","RUNNING").contains(run.state()) && !(completedReplay && run.state().equals("SUCCEEDED")))throw conflict("STREAM_RUN_INACTIVE");

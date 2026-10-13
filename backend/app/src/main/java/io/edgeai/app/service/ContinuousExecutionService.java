@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ContinuousExecutionService {
+    public enum Action { PROVISION, REPLACE, DRAIN }
     private final ContinuousRepository executions;
     private final VirtualDeviceRepository vds;
     private final ProfileRepository profiles;
@@ -24,11 +25,11 @@ public class ContinuousExecutionService {
     public boolean owns(UUID id){return vds.find(id,false).map(v->v.serviceProfileVersionId()==null).orElse(false);}
     public boolean enabled(){return enabled;}
     @Transactional
-    public Creation<VDOperationResponse> request(UUID id,String key,String body,VDExecutionService.Action action) {
+    public Creation<VDOperationResponse> request(UUID id,String key,String body,Action action) {
         if(!enabled)throw new ControlPlaneException(503,"CONTINUOUS_DISABLED","연속 처리 기능이 비활성화되어 있습니다.");
         UUID requestKey=WorkflowInput.uuid(key);long revision=VirtualDeviceInput.lifecycleRevision(body);
         var vd=vds.find(id,true).orElseThrow(()->new ControlPlaneException(404,"VD_NOT_FOUND","가상디바이스가 없습니다."));
-        String desired=action==VDExecutionService.Action.DRAIN?"STOP":action==VDExecutionService.Action.REPLACE?"REPLACE":"START";
+        String desired=action==Action.DRAIN?"STOP":action==Action.REPLACE?"REPLACE":"START";
         var previous=executions.operationByKey(id,requestKey);
         if(previous.isPresent()) {
             var operation=previous.get();
@@ -54,6 +55,10 @@ public class ContinuousExecutionService {
         execution.ifPresent(e->{result.put("generation",e.generation().toString());result.put("desiredRunning",e.running());result.put("updatedAt",e.updatedAt().toString());});
         executions.session("central").ifPresent(s->{result.put("engineId",s.engineId());result.put("enginePodUid",s.podUid().toString());result.put("engineLeaseExpiresAt",s.expiresAt().toString());if(s.expiresAt().isBefore(clock.instant()) && execution.map(ContinuousRepository.Execution::running).orElse(false)){result.put("state","ERROR");result.put("reason","ENGINE_LEASE_EXPIRED");}});
         return result;
+    }
+    public void registrationChanged(VirtualDevice vd) {
+        var current=executions.find(vd.id());
+        if(current.isPresent() && current.get().running())executions.request(vd.id(),UUID.randomUUID(),vd.revision(),vd.state()==VirtualDevice.State.RELEASED?"STOP":"REPLACE",clock.instant());
     }
     public void validateEdit(UUID id,Object config,int inputCount) {
         executions.lockCapacity();

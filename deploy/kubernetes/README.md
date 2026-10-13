@@ -29,10 +29,6 @@ ClusterRole/Binding을 준비한다. 권한은 core/v1 nodes의 get/list뿐이�
 Bootstrap RBAC는 `bootstrap/node-reader.json`, namespace ServiceAccount는 GitOps로 관리한다.
 # M4 runtime 준비
 
-dev overlay는 CI의 실제 VD Task 수용까지 통과한 이미지에서 `EDGEAI_VD_ENABLED=true`를
-API 컨테이너에 명시한다. 로컬/공통 애플리케이션 기본값은 false다. 추가 권한 확대 없이 기존
-전용 namespace의 VD Pod·Secret 권한을 사용한다. 실제 상태는 VD execution/Operation으로 확인한다.
-
 `python3 scripts/internal/bootstrap-runtime.py --context <명시적-context>`는 소유 labels를 확인한 뒤
 `edgeai-runtimes`와 Runner SA, 제어 서버의 namespace 제한 Job/Pod/Secret 권한과 TokenReview
 권한을 준비한다. 기존 제어 서버 namespace/SA가 필요하며 공유 리소스를 인수하지 않는다.
@@ -41,9 +37,9 @@ Pod 신원 증명용 audience=edgeai-runner projected token만 Job에 포함한�
 
 내부 API·S3가 사설 CA의 HTTPS를 사용하면 runtime namespace에 공개 CA 번들의 `ca.crt`를 담은
 불변 ConfigMap을 준비하고 API에 `EDGEAI_RUNTIME_CA_CONFIG_MAP=<이름>`을 설정한다.
-Runner/VD는 이를 읽기 전용으로 마운트하고 인증서 검증을 유지한다. 빈 기본값은 시스템 신뢰 번들을
+Runner는 이를 읽기 전용으로 마운트하고 인증서 검증을 유지한다. 빈 기본값은 시스템 신뢰 번들을
 사용한다. CA 교체는 새 이름으로 준비하며 기존 runtime이 종료될 때까지 기존 번들을 유지한다.
-VD는 이름을 실행 설정에 고정한다. 상세: [ADR0042](../../docs/adr/0042-runtime-tls-trust.md).
+ 상세: [ADR0042](../../docs/adr/0042-runtime-tls-trust.md).
 
 같은 API에 추가 native HTTPS 포트를 열려면 `EDGEAI_API_TLS_ENABLED=true`, 별도 포트
 `EDGEAI_API_TLS_PORT`(기본18443), PEM 절대 경로 `EDGEAI_API_TLS_CERTIFICATE_FILE` 및
@@ -60,7 +56,7 @@ OpenSSL·JDK keytool·mosquitto_ctrl이 필요하며 기존 소유 namespace/RBA
 
 선택 컴포넌트 `deploy/kubernetes/components/stream`은 영속 TLS broker와 API/MinIO TLS 설정을
 제공하며 dev overlay의 `components`에 연결돼 있다. 다른 설치에서도 적용 전에 검증된 HTTPS
-지원 이미지·신원·공개 CA와 기존 활성 실행/VD를 확인한다. bootstrap 없이 이 overlay를 적용하지 않는다.
+지원 이미지·신원·공개 CA와 기존 활성 실행를 확인한다. bootstrap 없이 이 overlay를 적용하지 않는다.
 기존 MinIO data PVC는 유지한다. 내부 ClusterIP/DNS 연결이며 외부 장치 라우팅은 별도다.
 신원 검사는 `python3 scripts/internal/test-stream-bootstrap.py --context <context>`, 준비된 broker 검사는
 Paho가 설치된 Python으로 `scripts/internal/test-stream-platform-broker.py --context <context>`를 실행한다.

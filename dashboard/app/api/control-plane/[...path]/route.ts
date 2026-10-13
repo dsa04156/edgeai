@@ -13,26 +13,25 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   if (!workflowsEnabled() && /^(workflows|workflow-runs)(\/|$)/.test(target))
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
+  const continuousAllowed = request.method === "GET" && (target === "virtual-devices" || target === "virtual-devices/continuous-catalog" || new RegExp(`^virtual-devices/${uuid}(/execution|/outputs(/[a-z][a-z0-9_]{0,62}/history)?)?$`).test(target))
+    || request.method === "POST" && (target === "virtual-devices/continuous" || new RegExp(`^virtual-devices/${uuid}/(provision|drain)$`).test(target))
+    || request.method === "PATCH" && new RegExp(`^virtual-devices/${uuid}/continuous$`).test(target)
+    || request.method === "DELETE" && new RegExp(`^virtual-devices/${uuid}$`).test(target);
   const allowed = request.method === "GET" ? target === "csrf" || target === "node-metrics" || target === "infrastructure"
-    || target === "virtual-devices/processing-catalog"
-    || target === "virtual-devices/continuous-catalog"
-    || new RegExp(`^virtual-devices/${uuid}/outputs(/[a-z][a-z0-9_]{0,62}/history)?$`).test(target)
     || ["sensors/readings", "sensors/commands", "sensors/registration-options"].includes(target)
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)
-    || /^profiles\/(DEVICE|SERVICE|VD)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
-    || new RegExp(`^virtual-devices/${uuid}/execution$`).test(target)
+    || /^profiles\/(DEVICE|SERVICE)(\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+)?$/.test(target)
     || new RegExp(`^workflow-runs/${uuid}/(streams|placements)$`).test(target)
     || new RegExp(`^tasks/${uuid}/results/[a-z][a-z0-9_]*/content$`).test(target)
-    || new RegExp(`^(devices|nodes|virtual-devices)(/${uuid})?$`).test(target)
+    || new RegExp(`^(devices|nodes)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE|VD)$/.test(target) || ["devices", "virtual-devices", "virtual-devices/processing", "virtual-devices/continuous", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^virtual-devices/${uuid}/(provision|replace|drain)$`).test(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE)$/.test(target) || ["devices", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
-    : request.method === "DELETE" ? new RegExp(`^(devices|virtual-devices)/${uuid}(/registration)?$`).test(target)
-      || /^profiles\/(DEVICE|SERVICE|VD)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)
-    : request.method === "PATCH" && new RegExp(`^virtual-devices/${uuid}/continuous$`).test(target)
-      || ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices|virtual-devices)/${uuid}$`).test(target);
+    : request.method === "DELETE" ? new RegExp(`^(devices)/${uuid}(/registration)?$`).test(target)
+      || /^profiles\/(DEVICE|SERVICE)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)
+    : ["PATCH", "DELETE"].includes(request.method) && new RegExp(`^(devices)/${uuid}$`).test(target);
   const managedAllowed = request.method === "POST" && managedProperties || ["PUT", "DELETE"].includes(request.method) && managedProperty || managed && (request.method === "GET" && target !== "device-connections/test" || request.method === "POST" && ["managed-devices", "device-profiles", "device-connections/test"].includes(target) || ["PUT", "DELETE"].includes(request.method) && /^managed-devices\/[a-z0-9][a-z0-9.-]*$/.test(target));
-  if (!allowed && !managedAllowed)
+  if (!allowed && !managedAllowed && !continuousAllowed)
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   // The open dashboard may mutate through its own origin only. Spring still verifies CSRF.
   const origin = request.headers.get("origin");

@@ -139,7 +139,7 @@ class DeviceIntegrationTest {
         var d=device();var s=session(d);
         assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.device_session(id,device_id,boot_id,epoch,opened_at) VALUES (?,?,?,?,clock_timestamp())",UUID.randomUUID(),d.id(),UUID.randomUUID(),99))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
-        var wrong=profiles.publish(ProfileIdentity.Kind.VD,encode(Map.of("key",key(),"version","1.0.0","spec",Map.of("type","sensorMirror")))).version();
+        var wrong=profiles.publish(ProfileIdentity.Kind.SERVICE,encode(Map.of("key",key(),"version","1.0.0","spec",Map.of("image","fixture")))).version();
         assertThatThrownBy(()->jdbc.update("UPDATE edgeai.device SET profile_version_id=? WHERE id=?",wrong.id(),d.id()))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("INSERT INTO edgeai.device_observation(id,device_id,session_id,sequence,observed_at,received_at,status,attributes,digest) VALUES (?,?,?,0,now(),now(),'ONLINE','{}',?)",UUID.randomUUID(),device().id(),s.id(),"sha256:"+"0".repeat(64)))

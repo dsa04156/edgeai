@@ -11,9 +11,8 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
-final class S3RuntimeResultJournal implements RuntimeResultJournal, VDTaskResultJournal {
+final class S3RuntimeResultJournal implements RuntimeResultJournal {
     static final String MEDIA_TYPE="application/vnd.edgeai.runtime-result+json";
-    static final String VD_MEDIA_TYPE="application/vnd.edgeai.vd-task-result+json";
     private static final int MAX_BYTES=1048576;
     private final MinioClient client;
     private final String bucket;
@@ -23,10 +22,6 @@ final class S3RuntimeResultJournal implements RuntimeResultJournal, VDTaskResult
     @Override public void retainResult(RuntimeResultAuthority authority){
         Objects.requireNonNull(authority);
         retain(authority.objectKey(),authority.document(),MEDIA_TYPE);
-    }
-    @Override public void retainVDResult(io.edgeai.domain.vd.VDTaskResultAuthority authority){
-        Objects.requireNonNull(authority);
-        retain(authority.objectKey(),authority.document(),VD_MEDIA_TYPE);
     }
     private void retain(String key,Map<String,Object> document,String mediaType){
         try{

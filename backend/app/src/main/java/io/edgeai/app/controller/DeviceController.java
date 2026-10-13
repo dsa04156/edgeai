@@ -16,7 +16,7 @@ public class DeviceController {
     @PostMapping(consumes="application/json")
     public ResponseEntity<DeviceResponse> create(@RequestBody String body) {
         throw new io.edgeai.app.exception.ControlPlaneException(410,"DEVICE_REGISTRY_RETIRED",
-            "별도 앱 장치 등록은 종료됐습니다. 센서 디바이스를 등록하고 VD 원본으로 선택하세요.");
+            "별도 앱 장치 등록은 종료됐습니다. 센서 디바이스 관리 경로에서 장치를 등록하세요.");
     }
     @GetMapping
     public ResourcePageResponse<DeviceResponse> list(@RequestParam(defaultValue="20") int limit,@RequestParam(defaultValue="0") int offset) {

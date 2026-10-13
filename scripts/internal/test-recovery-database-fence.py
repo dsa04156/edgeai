@@ -72,7 +72,7 @@ def main():
         pool = {'SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE':'2','SPRING_DATASOURCE_HIKARI_MINIMUMIDLE':'2',
                 'SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT':'1000','SPRING_DATASOURCE_HIKARI_INITIALIZATIONFAILTIMEOUT':'1000'}
         api = Api(source,work,extra_env=pool); apis.append(api)
-        profile = api.request('POST','profiles/DEVICE',{'key':'fence-'+token,'version':'1.0.0','spec':{'protocol':'synthetic'}},201)
+        profile = api.request('POST','profiles/SERVICE',{'key':'fence-'+token,'version':'1.0.0','spec':{'protocol':'synthetic'}},201)
         assert profile['id']
         pg.sql('CREATE TABLE public.fence_probe(value integer); INSERT INTO public.fence_probe VALUES(1)',source)
         pg.sql('CREATE TABLE public.fence_probe(value integer); INSERT INTO public.fence_probe VALUES(99)',other)
@@ -107,7 +107,7 @@ def main():
         passed('unrelated-database-live-connection-and-data-preserved')
 
         try:
-            api.request('POST','profiles/DEVICE',{'key':'blocked-'+token,'version':'1.0.0','spec':{}},201)
+            api.request('POST','profiles/SERVICE',{'key':'blocked-'+token,'version':'1.0.0','spec':{}},201)
             raise AssertionError('Old API wrote after source fencing')
         except urllib.error.HTTPError as error:
             assert error.code==503

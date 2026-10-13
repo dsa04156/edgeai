@@ -10,10 +10,9 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from datetime import datetime, timezone
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--through", choices=["device", "workflow"], default="workflow", help="Last milestone exercised; workflow is the complete current smoke")
+parser.add_argument("--through", choices=["device", "workflow"], default="workflow", help="Last area exercised; workflow runs the complete smoke")
 args = parser.parse_args()
 
 ui = os.environ.get("EDGEAI_SMOKE_UI_URL", "http://127.0.0.1:13080").rstrip("/")
@@ -63,7 +62,7 @@ assert request(api + "/swagger-ui/index.html")[0] == 200
 assert request(api + "/swagger-ui/index.html", authenticated=True)[0] == 200
 status, contract = request(api + "/openapi.yaml", authenticated=True)
 assert status == 200 and b"publishProfile" in contract
-url = ui + "/api/control-plane/profiles/DEVICE"
+url = ui + "/api/control-plane/profiles/SERVICE"
 assert request(url)[0] == 200
 status, body = request(ui + "/api/control-plane/csrf", authenticated=True)
 assert status == 200
@@ -85,45 +84,19 @@ print("PASS: deployed UI/assets, API service connection, Swagger, authentication
 
 assert request(ui + "/devices")[0] == 200
 devices_url = ui + "/api/control-plane/devices"
-assert request(devices_url)[0] == 200
+status, body = request(devices_url)
+assert status == 200 and isinstance(json.loads(body)["items"], list)
 device_input = {"key": "deploy-device-" + uuid.uuid4().hex, "displayName": "Deployment synthetic probe",
                 "profileVersionId": version["id"], "sourceMode": "SYNTHETIC"}
+assert request(devices_url, "POST", device_input, authenticated=True)[0] == 403
 status, body = request(devices_url, "POST", device_input, authenticated=True, csrf=csrf)
-assert status == 201
-device = json.loads(body)
-device_url = devices_url + "/" + device["id"]
-try:
-    assert request(devices_url, "POST", device_input, authenticated=True, csrf=csrf)[0] == 200
-    assert request(devices_url, "POST", {**device_input, "displayName": "conflict"}, authenticated=True, csrf=csrf)[0] == 409
-    patch = {"revision": device["revision"], "displayName": "Renamed synthetic probe"}
-    for method, url, body in [("PATCH", device_url, patch), ("DELETE", device_url, None),
-                              ("PUT", device_url + "/attachments/" + str(uuid.uuid4()), {"port": "synthetic"})]:
-        assert request(url, method, body, authenticated=True)[0] == 403
-    assert request(device_url, "PATCH", patch, authenticated=True, csrf=csrf)[0] == 200
-    assert request(device_url, "PATCH", patch, authenticated=True, csrf=csrf)[0] == 409
-    boot = {"bootId": str(uuid.uuid4())}
-    status, body = request(device_url + "/sessions", "POST", boot, authenticated=True, csrf=csrf)
-    assert status == 201
-    session = json.loads(body)
-    assert request(device_url + "/sessions", "POST", boot, authenticated=True, csrf=csrf)[0] == 200
-    observation = {"sessionId": session["id"], "sequence": 0, "observedAt": datetime.now(timezone.utc).isoformat(),
-                   "status": "ONLINE", "attributes": {"source": "deployment-smoke", "serial": 9007199254740993}}
-    assert request(device_url + "/observations", "POST", observation, authenticated=True, csrf=csrf)[0] == 201
-    assert request(device_url + "/observations", "POST", observation, authenticated=True, csrf=csrf)[0] == 200
-    status, body = request(device_url, authenticated=True)
-    detail = json.loads(body)
-    assert status == 200 and detail["device"]["connectionStatus"] == "ONLINE"
-    assert detail["observations"][0]["attributes"]["serial"] == 9007199254740993
-    assert request(device_url + "/sessions", "POST", {"bootId": str(uuid.uuid4())}, authenticated=True, csrf=csrf)[0] == 201
-    assert request(device_url + "/observations", "POST", observation, authenticated=True, csrf=csrf)[0] == 409
-    status, body = request(ui + "/api/control-plane/nodes", authenticated=True)
-    assert status == 200 and isinstance(json.loads(body)["items"], list)
-finally:
-    assert request(device_url, "DELETE", authenticated=True, csrf=csrf)[0] == 200
-status, body = request(device_url, authenticated=True)
-assert status == 200 and json.loads(body)["device"]["connectionStatus"] == "RELEASED"
-assert request(device_url + "/sessions", "POST", {"bootId": str(uuid.uuid4())}, authenticated=True, csrf=csrf)[0] == 409
-print("PASS: deployed Device lifecycle, CSRF on every mutation, revision conflicts, session fencing, lossless observations and Node reads")
+assert status == 410, f"Expected retired Device registration 410, got {status}"
+assert json.loads(body)["code"] == "DEVICE_REGISTRY_RETIRED"
+status, body = request(ui + "/api/control-plane/nodes", authenticated=True)
+assert status == 200 and isinstance(json.loads(body)["items"], list)
+status, body = request(ui + "/api/control-plane/protocols", authenticated=True)
+assert status == 200 and any(protocol["id"] == "modbus-tcp" for protocol in json.loads(body)["items"])
+print("PASS: retired Device registration 410/code, CSRF denial, legacy history, Node reads and Device Manager protocols")
 
 if args.through == "device":
     raise SystemExit(0)
@@ -132,7 +105,7 @@ status, body = request(api + "/api/v1/platform", authenticated=True)
 assert status == 200
 if "workflows" not in json.loads(body)["capabilities"]:
     assert request(ui + "/workflows")[0] == 404
-    for page in ("/", "/profiles", "/devices", "/virtual-devices", "/audit"):
+    for page in ("/", "/profiles", "/devices", "/audit"):
         status, html = request(ui + page)
         assert status == 200 and b'href="/workflows"' not in html
     for path in ("workflows", "workflow-runs"):

@@ -19,10 +19,10 @@ public class VirtualDeviceService {
     private final NodeRepository nodes;
     private final Clock clock;
     private final ManagedDeviceService managed;
-    private final VDLifecycleService lifecycle;
+
     @org.springframework.beans.factory.annotation.Autowired private ContinuousExecutionService continuous;
-    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDLifecycleService lifecycle,ManagedDeviceService managed) {
-        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.lifecycle=lifecycle;this.managed=managed;
+    public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,ManagedDeviceService managed) {
+        this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.managed=managed;
     }
     @Transactional
     public VirtualDeviceRepository.Creation create(String body) {
@@ -33,7 +33,7 @@ public class VirtualDeviceService {
         var spec=profile(input.profileVersionId());validatePlacement(input.configuration().placement());
         if(spec.continuous() && input.configuration().placement().nodeId()!=null)throw new IllegalArgumentException("Continuous processing uses the shared engine placement");
         boolean created=repository.create(input.key(),input.configuration().displayName(),input.profileVersionId(),spec.serviceProfileVersionId(),input.configuration().placement(),input.digest());
-        var value=repository.findByKey(input.key()).orElseThrow();
+        var value=repository.findByKey(input.key()).orElseThrow(()->error(409,"VD_CONFLICT","이미 사용된 가상 센서 키입니다."));
         if(!created)return replay(value,input.digest());
         var sources=validateSources(spec,input.configuration().sources());
         bindChanges(value,List.of(),input.configuration().sources(),sources,now(value));
@@ -66,14 +66,14 @@ public class VirtualDeviceService {
         if(profileId.equals(vd.profileVersionId()) && vd.displayName().equals(configuration.displayName()) && vd.placement().equals(configuration.placement()) && current.equals(configuration.sources())
             && active.stream().allMatch(b->sameIdentity(b,devicesById.get(b.sourceKey()))))return vd;
         var now=now(vd);repository.reconfigure(id,configuration.displayName(),profileId,spec.serviceProfileVersionId(),configuration.placement(),now);
-        var updated=find(id,false);bindChanges(updated,active,configuration.sources(),devicesById,now);lifecycle.registryChanged(updated);return updated;
+        var updated=find(id,false);bindChanges(updated,active,configuration.sources(),devicesById,now);if(continuous!=null)continuous.registrationChanged(updated);return updated;
     }
     @Transactional
     public VirtualDevice release(UUID id) {
         var vd=find(id,true);if(vd.state()==VirtualDevice.State.RELEASED)return vd;
         var now=now(vd);repository.update(id,vd.displayName(),vd.placement(),VirtualDevice.State.RELEASED,now);
         for(var binding:repository.activeSources(id))repository.close(binding.id(),vd.revision()+1,now);
-        var released=find(id,false);lifecycle.registryChanged(released);return released;
+        var released=find(id,false);if(continuous!=null)continuous.registrationChanged(released);return released;
     }
     @Transactional
     public void deleteRegistration(UUID id) {
@@ -102,17 +102,6 @@ public class VirtualDeviceService {
     }
     private VDProfileSpec profile(UUID id) {
         var spec=VirtualDeviceInput.spec(requireProfile(id,ProfileIdentity.Kind.VD).specJson());
-        if(spec.continuous())return spec;
-        var service=ServiceExecutionInput.parseSpec(requireProfile(spec.serviceProfileVersionId(),ProfileIdentity.Kind.SERVICE).specJson());
-        if(spec.processingJson()!=null) {
-            var processing=DeviceProfileCompiler.map(WorkflowInput.JSON.decode(spec.processingJson()));
-            if(!service.outputs().containsKey(processing.get("outputPort")))throw new IllegalArgumentException("Processing output port is not declared by SERVICE");
-            for(var raw:(List<?>)processing.get("pipelines")) {
-                var input=DeviceProfileCompiler.map(DeviceProfileCompiler.map(raw).get("input"));
-                if(input.containsKey("port") && !service.inputs().containsKey(input.get("port")))throw new IllegalArgumentException("Processing artifact input port is not declared by SERVICE");
-            }
-        }
-        for(var source:spec.sources().values())if(source.deviceProfileVersionId()!=null)requireProfile(source.deviceProfileVersionId(),ProfileIdentity.Kind.DEVICE);
         return spec;
     }
     private ProfileVersion requireProfile(UUID id,ProfileIdentity.Kind kind) {
@@ -128,44 +117,19 @@ public class VirtualDeviceService {
             .anyMatch(e->e.getValue().required() && !requested.containsKey(e.getKey())))
             throw error(409,"VD_SOURCE_INCOMPATIBLE","선언된 원본 키와 필수 원본을 확인하세요.");
         var sources=new HashMap<String,VDSourceBinding>();
-        var numericProperties=new HashMap<String,Set<String>>();
         var continuousTypes=new TreeMap<String,ProcessingExpression.Type>();
-        repository.lockManagedSources(requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()!=null).map(e->e.getValue().deviceId()).toList());
-        // Preserve a global row-lock order for immutable legacy Device references.
-        requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()==null).map(e->UUID.fromString(e.getValue().deviceId())).distinct().sorted()
-            .forEach(id->devices.find(id,true).orElseThrow(()->error(404,"VD_NOT_FOUND","원본 Device가 없습니다.")));
+        repository.lockManagedSources(requested.values().stream().map(VDSourceSelection::deviceId).toList());
         for(var entry:requested.entrySet()) {
-            var selection=entry.getValue();String id=selection.deviceId();var requirement=spec.sources().get(entry.getKey());
-            if(requirement.deviceModel()!=null) {
-                var device=managed.source(id,requirement.deviceModel(),null);
-                var kind=((Map<?,?>)device.get("profile")).get("kind");
-                var declared=((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(p->((Map<?,?>)p).get("name")).toList();
-                if(!declared.containsAll(selection.properties()))throw error(409,"VD_SOURCE_INCOMPATIBLE","선택한 측정 항목이 센서 규격에 없습니다.");
-                if(spec.continuous()) {
-                    if(selection.properties().size()!=1 || declared.size()!=1)throw new IllegalArgumentException("Continuous inputs require one separate measurement per Device");
-                    var property=DeviceProfileCompiler.map(((List<?>)DeviceProfileCompiler.map(device.get("profile")).get("properties")).getFirst());
-                    continuousTypes.put(entry.getKey(),ContinuousRuleCompiler.inputType((String)property.get("dataType")));
-                }
-                numericProperties.put(entry.getKey(),((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(DeviceProfileCompiler::map)
-                    .filter(property->Set.of("float32","float64","int16","uint16","int32","uint32").contains(Objects.toString(property.get("dataType"),""))).map(property->(String)property.get("name")).collect(java.util.stream.Collectors.toSet()));
-                sources.put(entry.getKey(),new VDSourceBinding(null,null,null,null,null,"virtual".equals(kind)?Device.SourceMode.SYNTHETIC:Device.SourceMode.LIVE,
-                    0,null,null,null,id,UUID.fromString((String)device.get("uid")),(String)device.get("model"),selection.properties(),selection.maxAgeSeconds()));
-            } else {
-                // Immutable v1 templates and their history remain readable during migration.
-                var device=devices.find(UUID.fromString(id),true).orElseThrow(()->error(404,"VD_NOT_FOUND","원본 Device가 없습니다."));
-                if(device.state()!=Device.State.ACTIVE || !requirement.deviceProfileVersionId().equals(device.profileVersionId()) || !requirement.sourceModes().contains(device.sourceMode()))
-                    throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 원본 Device의 규격 또는 상태가 조건과 다릅니다.");
-                if(!selection.properties().isEmpty())throw error(409,"VD_SOURCE_INCOMPATIBLE","기존 UUID 원본은 센서 디바이스로 전환한 뒤 측정 항목을 선택하세요.");
-                sources.put(entry.getKey(),new VDSourceBinding(null,null,null,device.id(),device.profileVersionId(),device.sourceMode(),0,null,null,null));
-            }
-        }
-        if(spec.processingJson()!=null)for(var raw:(List<?>)DeviceProfileCompiler.map(WorkflowInput.JSON.decode(spec.processingJson())).get("pipelines")) {
-            var input=DeviceProfileCompiler.map(DeviceProfileCompiler.map(raw).get("input"));
-            if(input.containsKey("sourceKey")) {
-                var binding=sources.get(input.get("sourceKey"));
-                if(binding==null || !binding.properties().contains(input.get("property")))throw error(409,"VD_SOURCE_INCOMPATIBLE","처리 설정의 측정 항목을 VD 원본에서 선택하세요.");
-                if(!numericProperties.getOrDefault(input.get("sourceKey"),Set.of()).contains(input.get("property")))throw error(409,"VD_SOURCE_INCOMPATIBLE","공통 처리는 숫자 측정 항목을 사용합니다.");
-            }
+            var selection=entry.getValue();var requirement=spec.sources().get(entry.getKey());
+            var device=managed.source(selection.deviceId(),requirement.deviceModel(),null);
+            var sensorProfile=DeviceProfileCompiler.map(device.get("profile"));
+            var declared=(List<?>)sensorProfile.getOrDefault("properties",List.of());
+            if(selection.properties().size()!=1 || declared.size()!=1)throw new IllegalArgumentException("Continuous inputs require one separate measurement per Device");
+            var property=DeviceProfileCompiler.map(declared.getFirst());
+            if(!selection.properties().getFirst().equals(property.get("name")))throw error(409,"VD_SOURCE_INCOMPATIBLE","선택한 측정 항목이 센서 규격에 없습니다.");
+            continuousTypes.put(entry.getKey(),ContinuousRuleCompiler.inputType((String)property.get("dataType")));
+            sources.put(entry.getKey(),new VDSourceBinding(null,null,null,null,null,"virtual".equals(sensorProfile.get("kind"))?Device.SourceMode.SYNTHETIC:Device.SourceMode.LIVE,
+                0,null,null,null,selection.deviceId(),UUID.fromString((String)device.get("uid")),(String)device.get("model"),selection.properties(),selection.maxAgeSeconds()));
         }
         if(spec.continuous())ContinuousRuleCompiler.compile(new UUID(0,0),new UUID(0,0),WorkflowInput.JSON.decode(spec.continuousJson()),continuousTypes);
         return sources;

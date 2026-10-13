@@ -47,17 +47,6 @@ class RegistryDeletionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.device_session WHERE device_id=?", Integer.class, device)).isZero();
         profiles.delete(profile.identity());
     }
-    @Test void vdProfileJsonReferencesProtectServiceAndDeviceVersions() {
-        var service = profile(ProfileIdentity.Kind.SERVICE, Map.of("image", "fixture"));
-        var source = profile(ProfileIdentity.Kind.DEVICE, Map.of("protocol", "mqtt"));
-        var vd = profile(ProfileIdentity.Kind.VD, Map.of("serviceProfileVersionId", service.id().toString().toUpperCase(),
-            "sources", Map.of("sensor", Map.of("deviceProfileVersionId", source.id()))));
-        assertThatThrownBy(() -> profiles.delete(service.identity())).isInstanceOf(ProfileInUseException.class);
-        assertThatThrownBy(() -> profiles.delete(source.identity())).isInstanceOf(ProfileInUseException.class);
-        profiles.delete(vd.identity());
-        profiles.delete(service.identity());
-        profiles.delete(source.identity());
-    }
     @Test void deletingOneVersionDoesNotRemoveOtherVersions() {
         var first = profile(ProfileIdentity.Kind.SERVICE, Map.of("image", "fixture"));
         var second = profiles.publish(ProfileIdentity.Kind.SERVICE, json.writeValueAsString(Map.of("key", first.identity().key(),

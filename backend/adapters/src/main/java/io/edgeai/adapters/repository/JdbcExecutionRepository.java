@@ -15,9 +15,6 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
     public void lockRequestKey(UUID key) {
         jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))","edgeai-run-create:"+key);
     }
-    public void saveVDInput(UUID taskId,UUID vdId,String document) {
-        jdbc.update("INSERT INTO edgeai.vd_task_input(task_id,vd_id,document) VALUES (?,?,CAST(? AS jsonb))",taskId,vdId,document);
-    }
     public Optional<String> vdInput(UUID taskId) {
         return jdbc.query("SELECT document::text FROM edgeai.vd_task_input WHERE task_id=?",(r,n)->r.getString(1),taskId).stream().findFirst();
     }
@@ -43,7 +40,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
         }
     }
     public Optional<WorkflowRun> run(UUID id,boolean lock) {
-        // Run state/cancellation does not acquire another task's VD. Producer operations lock their VD first.
+        // Run state and cancellation share the Run mutex with producer operations.
         return jdbc.query("SELECT * FROM edgeai.workflow_run WHERE id=?"+(lock?" FOR UPDATE":""),RUN,id).stream().findFirst(); }
     public Optional<WorkflowRun> byIdempotencyKey(UUID key) { return jdbc.query("SELECT * FROM edgeai.workflow_run WHERE idempotency_key=?",RUN,key).stream().findFirst(); }
     public List<WorkflowRun> runs(int limit,int offset) { return jdbc.query("SELECT * FROM edgeai.workflow_run ORDER BY created_at DESC,id LIMIT ? OFFSET ?",RUN,limit,offset); }
@@ -61,18 +58,19 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
             r.getObject("failed_attempt_id",UUID.class),r.getString("namespace"),r.getTimestamp("available_at").toInstant(),r.getTimestamp("deadline").toInstant()),taskId).stream().findFirst();
     }
     public List<UUID> dueRetries(String namespace,Instant now,int limit) {
-        return jdbc.query("SELECT task_id FROM edgeai.task_retry WHERE namespace=? AND available_at<=? ORDER BY available_at,task_id LIMIT ?",
+        return jdbc.query("SELECT r.task_id FROM edgeai.task_retry r JOIN edgeai.task_attempt a ON a.id=r.failed_attempt_id JOIN edgeai.task t ON t.id=r.task_id WHERE t.initial_mode<>'VD' AND a.mode<>'VD' AND r.namespace=? AND r.available_at<=? ORDER BY r.available_at,r.task_id LIMIT ?",
             (r,n)->r.getObject(1,UUID.class),namespace,Timestamp.from(now),limit);
     }
     public void clearRetry(UUID taskId){jdbc.update("DELETE FROM edgeai.task_retry WHERE task_id=?",taskId);}
     public TaskAttempt startRetry(UUID taskId,Instant now) {
         var previous=attempts(taskId).getFirst();
+        if(previous.mode().equals("VD"))throw new IllegalStateException("Retired execution cannot be retried");
         return startAttempt(taskId,previous.mode(),previous.nodeId(),"RETRY",previous.excludedNodeNames(),now,previous.remoteTarget(),previous.vdId());
     }
     public TaskAttempt startOffload(UUID taskId,UUID nodeId,List<String> excluded,Instant now) { return startAttempt(taskId,nodeId==null?"AUTO":"NODE",nodeId,"OFFLOAD",excluded,now,null,null); }
-    public TaskAttempt startVdOffload(UUID taskId,UUID vdId,Instant now) { return startAttempt(taskId,"VD",null,"OFFLOAD",List.of(),now,null,Objects.requireNonNull(vdId)); }
     public TaskAttempt startRemoteOffload(UUID taskId,io.edgeai.domain.remote.RemoteTarget target,Instant now){return startAttempt(taskId,"REMOTE",null,"OFFLOAD",List.of(),now,target,null);}
     private TaskAttempt startAttempt(UUID taskId,String mode,UUID nodeId,String cause,List<String> excluded,Instant now,io.edgeai.domain.remote.RemoteTarget target,UUID vdId) {
+        if(task(taskId).orElseThrow().retiredVirtualDevice())throw new IllegalStateException("Retired execution cannot be resumed");
         var attempt=jdbc.query("""
             INSERT INTO edgeai.task_attempt(id,task_id,number,epoch,state,mode,node_id,cause,excluded_node_names,created_at,updated_at,remote_provider_key,remote_configuration_digest,remote_source_mode,vd_id)
             SELECT ?,?,max(number)+1,max(epoch)+1,'QUEUED',?,?,?,CAST(? AS text[]), ?,?,?,?,?,? FROM edgeai.task_attempt WHERE task_id=? RETURNING *

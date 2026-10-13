@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isLosslessNumber, parse, stringify } from "lossless-json";
-import { record } from "../../lib/vd-profile";
+import { record } from "../../lib/json-record";
 
 export function ResultContent({ taskId, port, supported }: { taskId: string; port: string; supported: boolean }) {
   const [value, setValue] = useState<unknown>();

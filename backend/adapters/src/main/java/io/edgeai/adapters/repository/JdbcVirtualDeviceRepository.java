@@ -32,10 +32,10 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
             """,UUID.randomUUID(),key,name,profileId,serviceId,placement.mode().name(),placement.nodeId(),digest)==1;
     }
     public Optional<VirtualDevice> find(UUID id,boolean lock) {
-        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE id=?"+(lock?" FOR NO KEY UPDATE":""),VD,id).stream().findFirst();
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE id=? AND service_profile_version_id IS NULL"+(lock?" FOR NO KEY UPDATE":""),VD,id).stream().findFirst();
     }
     public Optional<VirtualDevice> findByKey(String key) {
-        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=?",VD,key).stream().findFirst();
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=? AND service_profile_version_id IS NULL",VD,key).stream().findFirst();
     }
     public void lockProcessingKey(String key) {
         jdbc.query("SELECT pg_advisory_xact_lock(hashtext('edgeai.processing-create'),hashtext(?))",(r,n)->true,key);
@@ -47,7 +47,7 @@ public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepositor
         jdbc.update("INSERT INTO edgeai.vd_processing_registration(vd_id,request_digest) VALUES (?,?) ON CONFLICT(vd_id) DO NOTHING",id,digest);
     }
     public List<VirtualDevice> list(int limit,int offset) {
-        return jdbc.query("SELECT * FROM edgeai.virtual_device ORDER BY vd_key COLLATE \"C\" LIMIT ? OFFSET ?",VD,limit,offset);
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE service_profile_version_id IS NULL ORDER BY vd_key COLLATE \"C\" LIMIT ? OFFSET ?",VD,limit,offset);
     }
     public void update(UUID id,String name,VirtualDevice.Placement placement,VirtualDevice.State state,Instant now) {
         jdbc.update("UPDATE edgeai.virtual_device SET display_name=?,placement_mode=?,node_id=?,state=?,revision=revision+1,updated_at=? WHERE id=?",

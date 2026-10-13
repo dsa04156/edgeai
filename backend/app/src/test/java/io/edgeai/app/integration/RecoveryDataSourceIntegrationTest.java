@@ -82,7 +82,7 @@ class RecoveryDataSourceIntegrationTest {
     }
 
     @Test void inspectionRejectsExecutionFlagsAndUnmarkedDatabase() throws Exception {
-        for (String feature : java.util.List.of("edgeai.runtime.enabled", "edgeai.vd.enabled", "edgeai.remote.enabled",
+        for (String feature : java.util.List.of("edgeai.runtime.enabled", "edgeai.vd.enabled", "edgeai.continuous.enabled", "edgeai.remote.enabled",
                 "edgeai.stream.enabled", "edgeai.stream.bindings-enabled", "edgeai.stream.runs-enabled", "edgeai.kubernetes.enabled")) {
             var guard = RecoveryConfiguration.recoveryDataSourceGuard(new MockEnvironment()
                 .withProperty("edgeai.recovery.inspect-only", "true").withProperty(feature, "true"));

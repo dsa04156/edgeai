@@ -26,18 +26,15 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         return jdbc.query("""
             SELECT a.id FROM edgeai.task_attempt a JOIN edgeai.task t ON t.id=a.task_id
             JOIN edgeai.workflow_run w ON w.id=t.run_id
-            WHERE a.state='QUEUED' AND t.state='READY' AND w.state IN ('PENDING','RUNNING') AND w.id=?
+            WHERE t.initial_mode<>'VD' AND a.mode<>'VD' AND a.state='QUEUED' AND t.state='READY' AND w.state IN ('PENDING','RUNNING') AND w.id=?
             ORDER BY a.created_at,a.id LIMIT ?
             """,(r,n)->r.getObject(1,UUID.class),runId,limit);
     }
     public List<RuntimeInstance> active(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND remote_allocation_id IS NULL AND vd_id IS NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD') AND namespace=? AND remote_allocation_id IS NULL AND vd_id IS NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public List<RuntimeInstance> activeRemote(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
-    }
-    public List<RuntimeInstance> activeVD(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE namespace=? AND vd_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE (desired_state='STOPPED' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public void create(RuntimeInstance r) {
         Timestamp now=Timestamp.from(r.createdAt());
@@ -166,7 +163,7 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         return jdbc.query("""
             UPDATE edgeai.runtime_command SET lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
             WHERE id=(SELECT id FROM edgeai.runtime_command WHERE NOT completed AND available_at<=?
-                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE namespace=? AND vd_id IS NULL AND (remote_allocation_id IS NOT NULL)=?)
+                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE (kind<>'CREATE' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND vd_id IS NULL AND (remote_allocation_id IS NOT NULL)=?)
                 AND (lease_until IS NULL OR lease_until<=?) ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
             RETURNING *
             """,(r,n)->new RuntimeCommand(r.getObject("id",UUID.class),r.getObject("runtime_id",UUID.class),r.getString("kind"),r.getInt("attempts"),

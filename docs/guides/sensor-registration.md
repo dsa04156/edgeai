@@ -29,7 +29,7 @@ Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQT
 
 실행 상태의 기준은 Device/DeviceStatus CRD입니다. 앱 DB나 레포 YAML을 별도 상태 원본으로 만들지 않습니다. 등록 API는 `/api/devices`, Profile API는 `/api/device-profiles`, 지원 프로토콜은 `/api/protocols`입니다. 브라우저는 같은 출처 프록시와 기존 CSRF 토큰을 사용합니다.
 
-기존 `/api/v1/sensors/*` 경로는 410 `SENSOR_API_REPLACED`로 종료됐습니다. Arduino와 Sense HAT은 현재 실제 보드를 새 Mapper에 연결했습니다. Arduino의 `*_raw` 값은 환산 전 ADC/디지털 값이며 °C 또는 가속도 물리 단위로 표시하지 않습니다. 시리얼 endpoint는 노드의 `/run/edgeai/devices`에 존재해야 합니다. Sense HAT 지원은 v1 보드로 한정됩니다. 기존 UUID 앱 Device/VD 등록과 CRD 이름도 자동으로 같은 ID가 되지 않습니다.
+기존 `/api/v1/sensors/*` 경로는 410 `SENSOR_API_REPLACED`로 종료됐습니다. Arduino와 Sense HAT은 현재 실제 보드를 새 Mapper에 연결했습니다. Arduino의 `*_raw` 값은 환산 전 ADC/디지털 값이며 °C 또는 가속도 물리 단위로 표시하지 않습니다. 시리얼 endpoint는 노드의 `/run/edgeai/devices`에 존재해야 합니다. Sense HAT 지원은 v1 보드로 한정됩니다. UUID 앱 장치 이력과 CRD 이름은 다른 신원입니다. 기존 VD 등록·실행 기능은 제거됐습니다.
 
 [실행 구조·환경·데이터 경로](../../deploy/kubeedge/README.md)
 

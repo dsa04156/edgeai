@@ -146,7 +146,7 @@ main { max-width: 1800px; padding: 20px 22px; }
 h1 { font-size: 29px; font-weight: 750; letter-spacing: -.045em; }
 .intro { margin-top: 6px; font-size: 13px; color: var(--secondary); }
 .overview-meta { margin: 12px 0; }
-.metric-strip, .metric-strip[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.metric-strip, .metric-strip[data-count="4"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
 .metric-strip .metric { display: grid; grid-template-columns: 38px minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: start; column-gap: 12px; row-gap: 4px; padding: 18px 16px; min-height: 120px; background: #fff; border: 1px solid var(--line); border-radius: 7px; color: #182c47; }
 .metric-strip .metric:hover { background: #fcfdff; border-color: #a7c8f2; text-decoration: none; }
 .metric-strip[data-count="4"] .metric:nth-child(n) { border: 1px solid var(--line); }
@@ -263,3 +263,5 @@ h1 { font-size: 29px; font-weight: 750; letter-spacing: -.045em; }
 .registry-table { min-width: 680px; }
 .registry-table td:first-child { min-width: 160px; }
 .registry-table td:last-child { min-width: 170px; }
+
+@media (max-width: 600px) { .metric-strip[data-count="3"] { grid-template-columns: 1fr; } }

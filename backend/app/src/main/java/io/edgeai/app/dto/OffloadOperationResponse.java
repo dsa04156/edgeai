@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.util.UUID;
 public record OffloadOperationResponse(UUID id,String kind,UUID taskId,UUID sourceAttemptId,UUID targetAttemptId,UUID targetNodeId,
         String trigger,java.util.List<String> excludedNodeNames,Object decision,String state,String failureReason,Instant drainDeadline,Instant startDeadline,Instant createdAt,Instant updatedAt,io.edgeai.domain.remote.RemoteTarget remoteTarget,
-        java.util.List<io.edgeai.domain.execution.OffloadMember> members) implements OperationResponse {
-    public static OffloadOperationResponse from(OffloadOperation o){return new OffloadOperationResponse(o.id(),"TASK_OFFLOAD",o.taskId(),o.sourceAttemptId(),o.targetAttemptId(),o.targetNodeId(),o.trigger(),o.excludedNodeNames(),o.decisionJson()==null?null:io.edgeai.app.support.WorkflowInput.JSON.decode(o.decisionJson()),o.state(),o.failureReason(),o.drainDeadline(),o.startDeadline(),o.createdAt(),o.updatedAt(),o.remoteTarget(),o.members());}
+        java.util.List<Member> members) implements OperationResponse {
+    public static OffloadOperationResponse from(OffloadOperation o){return new OffloadOperationResponse(o.id(),"TASK_OFFLOAD",o.taskId(),o.sourceAttemptId(),o.targetAttemptId(),o.targetNodeId(),o.trigger(),o.excludedNodeNames(),o.decisionJson()==null?null:io.edgeai.app.support.WorkflowInput.JSON.decode(o.decisionJson()),o.state(),o.failureReason(),o.drainDeadline(),o.startDeadline(),o.createdAt(),o.updatedAt(),o.remoteTarget(),o.members().stream().map(Member::from).toList());}
+    public record Member(UUID taskId,UUID sourceAttemptId,UUID targetAttemptId,UUID checkpointId,UUID targetNodeId,UUID targetVdId,java.util.List<String> excludedNodeNames) {
+        static Member from(io.edgeai.domain.execution.OffloadMember m) { return new Member(m.taskId(),m.sourceAttemptId(),m.targetAttemptId(),m.checkpointId(),m.targetNodeId(),m.targetVdId(),m.excludedNodeNames()); }
+    }
 }

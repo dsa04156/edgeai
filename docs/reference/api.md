@@ -1,6 +1,6 @@
 # API 참고
 
-프로필·UUID 앱 장치·VD·실행 관리 API는 `/api/v1`, KubeEdge Device Manager는 `/api/devices` 등 별도 경로를 사용합니다.
+프로필·UUID 앱 장치·실행 관리 API는 `/api/v1`, KubeEdge Device Manager는 `/api/devices` 등 별도 경로를 사용합니다.
 Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 정의 원본은 `contracts/openapi/platform-api.yaml`이며 이 페이지의 목록은 해당 계약에서 생성합니다.
 
@@ -8,10 +8,9 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 
 | 계약 | 대상 |
 |---|---|
-| `platform-api.yaml` | 프로필, 장치, 인프라, 센서, VD, Spring DAG·실행, 감사 |
+| `platform-api.yaml` | 프로필, 장치, 인프라, 센서, Spring DAG·실행, 감사 |
 | `platform-service-api.json` | DDS 구성의 Buildx·Gitea·Argo CD 연결 |
 | `runner-api.yaml` | 내부 Runner 프로토콜 |
-| `vd-runtime-api.yaml` | 내부 VD supervisor 프로토콜 |
 | `stream-api.yaml` | Device·Runner의 스트림·checkpoint 프로토콜 |
 | `remote-reference-api.yaml` | 참조 Remote 제공자 계약 |
 
@@ -26,8 +25,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `/api/devices/{id}/properties/{property}` | 항목 하나 삭제 (`DELETE`); 마지막 항목이면 장치 등록도 삭제 |
 | `/api/device-profiles` | 프로토콜별 저장 Property 규격 |
 | `/api/device-connections/test`, `/api/protocols` | 대상 Mapper 연결 테스트, 지원 프로토콜 목록 |
-| `/api/v1/devices`, `/api/v1/profiles` | UUID 앱 Device·Session, 버전형 DEVICE/SERVICE/VD 프로필 |
-| `/api/v1/virtual-devices` | 원본·실행 이력을 유지하는 UUID VD |
+| `/api/v1/devices`, `/api/v1/profiles` | UUID 앱 Device·Session, 버전형 DEVICE/SERVICE 프로필 |
 
 기존 `/api/v1/sensors/*`는 410 `SENSOR_API_REPLACED`로 종료됐습니다. 아래 생성 목록에는
 호환 응답을 위한 deprecated operation도 포함됩니다. 이전 이력·명령 기능이 유지된다는 뜻은 아닙니다.
@@ -59,7 +57,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **66개**입니다.
+계약에 정의된 operation은 **57개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -109,17 +107,9 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/v1/tasks/{taskId}` | `getTask` |
 | `POST` | `/api/v1/tasks/{taskId}/cancel` | `cancelTask` |
 | `GET` | `/api/v1/tasks/{taskId}/results` | `getTaskResults` |
+| `GET` | `/api/v1/tasks/{taskId}/results/{port}/content` | `getTaskResultContent` |
 | `POST` | `/api/v1/tasks/{taskId}/offload` | `offloadTask` |
 | `GET` | `/api/v1/operations/{operationId}` | `getOperation` |
-| `POST` | `/api/v1/virtual-devices` | `createVirtualDevice` |
-| `GET` | `/api/v1/virtual-devices` | `listVirtualDevices` |
-| `GET` | `/api/v1/virtual-devices/{vdId}` | `getVirtualDevice` |
-| `PATCH` | `/api/v1/virtual-devices/{vdId}` | `updateVirtualDevice` |
-| `DELETE` | `/api/v1/virtual-devices/{vdId}` | `releaseVirtualDevice` |
-| `POST` | `/api/v1/virtual-devices/{vdId}/provision` | `provisionVirtualDevice` |
-| `POST` | `/api/v1/virtual-devices/{vdId}/replace` | `replaceVirtualDeviceRuntime` |
-| `POST` | `/api/v1/virtual-devices/{vdId}/drain` | `drainVirtualDeviceRuntime` |
-| `GET` | `/api/v1/virtual-devices/{vdId}/execution` | `getVirtualDeviceExecution` |
 | `POST` | `/api/v1/devices/{deviceId}/sessions/{sessionId}/stream-token` | `issueDeviceStreamToken` |
 | `GET` | `/api/v1/audit-requests` | `listManagementAuditRequests` |
 | `GET` | `/api/v1/audit-requests/{auditId}` | `getManagementAuditRequest` |
@@ -128,7 +118,6 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/v1/sensors/readings` | `getSensorReadings` |
 | `GET` | `/api/v1/sensors/commands` | `getSensorCommands` |
 | `POST` | `/api/v1/sensors/command` | `executeSensorCommand` |
-| `DELETE` | `/api/v1/virtual-devices/{vdId}/registration` | `deleteVirtualDeviceRegistration` |
 <!-- END GENERATED OPERATIONS -->
 
 기능별 사용 조건은 [지원 범위](support.md)를 확인합니다.

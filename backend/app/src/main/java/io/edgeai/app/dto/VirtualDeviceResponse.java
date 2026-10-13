@@ -9,7 +9,7 @@ public record VirtualDeviceResponse(UUID id, String key, String displayName, UUI
                                     UUID serviceProfileVersionId, String state, long revision, Map<String,Object> placement,
                                     Instant createdAt, Instant updatedAt,String executionMode) {
     public VirtualDeviceResponse(UUID id,String key,String displayName,UUID profileVersionId,UUID serviceProfileVersionId,String state,long revision,Map<String,Object> placement,Instant createdAt,Instant updatedAt) {
-        this(id,key,displayName,profileVersionId,serviceProfileVersionId,state,revision,placement,createdAt,updatedAt,serviceProfileVersionId==null?"CONTINUOUS_EKUIPER":"VD_SUPERVISOR");
+        this(id,key,displayName,profileVersionId,serviceProfileVersionId,state,revision,placement,createdAt,updatedAt,"CONTINUOUS_EKUIPER");
     }
     public static VirtualDeviceResponse from(VirtualDevice vd) {
         return new VirtualDeviceResponse(vd.id(),vd.key(),vd.displayName(),vd.profileVersionId(),vd.serviceProfileVersionId(),

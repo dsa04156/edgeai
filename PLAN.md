@@ -1,5 +1,7 @@
 # 개발 단계
 
+> 2026-10-12: 기존 VD 기능을 제거했습니다. 아래 VD 설명·검증은 이전 버전의 이력입니다. 현재 범위는 [제거 결정](docs/adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
+
 전체 목표는 M0–M10 구현과 검증입니다. 최신 작업·DB·CI 상태는 [PROGRESS.md](PROGRESS.md)를 확인하세요.
 
 | 단계 | 남은 구현·검증 게이트 |

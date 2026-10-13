@@ -3,8 +3,7 @@ info:
   title: EdgeAI Runner internal contract
   version: 0.1.0
   description: M4 내부 프로토콜. 사용자 공개 Attempt 생성 API가 아니다. 현재 구현 연결·검증 상태는 PROGRESS를 따른다.
-    모든 요청 JSON은 256KiB 이하이며 claim 응답은 고정 VD 처리 창을 포함해 2MiB 이하이다.
-    토큰·서명 URL은 비공개/비영속 데이터다.
+    모든 요청 JSON은 256KiB 이하이며 토큰·서명 URL은 비공개/비영속 데이터다.
 servers:
 - url: /
 security:

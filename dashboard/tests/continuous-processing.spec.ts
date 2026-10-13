@@ -101,14 +101,15 @@ test("sensor-to-central flow explains separate outputs without claiming an inact
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("an unavailable catalog stays unknown rather than inactive and preserves the legacy registration", async ({ page }) => {
+test("an unavailable catalog stays unknown and retired batch registration stays absent", async ({ page }) => {
   await fixture(page, false, "unavailable");
   await page.goto("/virtual-devices?create=1");
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow.getByText("연속 처리 상태 확인 필요", { exact: true })).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
-  await expect(page.getByRole("form", { name: "센서 처리 장치 등록", exact: true })).toBeVisible();
+  await expect(page.getByRole("form", { name: "센서 처리 장치 등록", exact: true })).toHaveCount(0);
+  await expect(page.getByText("기존 표본·FFT 처리 장치 등록", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: `../output/continuous-vd/web-flow-${test.info().project.name}.png`, fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
