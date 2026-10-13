@@ -17,11 +17,13 @@ flowchart TB
   MAP --> STATUS[DeviceStatus / 최신값]
   STATUS --> API
   MAP --> NANO[노드 로컬 NanoMQ]
+  NANO --> COL[Spring 센서 원본 collector]
+  COL --> HIST[(InfluxDB)]
   NANO -. 연속 처리 활성화 후 .-> PA[중앙 processing Agent]
   PA --> EK[공유 eKuiper]
   EK --> PA
   PA --> API
-  API -. 원본·계산 결과 보관 .-> HIST[(InfluxDB)]
+  API -. 계산 결과 보관 .-> HIST
   API --> K[Kubernetes API]
   K --> RUN[일반 SERVICE Runner]
   RUN --> OBJ[MinIO 검증 결과]
@@ -34,6 +36,8 @@ flowchart TB
 ```
 
 연속 처리 flag는 기본 false입니다. 중앙 Agent·qualified 입력·history 배포와 실제 수용 이후에만 점선 경로를 활성화합니다. eKuiper Pod 설치와 가상 센서의 실제 계산 실행은 다릅니다. 센서용 NanoMQ와 일반 STREAM broker는 다른 용도입니다.
+
+센서 원본 collector와 InfluxDB 원본 저장·이력 조회는 연속 계산 flag와 별도로 동작합니다. 원본 collector·저장소 연결이 준비되면 위의 실선 경로로 센서 데이터를 보관합니다.
 
 ## 관리·관측·실행 경계
 
