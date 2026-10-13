@@ -1,0 +1,136 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: edgeai-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: edgeai-postgres-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  capacity:
+    storage: 50Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: edgeai-hdd
+  claimRef:
+    namespace: edgeai
+    name: edgeai-postgres-hdd
+  local:
+    path: /mnt/data3tb/edgeai/databases/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - etri-ser0001-cg0msb
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: edgeai-influxdb-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  capacity:
+    storage: 400Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: edgeai-hdd
+  claimRef:
+    namespace: edgeai
+    name: edgeai-influxdb-hdd
+  local:
+    path: /mnt/data3tb/edgeai/databases/influxdb
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - etri-ser0001-cg0msb
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: edgeai-postgres-backup-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: edgeai-hdd
+  claimRef:
+    namespace: edgeai
+    name: edgeai-postgres-backup-hdd
+  local:
+    path: /mnt/data3tb/edgeai/backups/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - etri-ser0001-cg0msb
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: edgeai-influxdb-backup-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  capacity:
+    storage: 1200Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: edgeai-hdd
+  claimRef:
+    namespace: edgeai
+    name: edgeai-influxdb-backup-hdd
+  local:
+    path: /mnt/data3tb/edgeai/backups/influxdb
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - etri-ser0001-cg0msb

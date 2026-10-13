@@ -1,0 +1,202 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: edgeai-postgres-backup
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+spec:
+  schedule: 0 3 * * *
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: edgeai
+            edgeai.io/database-access: 'true'
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: etri-ser0001-cg0msb
+            kubernetes.io/arch: amd64
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: backup
+            image: public.ecr.aws/docker/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+            command:
+            - /bin/sh
+            - -ec
+            - |
+              set -eu
+              umask 077
+              stamp=$(date -u +%Y%m%dT%H%M%SZ)
+              partial=/backups/${stamp}.partial
+              completed=/backups/${stamp}
+              mkdir "$partial"
+              trap 'rm -rf -- "$partial"' EXIT HUP INT TERM
+              pg_dump --format=custom --no-owner --no-acl --file="$partial/edgeai.dump"
+              pg_dumpall --globals-only --file="$partial/globals.sql"
+              pg_restore --list "$partial/edgeai.dump" >/dev/null
+              (cd "$partial" && sha256sum edgeai.dump globals.sql > SHA256SUMS)
+              touch "$partial/.complete"
+              mv "$partial" "$completed"
+              trap - EXIT HUP INT TERM
+              # These dedicated volumes contain only this job's completed timestamp directories.
+              ls -1d /backups/20??????T??????Z 2>/dev/null | sort -r | tail -n +4 | while IFS= read -r older; do
+                if [ -f "$older/.complete" ]; then rm -rf -- "$older"; fi
+              done
+              printf 'Database backup complete: %s\n' "$stamp"
+            env:
+            - name: PGHOST
+              value: edgeai-postgres-hdd
+            - name: PGPORT
+              value: '5432'
+            - name: PGDATABASE
+              value: edgeai
+            - name: PGUSER
+              value: edgeai
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: edgeai-postgres-hdd
+                  key: password
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+                ephemeral-storage: 32Mi
+              limits:
+                cpu: '1'
+                memory: 512Mi
+                ephemeral-storage: 256Mi
+            volumeMounts:
+            - name: backups
+              mountPath: /backups
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: backups
+            persistentVolumeClaim:
+              claimName: edgeai-postgres-backup-hdd
+          - name: tmp
+            emptyDir:
+              sizeLimit: 128Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: edgeai-influxdb-backup
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+spec:
+  schedule: 30 3 * * *
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: edgeai
+            edgeai.io/database-access: 'true'
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: etri-ser0001-cg0msb
+            kubernetes.io/arch: amd64
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: backup
+            image: public.ecr.aws/docker/library/influxdb@sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797
+            command:
+            - /bin/sh
+            - -ec
+            - |
+              set -eu
+              umask 077
+              stamp=$(date -u +%Y%m%dT%H%M%SZ)
+              partial=/backups/${stamp}.partial
+              completed=/backups/${stamp}
+              mkdir "$partial"
+              trap 'rm -rf -- "$partial"' EXIT HUP INT TERM
+              influx backup --host http://edgeai-influxdb-hdd:8086 "$partial/data"
+              test -n "$(find "$partial/data" -name '*.manifest' -print -quit)"
+              (cd "$partial" && find data -type f -exec sha256sum {} + > SHA256SUMS)
+              touch "$partial/.complete"
+              mv "$partial" "$completed"
+              trap - EXIT HUP INT TERM
+              # These dedicated volumes contain only this job's completed timestamp directories.
+              ls -1d /backups/20??????T??????Z 2>/dev/null | sort -r | tail -n +4 | while IFS= read -r older; do
+                if [ -f "$older/.complete" ]; then rm -rf -- "$older"; fi
+              done
+              printf 'Database backup complete: %s\n' "$stamp"
+            env:
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: edgeai-influxdb-admin
+                  key: token
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+                ephemeral-storage: 32Mi
+              limits:
+                cpu: '1'
+                memory: 512Mi
+                ephemeral-storage: 256Mi
+            volumeMounts:
+            - name: backups
+              mountPath: /backups
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: backups
+            persistentVolumeClaim:
+              claimName: edgeai-influxdb-backup-hdd
+          - name: tmp
+            emptyDir:
+              sizeLimit: 128Mi
