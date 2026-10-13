@@ -16,20 +16,20 @@
 .sensor-graph-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .sensor-graph-summary > div:first-child { min-width: 0; }
 .sensor-graph-metric-label { font-size: 12px; color: var(--secondary); }
-.sensor-graph-value { display: flex; align-items: baseline; gap: 8px; margin: 0; font-variant-numeric: tabular-nums; }
+.sensor-graph-value { display: flex; align-items: baseline; gap: 8px; margin: 0; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .sensor-graph-value strong { font-size: 32px; font-weight: 600; overflow-wrap: anywhere; }
 .sensor-graph-value > span { font-size: 16px; color: var(--secondary); }
 .sensor-graph-approx { font-size: 20px; font-weight: 400; color: var(--secondary); margin-right: 4px; }
 .sensor-graph-state { display: grid; justify-items: end; flex-shrink: 0; gap: 4px; text-align: right; }
 .sensor-graph-state > span.muted { font-size: 11px; }
-.sensor-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 12px; border-block: 1px solid var(--line); }
+.sensor-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 8px; border-block: 1px solid var(--line); }
 .sensor-graph-controls label { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-size: 12px; }
 .sensor-graph-period select { width: auto; min-width: 96px; }
 .sensor-graph-controls > button { margin-left: auto; }
 .sensor-graph .interactive-history-chart { margin: 0; }
 .sensor-graph .history-chart-toolbar { justify-content: flex-start; gap: 8px; }
 .sensor-graph .history-chart-toolbar > span { margin-left: auto; font-size: 11px; }
-.sensor-graph .history-chart-canvas { height: 320px; }
+.sensor-graph .history-chart-canvas { height: clamp(280px, 40dvh, 360px); }
 .sensor-graph .history-chart-help { display: none; }
 .sensor-graph .notice, .sensor-graph .hint, .sensor-graph .error { margin: 0; font-size: 12px; }
 .sensor-graph-loading { display: grid; place-items: center; min-height: 320px; margin: 0; color: var(--secondary); }
