@@ -46,7 +46,9 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
         void connect() {
             if(client.isConnected()){subscribe();return;}
             if(!connecting.compareAndSet(false,true))return;
-            connectors.submit(()->{try{var options=new MqttConnectionOptions();options.setCleanStart(false);options.setSessionExpiryInterval(86400L);options.setReceiveMaximum(16);options.setAutomaticReconnect(true);options.setConnectionTimeout(2);options.setKeepAliveInterval(15);client.connect(options).waitForCompletion(3000);}catch(MqttException ignored){}finally{connecting.set(false);}});
+            // Dual publication of 17 properties can burst above 16. Keep the window bounded
+            // without hitting NanoMQ 0.25.6's delayed resend path during normal collection.
+            connectors.submit(()->{try{var options=new MqttConnectionOptions();options.setCleanStart(false);options.setSessionExpiryInterval(86400L);options.setReceiveMaximum(64);options.setAutomaticReconnect(true);options.setConnectionTimeout(2);options.setKeepAliveInterval(15);client.connect(options).waitForCompletion(3000);}catch(MqttException ignored){}finally{connecting.set(false);}});
         }
         synchronized void subscribe() {
             try {

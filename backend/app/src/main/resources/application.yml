@@ -40,9 +40,9 @@ edgeai:
   devices:
     namespace: ${EDGEAI_DEVICE_NAMESPACE:edgeai-devices}
     data-broker: ${EDGEAI_DEVICE_DATA_BROKER:tcp://127.0.0.1:1883}
-    mapper-arm64: ${EDGEAI_MAPPER_ARM64:192.168.0.56:5000/edgeai/mapper@sha256:ed37d5483be78a2b121a8722e6b5e2253cba14e49f7d382bf0de2b87a4591d36}
-    mapper-amd64: ${EDGEAI_MAPPER_AMD64:192.168.0.56:5000/edgeai/mapper@sha256:83585ac2bf1d0dc59538798af8fdcc9de7c5c35c7f48a33e2ebaff70e9c91c2a}
-    mapper-sensehat-arm64: ${EDGEAI_MAPPER_SENSEHAT_ARM64:192.168.0.56:5000/edgeai/mapper-sensehat@sha256:a5d58a40545c4fe1f712c7b1f0a3a859d9e4fc4213bf8ca1e98af4f8307bf66f}
+    mapper-arm64: ${EDGEAI_MAPPER_ARM64:192.168.0.56:5000/edgeai/mapper@sha256:5b2fab60153dc33e603687d1ab7ed05c8444fa9b9b774e70a65c25f88fc64737}
+    mapper-amd64: ${EDGEAI_MAPPER_AMD64:192.168.0.56:5000/edgeai/mapper@sha256:e6238ccb39a7f2b548f9c23c69ec22e6eaaa7495ae5710b3fa922ab8d2c25d34}
+    mapper-sensehat-arm64: ${EDGEAI_MAPPER_SENSEHAT_ARM64:192.168.0.56:5000/edgeai/mapper-sensehat@sha256:285a6da420408fffe03c5868362d4081a7d998fc119dda22d9b55395f3fee578}
   infrastructure:
     source: ${EDGEAI_INFRASTRUCTURE_SOURCE:disabled}
     context: ${EDGEAI_INFRASTRUCTURE_CONTEXT:}
