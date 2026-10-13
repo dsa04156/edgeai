@@ -6,7 +6,6 @@ import { StatusBadge } from "./status-badge";
 import { AddDeviceProperty, EditDeviceProperty, newProperty as property, PropertyFields } from "./managed-device-property";
 import { RegistrationDialog } from "./registration-dialog";
 import { SensorGraph } from "./sensor-graph";
-import { interruptSensors, observeSensors, sensorKey, type SensorObservations } from "../../lib/sensor-observations";
 
 type Device = components["schemas"]["ManagedDevice"];
 type Input = components["schemas"]["ManagedDeviceInput"];
@@ -24,8 +23,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [failed, setFailed] = useState(false);
   const [deleting, setDeleting] = useState<Deletion | null>(null); const form = useRef<HTMLFormElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [graph, setGraph] = useState<{ deviceId: string; property: Property } | null>(null);
-  const [observations, setObservations] = useState<SensorObservations>({});
+  const [graph, setGraph] = useState<{ deviceId: string; deviceUid: string; property: Property } | null>(null);
   const section = useRef<HTMLElement>(null); const noticeElement = useRef<HTMLParagraphElement>(null);
   const registerButton = useRef<HTMLButtonElement>(null);
   const errorElement = useRef<HTMLParagraphElement>(null); const [addingId, setAddingId] = useState<string | null>(null);
@@ -40,8 +38,8 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   useEffect(() => {
     let stopped = false; let timer: ReturnType<typeof setTimeout>;
     async function load() {
-      try { const value = await (await request("managed-devices")).json(); if (!stopped) { setItems(value.items); setObservations(old => observeSensors(old, value.items, Date.now())); setFailed(false); } }
-      catch { if (!stopped) { setFailed(true); setObservations(interruptSensors); } }
+      try { const value = await (await request("managed-devices")).json(); if (!stopped) { setItems(value.items); setFailed(false); } }
+      catch { if (!stopped) setFailed(true); }
       if (!stopped) timer = setTimeout(load, 5000);
     }
     void load(); void request("device-profiles").then(r => r.json()).then(v => { if (!stopped) setProfiles(v.items); }).catch(() => {});
@@ -136,7 +134,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   function update(index: number, field: keyof Property, value: string | number) { setProperties(old => old.map((p, i) => i === index ? { ...p, [field]: value } : p)); }
   const filtered = items?.filter(d => d.id === addingId || d.id === editing?.deviceId || d.id === deleting?.deviceId || `${d.id} ${sourceName(d)} ${d.targetNode} ${d.profile.properties.map(p => p.name).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   const addingDevice = items?.find(d => d.id === addingId);
-  const graphDevice = items?.find(d => d.id === graph?.deviceId);
+  const graphDevice = items?.find(d => d.id === graph?.deviceId && d.uid === graph?.deviceUid && d.profile.properties.some(p => p.name === graph?.property.name));
   const graphProperty = graphDevice?.profile.properties.find(p => p.name === graph?.property.name) ?? graph?.property;
   return <section ref={section} aria-label="센서 등록과 수집 상태">
     <div className="toolbar"><h2>등록 센서</h2><button onClick={() => setRefresh(v => v + 1)}>새로고침</button><button ref={registerButton} className="primary" disabled={busy} onClick={() => open()}>새 장치 등록</button></div>
@@ -167,7 +165,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
       <thead><tr><th>센서</th><th>장치 / 노드</th><th>상태</th><th>최신값</th><th>수집 시각</th><th>관리</th></tr></thead>
       <tbody>{filtered.flatMap(d => d.profile.properties.map(p => <Fragment key={`${d.id}/${p.name}`}>
         <tr>
-          <td><button className="version-link" aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, property: p })}>{p.name}<span className="sensor-meta">{d.id}</span></button></td>
+          <td><button className="version-link" aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta">{d.id}</span></button></td>
           <td>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
           <td><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
           <td>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
@@ -183,7 +181,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
       </Fragment>))}</tbody>
     </table></div>}
     <RegistrationDialog open={!!graph} title={`${graph?.property.name ?? "센서"} · 센서 그래프`} closeLabel="닫기" onClose={() => setGraph(null)}>
-      {graph && graphProperty && <SensorGraph device={graphDevice} property={graphProperty} failed={failed} points={observations[sensorKey(graph.deviceId, graph.property.name)]?.points ?? []} />}
+      {graph && graphProperty && <SensorGraph key={`${graph.deviceUid}/${graph.property.name}`} device={graphDevice} deviceUid={graph.deviceUid} property={graphProperty} failed={failed} />}
     </RegistrationDialog>
     <RegistrationDialog open={!!addingDevice} title="측정 항목 추가" busy={busy} onClose={() => addTo(null)}>
       {addingDevice && <>

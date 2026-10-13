@@ -16,13 +16,16 @@ async function request<T>(path: string): Promise<T> {
   return value;
 }
 
-function OriginalChart({ history }: { history: History }) {
+export function OriginalChart({ history }: { history: History }) {
+  const [width, setWidth] = useState(680);
+  useEffect(() => { const media = window.matchMedia("(max-width: 700px)"); const update = () => setWidth(media.matches ? 340 : 680); update(); media.addEventListener("change", update); return () => media.removeEventListener("change", update); }, []);
   const points = history.items.filter(row => typeof row.value === "number" || typeof row.value === "boolean").map(row => ({ at: Date.parse(row.observedAt), value: Number(row.value) }));
   if (!points.length) return null;
   const values = points.map(row => row.value), low = Math.min(...values), high = Math.max(...values);
-  const x = (at: number) => 85 + (at - Date.parse(history.from)) / Math.max(1, Date.parse(history.to) - Date.parse(history.from)) * 537;
+  const right = width - 58;
+  const x = (at: number) => 85 + (at - Date.parse(history.from)) / Math.max(1, Date.parse(history.to) - Date.parse(history.from)) * (right - 85);
   const y = (value: number) => high === low ? 96 : 156 - (value - low) / (high - low) * 120;
-  return <figure className="continuous-history-chart"><svg role="img" aria-label={`${history.property} 원본 그래프, ${points.length}개 기록`} viewBox="0 0 680 200"><title>{history.property} 원본 관측값</title><path d="M85 28V156H622" className="continuous-axis" /><text x={81} y={32} textAnchor="end">{high.toPrecision(7)}</text><text x={81} y={156} textAnchor="end">{low.toPrecision(7)}</text>{points.map((point, index) => <circle key={index} cx={x(point.at)} cy={y(point.value)} r={3} className="continuous-dot" />)}<text x={85} y={184}>{new Date(history.from).toLocaleTimeString()}</text><text x={622} y={184} textAnchor="end">{new Date(history.to).toLocaleTimeString()}</text></svg><figcaption>조회한 원본 관측값입니다. 미수신 구간의 값을 보간하지 않습니다.</figcaption></figure>;
+  return <figure className="continuous-history-chart sensor-original-chart"><svg role="img" aria-label={`${history.property} 원본 그래프, ${points.length}개 기록`} viewBox={`0 0 ${width} 200`}><title>{history.property} 원본 관측값</title><path d={`M85 28V156H${right}`} className="continuous-axis" /><text x={81} y={32} textAnchor="end">{high.toPrecision(7)}</text><text x={81} y={156} textAnchor="end">{low.toPrecision(7)}</text>{points.map((point, index) => <circle key={index} cx={x(point.at)} cy={y(point.value)} r={3} className="continuous-dot" />)}<text x={85} y={184}>{new Date(history.from).toLocaleTimeString()}</text><text x={right} y={184} textAnchor="end">{new Date(history.to).toLocaleTimeString()}</text></svg><figcaption>조회한 원본 관측값입니다. 미수신 구간의 값을 보간하지 않습니다.</figcaption></figure>;
 }
 
 export function DataStoreBrowser() {

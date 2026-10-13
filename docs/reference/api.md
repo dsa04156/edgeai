@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **68개**입니다.
+계약에 정의된 operation은 **71개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -142,6 +142,9 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `POST` | `/api/v1/virtual-devices/{vdId}/provision` | `provisionVirtualDevice` |
 | `POST` | `/api/v1/virtual-devices/{vdId}/drain` | `drainVirtualDeviceRuntime` |
 | `GET` | `/api/v1/virtual-devices/{vdId}/execution` | `getVirtualDeviceExecution` |
+| `GET` | `/api/v1/data-store` | `getDataStore` |
+| `GET` | `/api/v1/data-store/sensors/{uid}/{property}/history` | `getSensorOriginalHistory` |
+| `GET` | `/api/v1/virtual-devices/{id}/processing-versions` | `getProcessingVersions` |
 <!-- END GENERATED OPERATIONS -->
 
 기능별 사용 조건은 [지원 범위](support.md)를 확인합니다.

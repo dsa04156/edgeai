@@ -124,7 +124,7 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
 
 test("processing versions expose the previous definition and generated SQL", async ({ page }) => {
   await fixture(page, true); await page.goto("/virtual-devices");
-  await page.getByRole("button", { name: /^온도 계산\s*temperature-calculations$/ }).click();
+  await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
   await page.getByRole("button", { name: "처리 정의·버전 조회", exact: true }).click();
   const versions = page.getByRole("region", { name: "처리 정의 버전", exact: true });
   await expect(versions.getByText("revision 2", { exact: true })).toBeVisible();

@@ -13,7 +13,7 @@
 .continuous-axis { fill: none; stroke: var(--line); }
 .continuous-line { fill: none; stroke: var(--signal); stroke-width: 2; }
 .continuous-dot { fill: var(--signal); }
-.sensor-live-chart svg { min-width: 0; }
+.sensor-original-chart svg { min-width: 0; }
 .graph-latest { font-variant-numeric: tabular-nums; }
 .graph-latest strong { font-size: 28px; }
 .continuous-gap { fill: var(--warning-surface); }
@@ -44,7 +44,7 @@
   .vd-table tbody td { display: block; min-width: 0; width: auto; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
   .vd-table tbody td:first-child, .vd-table tbody td:last-child { grid-column: 1 / -1; width: auto; }
   .vd-table tbody td:nth-child(3)::before { content: '변경 버전 · '; color: var(--secondary); }
-  .vd-table tbody td:nth-child(4)::before { content: '배치 · '; color: var(--secondary); }
+  .vd-table tbody td:nth-child(4)::before { content: '관리 · '; color: var(--secondary); }
 }
 .platform-service-status { padding: 16px; margin-block: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .platform-service-status p { margin: 8px 0; font-size: 13px; }

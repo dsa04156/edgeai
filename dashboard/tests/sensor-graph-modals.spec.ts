@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-const device = { id: "temperature-sensor", targetNode: "edge-a", state: "ONLINE", profile: { name: "temperature-model", protocol: "mqtt", sourceName: "environment", properties: [{ name: "temperature", dataType: "float64", unit: "°C", scale: 1, offset: 0 }] }, properties: { temperature: { value: "21.5", timestamp: Date.now() } } };
+const device = { id: "temperature-sensor", uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", targetNode: "edge-a", state: "ONLINE", profile: { name: "temperature-model", protocol: "mqtt", sourceName: "environment", properties: [{ name: "temperature", dataType: "float64", unit: "°C", scale: 1, offset: 0 }] }, properties: { temperature: { value: "21.5", timestamp: Date.now() } } };
 
 async function catalog(page: Page) {
   await page.route("**/api/health", route => route.fulfill({ json: { status: "UP" } }));
@@ -8,20 +8,24 @@ async function catalog(page: Page) {
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
     if (path === "infrastructure") return route.fulfill({ json: { fetchedAt: new Date().toISOString(), nodesStatus: "AVAILABLE", sensors: [], nodes: [] } });
     if (path === "managed-devices") return route.fulfill({ json: { items: [device] } });
+    if (path === `data-store/sensors/${device.uid}/temperature/history`) {
+      const query = new URL(route.request().url()).searchParams;
+      return route.fulfill({ json: { deviceUid: device.uid, property: "temperature", from: query.get("from"), to: query.get("to"), retentionDays: 30, truncated: false, items: [21.5, 22.5].map((value, index) => ({ deviceUid: device.uid, deviceId: device.id, property: "temperature", unit: "°C", type: "float64", quality: "UNVERIFIED", observedAt: new Date(Date.now() - 60000 + index * 1000).toISOString(), value })) } });
+    }
     if (path === "csrf") return route.fulfill({ json: { token: "fixture" } });
     return route.fulfill({ json: { items: [], nextOffset: null } });
   });
 }
 
-test("clicking a sensor opens its live graph in a bounded dialog and restores focus", async ({ page }, info) => {
+test("clicking a sensor opens its stored original graph in a bounded dialog and restores focus", async ({ page }, info) => {
   await catalog(page); await page.goto("/devices?view=sensors");
   const trigger = page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true });
   await expect(trigger).toBeVisible(); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 1개 관측", exact: true })).toBeVisible();
-  await expect(dialog.getByText(/화면을 연 뒤 수신한 최신값/)).toBeVisible();
-  await expect(dialog.getByText(/서버에 저장된 센서 이력이 아닙니다/)).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByText(/InfluxDB에 저장된 센서 원본/)).toBeVisible();
+  await expect(dialog.getByText(/이전 Mapper의 기록/)).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
   await page.screenshot({ path: info.outputPath("sensor-graph-modal.png"), fullPage: true });
   const box = await dialog.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0);
@@ -65,31 +69,16 @@ test("clicking a virtual device opens its saved output graph and switches output
   await expect(page.getByRole("heading", { name: "현재 원본 연결", exact: true })).toBeVisible();
 });
 
-test("live sensor observations deduplicate, preserve interruptions and survive closing the dialog", async ({ page }) => {
-  const now = Date.now(); await page.clock.install({ time: new Date(now) }); await catalog(page);
-  let failed = false, at = now, value = "21.5";
-  await page.route("**/api/control-plane/managed-devices", route => failed
-    ? route.fulfill({ status: 503, json: { message: "센서 수신 중단" } })
-    : route.fulfill({ json: { items: [{ ...device, properties: { temperature: { value, timestamp: at } } }] } }));
+test("stored sensor records remain available after closing and reloading the page", async ({ page }) => {
+  await catalog(page);
   await page.goto("/devices?view=sensors");
   const trigger = page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 1개 관측", exact: true })).toBeVisible();
-  await page.clock.runFor(5100);
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 1개 관측", exact: true })).toBeVisible();
-  at = now + 6000; value = "22.5"; await page.clock.runFor(5100);
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 2개 관측", exact: true })).toBeVisible();
-  failed = true; await page.clock.runFor(5100);
-  await expect(dialog.getByRole("alert")).toContainText("마지막 관측");
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 2개 관측", exact: true })).toBeVisible();
-  failed = false; at = now + 16000; value = "23.5"; await page.clock.runFor(5100);
-  const graph = dialog.getByRole("img", { name: "temperature 실시간 그래프, 3개 관측", exact: true });
-  await expect(graph).toBeVisible(); await expect(dialog.getByRole("alert")).toHaveCount(0);
-  // A visible line joins the first two readings; the recovered reading is a separate dot.
-  await expect(graph.locator("polyline")).toHaveCount(1);
-  await expect(graph.locator("polyline")).toHaveAttribute("points", /^[^ ]+ [^ ]+$/);
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await trigger.click();
-  await expect(dialog.getByRole("img", { name: "temperature 실시간 그래프, 3개 관측", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await page.reload(); await trigger.click();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
 });
 
 test("inactive virtual processing and unavailable history are explained inside the graph dialog", async ({ page }) => {
@@ -110,4 +99,50 @@ test("inactive virtual processing and unavailable history are explained inside t
   await expect(dialog.getByRole("cell").filter({ hasText: "마지막 값" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "average 그래프", exact: true })).toBeDisabled();
   await expect(dialog.getByRole("img")).toHaveCount(0);
+});
+
+test("sensor history periods, pagination, store failures and empty records stay within the modal", async ({ page }) => {
+  await catalog(page); let fail = false, empty = false;
+  const queries: URLSearchParams[] = [];
+  await page.route("**/api/control-plane/data-store/sensors/**/history?**", route => {
+    const query = new URL(route.request().url()).searchParams; queries.push(query);
+    if (fail) return route.fulfill({ status: 503, json: { message: "InfluxDB 저장소를 확인하세요." } });
+    return route.fulfill({ json: { deviceUid: device.uid, property: "temperature", from: query.get("from"), to: query.get("to"), retentionDays: 30, truncated: !empty && !query.has("cursor"), nextCursor: empty || query.has("cursor") ? undefined : "cursor-a", items: empty ? [] : [{ deviceUid: device.uid, property: "temperature", unit: "°C", type: "float64", quality: "QUALIFIED", observedAt: new Date().toISOString(), value: query.has("cursor") ? 22.5 : 21.5 }] } });
+  });
+  await page.goto("/devices?view=sensors"); await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 1개 기록", exact: true })).toBeVisible();
+  expect(Date.parse(queries[0].get("to")!) - Date.parse(queries[0].get("from")!)).toBe(900000);
+  await dialog.getByRole("checkbox", { name: "자동 갱신 · 5초", exact: true }).uncheck();
+  await dialog.getByLabel("조회 기간", { exact: true }).selectOption("60");
+  await expect(dialog.getByRole("status")).toHaveCount(0);
+  const period = queries.at(-1)!; expect(Date.parse(period.get("to")!) - Date.parse(period.get("from")!)).toBe(3600000);
+  await dialog.getByRole("button", { name: "다음 기록", exact: true }).click();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  expect(queries.at(-1)!.get("cursor")).toBe("cursor-a"); expect(queries.at(-1)!.get("from")).toBe(period.get("from")); expect(queries.at(-1)!.get("to")).toBe(period.get("to"));
+  await dialog.getByText("기록 표 · 2개", { exact: true }).click();
+  await expect(dialog.getByRole("table").getByRole("row")).toHaveCount(3);
+  fail = true; await dialog.getByRole("button", { name: "그래프 조회", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("InfluxDB 저장소"); await expect(dialog.getByRole("img")).toHaveCount(0);
+  fail = false; empty = true; await dialog.getByRole("button", { name: "그래프 조회", exact: true }).click();
+  await expect(dialog.getByText("이 기간에 저장된 센서 원본이 없습니다.", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+});
+
+test("a recreated sensor name keeps the open graph on its original UID", async ({ page }) => {
+  await page.clock.install({ time: new Date() }); await catalog(page);
+  const replacement = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; let replaced = false;
+  await page.route("**/api/control-plane/managed-devices", route => route.fulfill({ json: { items: [{ ...device, uid: replaced ? replacement : device.uid }] } }));
+  await page.route(`**/api/control-plane/data-store/sensors/${replacement}/temperature/history?**`, route => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: { deviceUid: replacement, property: "temperature", from: query.get("from"), to: query.get("to"), retentionDays: 30, truncated: false, items: [{ deviceUid: replacement, property: "temperature", unit: "°C", type: "float64", quality: "QUALIFIED", observedAt: new Date().toISOString(), value: 99 }] } });
+  });
+  await page.goto("/devices?view=sensors"); const trigger = page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }); await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  replaced = true; await page.clock.runFor(5100);
+  await expect(dialog.getByText(/현재 등록에서 이 센서 UID를 찾지 못했습니다/)).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape"); await trigger.click();
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 1개 기록", exact: true })).toBeVisible();
 });
