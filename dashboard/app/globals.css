@@ -7,6 +7,22 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+html { scrollbar-gutter: stable; }
+.registration-actions { justify-content: flex-end; }
+.registration-dialog { width: min(960px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); background: var(--panel); }
+.registration-dialog[open] { display: flex; flex-direction: column; }
+.registration-dialog::backdrop { background: rgba(16, 33, 49, .48); }
+.registration-dialog-header, .registration-dialog-footer { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; }
+.registration-dialog-header { border-bottom: 1px solid var(--line); }
+.registration-dialog-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.registration-dialog-body { min-height: 0; min-width: 0; padding: 24px; overflow: auto; overscroll-behavior: contain; }
+.registration-dialog-footer { border-top: 1px solid var(--line); justify-content: flex-end; }
+.registration-dialog-body > .panel { margin: 0; border: 0; padding: 0; }
+@media (max-width: 700px) {
+  .registration-dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
+  .registration-dialog-header, .registration-dialog-footer { padding: 12px 16px; }
+  .registration-dialog-body { padding: 16px; }
+}
 a { color: var(--signal); text-decoration: none; text-underline-offset: 4px; }
 a:hover { text-decoration: underline; }
 button, input, textarea, select { font: inherit; }

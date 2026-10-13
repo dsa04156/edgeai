@@ -93,7 +93,7 @@ test("one VD displays three separate output rows and a chart with an explicit st
 
 test("sensor-to-central flow explains separate outputs without claiming an inactive engine is running", async ({ page }) => {
   await fixture(page, false, "disabled");
-  await page.goto("/virtual-devices?create=1");
+  await page.goto("/virtual-devices");
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toBeVisible();
@@ -103,16 +103,18 @@ test("sensor-to-central flow explains separate outputs without claiming an inact
   await expect(flow.getByText("처리 agent ↔ eKuiper", { exact: true })).toBeVisible();
   await expect(flow.getByText(/결과는 항목마다 별도 행과 그래프로/)).toBeVisible();
   await expect(flow.getByText(/계산 중|연결 완료/)).toHaveCount(0);
+  await page.getByRole("button", { name: "가상 장치 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("an unavailable catalog stays unknown and retired batch registration stays absent", async ({ page }) => {
   await fixture(page, false, "unavailable");
-  await page.goto("/virtual-devices?create=1");
+  await page.goto("/virtual-devices");
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow.getByText("연속 처리 상태 확인 필요", { exact: true })).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "가상 장치 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   await expect(page.getByRole("form", { name: "센서 처리 장치 등록", exact: true })).toHaveCount(0);
   await expect(page.getByText("기존 표본·FFT 처리 장치 등록", { exact: true })).toHaveCount(0);
