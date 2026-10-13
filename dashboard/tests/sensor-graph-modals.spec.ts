@@ -115,6 +115,7 @@ test("sensor history periods, pagination, store failures and empty records stay 
   expect(Date.parse(queries[0].get("to")!) - Date.parse(queries[0].get("from")!)).toBe(900000);
   await dialog.getByRole("checkbox", { name: "자동 갱신 · 5초", exact: true }).uncheck();
   await dialog.getByLabel("조회 기간", { exact: true }).selectOption("60");
+  await expect.poll(() => Date.parse(queries.at(-1)!.get("to")!) - Date.parse(queries.at(-1)!.get("from")!)).toBe(3600000);
   await expect(dialog.getByRole("status")).toHaveCount(0);
   const period = queries.at(-1)!; expect(Date.parse(period.get("to")!) - Date.parse(period.get("from")!)).toBe(3600000);
   await dialog.getByRole("button", { name: "다음 기록", exact: true }).click();
@@ -145,4 +146,24 @@ test("a recreated sensor name keeps the open graph on its original UID", async (
   await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await trigger.click();
   await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 1개 기록", exact: true })).toBeVisible();
+});
+
+test("automatic sensor history refresh retains the open record table and recovers from a temporary outage", async ({ page }) => {
+  await page.clock.install({ time: new Date() }); await catalog(page); let failed = false, count = 2;
+  await page.route("**/api/control-plane/data-store/sensors/**/history?**", route => {
+    if (failed) return route.fulfill({ status: 503, json: { message: "일시 저장소 오류" } });
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: { deviceUid: device.uid, property: "temperature", from: query.get("from"), to: query.get("to"), retentionDays: 30, truncated: false, items: Array.from({ length: count }, (_, index) => ({ deviceUid: device.uid, property: "temperature", unit: "°C", type: "float64", quality: "QUALIFIED", observedAt: new Date(Date.now() - 60000 + index * 1000).toISOString(), value: 21.5 + index })) } });
+  });
+  await page.goto("/devices?view=sensors"); await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await dialog.getByText("기록 표 · 2개", { exact: true }).click();
+  failed = true; await page.clock.runFor(5100);
+  await expect(dialog.getByRole("alert")).toContainText("일시 저장소 오류");
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("table")).toBeVisible();
+  failed = false; count = 3; await page.clock.runFor(5100);
+  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 3개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveCount(0); await expect(dialog.getByRole("table")).toBeVisible();
 });

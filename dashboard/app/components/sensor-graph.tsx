@@ -7,7 +7,7 @@ import { StatusBadge } from "./status-badge";
 
 type Schema = components["schemas"];
 type History = Schema["SensorOriginalHistory"];
-type Query = { minutes: number; refresh: number; cursor?: string; from?: string; to?: string };
+type Query = { minutes: number; refresh: number; preserve?: boolean; cursor?: string; from?: string; to?: string };
 const periods = [[15, "15분"], [60, "1시간"], [360, "6시간"], [1440, "24시간"], [10080, "7일"], [43200, "30일"]] as const;
 
 export function SensorGraph({ device, deviceUid, property, failed }: {
@@ -20,25 +20,25 @@ export function SensorGraph({ device, deviceUid, property, failed }: {
   useEffect(() => {
     const requests = sequence.current, request = ++requests.value, controller = new AbortController();
     const load = async () => {
-      setBusy(true); setError("");
-      if (!query.cursor) setHistory(null);
+      setBusy(true);
+      if (!query.cursor && !query.preserve) { setHistory(null); setError(""); }
       const to = query.to ?? new Date().toISOString(), from = query.from ?? new Date(Date.parse(to) - query.minutes * 60000).toISOString();
       const params = new URLSearchParams({ from, to, limit: "1000", ...(query.cursor ? { cursor: query.cursor } : {}) });
       try {
         const response = await fetch(`/api/control-plane/data-store/sensors/${encodeURIComponent(deviceUid)}/${encodeURIComponent(property.name)}/history?${params}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
         const rows: History & { message?: string } = await response.json();
         if (!response.ok) throw new Error(rows.message || "센서 원본 이력을 조회하지 못했습니다.");
-        if (request === requests.value) setHistory(previous => query.cursor && previous ? { ...rows, items: [...previous.items, ...rows.items].slice(0, 2000) } : rows);
+        if (request === requests.value) { setHistory(previous => query.cursor && previous ? { ...rows, items: [...previous.items, ...rows.items].slice(0, 2000) } : rows); setError(""); }
       } catch (error) { if (request === requests.value) setError(error instanceof Error ? error.message : "센서 원본 이력을 조회하지 못했습니다."); }
       finally { if (request === requests.value) setBusy(false); }
     };
     void load(); return () => { ++requests.value; controller.abort(); };
   }, [deviceUid, property.name, query]);
   useEffect(() => {
-    if (!automatic || busy || error) return;
-    const timer = setTimeout(() => setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1 })), 5000);
+    if (!automatic || busy) return;
+    const timer = setTimeout(() => setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1, preserve: true })), 5000);
     return () => clearTimeout(timer);
-  }, [automatic, busy, error]);
+  }, [automatic, busy]);
   const latest = device?.properties[property.name];
   const retentionDays = history?.retentionDays ?? 30;
   return <section aria-label="센서 원본 그래프">
@@ -47,8 +47,8 @@ export function SensorGraph({ device, deviceUid, property, failed }: {
     <p className="hint">InfluxDB에 저장된 센서 원본을 조회합니다. 페이지를 닫거나 새로고침해도 저장된 이력은 유지됩니다. 원본 보관 기간 {retentionDays}일.</p>
     {failed && <p role="alert" className="error">현재 센서 상태 조회에 실패했습니다. 최신값은 마지막 조회 결과입니다.</p>}
     {!device && <p className="notice">현재 등록에서 이 센서 UID를 찾지 못했습니다. 저장된 원본 이력을 표시합니다.</p>}
-    <div className="toolbar"><label>조회 기간<select value={query.minutes} onChange={event => setQuery(previous => ({ minutes: Number(event.target.value), refresh: previous.refresh + 1 }))}>{periods.filter(([minutes]) => minutes <= retentionDays * 1440).map(([minutes, label]) => <option key={minutes} value={minutes}>{label}</option>)}</select></label><label className="check-row"><input type="checkbox" checked={automatic} onChange={event => setAutomatic(event.target.checked)} />자동 갱신 · 5초</label><button onClick={() => setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1 }))}>그래프 조회</button></div>
-    {error && <p role="alert" className="error">{error} 저장소 연결을 확인한 뒤 그래프 조회로 다시 시도하세요.</p>}
+    <div className="toolbar"><label>조회 기간<select aria-label="조회 기간" value={query.minutes} onChange={event => setQuery(previous => ({ minutes: Number(event.target.value), refresh: previous.refresh + 1 }))}>{periods.filter(([minutes]) => minutes <= retentionDays * 1440).map(([minutes, label]) => <option key={minutes} value={minutes}>{label}</option>)}</select></label><label className="check-row"><input type="checkbox" checked={automatic} onChange={event => setAutomatic(event.target.checked)} />자동 갱신 · 5초</label><button onClick={() => setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1 }))}>그래프 조회</button></div>
+    {error && <p role="alert" className="error">{error}{history && " 마지막으로 조회한 기록을 표시합니다."} {automatic ? "5초 후 자동으로 다시 조회합니다." : "저장소 연결을 확인한 뒤 그래프 조회로 다시 시도하세요."}</p>}
     {busy && <p role="status">원본 이력 조회 중…</p>}
     {history && <>{!history.items.length ? <p className="empty">이 기간에 저장된 센서 원본이 없습니다.</p> : <>
       <OriginalChart history={history} />
