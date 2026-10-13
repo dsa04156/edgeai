@@ -20,9 +20,9 @@ function OriginalChart({ history }: { history: History }) {
   const points = history.items.filter(row => typeof row.value === "number" || typeof row.value === "boolean").map(row => ({ at: Date.parse(row.observedAt), value: Number(row.value) }));
   if (!points.length) return null;
   const values = points.map(row => row.value), low = Math.min(...values), high = Math.max(...values);
-  const x = (at: number) => 52 + (at - Date.parse(history.from)) / Math.max(1, Date.parse(history.to) - Date.parse(history.from)) * 570;
-  const y = (value: number) => 156 - (value - low) / Math.max(1, high - low) * 120;
-  return <figure className="continuous-history-chart"><svg role="img" aria-label={`${history.property} 원본 그래프, ${points.length}개 기록`} viewBox="0 0 680 200"><title>{history.property} 원본 관측값</title><path d="M52 28V156H622" className="continuous-axis" /><text x={48} y={32} textAnchor="end">{high.toPrecision(4)}</text><text x={48} y={156} textAnchor="end">{low.toPrecision(4)}</text>{points.map((point, index) => <circle key={index} cx={x(point.at)} cy={y(point.value)} r={3} className="continuous-dot" />)}<text x={52} y={184}>{new Date(history.from).toLocaleTimeString()}</text><text x={622} y={184} textAnchor="end">{new Date(history.to).toLocaleTimeString()}</text></svg><figcaption>조회한 원본 관측값입니다. 미수신 구간의 값을 보간하지 않습니다.</figcaption></figure>;
+  const x = (at: number) => 85 + (at - Date.parse(history.from)) / Math.max(1, Date.parse(history.to) - Date.parse(history.from)) * 537;
+  const y = (value: number) => high === low ? 96 : 156 - (value - low) / (high - low) * 120;
+  return <figure className="continuous-history-chart"><svg role="img" aria-label={`${history.property} 원본 그래프, ${points.length}개 기록`} viewBox="0 0 680 200"><title>{history.property} 원본 관측값</title><path d="M85 28V156H622" className="continuous-axis" /><text x={81} y={32} textAnchor="end">{high.toPrecision(7)}</text><text x={81} y={156} textAnchor="end">{low.toPrecision(7)}</text>{points.map((point, index) => <circle key={index} cx={x(point.at)} cy={y(point.value)} r={3} className="continuous-dot" />)}<text x={85} y={184}>{new Date(history.from).toLocaleTimeString()}</text><text x={622} y={184} textAnchor="end">{new Date(history.to).toLocaleTimeString()}</text></svg><figcaption>조회한 원본 관측값입니다. 미수신 구간의 값을 보간하지 않습니다.</figcaption></figure>;
 }
 
 export function DataStoreBrowser() {
