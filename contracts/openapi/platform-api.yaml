@@ -4758,7 +4758,7 @@ components:
               type: {type: string}
               configurationSha256: {type: string}
               sourceGeneration: {type: string, format: uuid}
-              sessionId: {type: string, format: uuid}
+              sessionId: {type: string, pattern: '^[a-z0-9]{1,13}$', description: Mapper의 양의 int64 incarnation counter를 canonical base36으로 표현한 값.}
               sequence: {type: integer, minimum: 1}
               observedAt: {type: string, format: date-time}
               receivedAt: {type: string, format: date-time}

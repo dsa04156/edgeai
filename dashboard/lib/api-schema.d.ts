@@ -2476,7 +2476,7 @@ export interface components {
                 configurationSha256: string;
                 /** Format: uuid */
                 sourceGeneration?: string;
-                /** Format: uuid */
+                /** @description Mapper의 양의 int64 incarnation counter를 canonical base36으로 표현한 값. */
                 sessionId?: string;
                 sequence?: number;
                 /** Format: date-time */

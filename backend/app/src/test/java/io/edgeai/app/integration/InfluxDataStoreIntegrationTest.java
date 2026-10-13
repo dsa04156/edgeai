@@ -59,7 +59,7 @@ class InfluxDataStoreIntegrationTest {
     }
     String qualified(long at,double value,int sequence) {
         var profile=Map.of("protocol","virtual","host","sensor-input.example","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")));
-        return json.canonical(Map.ofEntries(Map.entry("apiVersion","edgeai.observation/v1"),Map.entry("namespace","edgeai-devices"),Map.entry("deviceName","archive-sensor"),Map.entry("property","temperature"),Map.entry("sourceGeneration",generation.toString()),Map.entry("configurationSha256",DeviceProfileCompiler.configuration(profile)),Map.entry("observedAt",at),Map.entry("receivedAt",at),Map.entry("timeBasis","SOURCE"),Map.entry("sessionId",generation.toString()),Map.entry("sequence",sequence),Map.entry("type","float64"),Map.entry("unit","°C"),Map.entry("value",value)));
+        return json.canonical(Map.ofEntries(Map.entry("apiVersion","edgeai.observation/v1"),Map.entry("namespace","edgeai-devices"),Map.entry("deviceName","archive-sensor"),Map.entry("property","temperature"),Map.entry("sourceGeneration",generation.toString()),Map.entry("configurationSha256",DeviceProfileCompiler.configuration(profile)),Map.entry("observedAt",at),Map.entry("receivedAt",at),Map.entry("timeBasis","SOURCE"),Map.entry("sessionId",Long.toString(Instant.now().toEpochMilli(),36)),Map.entry("sequence",sequence),Map.entry("type","float64"),Map.entry("unit","°C"),Map.entry("value",value)));
     }
     void publish(MqttClient publisher,String topic,String payload) throws Exception {var message=new MqttMessage(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));message.setQos(1);publisher.publish(topic,message);}
     String history(){return "/api/v1/data-store/sensors/"+uid+"/temperature/history";}
@@ -100,12 +100,14 @@ class InfluxDataStoreIntegrationTest {
             publisher.connect();Thread.sleep(700);long at=Instant.now().toEpochMilli();String payload=qualified(at,34.5,1);
             publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",payload.replace("\"timeBasis\":\"SOURCE\"","\"timeBasis\":3"));
             publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",payload.replace("\"observedAt\":"+at,"\"observedAt\":"+at+".5"));
+            var invalidSession=new TreeMap<String,Object>((Map<String,Object>)json.decode(payload));invalidSession.put("sessionId","01");
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",json.canonical(invalidSession));
             Thread.sleep(400);awaitRows(0);publisher.disconnect();
         }
         mvc.perform(get(history()).param("from","invalid-date")).andExpect(status().isBadRequest());
     }
     @Test void originalMqttObservationsAreRetainedAndRepeatedDeliveryDoesNotDuplicateHistory() throws Exception {
-        long at=Instant.now().toEpochMilli();String session=UUID.randomUUID().toString();
+        long at=Instant.now().toEpochMilli();String session=Long.toString(Instant.now().toEpochMilli(),36);
         var profile=Map.of("protocol","virtual","host","sensor-input.example","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")));
         String original=json.canonical(Map.ofEntries(Map.entry("apiVersion","edgeai.observation/v1"),Map.entry("namespace","edgeai-devices"),Map.entry("deviceName","archive-sensor"),Map.entry("property","temperature"),Map.entry("sourceGeneration",generation.toString()),Map.entry("configurationSha256",DeviceProfileCompiler.configuration(profile)),Map.entry("observedAt",at),Map.entry("receivedAt",at),Map.entry("timeBasis","SOURCE"),Map.entry("sessionId",session),Map.entry("sequence",1),Map.entry("type","float64"),Map.entry("unit","°C"),Map.entry("value",23.5)));
         var publisher=new MqttClient("tcp://127.0.0.1:"+brokerPort,"archive-test-publisher-"+UUID.randomUUID());

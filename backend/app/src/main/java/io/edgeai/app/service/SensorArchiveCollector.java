@@ -74,7 +74,9 @@ public class SensorArchiveCollector implements AutoCloseable {
         if(qualified) {
             if(!"edgeai.observation/v1".equals(value.get("apiVersion"))||!Objects.equals(route.get("deviceId"),value.get("deviceName")))throw new IllegalArgumentException("Wrong observation identity");
             for(var key:List.of("namespace","property","sourceGeneration","configurationSha256","type","unit"))if(!Objects.equals(route.get(key),value.get(key)))throw new IllegalArgumentException("Observation configuration changed");
-            UUID.fromString((String)value.get("sessionId"));long sequence=new java.math.BigDecimal(value.get("sequence").toString()).longValueExact();if(sequence<1||sequence>9007199254740991L)throw new IllegalArgumentException("Invalid observation sequence");
+            String session=(String)value.get("sessionId");if(session==null||!session.matches("[a-z0-9]{1,13}"))throw new IllegalArgumentException("Invalid observation session");
+            long incarnation=Long.parseLong(session,36);if(incarnation<=0||!Long.toString(incarnation,36).equals(session))throw new IllegalArgumentException("Invalid observation session");
+            long sequence=new java.math.BigDecimal(value.get("sequence").toString()).longValueExact();if(sequence<1||sequence>9007199254740991L)throw new IllegalArgumentException("Invalid observation sequence");
             String basis=Objects.toString(value.get("timeBasis"),"");if(!(value.get("timeBasis") instanceof String)||!Set.of("SOURCE","RECEIVED","COLLECTED").contains(basis))throw new IllegalArgumentException("Invalid observation time basis");
             timestamp=new java.math.BigDecimal(value.get("observedAt").toString()).longValueExact();measured=value.get("value");
             String type=(String)route.get("type");if(type.equals("bool")?!(measured instanceof Boolean):type.equals("string")?!(measured instanceof String):!(measured instanceof Number))throw new IllegalArgumentException("Observation value type mismatch");
