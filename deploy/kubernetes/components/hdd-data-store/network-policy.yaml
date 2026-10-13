@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-hdd-databases
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+spec:
+  podSelector:
+    matchLabels:
+      edgeai.io/component: database
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: edgeai-api
+    - podSelector:
+        matchLabels:
+          edgeai.io/database-access: 'true'
+    - ipBlock:
+        cidr: 192.168.0.56/32
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 8086

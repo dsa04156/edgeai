@@ -1,0 +1,282 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-postgres-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  selector:
+    app: edgeai-postgres-hdd
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgeai-postgres-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  serviceName: edgeai-postgres-hdd-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edgeai-postgres-hdd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: edgeai
+        edgeai.io/storage-tier: hdd
+        app: edgeai-postgres-hdd
+        edgeai.io/component: database
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: etri-ser0001-cg0msb
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: postgres
+        image: public.ecr.aws/docker/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        ports:
+        - name: postgres
+          containerPort: 5432
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+            ephemeral-storage: 64Mi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+            ephemeral-storage: 256Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: tmp
+          mountPath: /tmp
+        - name: socket
+          mountPath: /var/run/postgresql
+        env:
+        - name: POSTGRES_DB
+          value: edgeai
+        - name: POSTGRES_USER
+          value: edgeai
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: edgeai-postgres-hdd
+              key: password
+        - name: POSTGRES_INITDB_ARGS
+          value: --locale=C --encoding=UTF8
+        startupProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - edgeai
+            - -d
+            - edgeai
+          periodSeconds: 2
+          failureThreshold: 90
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - edgeai
+            - -d
+            - edgeai
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - edgeai
+            - -d
+            - edgeai
+          periodSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: edgeai-postgres-hdd
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+      - name: socket
+        emptyDir:
+          sizeLimit: 16Mi
+      terminationGracePeriodSeconds: 120
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-influxdb-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  selector:
+    app: edgeai-influxdb-hdd
+  ports:
+  - name: influxdb
+    port: 8086
+    targetPort: 8086
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgeai-influxdb-hdd
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  serviceName: edgeai-influxdb-hdd-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edgeai-influxdb-hdd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: edgeai
+        edgeai.io/storage-tier: hdd
+        app: edgeai-influxdb-hdd
+        edgeai.io/component: database
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: etri-ser0001-cg0msb
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: influxdb
+        image: public.ecr.aws/docker/library/influxdb@sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797
+        ports:
+        - name: influxdb
+          containerPort: 8086
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+            ephemeral-storage: 64Mi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+            ephemeral-storage: 256Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/influxdb2
+        - name: tmp
+          mountPath: /tmp
+        command:
+        - influxd
+        args:
+        - --http-bind-address=:8086
+        - --bolt-path=/var/lib/influxdb2/influxd.bolt
+        - --sqlite-path=/var/lib/influxdb2/influxd.sqlite
+        - --engine-path=/var/lib/influxdb2/engine
+        - --reporting-disabled=true
+        startupProbe:
+          httpGet:
+            path: /health
+            port: influxdb
+          periodSeconds: 2
+          failureThreshold: 90
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: influxdb
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: influxdb
+          periodSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: edgeai-influxdb-hdd
+      - name: tmp
+        emptyDir:
+          sizeLimit: 128Mi
+      terminationGracePeriodSeconds: 120
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-postgres-hdd-headless
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  clusterIP: None
+  selector:
+    app: edgeai-postgres-hdd
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-influxdb-hdd-headless
+  labels:
+    app.kubernetes.io/part-of: edgeai
+    edgeai.io/storage-tier: hdd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  clusterIP: None
+  selector:
+    app: edgeai-influxdb-hdd
+  ports:
+  - name: influxdb
+    port: 8086
+    targetPort: 8086
