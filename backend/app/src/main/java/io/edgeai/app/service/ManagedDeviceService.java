@@ -171,6 +171,17 @@ public class ManagedDeviceService {
         return result;
     }
     /** Called only by an authenticated, CSRF-protected registration/update transaction. */
+    public List<Map<String,Object>> archiveCatalog(Map<String,Object> overrides) {
+        var result=new ArrayList<Map<String,Object>>();var nodes=new HashMap<String,Map<String,Object>>();
+        var root=request("GET",path("devices")+"?labelSelector=app.kubernetes.io%2Fpart-of%3Dedgeai",null,200);
+        for(var raw:(List<?>)root.getOrDefault("items",List.of())) {
+            var device=map(raw);owned(device);String nodeName=(String)map(device.get("spec")).get("nodeName");
+            try{var node=nodes.computeIfAbsent(nodeName,key->request("GET","/api/v1/nodes/"+name(key),null,200));result.add(ObservationRoute.archive(device,node,overrides));}
+            catch(IllegalArgumentException | ControlPlaneException e){var unavailable=ObservationRoute.metadata(device);unavailable.put("reason","ARCHIVE_ROUTE_UNAVAILABLE");result.add(unavailable);}
+        }
+        if(result.size()>500)throw error(409,"CONTINUOUS_CAPACITY_EXCEEDED","원본 수집 항목이 500개를 초과합니다.");return result;
+    }
+    /** Called only by an authenticated, CSRF-protected registration/update transaction. */
     @Transactional
     public void prepareObservations(Collection<String> ids) {
         var ordered=ids.stream().distinct().sorted().toList();vds.lockManagedSources(ordered);

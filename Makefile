@@ -29,3 +29,11 @@ test:
 .PHONY: platform-service
 platform-service:
 	bash scripts/dev/dev-platform-service.sh
+
+.PHONY: data-store-start data-store-stop test-data-store
+data-store-start:
+	bash scripts/dev/dev-data-store.sh start
+data-store-stop:
+	bash scripts/dev/dev-data-store.sh stop
+test-data-store:
+	bash scripts/test/test-data-store.sh

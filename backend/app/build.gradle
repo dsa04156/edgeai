@@ -41,7 +41,17 @@ tasks.register('integrationTest', Test) {
     exclude '**/StreamBindingIntegrationTest.class'
     exclude '**/StreamCheckpointIntegrationTest.class'
     exclude '**/StreamSourceCompletionIntegrationTest.class'
+    exclude '**/InfluxDataStoreIntegrationTest.class'
     shouldRunAfter tasks.named('test')
+}
+
+tasks.register('dataStoreIntegrationTest', Test) {
+    description = 'Requires real PostgreSQL, InfluxDB OSS2.9.1 and MQTT; never substitutes a time-series fixture.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/InfluxDataStoreIntegrationTest.class'
+    include '**/ContinuousRegistrationIntegrationTest.class'
+    filter { includeTestsMatching '*InfluxDataStoreIntegrationTest'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.selectedStorageOnlyKeepsMatchingComputedValuesWithoutFilteringLiveOutputs' }
 }
 
 tasks.register('storageIntegrationTest', Test) {

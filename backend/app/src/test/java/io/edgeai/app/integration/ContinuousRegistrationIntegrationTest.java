@@ -116,7 +116,41 @@ class ContinuousRegistrationIntegrationTest {
         mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence,"reports",List.of(Map.of("vdId",stop.get("vdId"),"generation",stop.get("generation"),"state","STOPPED","reason","STOPPED","ruleIds",List.of()))))).andExpect(status().isOk());
         mvc.perform(post("/api/v1/virtual-devices/"+ids.getLast()+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted());
     }
-    @Test void everyResultIsStoredAndHistoryFailureDoesNotStopLiveResultsOrReplayTheGap() throws Exception {
+    @Test void resultStoragePolicyIsPartOfTheImmutableProcessingDefinition() throws Exception {
+        var config=Map.of("intervalSeconds",1,"retentionDays",7,"resultStorage",Map.of("mode","SELECTED","outputs",List.of(Map.of("name","temperature","condition","value >= 30"))),"outputs",List.of(Map.of("name","temperature","expression","a","operation","scalar","unit","°C")));
+        var body=Map.of("key","policy-"+UUID.randomUUID(),"displayName","선택 보관","sources",List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"),"maxAgeSeconds",30)),"continuous",config);
+        var response=mvc.perform(post("/api/v1/virtual-devices/continuous").with(csrf()).contentType("application/json").content(json.canonical(body))).andExpect(status().isCreated()).andReturn();
+        String id=(String)((Map<?,?>)json.decode(response.getResponse().getContentAsString())).get("id");
+        mvc.perform(get("/api/v1/virtual-devices/"+id)).andExpect(status().isOk()).andExpect(jsonPath("$.continuous.resultStorage.mode").value("SELECTED")).andExpect(jsonPath("$.continuous.resultStorage.outputs[0].condition").value("value >= 30"));
+    }
+    @Test void editingProcessingPreservesPreviousDefinitionsBindingsAndGeneratedSql() throws Exception {
+        var sources=List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"),"maxAgeSeconds",30));
+        var config=Map.of("intervalSeconds",1,"retentionDays",7,"resultStorage",Map.of("mode","NONE"),"outputs",List.of(Map.of("name","temperature","expression","a","operation","scalar","unit","°C")));
+        var created=mvc.perform(post("/api/v1/virtual-devices/continuous").with(csrf()).contentType("application/json").content(json.canonical(Map.of("key","versions-"+UUID.randomUUID(),"displayName","계산 버전","sources",sources,"continuous",config)))).andExpect(status().isCreated()).andReturn();
+        String vd=(String)((Map<?,?>)json.decode(created.getResponse().getContentAsString())).get("id");
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/processing-versions")).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].rules[0].sql",org.hamcrest.Matchers.containsString("SELECT"))).andExpect(jsonPath("$.items[0].sources[0].deviceUid").value(uid.toString()));
+        var replacement=Map.of("intervalSeconds",1,"retentionDays",7,"resultStorage",Map.of("mode","ALL"),"outputs",List.of(Map.of("name","temperature","expression","a * 2","operation","scalar","unit","°C")));
+        mvc.perform(patch("/api/v1/virtual-devices/"+vd+"/continuous").with(csrf()).contentType("application/json").content(json.canonical(Map.of("revision",0,"displayName","수정 계산","sources",sources,"continuous",replacement)))).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/processing-versions")).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2)).andExpect(jsonPath("$.items[0].configuration.outputs[0].expression").value("a * 2")).andExpect(jsonPath("$.items[1].configuration.outputs[0].expression").value("a")).andExpect(jsonPath("$.items[1].configuration.resultStorage.mode").value("NONE"));
+    }
+    @Test void selectedStorageOnlyKeepsMatchingComputedValuesWithoutFilteringLiveOutputs() throws Exception {
+        var config=Map.of("intervalSeconds",1,"retentionDays",7,"resultStorage",Map.of("mode","SELECTED","outputs",List.of(Map.of("name","temperature","condition","value >= 30"),Map.of("name","alarm","condition","value == true"))),"outputs",List.of(Map.of("name","temperature","expression","a","operation","scalar","unit","°C"),Map.of("name","alarm","expression","a > 30","operation","threshold","unit","")));
+        var response=mvc.perform(post("/api/v1/virtual-devices/continuous").with(csrf()).contentType("application/json").content(json.canonical(Map.of("key","selected-"+UUID.randomUUID(),"displayName","조건 보관","sources",List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"),"maxAgeSeconds",30)),"continuous",config)))).andExpect(status().isCreated()).andReturn();
+        String vd=(String)((Map<?,?>)json.decode(response.getResponse().getContentAsString())).get("id"),session=UUID.randomUUID().toString();
+        mvc.perform(post("/api/v1/virtual-devices/"+vd+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted());
+        var poll=mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",1,"reports",List.of()))).andExpect(status().isOk()).andReturn();
+        var plan=(Map<?,?>)json.decode(poll.getResponse().getContentAsString());
+        String generation=(String)((List<?>)plan.get("executions")).stream().map(v->(Map<?,?>)v).filter(v->vd.equals(v.get("vdId"))).findFirst().orElseThrow().get("generation");
+        long slot=Instant.now().getEpochSecond();
+        var alarm=new TreeMap<String,Object>(result(vd,generation,slot-1,40));alarm.put("outputId","alarm");alarm.put("value",true);
+        mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-2,20),result(vd,generation,slot-1,40),alarm)))).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",Instant.ofEpochSecond(slot-10).toString()).param("to",Instant.ofEpochSecond(slot+10).toString())).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].value").value(40));
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].latest.value").value(40));
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",Instant.ofEpochSecond(slot-10).toString()).param("to",Instant.ofEpochSecond(slot+10).toString()).param("bucketSeconds","60")).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].average").value(40.0)).andExpect(jsonPath("$.items[0].count").value(1));
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/alarm/history").param("from",Instant.ofEpochSecond(slot-10).toString()).param("to",Instant.ofEpochSecond(slot+10).toString())).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].value").value(true));
+        mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/alarm/history").param("from",Instant.ofEpochSecond(slot-10).toString()).param("to",Instant.ofEpochSecond(slot+10).toString()).param("bucketSeconds","60")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].average").value(1.0));
+    }
+    @Test void everySelectedResultIsRetriedAfterHistoryFailureWithoutStoppingLiveOutputs() throws Exception {
         String body=json.canonical(Map.of("key","continuous-history-"+UUID.randomUUID(),"displayName","온도",
             "sources",List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"),"maxAgeSeconds",30)),
             "continuous",Map.of("intervalSeconds",1,"retentionDays",7,"outputs",List.of(Map.of("name","temperature","expression","a","operation","scalar","unit","°C")))));
@@ -141,7 +175,7 @@ class ContinuousRegistrationIntegrationTest {
         mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-2,23))))).andExpect(status().isOk()).andExpect(jsonPath("$.newResults").value(0));
         mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-1,24))))).andExpect(status().isOk()).andExpect(jsonPath("$.historyStored").value(true));
         mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",from).param("to",to))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(3)).andExpect(jsonPath("$.gaps[?(@.reason=='HISTORY_UNAVAILABLE')]").value(org.hamcrest.Matchers.hasSize(1)));
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(4)).andExpect(jsonPath("$.gaps[?(@.reason=='HISTORY_UNAVAILABLE')]").value(org.hamcrest.Matchers.hasSize(1)));
         mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",from).param("to",to).param("bucketSeconds","60"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.aggregation.bucketSeconds").value(60));
         var reset=mvc.perform(enginePost("reset",Map.of("sessionId",session,"vdId",vd,"generation",generation,"reason","INPUT_STALE"))).andExpect(status().isOk()).andReturn();

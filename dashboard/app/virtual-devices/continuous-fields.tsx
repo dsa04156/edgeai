@@ -22,6 +22,13 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
   const choices = inputs;
   function source(index: number, patch: Partial<Source>) { setSources(rows => rows.map((row, n) => n === index ? { ...row, ...patch } : row)); }
   function output(index: number, patch: Partial<Output>) { setConfiguration(value => ({ ...value, outputs: value.outputs.map((row, n) => n === index ? { ...row, ...patch } : row) })); }
+  const storage = configuration.resultStorage || { mode: "ALL" as const };
+  function storageOutput(name: string, checked: boolean, condition = "") {
+    setConfiguration(value => {
+      const current = value.resultStorage?.mode === "SELECTED" ? value.resultStorage.outputs : [];
+      return { ...value, resultStorage: { mode: "SELECTED", outputs: [...current.filter(row => row.name !== name), ...(checked ? [{ name, ...(condition ? { condition } : {}) }] : [])] } };
+    });
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (pending || busy || !enabled) return;
     const form = new FormData(event.currentTarget); setPending(true); setFeedback("");
@@ -49,16 +56,19 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
     </fieldset>
     <div className="form-row"><label>계산 간격(초)<input type="number" required min={1} max={3600} value={configuration.intervalSeconds} onChange={event => setConfiguration(value => ({ ...value, intervalSeconds: Number(event.target.value) }))} /></label>
       <label>결과 보관 기간(일)<input type="number" required min={1} max={30} value={configuration.retentionDays} onChange={event => setConfiguration(value => ({ ...value, retentionDays: Number(event.target.value) }))} /></label></div>
+    <label>결과 저장 정책<select aria-label="결과 저장 정책" value={storage.mode} onChange={event => { const mode = event.target.value as "NONE" | "SELECTED" | "ALL"; setConfiguration(value => ({ ...value, resultStorage: mode === "SELECTED" ? { mode, outputs: [] } : { mode } })); }}><option value="NONE">저장 안 함</option><option value="SELECTED">선택 저장</option><option value="ALL">전체 저장</option></select></label>
+    <p className="hint">처리 정의와 버전은 항상 보관합니다. 결과 저장 정책은 계산과 출력 조건을 바꾸지 않습니다. 선택 저장은 아래에서 항목과 조건을 지정하세요.</p>
     <fieldset className="publish-fields"><legend>출력 항목 · 최대 16개</legend>
       <p className="hint">별칭으로 식을 작성하세요. 예: (a + b) / 2, a &gt; 30, a &gt; 30 &amp;&amp; b &lt; 80. 입력 누락이나 연결 변경 시 창을 다시 모읍니다.</p>
       {configuration.outputs.map((row, index) => <fieldset key={index} className="publish-fields"><legend>출력 {index + 1}</legend>
-        <div className="form-row"><label>항목 이름<input aria-label={`출력 ${index + 1} 이름`} required pattern="[a-z][a-z0-9_]{0,62}" value={row.name} onChange={event => output(index, { name: event.target.value })} /></label>
+        <div className="form-row"><label>항목 이름<input aria-label={`출력 ${index + 1} 이름`} required pattern="[a-z][a-z0-9_]{0,62}" value={row.name} onChange={event => { const name = event.target.value; setConfiguration(value => ({ ...value, outputs: value.outputs.map((old, n) => n === index ? { ...old, name } : old), ...(value.resultStorage?.mode === "SELECTED" ? { resultStorage: { mode: "SELECTED", outputs: value.resultStorage.outputs.map(selected => selected.name === row.name ? { ...selected, name } : selected) } } : {}) })); }} /></label>
           <label>처리<select aria-label={`출력 ${index + 1} 처리`} value={row.operation} onChange={event => { const operation = event.target.value as Output["operation"]; const replacement: Output = { name: row.name, expression: row.expression, operation, unit: row.unit, ...(windowOperation(operation) ? { sampleCount: row.sampleCount || 5 } : {}), ...(operation === "filter" || row.condition ? { condition: row.condition || "a > 0" } : {}) }; setConfiguration(value => ({ ...value, outputs: value.outputs.map((old, n) => n === index ? replacement : old) })); }}>{Object.entries(operations).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <label>단위<input aria-label={`출력 ${index + 1} 단위`} maxLength={32} value={row.unit} onChange={event => output(index, { unit: event.target.value })} /></label></div>
         <label>{row.operation === "threshold" ? "참/거짓 계산식" : "계산식"}<input aria-label={`출력 ${index + 1} 계산식`} required maxLength={1024} value={row.expression} onChange={event => output(index, { expression: event.target.value })} /></label>
         {windowOperation(row.operation) && <label>창 표본 수<input aria-label={`출력 ${index + 1} 창 표본 수`} type="number" required min={1} max={1024} value={row.sampleCount || 1} onChange={event => output(index, { sampleCount: Number(event.target.value) })} /></label>}
         <label>출력 조건{row.operation !== "filter" && " (선택)"}<input aria-label={`출력 ${index + 1} 조건`} required={row.operation === "filter"} maxLength={1024} value={row.condition || ""} onChange={event => { const next = { ...row }; if (event.target.value) next.condition = event.target.value; else delete next.condition; setConfiguration(value => ({ ...value, outputs: value.outputs.map((old, n) => n === index ? next : old) })); }} /></label>
-        <button type="button" disabled={configuration.outputs.length === 1} onClick={() => setConfiguration(value => ({ ...value, outputs: value.outputs.filter((_, n) => n !== index) }))}>출력 {index + 1} 삭제</button>
+        {storage.mode === "SELECTED" && <><label><input type="checkbox" aria-label={`출력 ${index + 1} 저장`} checked={storage.outputs.some(selected => selected.name === row.name)} onChange={event => storageOutput(row.name, event.target.checked)} /> 이 항목 저장</label>{storage.outputs.some(selected => selected.name === row.name) && <label>저장 조건 (선택)<input aria-label={`출력 ${index + 1} 저장 조건`} maxLength={1024} placeholder="value >= 10" value={storage.outputs.find(selected => selected.name === row.name)?.condition || ""} onChange={event => storageOutput(row.name, true, event.target.value)} /><span className="hint">계산된 결과를 value로 참조합니다. 비워 두면 이 항목의 모든 결과를 저장합니다.</span></label>}</>}
+        <button type="button" disabled={configuration.outputs.length === 1} onClick={() => setConfiguration(value => ({ ...value, outputs: value.outputs.filter((_, n) => n !== index), ...(value.resultStorage?.mode === "SELECTED" ? { resultStorage: { mode: "SELECTED", outputs: value.resultStorage.outputs.filter(selected => selected.name !== row.name) } } : {}) }))}>출력 {index + 1} 삭제</button>
       </fieldset>)}
       <button type="button" disabled={configuration.outputs.length >= 16} onClick={() => setConfiguration(value => { let n = value.outputs.length; while (value.outputs.some(row => row.name === `value${n}`)) n++; return { ...value, outputs: [...value.outputs, { name: `value${n}`, expression: sources[0].sourceKey, operation: "scalar", unit: "" }] }; })}>출력 항목 추가</button>
     </fieldset>

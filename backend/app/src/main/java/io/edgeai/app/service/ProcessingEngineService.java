@@ -21,6 +21,7 @@ public class ProcessingEngineService {
     private final ManagedDeviceService sensors;
     private final Clock clock;
     private final ProcessingHistoryRepository history;
+    @org.springframework.beans.factory.annotation.Autowired private ProcessingHistoryDelivery delivery;
     private final Map<String,Object> overrides;
     private Instant catalogAt=Instant.EPOCH;
     private List<Map<String,Object>> inputs=List.of();
@@ -65,7 +66,7 @@ public class ProcessingEngineService {
         for(var raw:reports)report(map(raw),routes,now);
         var desired=new ArrayList<Map<String,Object>>();
         for(var execution:executions.desired()) {
-            try{desired.add(plan(execution,routes));}
+            try{var publicPlan=new TreeMap<>(plan(execution,routes));publicPlan.remove("configuration");publicPlan.remove("profileVersionId");publicPlan.remove("vdRevision");desired.add(publicPlan);}
             catch(IllegalArgumentException | ControlPlaneException e) {
                 executions.observe(execution.vdId(),execution.generation(),"ERROR","SOURCE_CONFIGURATION_UNAVAILABLE",now);
                 var failed=new TreeMap<String,Object>();failed.put("vdId",execution.vdId().toString());failed.put("generation",execution.generation().toString());failed.put("running",false);failed.put("reason","SOURCE_CONFIGURATION_UNAVAILABLE");failed.put("rules",List.of());failed.put("sources",List.of());desired.add(failed);
@@ -85,7 +86,7 @@ public class ProcessingEngineService {
             var source=new TreeMap<>(route);source.put("alias",binding.sourceKey());source.put("column","x"+sources.size());source.put("maxAgeSeconds",binding.maxAgeSeconds());sources.add(source);
             types.put(binding.sourceKey(),ContinuousRuleCompiler.inputType((String)route.get("type")));
         }
-        result.put("sources",sources);result.put("rules",ContinuousRuleCompiler.compile(vd.id(),execution.generation(),config,types));result.put("intervalSeconds",config.get("intervalSeconds"));result.put("retentionDays",config.get("retentionDays"));return result;
+        result.put("sources",sources);result.put("rules",ContinuousRuleCompiler.compile(vd.id(),execution.generation(),config,types));result.put("intervalSeconds",config.get("intervalSeconds"));result.put("retentionDays",config.get("retentionDays"));result.put("configuration",config);result.put("profileVersionId",vd.profileVersionId().toString());result.put("vdRevision",vd.revision());return result;
     }
     private void report(Map<String,Object> report,List<Map<String,Object>> routes,Instant now) {
         object(report,"vdId","generation","state","reason","ruleIds");UUID id=uuid(report.get("vdId")),generation=uuid(report.get("generation"));
@@ -126,7 +127,7 @@ public class ProcessingEngineService {
         if(!(request.get("results") instanceof List<?> values) || values.isEmpty() || values.size()>64)throw new IllegalArgumentException("One to sixty-four results required");
         var ids=new TreeSet<UUID>();for(var raw:values)ids.add(uuid(map(raw).get("vdId")));
         for(var id:ids)vds.find(id,true).orElseThrow(()->conflict("GENERATION_CHANGED","등록된 실행이 없습니다."));
-        var routes=catalog();var now=clock.instant();var samples=new ArrayList<ProcessingHistoryRepository.Sample>();var seen=new HashSet<String>();
+        var routes=catalog();var now=clock.instant();var samples=new ArrayList<ProcessingHistoryRepository.Sample>();var seen=new HashSet<String>();int accepted=0;
         var currentExecutions=new HashMap<UUID,ContinuousRepository.Execution>();
         var currentPlans=new HashMap<UUID,Map<String,Object>>();
         for(var raw:values) {
@@ -151,18 +152,21 @@ public class ProcessingEngineService {
             }
             String unique=id+":"+output+":"+generation+":"+sequence;if(!seen.add(unique))throw new IllegalArgumentException("Duplicate result in batch");
             var document=new TreeMap<String,Object>(map(value));document.put("unit",rule.unit());document.put("type",rule.type());document.put("historyStored",false);
+            boolean retain=ResultStoragePolicy.stores(map(plan.get("configuration")),output,calculated);
+            document.put("storageStatus",retain?"PENDING":"SKIPPED");document.put("profileVersionId",plan.get("profileVersionId"));document.put("vdRevision",plan.get("vdRevision"));
             var result=new ContinuousRepository.Result(id,output,generation,(String)value.get("evaluationId"),sequence,at,JSON.canonical(document));
-            if(executions.accept(result,now)){executions.appendLatest(result);samples.add(new ProcessingHistoryRepository.Sample(result,((Number)plan.get("retentionDays")).intValue(),rule.type(),rule.unit(),calculated,JSON.canonical(proofs)));}
+            if(executions.accept(result,now)){accepted++;executions.appendLatest(result);if(retain)samples.add(new ProcessingHistoryRepository.Sample(result,((Number)plan.get("retentionDays")).intValue(),rule.type(),rule.unit(),calculated,JSON.canonical(proofs)));}
         }
         boolean stored=false;
+        delivery.reserve(samples.size());
+        for(var sample:samples)delivery.enqueue(sample);
+        stored=delivery.flush();
         if(!samples.isEmpty()) {
-            try{history.append(samples);stored=true;}catch(RuntimeException error){org.slf4j.LoggerFactory.getLogger(ProcessingEngineService.class).warn("Continuous history unavailable; {} live results retained ({})",samples.size(),error.getClass().getSimpleName());}
             for(var sample:samples) {
                 var r=sample.result();executions.gap(r.vdId(),r.generation(),"HISTORY_UNAVAILABLE",!stored,stored?now:r.evaluationAt());
-                if(stored){var document=map(JSON.decode(r.json()));document.put("historyStored",true);executions.markHistoryStored(r.vdId(),r.outputId(),r.generation(),r.sequence(),JSON.canonical(document));}
             }
         }
-        return Map.of("accepted",values.size(),"newResults",samples.size(),"historyStored",stored,"replay",false);
+        return Map.of("accepted",values.size(),"newResults",accepted,"historyStored",stored,"replay",false);
     }
     private static ControlPlaneException conflict(String code,String message){return new ControlPlaneException(409,code,message);}
 }

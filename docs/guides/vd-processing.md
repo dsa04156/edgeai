@@ -20,8 +20,53 @@ VD 1개와 결과 3행이 생깁니다. 각각 독립 VD로 등록하면 VD 3개
 
 장치 상세에서 **계산 시작**을 요청한 뒤 실제 계산 엔진 보고를 기다립니다. 출력마다 최신값·계산 시각·
 유효 상태가 별도 행에 표시됩니다. 각 행의 그래프로 기록을 조회합니다. 누락·세대 변경 구간은 선을 연결하지
-않으며 저장 중단은 따로 표시합니다. 저장 장애 중에도 최신 결과는 표시하지만 그 기간은 복구 뒤 채우지 않습니다.
+않으며 저장 중단은 따로 표시합니다. 저장 장애 중에는 최신 결과를 표시하고 선택된 결과를 PostgreSQL 임시 대기열에 둡니다. 복구 후 InfluxDB로 다시 전달하고 완료한 대기열 항목은 제거합니다. 대기열 기본 상한은 100,000개이며 보존 기간이 지난 대기 결과는 만료됩니다.
 원본 센서 CRD는 측정 항목별로 유지하고 계산 결과의 CRD는 만들지 않습니다.
+
+### 원본·정의·처리 결과 저장
+
+센서 원본과 정책에 해당하는 VD 결과 데이터는 **InfluxDB OSS2.9.1**에 보관합니다.
+VD 처리 정의·입력 연결·실행 설정·불변 프로필·생성 SQL 템플릿·실행 명령과 오류 이력은 **PostgreSQL**에 유지합니다.
+연속 설정을 수정하면 이전 정의를 덮어쓰지 않고 `처리 정의·버전 조회`에서 새 등록 revision과 이전 설정을 확인합니다.
+SQL은 서버가 생성한 실행 generation 부여 전 템플릿입니다. 공개 API는 임의 SQL·sink 실행 요청을 받지 않습니다.
+
+VD 생성/수정의 **결과 저장 정책**은 `저장 안 함 / 선택 저장 / 전체 저장`입니다.
+선택 저장은 출력 항목과 항목별 조건을 지정합니다. 조건의 `value`는 계산된 결과이며,
+예를 들어 `value >= 10`, boolean 출력은 `value == true`로 작성합니다. 비우면 선택한 항목의 모든 값을 저장합니다.
+이 정책은 계산식·엔진의 출력 조건·최신값을 바꾸지 않습니다. 정의에 정책이 없던 기존 VD는 ALL로 해석합니다.
+
+**데이터 저장소** 화면은 저장 중인 원본 항목과 측정 시각·값·UID·설정 식별자·원래 MQTT JSON을 조회합니다.
+최신 twin을 주기적으로 읽는 BATCH `sensor_sample`과 별개인 전용 MQTT 구독 경로입니다.
+수집 식별자가 적용된 Mapper의 원본은 source generation/session/sequence를 유지하고 재전송을 같은 point로 처리합니다.
+같은 원본 시각의 다른 sequence는 별도 보관하며, InfluxDB 내부 point 시각의 1ms 미만 부분은 식별용입니다.
+API의 `observedAt`은 원래 측정 시각입니다. 날짜 범위 조회는 시작 포함·종료 미포함이며 최대 31일/2,000개입니다.
+이전 DataModel Mapper 원본은 명시적으로 **설정 미검증**으로 표시하며 같은 UID·항목·시각의 재보고는 point를 갱신합니다.
+이 데이터만으로 UID/수집 설정 적용을 검증하거나 연속 처리의 유효 입력으로 승격하지 않습니다.
+
+원본 bucket은 기본30일입니다. 결과는 `vd-results-1d`부터 `vd-results-30d`까지 보존 기간별 bucket을 사용하므로
+VD별 기간이 실제 bucket 만료 정책에 연결됩니다. 조회에서도 만료된 결과를 제외합니다.
+최신 결과 상태의 `SKIPPED / PENDING / STORED`는 저장 정책 제외·전달 대기·저장 완료를 구분합니다.
+MQTT 구독자는 저장을 마친 뒤 QoS1 ACK를 보냅니다. 지속 세션은 하루로 설정하며 브로커의 큐 크기·영속 설정은 별도 운영 항목입니다.
+설정 복원은 규칙 재생성이며, 중단된 윈도우 상태를 자동 복원하거나 과거 원본을 재생하는 기능은 아닙니다.
+
+### 로컬 InfluxDB 준비
+
+`make data-store-start`는 검증된 공식 Linux amd64 binary를 설치하고 프로젝트 소유의
+`127.0.0.1:18086` 저장소와 bucket을 준비합니다. `make data-store-stop`은 데이터·자격 증명을 남기고 소유 프로세스만 종료합니다.
+`.tools/influx-data-store/connection.json`의 URL·org·tokenFile을 서버 전용 설정
+`EDGEAI_INFLUX_URL`, `EDGEAI_INFLUX_ORG`, `EDGEAI_INFLUX_TOKEN_FILE`에 연결하고
+`EDGEAI_RAW_HISTORY_ENABLED=true`로 원본 구독을 활성화합니다. 토큰은 출력하거나 Git에 저장하지 않습니다.
+기본 토큰은 측정 bucket의 read/write 권한이며 초기 admin token은 API 프로세스에 전달하지 않습니다.
+원본 수집은 중앙 eKuiper 실행 활성화와 독립적입니다. broker가 node loopback이면 Node InternalIP로 해석하며
+필요한 경우 `EDGEAI_RAW_HISTORY_BROKER_NODE_OVERRIDES`에 Node UID별 도달 가능한 호스트를 지정합니다.
+
+`make test-data-store`는 격리 PostgreSQL, 실제 InfluxDB2.9.1과 소유 MQTT 브로커로
+원본·중복·같은 시각의 별도 sequence·값/조건 정책·numeric/boolean 결과·구간 집계를 검증합니다.
+일반 PostgreSQL integrationTest와 외부 시간계열 저장소 시험은 별도 실행하며 준비가 없으면 성공으로 skip하지 않습니다.
+기존 `EDGEAI_HISTORY_DB_URL`은 이전 PostgreSQL 이력 호환 설정이며 새 Influx URL이 우선합니다.
+이전 이력 DB·volume은 자동으로 삭제하거나 데이터 이전을 수행하지 않습니다.
+공유 엔진의 현재 동시 실행 제한(200 VD/500 출력)과 별도로 등록된 정의·버전은 관리할 수 있습니다.
+500 VD 동시 실행, 실센서 장기 손실률, 저장 공간/부하는 별도 수용 시험 대상입니다.
 
 ### 개발 검증
 

@@ -24,11 +24,13 @@ async function fixture(page: Page, detail = false, catalog: "enabled" | "disable
       const body = request.postDataJSON();
       expect(body.sources).toEqual([{ sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30 }, { sourceKey: "b", deviceId: "humidity", properties: ["humidity"], maxAgeSeconds: 30 }]);
       expect(body.continuous.outputs.map((output: { expression: string }) => output.expression)).toEqual(["(a + b) / 2", "a > 30"]);
+      expect(body.continuous.resultStorage).toEqual({ mode: "SELECTED", outputs: [{ name: "value", condition: "value >= 25" }] });
       expect(body).not.toHaveProperty("image"); expect(body).not.toHaveProperty("serviceProfileVersionId");
       if (++attempts === 1) return route.fulfill({ status: 503, json: { message: "등록 재시도" } });
       return route.fulfill({ status: 201, json: vd });
     }
     if (path === `virtual-devices/${id}`) return detail ? route.fulfill({ json: { vd, activeSources: [{ id: "source", sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30, sourceKind: "physical" }], sourceHistory: [] } }) : route.fulfill({ status: 503, json: { message: "상세 조회 실패" } });
+    if (path === `virtual-devices/${id}/processing-versions`) return route.fulfill({ json: { nextOffset: null, items: [{ revision: 2, profileVersionId: profile, configuration, sources: [{ alias: "a", deviceId: "temperature" }], rules: [{ id: "rule-2", outputId: "average", sql: "SELECT AVG(x0) FROM edgeai_vd_frames", type: "number", unit: "°C", warmupTicks: 3, conditional: false }], recordedAt: new Date().toISOString() }, { revision: 1, profileVersionId: profile, configuration: { ...configuration, intervalSeconds: 5 }, sources: [{ alias: "a", deviceId: "temperature" }], rules: [{ id: "rule-1", outputId: "average", sql: "SELECT x0 FROM edgeai_vd_frames", type: "number", unit: "°C", warmupTicks: 1, conditional: false }], recordedAt: new Date().toISOString() }] } });
     if (path === `virtual-devices/${id}/execution`) return route.fulfill({ json: { continuous: { enabled: true, desiredRunning: true, generation, state: "RUNNING", reason: "HEALTHY" } } });
     if (path === `virtual-devices/${id}/outputs`) return route.fulfill({ json: { intervalSeconds: 1, retentionDays: 7, historyEnabled: true, items: configuration.outputs.map((output, index) => ({ ...output, outputId: output.name, type: index === 2 ? "boolean" : "number", quality: "VALID", latest: { value: index === 2 ? true : 21.5, evaluationAt: new Date().toISOString(), historyStored: index !== 1 } })) } });
     if (path === `virtual-devices/${id}/outputs/average/history`) {
@@ -56,8 +58,12 @@ test("multiple sensors and outputs preserve a failed registration without requir
   await form.getByRole("button", { name: "출력 항목 추가", exact: true }).click();
   await form.getByLabel("출력 2 처리", { exact: true }).selectOption("threshold");
   await form.getByLabel("출력 2 계산식", { exact: true }).fill("a > 30");
+  await form.getByLabel("결과 저장 정책", { exact: true }).selectOption("SELECTED");
+  await form.getByLabel("출력 1 저장", { exact: true }).check();
+  await form.getByLabel("출력 1 저장 조건", { exact: true }).fill("value >= 25");
   await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
   await expect(form.getByRole("alert")).toHaveText("등록 재시도");
+  await expect(form.getByLabel("출력 1 저장 조건", { exact: true })).toHaveValue("value >= 25");
   await expect(form.getByLabel("입력 2 센서", { exact: true })).toHaveValue("humidity");
   await expect(form.getByLabel("출력 1 계산식", { exact: true })).toHaveValue("(a + b) / 2");
   await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
@@ -112,4 +118,15 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
   await expect(page.getByText("기존 표본·FFT 처리 장치 등록", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: `../output/continuous-vd/web-flow-${test.info().project.name}.png`, fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("processing versions expose the previous definition and generated SQL", async ({ page }) => {
+  await fixture(page, true); await page.goto("/virtual-devices");
+  await page.getByRole("button", { name: /^온도 계산\s*temperature-calculations$/ }).click();
+  await page.getByRole("button", { name: "처리 정의·버전 조회", exact: true }).click();
+  const versions = page.getByRole("region", { name: "처리 정의 버전", exact: true });
+  await expect(versions.getByText("revision 2", { exact: true })).toBeVisible();
+  await expect(versions.getByText("revision 1", { exact: true })).toBeVisible();
+  await versions.getByText("revision 1", { exact: true }).click();
+  await expect(versions.getByText("SELECT x0 FROM edgeai_vd_frames", { exact: true })).toBeVisible();
 });

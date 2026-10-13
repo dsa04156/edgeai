@@ -1172,6 +1172,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** InfluxDB 연결과 보관 중인 센서 항목 조회 */
+        get: operations["getDataStore"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-store/sensors/{uid}/{property}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 센서 UID별 원본 이력 조회. 삭제·재등록한 같은 이름의 센서와 섞지 않습니다. */
+        get: operations["getSensorOriginalHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{id}/processing-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 불변 처리 설정·입력 연결·생성 SQL 템플릿 버전 */
+        get: operations["getProcessingVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2358,11 +2409,116 @@ export interface components {
             /** @description 수집을 추가로 실행하지 않고 조회한 측정 항목 목록. 실제 입력 수신 상태는 실행 결과에서 확인합니다. */
             inputs: components["schemas"]["ContinuousSensor"][];
         };
+        /** @description 처리·출력 조건과 독립된 이력 저장 정책. 생략한 기존 정의는 ALL입니다. */
+        ResultStoragePolicy: {
+            /** @enum {string} */
+            mode: "NONE" | "ALL";
+        } | {
+            /** @constant */
+            mode: "SELECTED";
+            outputs: {
+                name: string;
+                /** @description 계산된 결과 value만 참조하는 불리언 식. 생략하면 선택한 항목의 모든 값을 저장합니다. */
+                condition?: string;
+            }[];
+        };
+        DataStoreCatalog: {
+            /** @constant */
+            engine: "InfluxDB";
+            configured: boolean;
+            /** @enum {string} */
+            status: "READY" | "DISABLED";
+            rawRetentionDays: number;
+            /** Format: date-time */
+            asOf: string;
+            truncated: boolean;
+            collector: {
+                enabled: boolean;
+                /** @enum {string} */
+                status: "DISABLED" | "PARTIAL" | "NO_SOURCES" | "CONNECTING" | "COLLECTING" | "CATALOG_UNAVAILABLE" | "STORE_UNAVAILABLE";
+                /** @description 이번 프로세스의 저장 수신 횟수. 고유 데이터 행 수가 아닙니다. */
+                storedDeliveries: number;
+                rejectedDeliveries: number;
+            };
+            sensors: {
+                /** Format: uuid */
+                deviceUid: string;
+                deviceId: string;
+                namespace: string;
+                property: string;
+                unit: string;
+                type: string;
+                /** Format: date-time */
+                observedAt: string;
+                /** @enum {string} */
+                quality: "QUALIFIED" | "UNVERIFIED";
+            }[];
+        };
+        SensorOriginalHistory: {
+            /** Format: uuid */
+            deviceUid: string;
+            property: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            retentionDays: number;
+            truncated: boolean;
+            nextCursor?: string;
+            items: {
+                /** Format: uuid */
+                deviceUid: string;
+                deviceId: string;
+                namespace: string;
+                property: string;
+                unit: string;
+                type: string;
+                configurationSha256: string;
+                /** Format: uuid */
+                sourceGeneration?: string;
+                /** Format: uuid */
+                sessionId?: string;
+                sequence?: number;
+                /** Format: date-time */
+                observedAt: string;
+                /** Format: date-time */
+                receivedAt: string;
+                value: number | boolean | string;
+                /** @enum {string} */
+                quality: "QUALIFIED" | "UNVERIFIED";
+                timeBasis: string;
+                rawPayload: string;
+            }[];
+        };
+        ProcessingVersionPage: {
+            nextOffset: number | null;
+            items: {
+                revision: number;
+                /** Format: uuid */
+                profileVersionId: string;
+                configuration: components["schemas"]["ContinuousConfiguration"];
+                sources: {
+                    [key: string]: unknown;
+                }[];
+                rules: {
+                    id: string;
+                    outputId: string;
+                    sql: string;
+                    type: string;
+                    unit: string;
+                    warmupTicks: number;
+                    conditional: boolean;
+                }[];
+                /** Format: date-time */
+                recordedAt: string;
+            }[];
+        };
         ContinuousConfiguration: {
             /** @default 1 */
             intervalSeconds: number;
             /** @default 7 */
             retentionDays: number;
+            resultStorage?: components["schemas"]["ResultStoragePolicy"];
             outputs: components["schemas"]["ContinuousOutputDefinition"][];
         };
         ContinuousCreate: {
@@ -2427,6 +2583,18 @@ export interface components {
                 min?: number;
                 max?: number;
                 average?: number;
+                outputId?: string;
+                /** Format: uuid */
+                vdId?: string;
+                historyStored?: boolean;
+                /** @enum {string} */
+                storageStatus?: "STORED";
+                /** Format: uuid */
+                profileVersionId?: string;
+                vdRevision?: number;
+                sources?: {
+                    [key: string]: unknown;
+                }[];
             }[];
         };
         ContinuousOutputDefinition: {
@@ -2451,6 +2619,7 @@ export interface components {
             intervalSeconds: number;
             retentionDays: number;
             historyEnabled: boolean;
+            resultStorage?: components["schemas"]["ResultStoragePolicy"];
             items: {
                 name: string;
                 expression: string;
@@ -2480,6 +2649,11 @@ export interface components {
             type: "number" | "boolean";
             unit: string;
             historyStored: boolean;
+            /** @enum {string} */
+            storageStatus?: "PENDING" | "STORED" | "SKIPPED";
+            /** Format: uuid */
+            profileVersionId?: string;
+            vdRevision?: number;
             sources: {
                 alias: string;
                 /** Format: uuid */
@@ -5688,6 +5862,84 @@ export interface operations {
             400: components["responses"]["Unavailable"];
             404: components["responses"]["Unavailable"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    getDataStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실제 저장소 조회 또는 비활성 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataStoreCatalog"];
+                };
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getSensorOriginalHistory: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                uid: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 시작 포함·종료 미포함, 최대 31일 기간의 원본 이력 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorOriginalHistory"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getProcessingVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 최신 등록 revision 순. SQL은 실행 generation을 부여하기 전 템플릿입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingVersionPage"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

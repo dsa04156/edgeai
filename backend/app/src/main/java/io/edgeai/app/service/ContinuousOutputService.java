@@ -29,7 +29,7 @@ public class ContinuousOutputService {
                 && Instant.parse((String)sample.get("evaluationAt")).plusSeconds(((Number)config.get("intervalSeconds")).longValue()*2+2).isAfter(now);
             output.put("quality",sample==null?"NOT_AVAILABLE":current?"VALID":"STALE");items.add(output);
         }
-        return Map.of("vdId",id.toString(),"executionMode","CONTINUOUS_EKUIPER","asOf",now.toString(),"intervalSeconds",config.get("intervalSeconds"),"retentionDays",config.get("retentionDays"),"historyEnabled",history.enabled(),"items",items);
+        return Map.of("vdId",id.toString(),"executionMode","CONTINUOUS_EKUIPER","asOf",now.toString(),"intervalSeconds",config.get("intervalSeconds"),"retentionDays",config.get("retentionDays"),"historyEnabled",history.enabled(),"resultStorage",ResultStoragePolicy.policy(config),"items",items);
     }
     public Map<String,Object> history(UUID id,String output,String fromText,String toText,int limit,String cursor,Integer bucket) {
         var config=config(id);if(((List<?>)config.get("outputs")).stream().map(DeviceProfileCompiler::map).noneMatch(o->output.equals(o.get("name"))))throw new ControlPlaneException(404,"VD_OUTPUT_NOT_FOUND","출력 측정 항목이 없습니다.");

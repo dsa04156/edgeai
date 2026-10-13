@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name="edgeai.continuous.enabled",havingValue="true")
 public class ProcessingMaintenance {
     private final ContinuousRepository executions;private final ProcessingHistoryRepository history;private final Clock clock;private final boolean inspection;
+    @org.springframework.beans.factory.annotation.Autowired private ProcessingHistoryDelivery delivery;
+    @Scheduled(fixedDelay=1000,initialDelay=1000) public void deliver(){if(!inspection)delivery.flush();}
     public ProcessingMaintenance(ContinuousRepository executions,ProcessingHistoryRepository history,Clock clock,
         @org.springframework.beans.factory.annotation.Value("${edgeai.recovery.inspect-only:false}") boolean inspection){this.executions=executions;this.history=history;this.clock=clock;this.inspection=inspection;}
     @Scheduled(fixedDelay=5000,initialDelay=30000) public void maintain() {
