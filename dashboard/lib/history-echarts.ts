@@ -8,7 +8,7 @@ register([LineChart, ScatterChart, DataZoomComponent, GridComponent, MarkAreaCom
 export { init };
 export type { ECharts };
 export type HistoryPoint = { at: number; value: number; unit?: string; boolean?: boolean; breakBefore?: boolean };
-export type HistoryChartData = { name: string; from: number; to: number; points: HistoryPoint[]; connected?: boolean; gaps?: { from: number; to: number }[] };
+export type HistoryChartData = { name: string; from: number; to: number; points: HistoryPoint[]; connected?: boolean; showSymbol?: boolean; gaps?: { from: number; to: number }[] };
 const formatAxisValue = (value: number, boolean = false) => boolean ? value ? "참" : "거짓" : Number(value.toPrecision(8)).toLocaleString(undefined, { maximumSignificantDigits: 8 });
 const escape = (text: string) => text.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]!));
 
@@ -51,6 +51,6 @@ export function updateChart(chart: ECharts, data: HistoryChartData) {
   chart.setOption({
     xAxis: { min: data.from, max: data.to },
     yAxis: { min: boolean ? 0 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.min - 1 : extent.min, max: boolean ? 1 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.max + 1 : extent.max, interval: boolean ? 1 : undefined, axisLabel: { formatter: (value: number) => formatAxisValue(value, boolean) } },
-    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } }],
+    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: data.showSymbol ?? true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } }],
   }, { replaceMerge: ["series"] });
 }
