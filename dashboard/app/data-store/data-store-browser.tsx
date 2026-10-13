@@ -2,30 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
+import { OriginalChart } from "../components/sensor-original-chart";
 
 type Schema = components["schemas"];
 type Sensor = Schema["DataStoreCatalog"]["sensors"][number];
 type History = Schema["SensorOriginalHistory"];
 const collectionNames: Record<string, string> = { DISABLED: "원본 수집 비활성", COLLECTING: "원본 수집 연결됨", CONNECTING: "수집 연결 중", PARTIAL: "일부 센서 경로 확인 필요", NO_SOURCES: "수집 대상 없음", CATALOG_UNAVAILABLE: "센서 목록 확인 필요", STORE_UNAVAILABLE: "저장 대기" };
-const display = (value: string | number | boolean) => typeof value === "boolean" ? value ? "참" : "거짓" : typeof value === "number" ? value.toLocaleString() : value;
+const display = (value: string | number | boolean) => typeof value === "boolean" ? value ? "참" : "거짓" : typeof value === "number" ? value.toLocaleString(undefined, { maximumSignificantDigits: 8 }) : value;
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
   const value = await response.json();
   if (!response.ok) throw new Error(value.message || "이력을 조회하지 못했습니다.");
   return value;
-}
-
-export function OriginalChart({ history }: { history: History }) {
-  const [width, setWidth] = useState(680);
-  useEffect(() => { const media = window.matchMedia("(max-width: 700px)"); const update = () => setWidth(media.matches ? 340 : 680); update(); media.addEventListener("change", update); return () => media.removeEventListener("change", update); }, []);
-  const points = history.items.filter(row => typeof row.value === "number" || typeof row.value === "boolean").map(row => ({ at: Date.parse(row.observedAt), value: Number(row.value) }));
-  if (!points.length) return null;
-  const values = points.map(row => row.value), low = Math.min(...values), high = Math.max(...values);
-  const right = width - 58;
-  const x = (at: number) => 85 + (at - Date.parse(history.from)) / Math.max(1, Date.parse(history.to) - Date.parse(history.from)) * (right - 85);
-  const y = (value: number) => high === low ? 96 : 156 - (value - low) / (high - low) * 120;
-  return <figure className="continuous-history-chart sensor-original-chart"><svg role="img" aria-label={`${history.property} 원본 그래프, ${points.length}개 기록`} viewBox={`0 0 ${width} 200`}><title>{history.property} 원본 관측값</title><path d={`M85 28V156H${right}`} className="continuous-axis" /><text x={81} y={32} textAnchor="end">{high.toPrecision(7)}</text><text x={81} y={156} textAnchor="end">{low.toPrecision(7)}</text>{points.map((point, index) => <circle key={index} cx={x(point.at)} cy={y(point.value)} r={3} className="continuous-dot" />)}<text x={85} y={184}>{new Date(history.from).toLocaleTimeString()}</text><text x={right} y={184} textAnchor="end">{new Date(history.to).toLocaleTimeString()}</text></svg><figcaption>조회한 원본 관측값입니다. 미수신 구간의 값을 보간하지 않습니다.</figcaption></figure>;
 }
 
 export function DataStoreBrowser() {

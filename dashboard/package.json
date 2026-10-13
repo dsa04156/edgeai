@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",
+    "echarts": "6.1.0",
     "github-slugger": "^2.0.0",
     "js-yaml": "4.3.2",
     "lossless-json": "4.3.1",

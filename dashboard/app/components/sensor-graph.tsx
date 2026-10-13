@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
-import { OriginalChart } from "../data-store/data-store-browser";
+import { OriginalChart } from "./sensor-original-chart";
 import { StatusBadge } from "./status-badge";
 
 type Schema = components["schemas"];

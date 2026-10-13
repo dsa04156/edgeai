@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { ProcessingVersions } from "./processing-versions";
+import { HistoryChart as InteractiveHistoryChart } from "../components/history-chart";
 
 type Schema = components["schemas"];
 type History = Schema["ContinuousHistory"];
@@ -11,31 +12,20 @@ const reasons: Record<string, string> = { HEALTHY: "정상", INPUT_MISSING: "입
 const displayValue = (value: number | boolean | undefined) => typeof value === "boolean" ? value ? "참" : "거짓" : value === undefined ? "—" : Number(value.toPrecision(8)).toLocaleString();
 function requestKey() { const bytes = crypto.getRandomValues(new Uint8Array(16)); bytes[6] = bytes[6] & 15 | 64; bytes[8] = bytes[8] & 63 | 128; const value = [...bytes].map(n => n.toString(16).padStart(2, "0")).join(""); return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`; }
 
-function HistoryChart({ history, interval }: { history: History; interval: number }) {
-  const [width, setWidth] = useState(680);
-  useEffect(() => { const media = window.matchMedia("(max-width: 700px)"); const update = () => setWidth(media.matches ? 340 : 680); update(); media.addEventListener("change", update); return () => media.removeEventListener("change", update); }, []);
-  const points = history.items.map(row => ({ at: Date.parse(row.evaluationAt), value: row.average ?? (typeof row.value === "boolean" ? Number(row.value) : row.value), generation: row.generation })).filter((row): row is { at: number; value: number; generation: string | undefined } => Number.isFinite(row.value));
-  if (!points.length) return <p className="hint">이 기간에 저장된 결과가 없습니다.</p>;
-  const from = Date.parse(history.from), to = Date.parse(history.to); const values = points.map(row => row.value);
-  let minimum = Math.min(...values), maximum = Math.max(...values); if (minimum === maximum) { minimum -= 1; maximum += 1; }
-  const right = width - 48;
-  const x = (at: number) => 48 + (at - from) / Math.max(1, to - from) * (right - 48);
-  const y = (value: number) => 160 - (value - minimum) / (maximum - minimum) * 132;
-  const segments: string[][] = []; let previous: typeof points[number] | undefined;
-  const expected = (history.aggregation?.bucketSeconds || interval) * 1000;
-  for (const point of points) {
-    const gap = previous && history.gaps.some(value => Date.parse(value.from) <= point.at && Date.parse(value.to || history.to) >= previous!.at);
-    if (!previous || point.at - previous.at > expected * 1.5 || previous.generation !== point.generation || gap) segments.push([]);
-    segments[segments.length - 1].push(`${x(point.at)},${y(point.value)}`); previous = point;
-  }
-  return <figure className="continuous-history-chart"><svg role="img" aria-label={`${history.outputId} 결과 그래프, ${points.length}개 기록`} viewBox={`0 0 ${width} 200`}>
-    <title>{history.outputId} · {new Date(history.from).toLocaleString()}부터 {new Date(history.to).toLocaleString()}까지</title>
-    {history.gaps.map((gap, index) => <rect key={index} x={Math.max(48, x(Date.parse(gap.from)))} y={28} width={Math.max(1, Math.min(right, x(Date.parse(gap.to || history.to))) - Math.max(48, x(Date.parse(gap.from))))} height={132} className="continuous-gap" />)}
-    <path d={`M48 28V160H${right}`} className="continuous-axis" />
-    <text x={44} y={32} textAnchor="end">{displayValue(maximum)}</text><text x={44} y={160} textAnchor="end">{displayValue(minimum)}</text>
-    {segments.map((segment, index) => segment.length > 1 ? <polyline key={index} points={segment.join(" ")} className="continuous-line" /> : <circle key={index} cx={Number(segment[0].split(",")[0])} cy={Number(segment[0].split(",")[1])} r={3} className="continuous-dot" />)}
-    <text x={48} y={186}>{new Date(from).toLocaleTimeString()}</text><text x={right} y={186} textAnchor="end">{new Date(to).toLocaleTimeString()}</text>
-  </svg><figcaption>기록 누락·연결 변경 구간은 선을 이어 표시하지 않습니다.{history.aggregation && ` ${history.aggregation.bucketSeconds}초 구간 평균이며 원본 결과는 보존됩니다.`}</figcaption></figure>;
+function HistoryChart({ history, interval, unit }: { history: History; interval: number; unit: string }) {
+  const values = history.items.map(row => ({ at: Date.parse(row.evaluationAt), value: row.average ?? (typeof row.value === "boolean" ? Number(row.value) : row.value), generation: row.generation, unit, boolean: row.average == null && typeof row.value === "boolean" })).filter((row): row is typeof row & { value: number } => Number.isFinite(row.at) && Number.isFinite(row.value));
+  if (!values.length) return <p className="hint">이 기간에 저장된 결과가 없습니다.</p>;
+  const from = Date.parse(history.from), to = Date.parse(history.to), expected = (history.aggregation?.bucketSeconds || interval) * 1000;
+  const points = values.map((point, index) => {
+    const previous = values[index - 1];
+    const gap = previous && history.gaps.some(gap => Date.parse(gap.from) <= point.at && Date.parse(gap.to || history.to) >= previous.at);
+    return { ...point, breakBefore: !!previous && (point.at - previous.at > expected * 1.5 || previous.generation !== point.generation || !!gap) };
+  });
+  const gaps = history.gaps.map(gap => ({ from: Math.max(from, Date.parse(gap.from)), to: Math.min(to, Date.parse(gap.to || history.to)) })).filter(gap => Number.isFinite(gap.from) && Number.isFinite(gap.to) && gap.from < gap.to);
+  return <InteractiveHistoryChart key={history.outputId} data={{ name: history.outputId, from, to, points, connected: true, gaps }} label={`${history.outputId} 결과 그래프, ${points.length}개 기록`} caption={<>
+    기록 누락·연결 변경 구간은 선을 이어 표시하지 않습니다.{history.aggregation && ` ${history.aggregation.bucketSeconds}초 구간 평균이며 원본 결과는 보존됩니다.`}
+    <span className="block">연속 기록 구간 {1 + points.filter(point => point.breakBefore).length}개 · 기록 누락 {history.gaps.length}개</span>
+  </>} />;
 }
 
 export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = false }: { vd: Schema["VirtualDevice"]; auth: string; csrf: string; disabled: boolean; graphOnly?: boolean }) {
@@ -84,7 +74,7 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
     {outputs?.items.length === 0 && <p className="empty">등록된 출력 항목이 없습니다.</p>}
     {outputs && !outputs.historyEnabled && <p className="notice">기록 저장소가 연결되지 않았습니다. 최신 결과는 계속 표시됩니다.</p>}
     {selected && <section aria-label={`${selected} 기록`}><div className="toolbar"><h4>{selected} 기록 · {outputs?.items.find(row => row.outputId === selected)?.unit || "값"}</h4><label>조회 기간<select value={Math.min(hours, retentionDays * 24)} onChange={event => setHours(Number(event.target.value))}>{[1, 6, 24, 168, 720].filter(value => value <= retentionDays * 24).map(value => <option key={value} value={value}>{value}시간</option>)}</select></label><button onClick={() => { if (graphOnly) setHistoryRefresh(value => value + 1); else void chart(); }}>그래프 조회</button></div>
-      {historyError && <p role="alert" className="error">{historyError}</p>}{history && <><HistoryChart history={history} interval={outputs?.intervalSeconds || 1} />
+      {historyError && <p role="alert" className="error">{historyError}</p>}{history && <><HistoryChart history={history} interval={outputs?.intervalSeconds || 1} unit={outputs?.items.find(row => row.outputId === selected)?.unit || ""} />
         {history.gaps.length > 0 && <ul className="history-list">{history.gaps.map((gap, index) => <li key={index}>{reasons[gap.reason] || "결과 기록 누락"} · {new Date(gap.from).toLocaleString()} → {gap.to ? new Date(gap.to).toLocaleString() : "계속 중"}</li>)}</ul>}
         <details><summary>기록 표 · {history.items.length}개</summary><div className="table-scroll"><table className="registry-table"><thead><tr><th>계산 시각</th><th>값 / 평균</th><th>최솟값</th><th>최댓값</th><th>표본 수</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.evaluationAt).toLocaleString()}</td><td>{displayValue(row.average ?? row.value)}</td><td>{displayValue(row.min)}</td><td>{displayValue(row.max)}</td><td>{row.count || 1}</td></tr>)}</tbody></table></div></details>
         {history.truncated && <p className="hint">표시 한도에 도달했습니다. 조회 기간을 줄여 확인하세요.</p>}

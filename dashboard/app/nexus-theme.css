@@ -7,16 +7,11 @@
 .sensor-current span, .sensor-chart figcaption { font-size: 12px; color: var(--secondary); }
 .sensor-chart { margin: 16px 0; }
 .continuous-history-chart { margin: 16px 0; overflow-x: auto; }
-.continuous-history-chart svg { display: block; width: 100%; min-width: 340px; max-height: 320px; }
-.continuous-history-chart text { font-size: 12px; fill: var(--secondary); }
+.interactive-history-chart { overflow: visible; }
+.history-chart-canvas { width: 100%; height: 300px; }
 .continuous-history-chart figcaption { font-size: 12px; color: var(--secondary); }
-.continuous-axis { fill: none; stroke: var(--line); }
-.continuous-line { fill: none; stroke: var(--signal); stroke-width: 2; }
-.continuous-dot { fill: var(--signal); }
-.sensor-original-chart svg { min-width: 0; }
 .graph-latest { font-variant-numeric: tabular-nums; }
 .graph-latest strong { font-size: 28px; }
-.continuous-gap { fill: var(--warning-surface); }
 .continuous-flow { margin-block: 16px 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .continuous-flow h2 { margin: 0; font-size: 14px; }
 .continuous-flow > .toolbar { flex-wrap: wrap; }

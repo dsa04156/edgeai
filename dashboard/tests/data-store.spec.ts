@@ -19,10 +19,9 @@ test("original history keeps provenance, continues pagination and does not claim
   await history.getByRole("button", { name: "다음 기록", exact: true }).click();
   await expect(history.getByRole("table").getByRole("row")).toHaveCount(3);
   const chart = history.getByRole("img");
-  await expect(chart).toContainText("4.0001");
-  await expect(chart).toContainText("4.0002");
-  const positions = await chart.locator("circle").evaluateAll(points => points.map(point => Number(point.getAttribute("cy"))));
-  expect(Math.abs(positions[0] - positions[1])).toBeGreaterThan(80);
+  await expect(chart.locator("canvas")).toBeVisible();
+  await expect(history.getByRole("cell", { name: "4.0001 m/s²", exact: true })).toBeVisible();
+  await expect(history.getByRole("cell", { name: "4.0002 m/s²", exact: true })).toBeVisible();
   await history.getByText("원본 · 식별 정보", { exact: true }).first().click();
   await expect(history.getByText(uid, { exact: false }).first()).toBeVisible();
   await page.screenshot({ path: `../output/sensor-storage/data-store-${test.info().project.name}.png`, fullPage: true });
