@@ -20,10 +20,11 @@ public class DataStoreService {
     }
     public Map<String,Object> history(UUID uid,String property,String fromText,String toText,int limit,String cursor) {
         if(!property.matches("[a-z][a-z0-9_]{0,62}"))throw new IllegalArgumentException("Invalid measurement property");
-        Instant to=toText==null?clock.instant():Instant.parse(toText),from=fromText==null?to.minusSeconds(3600):Instant.parse(fromText);
+        Instant to=toText==null?clock.instant():parseTime(toText),from=fromText==null?to.minusSeconds(3600):parseTime(fromText);
         if(!from.isBefore(to)||Duration.between(from,to).compareTo(Duration.ofDays(31))>0||limit<1||limit>2000||cursor!=null&&cursor.length()>256)throw new IllegalArgumentException("Invalid measurement period or limit");
         try{var rows=new TreeMap<>(telemetry.readSensor(uid,property,from,to,limit,cursor));rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());return rows;}
         catch(IllegalArgumentException e){throw e;}catch(RuntimeException e){throw unavailable();}
     }
     private static ControlPlaneException unavailable(){return new ControlPlaneException(503,"HISTORY_STORE_UNAVAILABLE","InfluxDB 저장소를 확인하세요.");}
+    private static Instant parseTime(String text){try{return Instant.parse(text);}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Invalid measurement timestamp");}}
 }

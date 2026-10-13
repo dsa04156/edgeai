@@ -2650,7 +2650,7 @@ export interface components {
             unit: string;
             historyStored: boolean;
             /** @enum {string} */
-            storageStatus?: "PENDING" | "STORED" | "SKIPPED";
+            storageStatus?: "PENDING" | "STORED" | "SKIPPED" | "EXPIRED";
             /** Format: uuid */
             profileVersionId?: string;
             vdRevision?: number;

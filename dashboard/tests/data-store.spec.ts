@@ -20,6 +20,7 @@ test("original history keeps provenance, continues pagination and does not claim
   await expect(history.getByRole("table").getByRole("row")).toHaveCount(3);
   await history.getByText("원본 · 식별 정보", { exact: true }).first().click();
   await expect(history.getByText(uid, { exact: false }).first()).toBeVisible();
+  await page.screenshot({ path: `../output/sensor-storage/data-store-${test.info().project.name}.png`, fullPage: true });
   failed = true;
   await main.getByRole("button", { name: "저장소 새로고침", exact: true }).click();
   await expect(main.getByRole("alert")).toContainText("저장소 확인 필요");

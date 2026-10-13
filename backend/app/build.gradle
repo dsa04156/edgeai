@@ -51,7 +51,7 @@ tasks.register('dataStoreIntegrationTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     include '**/InfluxDataStoreIntegrationTest.class'
     include '**/ContinuousRegistrationIntegrationTest.class'
-    filter { includeTestsMatching '*InfluxDataStoreIntegrationTest'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.selectedStorageOnlyKeepsMatchingComputedValuesWithoutFilteringLiveOutputs' }
+    filter { includeTestsMatching '*InfluxDataStoreIntegrationTest'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.selectedStorageOnlyKeepsMatchingComputedValuesWithoutFilteringLiveOutputs'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.everySelectedResultIsRetriedAfterHistoryFailureWithoutStoppingLiveOutputs' }
 }
 
 tasks.register('storageIntegrationTest', Test) {

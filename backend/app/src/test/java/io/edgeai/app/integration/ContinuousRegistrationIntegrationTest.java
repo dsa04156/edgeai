@@ -41,6 +41,10 @@ class ContinuousRegistrationIntegrationTest {
     final JsonDocuments json=new JsonDocuments();
     static final UUID uid=UUID.randomUUID();
     final UUID podUid=UUID.randomUUID();
+    static void influx(String action) throws Exception {
+        var process=new ProcessBuilder("python3","../../scripts/internal/influx_local.py",action,"--test").inheritIO().start();
+        org.junit.jupiter.api.Assertions.assertEquals(0,process.waitFor(),"Owned InfluxDB lifecycle failed");
+    }
     @Test void retiredProfilesAndBatchRegistrationRemainUnavailable() throws Exception {
         mvc.perform(post("/api/v1/profiles/VD").with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isBadRequest());
@@ -165,12 +169,14 @@ class ContinuousRegistrationIntegrationTest {
         mvc.perform(enginePost("results",batch)).andExpect(status().isOk()).andExpect(jsonPath("$.newResults").value(0));
         String from=Instant.ofEpochSecond(slot-10).toString(),to=Instant.ofEpochSecond(slot+10).toString();
         mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",from).param("to",to)).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2));
+        boolean realInflux=System.getenv("EDGEAI_INFLUX_URL")!=null;
         try(var db=DriverManager.getConnection(historyUrl(),System.getenv().getOrDefault("EDGEAI_DB_USER","edgeai"),System.getenv("EDGEAI_DB_PASSWORD"));var statement=db.createStatement()) {
-            statement.execute("ALTER TABLE edgeai_history.result RENAME TO result_fault_test");
+            if(realInflux)influx("stop");else statement.execute("ALTER TABLE edgeai_history.result RENAME TO result_fault_test");
             try {
                 mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-2,23))))).andExpect(status().isOk()).andExpect(jsonPath("$.historyStored").value(false));
                 mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].latest.value").value(23)).andExpect(jsonPath("$.items[0].latest.historyStored").value(false));
-            }finally{statement.execute("ALTER TABLE edgeai_history.result_fault_test RENAME TO result");}
+                if(realInflux)mvc.perform(get("/api/v1/virtual-devices/"+vd+"/outputs/temperature/history").param("from",from).param("to",to)).andExpect(status().isServiceUnavailable());
+            }finally{if(realInflux)influx("start");else statement.execute("ALTER TABLE edgeai_history.result_fault_test RENAME TO result");}
         }
         mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-2,23))))).andExpect(status().isOk()).andExpect(jsonPath("$.newResults").value(0));
         mvc.perform(enginePost("results",Map.of("sessionId",session,"results",List.of(result(vd,generation,slot-1,24))))).andExpect(status().isOk()).andExpect(jsonPath("$.historyStored").value(true));

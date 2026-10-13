@@ -40,12 +40,13 @@ VD 생성/수정의 **결과 저장 정책**은 `저장 안 함 / 선택 저장 
 수집 식별자가 적용된 Mapper의 원본은 source generation/session/sequence를 유지하고 재전송을 같은 point로 처리합니다.
 같은 원본 시각의 다른 sequence는 별도 보관하며, InfluxDB 내부 point 시각의 1ms 미만 부분은 식별용입니다.
 API의 `observedAt`은 원래 측정 시각입니다. 날짜 범위 조회는 시작 포함·종료 미포함이며 최대 31일/2,000개입니다.
+CRD에 수집 식별자가 있어도 기존 DataModel 출력과 qualified 출력을 모두 구독합니다. 같은 UID·항목·설정·원본 시각·타입·값의 두 형식은 qualified 기록을 우선해 합치며 ACK 전에 완료합니다. sequence가 없는 DataModel의 개별 측정 식별에는 한계가 있습니다.
 이전 DataModel Mapper 원본은 명시적으로 **설정 미검증**으로 표시하며 같은 UID·항목·시각의 재보고는 point를 갱신합니다.
 이 데이터만으로 UID/수집 설정 적용을 검증하거나 연속 처리의 유효 입력으로 승격하지 않습니다.
 
 원본 bucket은 기본30일입니다. 결과는 `vd-results-1d`부터 `vd-results-30d`까지 보존 기간별 bucket을 사용하므로
 VD별 기간이 실제 bucket 만료 정책에 연결됩니다. 조회에서도 만료된 결과를 제외합니다.
-최신 결과 상태의 `SKIPPED / PENDING / STORED`는 저장 정책 제외·전달 대기·저장 완료를 구분합니다.
+최신 결과 상태의 `SKIPPED / PENDING / STORED / EXPIRED`는 저장 정책 제외·전달 대기·저장 완료·대기 중 보관 기간 만료를 구분합니다.
 MQTT 구독자는 저장을 마친 뒤 QoS1 ACK를 보냅니다. 지속 세션은 하루로 설정하며 브로커의 큐 크기·영속 설정은 별도 운영 항목입니다.
 설정 복원은 규칙 재생성이며, 중단된 윈도우 상태를 자동 복원하거나 과거 원본을 재생하는 기능은 아닙니다.
 
@@ -61,7 +62,7 @@ MQTT 구독자는 저장을 마친 뒤 QoS1 ACK를 보냅니다. 지속 세션�
 필요한 경우 `EDGEAI_RAW_HISTORY_BROKER_NODE_OVERRIDES`에 Node UID별 도달 가능한 호스트를 지정합니다.
 
 `make test-data-store`는 격리 PostgreSQL, 실제 InfluxDB2.9.1과 소유 MQTT 브로커로
-원본·중복·같은 시각의 별도 sequence·값/조건 정책·numeric/boolean 결과·구간 집계를 검증합니다.
+원본·중복·같은 시각의 별도 sequence·기존 Mapper/두 형식 조정·값/조건 정책·numeric/boolean 결과·구간 집계·실제 저장소 중단/복구를 검증합니다. 새로 시작한 시험 저장소는 종료 시 정리하고 재사용한 인스턴스는 유지합니다.
 일반 PostgreSQL integrationTest와 외부 시간계열 저장소 시험은 별도 실행하며 준비가 없으면 성공으로 skip하지 않습니다.
 기존 `EDGEAI_HISTORY_DB_URL`은 이전 PostgreSQL 이력 호환 설정이며 새 Influx URL이 우선합니다.
 이전 이력 DB·volume은 자동으로 삭제하거나 데이터 이전을 수행하지 않습니다.
@@ -83,7 +84,9 @@ core 배포에는 agent가 사용하는 metadata REST가 포함되지 않습니�
 전체 backend PostgreSQL 검증은 `bash scripts/test/test-integration.sh`, UI는
 `bash scripts/test/test-ui.sh`입니다. 개발 테스트를 실센서·운영 부하/24시간 검증으로 해석하지 않습니다.
 
-### 운영 준비와 되돌리기
+### Kubernetes 처리 엔진 운영 준비와 되돌리기
+
+아래 기존 `deploy/kubernetes/ekuiper` component와 preflight의 history PVC/480Gi 기준은 이전 PostgreSQL 이력 배포용입니다. 이번 InfluxDB 로컬 웹 반영을 Kubernetes InfluxDB 배포 완료로 해석하지 않습니다. 클러스터 적용 시 InfluxDB PVC·bucket·전용 토큰·네트워크 설정 및 실제 부하별 용량 산정을 먼저 준비해야 합니다.
 
 기능 flag 기본값은 false입니다. 병합은 운영 엔진 활성화를 뜻하지 않습니다.
 새 agent·history·Mapper·TLS 설정의 Kubernetes 적용은 아직 수행하지 않았습니다.

@@ -68,6 +68,7 @@ def start(run, port, org):
     pid = int(pid_file.read_text()) if pid_file.exists() else 0
     if not owned(pid, run, binary):
         with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(('127.0.0.1', port))
         log = open(run / 'server.log', 'ab')
         process = subprocess.Popen([str(binary), f'--http-bind-address=127.0.0.1:{port}', f'--bolt-path={run / "influxd.bolt"}', f'--engine-path={run / "engine"}', f'--sqlite-path={run / "influxd.sqlite"}', '--reporting-disabled=true'], stdout=log, stderr=log, start_new_session=True)
@@ -124,6 +125,9 @@ def stop(run):
     if not pid_file.exists():
         return
     pid = int(pid_file.read_text())
+    stat = Path(f'/proc/{pid}/stat')
+    if not stat.exists() or stat.read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+        return
     if not binaries or not owned(pid, run.resolve(), binaries[0].resolve()):
         raise RuntimeError('Recorded process is not the owned InfluxDB instance')
     os.kill(pid, signal.SIGTERM)
@@ -136,14 +140,18 @@ def stop(run):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['start', 'stop'])
+    parser.add_argument('action', choices=['start', 'stop', 'status'])
     parser.add_argument('--test', action='store_true')
     args = parser.parse_args()
     run = ROOT / ('output/sensor-storage/influx-test' if args.test else '.tools/influx-data-store')
     if args.action == 'start':
         start(run, 19086 if args.test else 18086, 'edgeai-test' if args.test else 'edgeai')
-    else:
+    elif args.action == 'stop':
         stop(run)
+    else:
+        binaries = list((ROOT / '.tools/influxdb2' / VERSION).rglob('influxd'))
+        pid_file = run / 'pid'
+        raise SystemExit(0 if binaries and pid_file.exists() and owned(int(pid_file.read_text()), run.resolve(), binaries[0].resolve()) else 1)
 
 if __name__ == '__main__':
     try:

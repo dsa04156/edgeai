@@ -5,9 +5,12 @@ import java.io.*;
 import java.net.*;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 import java.nio.file.*;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.Flow;
 import tools.jackson.databind.json.JsonMapper;
 
 /** OSS v2: native typed fields plus immutable provenance documents. No per-event tags. */
@@ -34,13 +37,33 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         try {
             String token=Files.readString(Path.of(tokenFile)).trim();if(token.length()<16 || token.length()>4096)throw new IllegalStateException("Telemetry credential unavailable");
             var request=HttpRequest.newBuilder(origin.resolve(path)).timeout(Duration.ofSeconds(5)).header("Authorization","Token "+token).header("Content-Type",contentType).POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            var response=http.send(request,HttpResponse.BodyHandlers.ofInputStream());
-            try(var input=response.body()) {
-                if(response.statusCode()/100!=2)throw new IllegalStateException("Telemetry request failed ("+response.statusCode()+")");
-                byte[] bytes=input.readNBytes(8388609);if(bytes.length>8388608)throw new IllegalStateException("Telemetry response limit exceeded");return new String(bytes,StandardCharsets.UTF_8);
-            }
+            var exchange=http.sendAsync(request,info->new BoundedBody());
+            HttpResponse<byte[]> response;
+            try{response=exchange.get(5,TimeUnit.SECONDS);}
+            catch(TimeoutException e){exchange.cancel(true);throw new IllegalStateException("Telemetry response deadline exceeded",e);}
+            catch(InterruptedException e){exchange.cancel(true);throw e;}
+            if(response.statusCode()/100!=2)throw new IllegalStateException("Telemetry request failed ("+response.statusCode()+")");
+            return new String(response.body(),StandardCharsets.UTF_8);
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Telemetry request interrupted",e);}
         catch(IOException e){throw new IllegalStateException("Telemetry store unavailable",e);}
+        catch(ExecutionException e){throw new IllegalStateException("Telemetry store unavailable",e.getCause());}
+    }
+    /** Completion represents the entire response, with a fixed memory bound and cancellable exchange. */
+    private static final class BoundedBody implements HttpResponse.BodySubscriber<byte[]> {
+        private final CompletableFuture<byte[]> body=new CompletableFuture<>();
+        private final ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        private Flow.Subscription subscription;
+        public CompletionStage<byte[]> getBody(){return body;}
+        public void onSubscribe(Flow.Subscription value){subscription=value;value.request(1);}
+        public void onNext(List<ByteBuffer> chunks){
+            for(var chunk:chunks){
+                if(chunk.remaining()>8388608-bytes.size()){subscription.cancel();body.completeExceptionally(new IllegalStateException("Telemetry response limit exceeded"));return;}
+                byte[] buffer=new byte[chunk.remaining()];chunk.get(buffer);bytes.writeBytes(buffer);
+            }
+            subscription.request(1);
+        }
+        public void onError(Throwable error){body.completeExceptionally(error);}
+        public void onComplete(){body.complete(bytes.toByteArray());}
     }
     private void write(String bucket,String lines) {
         if(inspection)throw new IllegalStateException("Inspection is read-only");
@@ -56,6 +79,11 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
     }
     public void append(Observation observation) {
         var document=json.readValue(observation.documentJson(),Map.class);
+        boolean qualified="QUALIFIED".equals(document.get("quality"));
+        String configuration=Objects.toString(document.get("configurationSha256"),"unknown");
+        // Legacy DataModels have no sequence. Reconcile only the exact original timestamp/type/value.
+        // Keep both routes subscribed so CRD metadata never implies Mapper publishing capability.
+        if(!qualified && matchingOriginal(observation,document,configuration,true))return;
         long sequence=document.get("sequence") instanceof Number n?n.longValue():0;
         String series=Objects.toString(document.get("sourceGeneration"),"legacy")+":"+Objects.toString(document.get("sessionId"),"legacy")+":"+(sequence/1000000);
         String tags=",device_uid="+observation.deviceUid()+",property="+tag(observation.property())+",series="+tag(series)+",configuration="+tag(Objects.toString(document.get("configurationSha256"),"unknown"));
@@ -63,6 +91,17 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         // Preserve distinct sequences at the same source millisecond without one tag per event.
         long storageTime=Math.addExact(nanos(observation.observedAt()),sequence%1000000);
         write(rawBucket,"sensor_original"+tags+" "+typedValue(document.get("value"))+",document="+field(observation.documentJson())+",series_document="+field(quote(metadata))+" "+storageTime);
+        if(qualified && matchingOriginal(observation,document,configuration,false)) {
+            String predicate="_measurement=\"sensor_original\" AND \"device_uid\"="+quote(observation.deviceUid().toString())+" AND \"property\"="+quote(observation.property())+" AND \"configuration\"="+quote(configuration)+" AND \"series\"=\"legacy:legacy:0\"";
+            request("/api/v2/delete?org="+encode(org)+"&bucket="+encode(rawBucket),"application/json",quote(Map.of("start",observation.observedAt().toString(),"stop",observation.observedAt().plusNanos(1).toString(),"predicate",predicate)));
+        }
+    }
+    private boolean matchingOriginal(Observation observation,Map<?,?> document,String configuration,boolean qualified) {
+        String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(observation.deviceUid().toString())+" and r.property == "+quote(observation.property())+" and r.configuration == "+quote(configuration)+" and r.series "+(qualified?"!=":"==")+" \"legacy:legacy:0\"";
+        String query=source(rawBucket,observation.observedAt(),observation.observedAt().plusMillis(1),filter)+" |> group(columns:[]) |> limit(n:1001)";
+        var rows=query(query);if(rows.size()>1000)throw new IllegalStateException("Original reconciliation limit exceeded");
+        for(var row:rows){var other=json.readValue(row.get("_value"),Map.class);Object a=document.get("value"),b=other.get("value");boolean same=a instanceof Number x&&b instanceof Number y?Double.compare(x.doubleValue(),y.doubleValue())==0:Objects.equals(a,b);if(same&&Objects.equals(document.get("type"),other.get("type"))&&Objects.equals(document.get("observedAt"),other.get("observedAt")))return true;}
+        return false;
     }
     public void append(List<Sample> samples) {
         var batches=new TreeMap<Integer,List<String>>();
@@ -122,7 +161,9 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         return result;
     }
     public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor) {
-        return documents(source(rawBucket,from,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor);
+        var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
+        if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
+        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor);
     }
     public List<Map<String,Object>> sensorSeries() {
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");

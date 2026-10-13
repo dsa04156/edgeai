@@ -46,8 +46,7 @@ public final class ObservationRoute {
         result.put("topic","edgeai/observations/v1/"+namespace+"/"+id+"/"+property.get("name"));return result;
     }
     /** Archival also accepts previous Mapper DataModels; they remain explicitly unqualified. */
-    public static Map<String,Object> archive(Map<String,Object> resource,Map<String,Object> node,Map<String,Object> overrides) {
-        try{var route=resolve(resource,node,overrides);route.put("format","QUALIFIED");return route;}catch(IllegalArgumentException ignored){}
+    public static List<Map<String,Object>> archive(Map<String,Object> resource,Map<String,Object> node,Map<String,Object> overrides) {
         var result=metadata(resource);var metadata=map(resource.get("metadata"));var annotations=map(metadata.getOrDefault("annotations",Map.of()));
         var profile=map(JSON.decode(Objects.toString(annotations.get("edgeai.io/device-profile"),"{}")));
         var properties=((List<?>)map(resource.get("spec")).getOrDefault("properties",List.of())).stream().map(DeviceProfileCompiler::map).filter(p->result.get("property").equals(p.get("name"))).toList();
@@ -61,6 +60,9 @@ public final class ObservationRoute {
             try{endpoint=new URI(endpoint.getScheme(),null,override.isBlank()?addresses.getFirst():override,endpoint.getPort(),null,null,null);}catch(Exception e){throw new IllegalArgumentException("Invalid data broker address");}
         }
         String topic=Objects.toString(mqtt.get("topic"),"");if(topic.isBlank() || topic.contains("#")||topic.contains("+"))throw new IllegalArgumentException("Exact original topic required");
-        result.put("broker",endpoint.toString());result.put("topic",topic);result.put("configurationSha256",configuration(profile));result.put("format","DATAMODEL");return result;
+        result.put("broker",endpoint.toString());result.put("topic",topic);result.put("configurationSha256",configuration(profile));result.put("format","DATAMODEL");
+        var routes=new ArrayList<Map<String,Object>>();routes.add(result);
+        try{var qualified=resolve(resource,node,overrides);qualified.put("format","QUALIFIED");if(!topic.equals(qualified.get("topic")))routes.add(qualified);}catch(IllegalArgumentException ignored){}
+        return routes;
     }
 }

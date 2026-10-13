@@ -33,10 +33,11 @@ public class ContinuousOutputService {
     }
     public Map<String,Object> history(UUID id,String output,String fromText,String toText,int limit,String cursor,Integer bucket) {
         var config=config(id);if(((List<?>)config.get("outputs")).stream().map(DeviceProfileCompiler::map).noneMatch(o->output.equals(o.get("name"))))throw new ControlPlaneException(404,"VD_OUTPUT_NOT_FOUND","출력 측정 항목이 없습니다.");
-        Instant to=toText==null?clock.instant():Instant.parse(toText),from=fromText==null?to.minusSeconds(3600):Instant.parse(fromText);
+        Instant to=toText==null?clock.instant():parseTime(toText),from=fromText==null?to.minusSeconds(3600):parseTime(fromText);
         if(!from.isBefore(to) || Duration.between(from,to).compareTo(Duration.ofDays(31))>0 || limit<1 || limit>2000 || cursor!=null && cursor.length()>256 || bucket!=null && (bucket<1||bucket>86400||Duration.between(from,to).getSeconds()/bucket>2000))throw new IllegalArgumentException("Invalid history period, limit or chart bucket");
         Map<String,Object> rows;
         try{rows=history.read(id,output,from,to,limit,cursor,bucket);}catch(IllegalArgumentException e){throw e;}catch(RuntimeException e){throw new ControlPlaneException(503,"HISTORY_STORE_UNAVAILABLE","이력 저장소에 연결할 수 없습니다.");}
         var response=new TreeMap<>(rows);response.put("vdId",id.toString());response.put("outputId",output);response.put("from",from.toString());response.put("to",to.toString());response.put("gaps",executions.gaps(id,from,to));response.put("retentionDays",config.get("retentionDays"));return response;
     }
+    private static Instant parseTime(String text){try{return Instant.parse(text);}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Invalid history timestamp");}}
 }

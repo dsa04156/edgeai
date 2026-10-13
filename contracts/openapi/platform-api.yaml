@@ -4941,7 +4941,7 @@ components:
         type: {type: string, enum: [number, boolean]}
         unit: {type: string, maxLength: 32}
         historyStored: {type: boolean}
-        storageStatus: {type: string, enum: [PENDING, STORED, SKIPPED]}
+        storageStatus: {type: string, enum: [PENDING, STORED, SKIPPED, EXPIRED]}
         profileVersionId: {type: string, format: uuid}
         vdRevision: {type: integer}
         sources:
