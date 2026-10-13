@@ -4744,7 +4744,6 @@ components:
         retentionDays: {type: integer}
         truncated: {type: boolean}
         nextCursor: {type: string}
-        order: {type: string, enum: [asc, desc]}
         items:
           type: array
           maxItems: 2000

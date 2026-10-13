@@ -23,10 +23,10 @@ public class DataStoreService {
     }
     public Map<String,Object> history(UUID uid,String property,String fromText,String toText,int limit,String cursor,String order) {
         if(!property.matches("[a-z][a-z0-9_]{0,62}"))throw new IllegalArgumentException("Invalid measurement property");
-        if(!order.equals("asc")&&!order.equals("desc"))throw new IllegalArgumentException("Invalid measurement order");
+        if(!"asc".equals(order)&&!"desc".equals(order))throw new IllegalArgumentException("Invalid measurement order");
         Instant to=toText==null?clock.instant():parseTime(toText),from=fromText==null?to.minusSeconds(3600):parseTime(fromText);
         if(!from.isBefore(to)||Duration.between(from,to).compareTo(Duration.ofDays(31))>0||limit<1||limit>2000||cursor!=null&&cursor.length()>256)throw new IllegalArgumentException("Invalid measurement period or limit");
-        try{var rows=new TreeMap<>(order.equals("desc")?telemetry.readSensor(uid,property,from,to,limit,cursor,true):telemetry.readSensor(uid,property,from,to,limit,cursor));rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());rows.put("order",order);return rows;}
+        try{var rows=new TreeMap<>(order.equals("desc")?telemetry.readSensor(uid,property,from,to,limit,cursor,true):telemetry.readSensor(uid,property,from,to,limit,cursor));rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());return rows;}
         catch(IllegalArgumentException e){throw e;}catch(RuntimeException e){throw unavailable();}
     }
     private static ControlPlaneException unavailable(){return new ControlPlaneException(503,"HISTORY_STORE_UNAVAILABLE","InfluxDB 저장소를 확인하세요.");}

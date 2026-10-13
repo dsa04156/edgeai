@@ -2465,8 +2465,6 @@ export interface components {
             retentionDays: number;
             truncated: boolean;
             nextCursor?: string;
-            /** @enum {string} */
-            order?: "asc" | "desc";
             items: {
                 /** Format: uuid */
                 deviceUid: string;
