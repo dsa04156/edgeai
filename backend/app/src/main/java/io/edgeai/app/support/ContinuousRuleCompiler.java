@@ -22,6 +22,7 @@ public final class ContinuousRuleCompiler {
         for(var raw:(List<?>)config.get("outputs")) {
             var output=map(raw);String name=(String)output.get("name"),operation=(String)output.get("operation");
             var expression=ProcessingExpression.parse((String)output.get("expression"),types);used.addAll(expression.inputs());
+            ResultStoragePolicy.validateType(config,name,expression.type());
             boolean window=Set.of("movingAverage","minimum","maximum").contains(operation);
             if(expression.type()==ProcessingExpression.Type.UNKNOWN || window && expression.type()!=ProcessingExpression.Type.NUMBER || operation.equals("threshold") && expression.type()!=ProcessingExpression.Type.BOOLEAN)
                 throw new IllegalArgumentException("Output expression type is incompatible with operation");

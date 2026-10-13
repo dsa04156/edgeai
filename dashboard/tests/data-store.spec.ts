@@ -1,0 +1,34 @@
+import { test, expect } from "@playwright/test";
+const uid = "55555555-5555-4555-8555-555555555555";
+test("original history keeps provenance, continues pagination and does not claim an unavailable store is connected", async ({ page }) => {
+  let failed = false;
+  const at = new Date().toISOString();
+  await page.route("**/api/control-plane/data-store**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("data-store")) return failed ? route.fulfill({ status: 503, json: { message: "저장소 확인 필요" } }) : route.fulfill({ json: { engine: "InfluxDB", configured: true, status: "READY", asOf: at, rawRetentionDays: 30, collector: { enabled: true, status: "COLLECTING", storedDeliveries: 2, rejectedDeliveries: 0 }, truncated: false, sensors: [{ deviceUid: uid, deviceId: "motor01", property: "vibration_x", namespace: "kubeedge", type: "float64", unit: "m/s²", observedAt: at, quality: "QUALIFIED" }] } });
+    const next = url.searchParams.has("cursor");
+    return route.fulfill({ json: { deviceUid: uid, property: "vibration_x", from: url.searchParams.get("from"), to: url.searchParams.get("to"), retentionDays: 30, truncated: !next, ...(next ? {} : { nextCursor: "next" }), items: [{ deviceUid: uid, deviceId: "motor01", property: "vibration_x", observedAt: at, receivedAt: at, value: next ? 4.0002 : 4.0001, unit: "m/s²", type: "float64", quality: "QUALIFIED", configurationSha256: "sha256:test", rawPayload: '{"value":4.0001}', timeBasis: "SOURCE" }] } });
+  });
+  await page.goto("/data-store");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "데이터 저장소", exact: true })).toBeVisible();
+  await expect(main.getByText("InfluxDB · 연결됨", { exact: true })).toBeVisible();
+  await main.getByRole("button", { name: "motor01 vibration_x 이력", exact: true }).click();
+  const history = main.getByRole("region", { name: "motor01 vibration_x 원본 이력", exact: true });
+  await expect(history.getByRole("table").getByRole("row")).toHaveCount(2);
+  await history.getByRole("button", { name: "다음 기록", exact: true }).click();
+  await expect(history.getByRole("table").getByRole("row")).toHaveCount(3);
+  const chart = history.getByRole("img");
+  await expect(chart).toContainText("4.0001");
+  await expect(chart).toContainText("4.0002");
+  const positions = await chart.locator("circle").evaluateAll(points => points.map(point => Number(point.getAttribute("cy"))));
+  expect(Math.abs(positions[0] - positions[1])).toBeGreaterThan(80);
+  await history.getByText("원본 · 식별 정보", { exact: true }).first().click();
+  await expect(history.getByText(uid, { exact: false }).first()).toBeVisible();
+  await page.screenshot({ path: `../output/sensor-storage/data-store-${test.info().project.name}.png`, fullPage: true });
+  failed = true;
+  await main.getByRole("button", { name: "저장소 새로고침", exact: true }).click();
+  await expect(main.getByRole("alert")).toContainText("저장소 확인 필요");
+  await expect(main.getByText("InfluxDB · 연결됨", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

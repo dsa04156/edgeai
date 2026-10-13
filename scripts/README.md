@@ -9,6 +9,8 @@
 | API / 화면 실행 | `make backend` / `make dashboard` |
 | 원본 Platform-Service 배포 API 실행 | `make platform-service` ([설정](../platform-service/README.md)) |
 | MinIO 시작 | `make storage` |
+| 센서·VD 이력 저장소 | `make data-store-start` / `make data-store-stop` |
+| 실제 InfluxDB·MQTT·PostgreSQL 검증 | `make test-data-store` |
 | Docker 없는 로컬 PostgreSQL | `make db-start` / `make db-stop` |
 | 개발 환경 점검 | `make check` |
 | 실행 중인 앱 연결 확인 | `make health` |

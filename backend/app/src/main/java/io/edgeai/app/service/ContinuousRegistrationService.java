@@ -18,6 +18,7 @@ public class ContinuousRegistrationService {
     private final io.edgeai.domain.repository.ProfileRepository profiles;
     private final boolean enabled;
     private final ProcessingEngineService engine;
+    @org.springframework.beans.factory.annotation.Autowired private ProcessingDefinitionService definitions;
     public ContinuousRegistrationService(VirtualDeviceRepository registrations,VirtualDeviceService vds,ManagedDeviceService sensors,
             io.edgeai.domain.repository.ProfileRepository profiles,ProcessingEngineService engine,@Value("${edgeai.continuous.enabled:false}") boolean enabled) {
         this.registrations=registrations;this.vds=vds;this.sensors=sensors;this.profiles=profiles;this.enabled=enabled;this.engine=engine;
@@ -48,7 +49,7 @@ public class ContinuousRegistrationService {
         String profileKey="continuous-"+JSON.digest("edgeai.continuous-profile/v1",spec).substring(7);
         var profile=profiles.publish(new ProfileIdentity(ProfileIdentity.Kind.VD,profileKey,"1.0.0"),JSON.canonical(spec),JSON.digest("edgeai-profile-v1\nVD",spec)).version();
         request.put("profileVersionId",profile.id().toString());
-        var created=vds.create(JSON.canonical(request));registrations.recordProcessingCreation(created.value().id(),digest);return created;
+        var created=vds.create(JSON.canonical(request));registrations.recordProcessingCreation(created.value().id(),digest);definitions.capture(created.value().id());return created;
     }
     @Transactional
     public io.edgeai.domain.vd.VirtualDevice update(UUID id,String body) {
@@ -67,6 +68,6 @@ public class ContinuousRegistrationService {
         var spec=Map.of("apiVersion","edgeai.vd/v3","type","processing","executionMode","CONTINUOUS_EKUIPER","sources",sources,"continuous",JSON.decode(config));
         String profileKey="continuous-"+JSON.digest("edgeai.continuous-profile/v1",spec).substring(7);
         var profile=profiles.publish(new ProfileIdentity(ProfileIdentity.Kind.VD,profileKey,"1.0.0"),JSON.canonical(spec),JSON.digest("edgeai-profile-v1\nVD",spec)).version();
-        request.remove("key");request.put("revision",input.get("revision"));request.put("profileVersionId",profile.id().toString());return vds.update(id,JSON.canonical(request));
+        request.remove("key");request.put("revision",input.get("revision"));request.put("profileVersionId",profile.id().toString());var updated=vds.update(id,JSON.canonical(request));definitions.capture(id);return updated;
     }
 }

@@ -9,7 +9,8 @@ import static io.edgeai.app.support.WorkflowInput.*;
 public final class ContinuousInput {
     private ContinuousInput() {}
     public static String parse(Object value, Set<String> aliases) {
-        var config=object(value,"intervalSeconds","retentionDays","outputs");
+        var config=DeviceProfileCompiler.map(parameters(value));
+        object(value,config.containsKey("resultStorage")?new String[]{"intervalSeconds","retentionDays","outputs","resultStorage"}:new String[]{"intervalSeconds","retentionDays","outputs"});
         integer(config.get("intervalSeconds"),1,3600);
         integer(config.get("retentionDays"),1,30);
         if(aliases.isEmpty() || aliases.size()>16)throw new IllegalArgumentException("One to sixteen inputs required");
@@ -38,6 +39,7 @@ public final class ContinuousInput {
             if(output.containsKey("condition") && ProcessingExpression.parse(text(output.get("condition"),1024),inputTypes).type()!=ProcessingExpression.Type.BOOLEAN)
                 throw new IllegalArgumentException("Filter condition must be boolean");
         }
+        ResultStoragePolicy.validate(config);
         return JSON.canonical(config);
     }
     public static int integer(Object value,int min,int max) {

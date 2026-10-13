@@ -10,6 +10,9 @@ public final class ManagementAuditRoutes {
     private ManagementAuditRoutes() {}
     public record Route(String method,String template,String operation) {}
     public static final List<Route> ROUTES=List.of(
+        new Route("GET","/api/v1/data-store","getDataStore"),
+        new Route("GET","/api/v1/data-store/sensors/{uid}/{property}/history","getSensorOriginalHistory"),
+        new Route("GET","/api/v1/virtual-devices/{id}/processing-versions","getProcessingVersions"),
         new Route("POST","/api/devices","createManagedDevice"),
         new Route("GET","/api/devices","listManagedDevices"),
         new Route("GET","/api/devices/{id}","getManagedDevice"),

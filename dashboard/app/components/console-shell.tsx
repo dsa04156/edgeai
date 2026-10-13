@@ -9,12 +9,12 @@ const groups = [
   { label: "워크스페이스", items: [["/", "운영 현황", "overview"]] },
   { label: "인프라", items: [["/devices", "인프라 관리", "nodes"], ["/virtual-devices", "가상 센서", "sensor"]] },
   { label: "실행 관리", workflows: true, items: [["/workflows", "서비스 워크플로", "workflow"], ["/runs", "실행 · 작업 · 결과", "runs"]] },
-  { label: "관리", items: [["/profiles", "실행 모듈 관리", "profile"], ["/audit", "감사 기록", "audit"], ["/docs", "프로젝트 문서", "docs"]] },
+  { label: "관리", items: [["/profiles", "실행 모듈 관리", "profile"], ["/data-store", "데이터 저장소", "storage"], ["/audit", "감사 기록", "audit"], ["/docs", "프로젝트 문서", "docs"]] },
 ];
 
 export function ConsoleIcon({ name }: { name: string }) {
   if (name === "docs") return <svg className="console-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 3h11l5 5v13H4zM14 3v6h6M8 13h8M8 17h6" /></svg>;
-  const icons: Record<string, string> = { overview: "diagram-3", nodes: "hdd-network", sensor: "cpu", workflow: "diagram-3", runs: "activity", profile: "diagram-3", audit: "bell", search: "search" };
+  const icons: Record<string, string> = { overview: "diagram-3", nodes: "hdd-network", sensor: "cpu", workflow: "diagram-3", runs: "activity", profile: "diagram-3", storage: "hdd-network", audit: "bell", search: "search" };
   return <Image className="console-icon" src={`/icons/${icons[name] || "diagram-3"}.svg`} width={18} height={18} alt="" />;
 }
 

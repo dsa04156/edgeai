@@ -24,6 +24,19 @@ server:
     include-message: never
     include-stacktrace: never
 edgeai:
+  data-store:
+    influx:
+      url: ${EDGEAI_INFLUX_URL:}
+      org: ${EDGEAI_INFLUX_ORG:edgeai}
+      token-file: ${EDGEAI_INFLUX_TOKEN_FILE:}
+      raw-bucket: ${EDGEAI_INFLUX_RAW_BUCKET:sensor-originals}
+      result-prefix: ${EDGEAI_INFLUX_RESULT_PREFIX:vd-results-}
+    raw:
+      enabled: ${EDGEAI_RAW_HISTORY_ENABLED:false}
+      client-id: ${EDGEAI_RAW_HISTORY_CLIENT_ID:edgeai-archive}
+      retention-days: ${EDGEAI_RAW_HISTORY_RETENTION_DAYS:30}
+      broker-node-overrides: "${EDGEAI_RAW_HISTORY_BROKER_NODE_OVERRIDES:{}}"
+      interval-ms: ${EDGEAI_RAW_HISTORY_CATALOG_INTERVAL_MS:5000}
   devices:
     namespace: ${EDGEAI_DEVICE_NAMESPACE:edgeai-devices}
     data-broker: ${EDGEAI_DEVICE_DATA_BROKER:tcp://127.0.0.1:1883}

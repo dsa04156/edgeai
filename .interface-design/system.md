@@ -248,3 +248,10 @@ Run 화면은 Task/Placement/Result를 3초마다 갱신하며 실패 시 마지
 - 기존 NEXUS 토큰과 native checkbox/number/table/details를 사용한다. 원본 슬롯마다 측정 항목을 선택하고 최대 수신 경과 시간(1–300초, 기본30초)을 입력한다.
 - 저장 실패 시 선택 항목과 허용 시간을 유지한다. 마지막 조회값·미수집을 구분하고 실행 요청 시 서버가 ONLINE·항목별 시각을 검사한다고 안내한다.
 - Task 상세의 ‘실행에 사용한 센서 입력’에서 고정값·단위·수신 시각을 먼저 보여주고, UID/모델/binding/VD revision은 native details로 접는다. 검증된 결과 영역을 함께 유지한다.
+
+## 데이터 저장소·처리 정의 버전
+
+- 기존 NEXUS 토큰·44px native controls·registry-table/table-scroll·continuous-history-chart를 재사용한다.
+- 센서 UID/항목을 중심으로 기간 조회와 원본 식별 정보 details를 제공한다. 원본 그래프는 점으로 표시하고 미수신 값은 보간하지 않는다.
+- 저장소 조회 실패 시 마지막 목록은 유지하되 연결됨 표시를 제거한다. 저장 정책 제외·전달 대기·완료와 실제 누락을 구분한다.
+- 처리 정의의 이전 revision·입력·SQL 템플릿은 details로 펼쳐 조회하며 기존 정의를 덮어쓰는 편집 동작은 제공하지 않는다.

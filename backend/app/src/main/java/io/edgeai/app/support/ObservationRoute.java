@@ -45,4 +45,24 @@ public final class ObservationRoute {
         result.put("type",visitor.get("dataType"));result.put("unit",visitor.getOrDefault("unit",""));result.put("broker",endpoint.toString());
         result.put("topic","edgeai/observations/v1/"+namespace+"/"+id+"/"+property.get("name"));return result;
     }
+    /** Archival also accepts previous Mapper DataModels; they remain explicitly unqualified. */
+    public static List<Map<String,Object>> archive(Map<String,Object> resource,Map<String,Object> node,Map<String,Object> overrides) {
+        var result=metadata(resource);var metadata=map(resource.get("metadata"));var annotations=map(metadata.getOrDefault("annotations",Map.of()));
+        var profile=map(JSON.decode(Objects.toString(annotations.get("edgeai.io/device-profile"),"{}")));
+        var properties=((List<?>)map(resource.get("spec")).getOrDefault("properties",List.of())).stream().map(DeviceProfileCompiler::map).filter(p->result.get("property").equals(p.get("name"))).toList();
+        if(properties.size()!=1)throw new IllegalArgumentException("Original output property not found");
+        var mqtt=map(map(properties.getFirst().get("pushMethod")).get("mqtt"));var endpoint=URI.create((String)mqtt.get("address"));
+        if(endpoint.getUserInfo()!=null || endpoint.getQuery()!=null || endpoint.getFragment()!=null || endpoint.getHost()==null || !Set.of("tcp","ssl","tls").contains(endpoint.getScheme()) || !Set.of("","/").contains(endpoint.getPath()) || endpoint.getPort()<1)throw new IllegalArgumentException("Invalid original data broker");
+        String override=Objects.toString(overrides.get(map(node.get("metadata")).get("uid")),"");
+        if(!override.isBlank() || Set.of("localhost","127.0.0.1","[::1]").contains(endpoint.getHost())) {
+            var addresses=((List<?>)map(node.get("status")).getOrDefault("addresses",List.of())).stream().map(DeviceProfileCompiler::map).filter(a->"InternalIP".equals(a.get("type"))).map(a->(String)a.get("address")).distinct().toList();
+            if(override.isBlank() && addresses.size()!=1)throw new IllegalArgumentException("Configure a data broker Node address");
+            try{endpoint=new URI(endpoint.getScheme(),null,override.isBlank()?addresses.getFirst():override,endpoint.getPort(),null,null,null);}catch(Exception e){throw new IllegalArgumentException("Invalid data broker address");}
+        }
+        String topic=Objects.toString(mqtt.get("topic"),"");if(topic.isBlank() || topic.contains("#")||topic.contains("+"))throw new IllegalArgumentException("Exact original topic required");
+        result.put("broker",endpoint.toString());result.put("topic",topic);result.put("configurationSha256",configuration(profile));result.put("format","DATAMODEL");
+        var routes=new ArrayList<Map<String,Object>>();routes.add(result);
+        try{var qualified=resolve(resource,node,overrides);qualified.put("format","QUALIFIED");if(!topic.equals(qualified.get("topic")))routes.add(qualified);}catch(IllegalArgumentException ignored){}
+        return routes;
+    }
 }

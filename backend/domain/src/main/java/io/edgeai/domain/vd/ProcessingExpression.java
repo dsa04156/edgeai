@@ -32,6 +32,24 @@ public final class ProcessingExpression {
     public Type type(){return root.type();}
     public Set<String> inputs(){return inputs;}
     public String sql(Map<String,String> columns,boolean window){return root.sql(columns,window);}
+    public Object evaluate(Map<String,Object> values){return evaluate(root,values);}
+    private static Object evaluate(Node node,Map<String,Object> values) {
+        if(node instanceof Literal literal)return literal.type()==Type.BOOLEAN?Boolean.valueOf(literal.value()):Double.valueOf(literal.value());
+        if(node instanceof Input input){var value=values.get(input.alias());if(value instanceof Number number && input.type()!=Type.BOOLEAN)return number.doubleValue();if(value instanceof Boolean && input.type()!=Type.NUMBER)return value;throw new IllegalArgumentException("Input value type mismatch");}
+        if(node instanceof Unary unary){var value=evaluate(unary.operand(),values);return switch(unary.operator()){case "NOT"->!((Boolean)value);case "-"->-((Double)value);default->value;};}
+        var binary=(Binary)node;Object left=evaluate(binary.left(),values);
+        if(binary.operator().equals("AND"))return (Boolean)left && (Boolean)evaluate(binary.right(),values);
+        if(binary.operator().equals("OR"))return (Boolean)left || (Boolean)evaluate(binary.right(),values);
+        Object right=evaluate(binary.right(),values);
+        return switch(binary.operator()) {
+            case "=" -> Objects.equals(left,right);case "<>" -> !Objects.equals(left,right);
+            case "+" -> (Double)left+(Double)right;case "-" -> (Double)left-(Double)right;
+            case "*" -> (Double)left*(Double)right;case "/" -> (Double)left/(Double)right;
+            case ">" -> (Double)left>(Double)right;case ">=" -> (Double)left>=(Double)right;
+            case "<" -> (Double)left<(Double)right;case "<=" -> (Double)left<=(Double)right;
+            default -> throw new IllegalArgumentException("Unsupported storage expression");
+        };
+    }
     public static ProcessingExpression parse(String expression,Map<String,Type> inputs) {
         if(expression==null || expression.isBlank() || expression.length()>1024)throw new IllegalArgumentException("Expression length out of range");
         var parser=new Parser(expression,inputs);var root=parser.expression(0,0);
