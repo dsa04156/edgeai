@@ -32,29 +32,54 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
         final AtomicBoolean connecting=new AtomicBoolean();
         volatile Set<String> routes=Set.of(),subscribed=Set.of();
         private final Object sessionLock=new Object();
-        private long session;
+        private volatile long session;
+        private final LinkedHashMap<Integer,PendingPacket> pendingPackets=new LinkedHashMap<>();
         private volatile boolean retired;
+        private final class PendingPacket {
+            final int id,qos;
+            boolean completed;
+            PendingPacket(MqttMessage message){id=message.getId();qos=message.getQos();}
+        }
         Connection(String address) {
             try {
                 String digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(address.getBytes(StandardCharsets.UTF_8))).substring(0,16);
                 client=new MqttAsyncClient(address.replace("tls://","ssl://"),clientPrefix+"-"+digest,new MemoryPersistence());
                 client.setManualAcks(true);
                 client.setCallback(new MqttCallback() {
-                    public void disconnected(MqttDisconnectResponse response){synchronized(sessionLock){session++;subscribed=Set.of();}}
+                    public void disconnected(MqttDisconnectResponse response){synchronized(sessionLock){session++;pendingPackets.clear();subscribed=Set.of();}}
                     public void mqttErrorOccurred(MqttException error){}
                     public void deliveryComplete(IMqttToken token){}
-                    public void connectComplete(boolean reconnect,String serverURI){synchronized(sessionLock){session++;subscribed=Set.of();}connectors.submit(Connection.this::subscribe);}
+                    public void connectComplete(boolean reconnect,String serverURI){synchronized(sessionLock){session++;pendingPackets.clear();subscribed=Set.of();}connectors.submit(Connection.this::subscribe);}
                     public void authPacketArrived(int reasonCode,MqttProperties properties){}
                     public void messageArrived(String topic,MqttMessage message)throws Exception {
-                        deliverySlots.acquire();
-                        long incarnation; synchronized(sessionLock){incarnation=session;}
+                        long incarnation;PendingPacket packet;
+                        synchronized(sessionLock){
+                            incarnation=session;
+                            // QoS1 DUP copies share one durable completion and one ACK owner.
+                            packet=message.getQos()>0?new PendingPacket(message):null;
+                            if(packet!=null&&pendingPackets.putIfAbsent(message.getId(),packet)!=null)return;
+                        }
+                        while(!deliverySlots.tryAcquire(100,TimeUnit.MILLISECONDS)){
+                            if(closed||retired||session!=incarnation||!client.isConnected())throw new IllegalStateException("Archive admission stopped");
+                        }
+                        if(closed||retired||session!=incarnation){deliverySlots.release();throw new IllegalStateException("Archive admission stopped");}
                         var target=receiver;
                         try {deliveries.submit(()->{
                             try {
                                 target.receive(new Delivery(address,topic,message.getPayload(),message.isRetained()));
                                 synchronized(sessionLock){
                                     // Packet IDs may be reused after reconnect. Old work must never ACK a new session.
-                                    if(!closed&&!retired&&session==incarnation&&client.isConnected())client.messageArrivedComplete(message.getId(),message.getQos());
+                                    if(!closed&&!retired&&session==incarnation&&client.isConnected()){
+                                        if(packet!=null&&pendingPackets.get(packet.id)==packet){
+                                            packet.completed=true;
+                                            // MQTT requires PUBACKs in receive order, even when writes finish out of order.
+                                            var pending=pendingPackets.values().iterator();
+                                            while(pending.hasNext()){
+                                                var next=pending.next();if(!next.completed)break;
+                                                client.messageArrivedComplete(next.id,next.qos);pending.remove();
+                                            }
+                                        }
+                                    }
                                 }
                             }catch(Exception error){
                                 boolean reconnect; synchronized(sessionLock){reconnect=!closed&&!retired&&session==incarnation;if(reconnect)session++;}
@@ -82,5 +107,5 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
         }
         public void close(){synchronized(sessionLock){retired=true;session++;}try{if(client.isConnected())client.disconnectForcibly(100,500,false);client.close();}catch(MqttException ignored){}}
     }
-    public synchronized void close(){closed=true;for(var connection:connections.values())connection.close();connections.clear();connectors.shutdownNow();deliveries.shutdownNow();}
+    public synchronized void close(){closed=true;deliveries.shutdownNow();for(var connection:connections.values())connection.close();connections.clear();connectors.shutdownNow();}
 }
