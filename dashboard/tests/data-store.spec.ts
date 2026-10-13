@@ -16,7 +16,7 @@ test("original history keeps provenance, continues pagination and does not claim
   await main.getByRole("button", { name: "motor01 vibration_x 이력", exact: true }).click();
   const history = main.getByRole("region", { name: "motor01 vibration_x 원본 이력", exact: true });
   await expect(history.getByRole("table").getByRole("row")).toHaveCount(2);
-  await history.getByRole("button", { name: "다음 기록", exact: true }).click();
+  await history.getByRole("button", { name: "이전 기록", exact: true }).click();
   await expect(history.getByRole("table").getByRole("row")).toHaveCount(3);
   const chart = history.getByRole("img");
   await expect(chart.locator("canvas")).toBeVisible();

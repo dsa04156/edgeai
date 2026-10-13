@@ -147,23 +147,31 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         return result;
     }
     private Map<String,Object> documents(String source,Instant from,Instant to,int limit,String cursor) {
+        return documents(source,from,to,limit,cursor,false);
+    }
+    private Map<String,Object> documents(String source,Instant from,Instant to,int limit,String cursor,boolean descending) {
         String continuation="";
         if(cursor!=null)try {
-            String[] parts=new String(Base64.getUrlDecoder().decode(cursor),StandardCharsets.UTF_8).split("\\|",-1);if(parts.length!=2)throw new IllegalArgumentException();
-            Instant at=Instant.parse(parts[0]);if(at.isBefore(from)||!at.isBefore(to)||parts[1].length()>100)throw new IllegalArgumentException();
-            continuation=" |> filter(fn:(r)=> r._time > time(v:"+quote(parts[0])+") or (r._time == time(v:"+quote(parts[0])+") and r.series > "+quote(parts[1])+"))";
+            String[] parts=new String(Base64.getUrlDecoder().decode(cursor),StandardCharsets.UTF_8).split("\\|",-1);
+            int offset=descending?1:0;if(parts.length!=2+offset||descending&&!parts[0].equals("desc"))throw new IllegalArgumentException();
+            Instant at=Instant.parse(parts[offset]);if(at.isBefore(from)||!at.isBefore(to)||parts[offset+1].length()>100)throw new IllegalArgumentException();
+            String comparator=descending?" < ":" > ";
+            continuation=" |> filter(fn:(r)=> r._time"+comparator+"time(v:"+quote(parts[offset])+") or (r._time == time(v:"+quote(parts[offset])+") and r.series"+comparator+quote(parts[offset+1])+"))";
         }catch(RuntimeException e){throw new IllegalArgumentException("Invalid telemetry cursor");}
-        var rows=query(source+continuation+" |> group(columns:[]) |> sort(columns:[\"_time\",\"series\"]) |> limit(n:"+(limit+1)+")");
+        var rows=query(source+continuation+" |> group(columns:[]) |> sort(columns:[\"_time\",\"series\"],desc:"+descending+") |> limit(n:"+(limit+1)+")");
         var items=new ArrayList<Map<String,Object>>();
         for(var row:rows.stream().limit(limit).toList())items.add(json.readValue(row.get("_value"),Map.class));
         var result=new TreeMap<String,Object>();result.put("items",items);result.put("truncated",rows.size()>limit);
-        if(rows.size()>limit){var last=rows.get(limit-1);result.put("nextCursor",Base64.getUrlEncoder().withoutPadding().encodeToString((last.get("_time")+"|"+last.get("series")).getBytes(StandardCharsets.UTF_8)));}
+        if(rows.size()>limit){var last=rows.get(limit-1);result.put("nextCursor",Base64.getUrlEncoder().withoutPadding().encodeToString(((descending?"desc|":"")+last.get("_time")+"|"+last.get("series")).getBytes(StandardCharsets.UTF_8)));}
         return result;
     }
     public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor) {
+        return readSensor(uid,property,from,to,limit,cursor,false);
+    }
+    @Override public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor,boolean descending) {
         var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
         if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
-        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor);
+        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor,descending);
     }
     public List<Map<String,Object>> sensorSeries() {
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");

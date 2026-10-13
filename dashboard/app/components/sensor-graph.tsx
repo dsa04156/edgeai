@@ -23,7 +23,7 @@ export function SensorGraph({ device, deviceUid, property, failed }: {
       setBusy(true);
       if (!query.cursor && !query.preserve) { setHistory(null); setError(""); }
       const to = query.to ?? new Date().toISOString(), from = query.from ?? new Date(Date.parse(to) - query.minutes * 60000).toISOString();
-      const params = new URLSearchParams({ from, to, limit: "1000", ...(query.cursor ? { cursor: query.cursor } : {}) });
+      const params = new URLSearchParams({ from, to, limit: "1000", order: "desc", ...(query.cursor ? { cursor: query.cursor } : {}) });
       try {
         const response = await fetch(`/api/control-plane/data-store/sensors/${encodeURIComponent(deviceUid)}/${encodeURIComponent(property.name)}/history?${params}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
         const rows: History & { message?: string } = await response.json();
@@ -60,8 +60,8 @@ export function SensorGraph({ device, deviceUid, property, failed }: {
       {history.items.some(row => row.quality === "UNVERIFIED") && <p className="notice">이전 Mapper의 기록이 포함되어 있습니다. 수집 설정이 검증되지 않은 원본입니다.</p>}
       <details className="sensor-graph-records"><summary>기록 표 · {history.items.length}개</summary><div className="table-scroll"><table className="registry-table"><caption className="sr-only">센서 원본 이력</caption><thead><tr><th>측정 시각</th><th>값</th><th>단위</th><th>식별 상태</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.observedAt).toLocaleString()}</td><td>{typeof row.value === "boolean" ? row.value ? "참" : "거짓" : String(row.value)}</td><td>{row.unit || "—"}</td><td>{row.quality === "QUALIFIED" ? "확인됨" : "미검증"}</td></tr>)}</tbody></table></div></details>
       </>}
-      {history.nextCursor && history.items.length < 2000 && <button disabled={busy} onClick={() => { setAutomatic(false); setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1, cursor: history.nextCursor, from: history.from, to: history.to })); }}>다음 기록</button>}
-      {history.truncated && <p className="hint">조회 기간의 일부 기록을 표시합니다.{history.items.length >= 2000 ? " 표시 한도 2000개에 도달했습니다. 기간을 줄여 확인하세요." : " 다음 기록으로 이어서 조회할 수 있습니다. 이어서 조회하면 자동 갱신을 멈춥니다."}</p>}
+      {history.nextCursor && history.items.length < 2000 && <button disabled={busy} onClick={() => { setAutomatic(false); setQuery(previous => ({ minutes: previous.minutes, refresh: previous.refresh + 1, cursor: history.nextCursor, from: history.from, to: history.to })); }}>이전 기록</button>}
+      {history.truncated && <p className="hint">조회 기간의 최신 기록부터 일부를 표시합니다.{history.items.length >= 2000 ? " 표시 한도 2000개에 도달했습니다. 기간을 줄여 확인하세요." : " 이전 기록으로 이어서 조회할 수 있습니다. 이어서 조회하면 자동 갱신을 멈춥니다."}</p>}
     </>}
     <details className="sensor-graph-info"><summary>센서·수집 정보</summary>
       <dl><dt>센서</dt><dd>{device?.id ?? "현재 등록에서 찾지 못함"}</dd><dt>노드</dt><dd>{device?.targetNode ?? "—"}</dd><dt>원본 최신값</dt><dd>{latest?.value ?? "—"} {property.unit}</dd><dt>센서 UID</dt><dd>{deviceUid}</dd><dt>보관 기간</dt><dd>{retentionDays}일</dd></dl>

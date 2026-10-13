@@ -2465,6 +2465,8 @@ export interface components {
             retentionDays: number;
             truncated: boolean;
             nextCursor?: string;
+            /** @enum {string} */
+            order?: "asc" | "desc";
             items: {
                 /** Format: uuid */
                 deviceUid: string;
@@ -5892,6 +5894,8 @@ export interface operations {
                 to?: string;
                 limit?: number;
                 cursor?: string;
+                /** @description desc는 최신 원본부터 조회하며 다음 cursor는 더 이전 기록으로 이동합니다. */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {

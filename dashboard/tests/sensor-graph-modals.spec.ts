@@ -119,7 +119,7 @@ test("sensor history periods, pagination, store failures and empty records stay 
   await expect.poll(() => Date.parse(queries.at(-1)!.get("to")!) - Date.parse(queries.at(-1)!.get("from")!)).toBe(3600000);
   await expect(dialog.getByText("원본 이력 조회 중…", { exact: true })).not.toBeVisible();
   const period = queries.at(-1)!; expect(Date.parse(period.get("to")!) - Date.parse(period.get("from")!)).toBe(3600000);
-  await dialog.getByRole("button", { name: "다음 기록", exact: true }).click();
+  await dialog.getByRole("button", { name: "이전 기록", exact: true }).click();
   await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
   expect(queries.at(-1)!.get("cursor")).toBe("cursor-a"); expect(queries.at(-1)!.get("from")).toBe(period.get("from")); expect(queries.at(-1)!.get("to")).toBe(period.get("to"));
   await dialog.getByText("기록 표 · 2개", { exact: true }).click();

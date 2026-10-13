@@ -33,7 +33,7 @@ export function DataStoreBrowser() {
     const sequence = ++sequences.current.history; setSelected(sensor); setHistoryBusy(true); setHistoryError("");
     const to = next && history ? history.to : new Date().toISOString();
     const from = next && history ? history.from : new Date(Date.parse(to) - Math.min(hours, (catalog?.rawRetentionDays || 30) * 24) * 3600000).toISOString();
-    const params = new URLSearchParams({ from, to, limit: "1000", ...(next && history?.nextCursor ? { cursor: history.nextCursor } : {}) });
+    const params = new URLSearchParams({ from, to, limit: "1000", order: "desc", ...(next && history?.nextCursor ? { cursor: history.nextCursor } : {}) });
     if (!next) setHistory(null);
     try {
       const rows = await request<History>(`data-store/sensors/${sensor.deviceUid}/${sensor.property}/history?${params}`);
@@ -50,7 +50,7 @@ export function DataStoreBrowser() {
   {selected && <section aria-label={`${selected.deviceId} ${selected.property} 원본 이력`}><div className="toolbar"><h2 ref={historyHeading} tabIndex={-1}>{selected.deviceId} · {selected.property}</h2><label>조회 기간<select value={hours} onChange={event => setHours(Number(event.target.value))}>{[1, 6, 24, 168, 720].filter(hours => hours <= (catalog?.rawRetentionDays || 30) * 24).map(hours => <option key={hours} value={hours}>{hours}시간</option>)}</select></label><button disabled={historyBusy} onClick={() => void load()}>기간 조회</button></div>
     {historyError && <p className="error" role="alert">{historyError}</p>}{historyBusy && <p role="status">원본 이력 조회 중…</p>}
     {history && <>{!history.items.length ? <p className="hint">이 기간에 보관된 원본이 없습니다.</p> : <><OriginalChart history={history} /><div className="table-scroll"><table className="registry-table"><caption className="sr-only">센서 원본 이력</caption><thead><tr><th>측정 시각</th><th>값</th><th>식별 상태</th><th>원본</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.observedAt).toLocaleString()}</td><td>{display(row.value)} {row.unit}</td><td>{row.quality === "QUALIFIED" ? "확인됨" : "미검증"}</td><td><details><summary>원본 · 식별 정보</summary><pre>{JSON.stringify({ deviceUid: row.deviceUid, configurationSha256: row.configurationSha256, sourceGeneration: row.sourceGeneration, timeBasis: row.timeBasis, rawPayload: row.rawPayload }, null, 2)}</pre></details></td></tr>)}</tbody></table></div></>}
-      {history.nextCursor && <button disabled={historyBusy || history.items.length >= 2000} onClick={() => void load(selected, true)}>다음 기록</button>}{history.items.length >= 2000 && history.truncated && <p className="hint">표시 한도 2000개에 도달했습니다. 조회 기간을 줄여 확인하세요.</p>}
+      {history.nextCursor && <button disabled={historyBusy || history.items.length >= 2000} onClick={() => void load(selected, true)}>이전 기록</button>}{history.truncated && <p className="hint">조회 기간의 최신 기록부터 일부를 표시합니다.{history.items.length >= 2000 ? " 표시 한도 2000개에 도달했습니다. 조회 기간을 줄여 확인하세요." : " 이전 기록으로 이어서 조회할 수 있습니다."}</p>}
     </>}
   </section>}
   </>;

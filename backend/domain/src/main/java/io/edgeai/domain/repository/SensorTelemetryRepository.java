@@ -9,6 +9,10 @@ public interface SensorTelemetryRepository {
     boolean enabled();
     void append(Observation observation);
     Map<String,Object> readSensor(UUID deviceUid,String property,Instant from,Instant to,int limit,String cursor);
+    default Map<String,Object> readSensor(UUID deviceUid,String property,Instant from,Instant to,int limit,String cursor,boolean descending) {
+        if(descending)throw new UnsupportedOperationException("Latest-first sensor history is not supported");
+        return readSensor(deviceUid,property,from,to,limit,cursor);
+    }
     List<Map<String,Object>> sensorSeries();
     int rawRetentionDays();
 }

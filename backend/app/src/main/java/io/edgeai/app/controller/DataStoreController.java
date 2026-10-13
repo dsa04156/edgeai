@@ -11,5 +11,5 @@ public class DataStoreController {
     public DataStoreController(DataStoreService service){this.service=service;}
     @GetMapping public Map<String,Object> catalog(){return service.catalog();}
     @GetMapping("/sensors/{uid}/{property}/history") public Map<String,Object> history(@PathVariable UUID uid,@PathVariable String property,
-        @RequestParam(required=false) String from,@RequestParam(required=false) String to,@RequestParam(defaultValue="1000") int limit,@RequestParam(required=false) String cursor){return service.history(uid,property,from,to,limit,cursor);}
+        @RequestParam(required=false) String from,@RequestParam(required=false) String to,@RequestParam(defaultValue="1000") int limit,@RequestParam(required=false) String cursor,@RequestParam(defaultValue="asc") String order){return service.history(uid,property,from,to,limit,cursor,order);}
 }

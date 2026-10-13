@@ -2333,6 +2333,7 @@ paths:
         - {name: to, in: query, schema: {type: string, format: date-time}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000, default: 1000}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 256}}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc], default: asc}, description: desc는 최신 원본부터 조회하며 다음 cursor는 더 이전 기록으로 이동합니다.}
       responses:
         '200':
           description: 시작 포함·종료 미포함, 최대 31일 기간의 원본 이력
@@ -4743,6 +4744,7 @@ components:
         retentionDays: {type: integer}
         truncated: {type: boolean}
         nextCursor: {type: string}
+        order: {type: string, enum: [asc, desc]}
         items:
           type: array
           maxItems: 2000
