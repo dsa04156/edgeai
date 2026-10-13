@@ -807,6 +807,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/virtual-devices/continuous-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공유 eKuiper 연속 처리 기능과 한도 */
+        get: operations["getContinuousCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/continuous": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 측정 항목을 입력으로 연속 처리 가상디바이스 등록
+         * @description 입력 프로토콜은 센서 어댑터가 처리한다. SERVICE 또는 VD별 Pod를 생성하지 않으며 파생 출력은 앱에서 관리한다. 등록은 계산을 시작하지 않는다. 같은 키와 동일한 입력의 재전송은 기존 등록을 반환한다.
+         */
+        post: operations["createContinuousVirtualDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/continuous": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 연속 처리 입력과 계산식 명시적으로 수정
+         * @description 새 불변 VD 프로필 버전을 참조하고 revision을 올린다. 실행 중이면 generation을 변경하고 이전 창과 결과를 차단한다. 새 센서를 자동으로 기존 계산 입력에 추가하지 않는다.
+         */
+        patch: operations["updateContinuousVirtualDevice"];
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 파생 측정 항목별 최신 값과 품질 */
+        get: operations["getContinuousOutputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/outputs/{outputId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 출력 이력과 데이터 누락 구간 조회
+         * @description 모든 계산 결과를 저장한다. bucketSeconds는 조회 결과만 집계하며 저장 주기를 바꾸지 않는다. 기본 최근 1시간, 최대 조회 기간 31일. 재연결 시 과거 결과를 재생하지 않는다.
+         */
+        get: operations["getContinuousOutputHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/virtual-devices/processing-catalog": {
         parameters: {
             query?: never;
@@ -1203,6 +1297,8 @@ export interface components {
         };
         ManagedDeviceInput: {
             name: string;
+            /** @description Physical source name shared by measurement devices; defaults to protocolConfig.deviceId or name. */
+            sourceName?: string;
             /**
              * @default physical
              * @enum {string}
@@ -1302,6 +1398,17 @@ export interface components {
                 available: boolean;
                 /** @enum {string} */
                 kind: "physical" | "virtual";
+                /**
+                 * @description Configured adapter availability does not attest an old or missing mapper on a particular node.
+                 * @enum {string}
+                 */
+                capabilityVerification?: "PER_NODE_REQUIRED";
+                /** @constant */
+                capabilityPath?: "/capabilities";
+                /** @description JSON Schema for the adapter protocolConfig object; property and connection settings remain independent from VD calculation inputs. */
+                configurationSchema?: {
+                    [key: string]: unknown;
+                };
             }[];
         };
         SensorRegistrationTemplate: {
@@ -2280,7 +2387,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "VD_PROVISION" | "VD_REPLACE" | "VD_DRAIN";
+            kind: "VD_PROVISION" | "VD_REPLACE" | "VD_DRAIN" | "VD_CONTINUOUS_START" | "VD_CONTINUOUS_REPLACE" | "VD_CONTINUOUS_STOP";
             /** Format: uuid */
             vdId: string;
             /** Format: int64 */
@@ -2290,7 +2397,7 @@ export interface components {
             /** Format: uuid */
             targetRuntimeId: string | null;
             /** @enum {string} */
-            state: "RUNNING" | "SUCCEEDED" | "FAILED" | "SUPERSEDED";
+            state: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "SUPERSEDED";
             reason: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -2349,6 +2456,168 @@ export interface components {
             /** Format: date-time */
             closedAt: string | null;
         };
+        ContinuousCatalog: {
+            enabled: boolean;
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            operations: ("scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter")[];
+            /** @constant */
+            maxInputs: 16;
+            /** @constant */
+            maxOutputs: 16;
+            /** @description 수집을 추가로 실행하지 않고 조회한 측정 항목 목록. 실제 입력 수신 상태는 실행 결과에서 확인합니다. */
+            inputs: components["schemas"]["ContinuousSensor"][];
+        };
+        ContinuousSensor: {
+            deviceId: string;
+            /** Format: uuid */
+            deviceUid: string;
+            deviceModel: string;
+            namespace: string;
+            property: string;
+            /** @enum {string} */
+            type: "float32" | "float64" | "int16" | "uint16" | "int32" | "uint32" | "bool";
+            unit: string;
+            targetNode: string;
+        };
+        ContinuousConfiguration: {
+            /** @default 1 */
+            intervalSeconds: number;
+            /** @default 7 */
+            retentionDays: number;
+            outputs: components["schemas"]["ContinuousOutputDefinition"][];
+        };
+        ContinuousOutputDefinition: {
+            name: string;
+            /** @description 입력 별칭과 숫자·불리언 상수 */
+            expression: string;
+            /** @enum {string} */
+            operation: "scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter";
+            /** @description movingAverage·minimum·maximum에만 필수. 유효한 연속 평가 횟수 기준입니다. 입력 누락 시 창을 초기화합니다. */
+            sampleCount?: number;
+            /** @description 결과 내보내기 조건. filter에 필수입니다. */
+            condition?: string;
+            unit: string;
+        };
+        ContinuousCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            continuous: components["schemas"]["ContinuousConfiguration"];
+        };
+        ContinuousUpdate: {
+            revision: number;
+            displayName: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            continuous: components["schemas"]["ContinuousConfiguration"];
+        };
+        ContinuousExecution: {
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            enabled: boolean;
+            /** @enum {string} */
+            state: "STOPPED" | "STARTING" | "RUNNING" | "WAITING_INPUT" | "STOPPING" | "ERROR";
+            reason: string;
+            /** Format: uuid */
+            generation?: string;
+            desiredRunning?: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+            engineId?: string;
+            /** Format: uuid */
+            enginePodUid?: string;
+            /** Format: date-time */
+            engineLeaseExpiresAt?: string;
+        };
+        ContinuousResult: {
+            /** Format: uuid */
+            vdId: string;
+            outputId: string;
+            /** Format: uuid */
+            generation: string;
+            sequence: number;
+            evaluationId: string;
+            /** Format: date-time */
+            evaluationAt: string;
+            value: number | boolean;
+            /** @enum {string} */
+            type: "number" | "boolean";
+            unit: string;
+            historyStored: boolean;
+            sources: {
+                alias: string;
+                /** Format: uuid */
+                deviceUid: string;
+                /** Format: uuid */
+                sourceGeneration: string;
+                configurationSha256: string;
+                observedAt: number;
+            }[];
+        };
+        ContinuousOutputs: {
+            /** Format: uuid */
+            vdId: string;
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            /** Format: date-time */
+            asOf: string;
+            intervalSeconds: number;
+            retentionDays: number;
+            historyEnabled: boolean;
+            items: {
+                name: string;
+                expression: string;
+                /** @enum {string} */
+                operation: "scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter";
+                sampleCount?: number;
+                condition?: string;
+                unit: string;
+                outputId: string;
+                /** @enum {string} */
+                quality: "VALID" | "STALE" | "NOT_AVAILABLE";
+                latest: components["schemas"]["ContinuousResult"] | null;
+            }[];
+        };
+        ContinuousHistory: {
+            /** Format: uuid */
+            vdId: string;
+            outputId: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            retentionDays: number;
+            truncated: boolean;
+            nextCursor?: string;
+            aggregation?: {
+                bucketSeconds: number;
+            };
+            gaps: {
+                /** Format: uuid */
+                generation: string;
+                reason: string;
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string | null;
+            }[];
+            items: {
+                /** Format: date-time */
+                evaluationAt: string;
+                /** Format: uuid */
+                generation?: string;
+                sequence?: number;
+                evaluationId?: string;
+                value?: number | boolean;
+                /** @enum {string} */
+                type?: "number" | "boolean";
+                unit?: string;
+                count?: number;
+                min?: number;
+                max?: number;
+                average?: number;
+            }[];
+        };
         VDExecution: {
             /** Format: uuid */
             vdId: string;
@@ -2363,6 +2632,7 @@ export interface components {
             bindingsTruncated: boolean;
             operations: components["schemas"]["VDOperation"][];
             operationsTruncated: boolean;
+            continuous?: components["schemas"]["ContinuousExecution"] | null;
         };
         /** @description Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다. */
         VirtualDeviceSources: {
@@ -2509,13 +2779,18 @@ export interface components {
             displayName: string;
             /** Format: uuid */
             profileVersionId: string;
-            /** Format: uuid */
-            serviceProfileVersionId: string;
+            /**
+             * Format: uuid
+             * @description 연속 처리 VD는 SERVICE를 참조하지 않습니다.
+             */
+            serviceProfileVersionId: string | null;
             /**
              * @description 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.
              * @enum {string}
              */
             state: "REGISTERED" | "RELEASED";
+            /** @enum {string} */
+            executionMode?: "CONTINUOUS_EKUIPER" | "VD_SUPERVISOR";
             /** Format: int64 */
             revision: number;
             placement: components["schemas"]["VirtualDevicePlacement"];
@@ -2793,7 +3068,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 측정 항목 추가 완료. 갱신된 장치를 반환하며 첫 수집값은 아직 없을 수 있다. */
+            /** @description 같은 물리 연결을 사용하는 별도 측정 Device를 반환한다. 첫 수집값은 아직 없을 수 있다. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4989,6 +5264,165 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getContinuousCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기능 활성화 상태와 지원 계산 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousCatalog"];
+                };
+            };
+        };
+    };
+    createContinuousVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinuousCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 등록 재조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            /** @description 등록 완료 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    updateContinuousVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinuousUpdate"];
+            };
+        };
+        responses: {
+            /** @description 수정 완료 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    getContinuousOutputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 파생 측정 항목별 행 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousOutputs"];
+                };
+            };
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
+        };
+    };
+    getContinuousOutputHistory: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                limit?: number;
+                cursor?: string;
+                /** @description cursor와 함께 사용할 수 없습니다. 결과 구간은 최대 2000개입니다. */
+                bucketSeconds?: number;
+            };
+            header?: never;
+            path: {
+                vdId: string;
+                outputId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 이력과 누락 구간 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousHistory"];
+                };
+            };
+            400: components["responses"]["VirtualDeviceError"];
+            404: components["responses"]["VirtualDeviceError"];
+            409: components["responses"]["VirtualDeviceError"];
+            503: components["responses"]["VirtualDeviceError"];
         };
     };
     getProcessingCatalog: {

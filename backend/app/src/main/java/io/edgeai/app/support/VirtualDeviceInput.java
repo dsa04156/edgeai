@@ -59,6 +59,17 @@ public final class VirtualDeviceInput {
     }
     public static VDProfileSpec spec(String document) {
         var map=parameters(JSON.parse(document,65536));
+        if("edgeai.vd/v3".equals(map.get("apiVersion"))) {
+            object(map,"apiVersion","type","executionMode","sources","continuous");
+            if(!"processing".equals(map.get("type")) || !"CONTINUOUS_EKUIPER".equals(map.get("executionMode")))throw new IllegalArgumentException("Unsupported continuous execution mode");
+            var sources=new TreeMap<String,VDProfileSpec.Source>();
+            parameters(map.get("sources")).forEach((alias,raw)->{
+                var source=object(raw,"deviceModel","required");
+                if(!Boolean.TRUE.equals(source.get("required")))throw new IllegalArgumentException("Continuous inputs are required");
+                sources.put(text(alias,32),new VDProfileSpec.Source(null,true,Set.of(),deviceName(source.get("deviceModel"))));
+            });
+            return new VDProfileSpec("processing",null,sources,0,60,15,null,ContinuousInput.parse(map.get("continuous"),sources.keySet()));
+        }
         var fields=new ArrayList<>(List.of("apiVersion","type","serviceProfileVersionId","sources","state","runtime"));
         if(map.containsKey("processing"))fields.add("processing");object(map,fields.toArray(String[]::new));
         boolean managed="edgeai.vd/v2".equals(map.get("apiVersion"));

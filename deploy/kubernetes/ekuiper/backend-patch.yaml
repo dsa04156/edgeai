@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          ports:
+            - {name: processing-tls, containerPort: 18443}
+          env:
+            # Activate only after mapper capability and history preflight.
+            - {name: EDGEAI_CONTINUOUS_ENABLED, value: 'false'}
+            - {name: EDGEAI_CONTINUOUS_CREDENTIAL_FILE, value: /var/run/processing/credential/credential}
+            - {name: EDGEAI_API_TLS_ENABLED, value: 'true'}
+            - {name: EDGEAI_API_TLS_CERTIFICATE_FILE, value: /var/run/processing/tls/tls.crt}
+            - {name: EDGEAI_API_TLS_PRIVATE_KEY_FILE, value: /var/run/processing/tls/tls.key}
+            - {name: EDGEAI_HISTORY_DB_URL, value: 'jdbc:postgresql://edgeai-processing-history.edgeai.svc:5432/edgeai_history'}
+            - {name: EDGEAI_HISTORY_DB_USER, value: edgeai_history}
+            - name: EDGEAI_HISTORY_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: edgeai-processing-history, key: password}
+          volumeMounts:
+            - {name: processing-credential, mountPath: /var/run/processing/credential, readOnly: true}
+            - {name: processing-tls, mountPath: /var/run/processing/tls, readOnly: true}
+      volumes:
+        - name: processing-credential
+          secret: {secretName: edgeai-processing-agent, defaultMode: 292}
+        - name: processing-tls
+          secret: {secretName: edgeai-processing-tls, defaultMode: 292}

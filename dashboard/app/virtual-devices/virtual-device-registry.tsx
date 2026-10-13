@@ -12,6 +12,9 @@ import { ConnectionPanel } from "../components/connection-panel";
 import { VDPrerequisites } from "./vd-prerequisites";
 import { readProfilePage } from "../../lib/profile-version";
 import { SensorProcessingRegistration } from "./sensor-processing-registration";
+import { ContinuousFields } from "./continuous-fields";
+import { ContinuousExecution } from "./continuous-execution";
+import { ContinuousFlow } from "./continuous-flow";
 
 type Schema = components["schemas"];
 type VD = Schema["VirtualDevice"];
@@ -93,11 +96,27 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   const [updateProfile, setUpdateProfile] = useState("");
   const [initialDevice, setInitialDevice] = useState("");
   const [processingReady, setProcessingReady] = useState(false);
+  const [continuousEnabled, setContinuousEnabled] = useState(false);
+  const [continuousInputs, setContinuousInputs] = useState<Schema["ContinuousSensor"][]>([]);
+  const [continuousError, setContinuousError] = useState("");
   const [processingError, setProcessingError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [sourceSelections, setSourceSelections] = useState<Record<string, string>>({});
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null); const [confirmRelease, setConfirmRelease] = useState(false); const [formVersion, setFormVersion] = useState(0);
+  useEffect(() => {
+    if (!auth) return;
+    let stopped = false; let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/control-plane/virtual-devices/continuous-catalog", { cache: "no-store", signal: AbortSignal.timeout(8000), headers: { Authorization: auth } });
+        const value = await response.json(); if (!response.ok) throw new Error(value.message || "센서 목록을 갱신하지 못했습니다.");
+        if (!stopped) { setContinuousEnabled(value.enabled === true); setContinuousInputs(value.inputs || []); setContinuousError(""); }
+      } catch (error) { if (!stopped) setContinuousError(error instanceof Error ? error.message : "센서 목록을 갱신하지 못했습니다."); }
+      if (!stopped) timer = setTimeout(poll, 10000);
+    };
+    timer = setTimeout(poll, 10000); return () => { stopped = true; clearTimeout(timer); };
+  }, [auth]);
   useEffect(() => {
     if (!saveFeedback || saveFeedback.state === "pending") return;
     const form = saveFeedback.scope === "register" ? registerForm.current : updateForm.current;
@@ -121,6 +140,10 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
     try { setProcessingReady((await (await api("virtual-devices/processing-catalog", undefined, authorization)).json()).ready === true); setProcessingError(""); }
     catch (error) { setProcessingReady(false); setProcessingError(error instanceof Error ? error.message : "다시 시도하세요."); }
   }
+  async function loadContinuousCatalog(authorization = auth) {
+    try { const value: Schema["ContinuousCatalog"] = await (await api("virtual-devices/continuous-catalog", undefined, authorization)).json(); setContinuousEnabled(value.enabled === true); setContinuousInputs(value.inputs || []); setContinuousError(""); }
+    catch (error) { setContinuousEnabled(false); setContinuousError(error instanceof Error ? error.message : "재조회가 필요합니다."); }
+  }
   async function show(id: string) { const value: Detail=await (await api(`virtual-devices/${id}`)).json(); setDetail(value); setUpdateProfile(value.vd.profileVersionId); setConfirmRelease(false); }
   function write(method: string, body?: object): RequestInit {
     return { method, headers: { "X-CSRF-TOKEN": csrf, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: stringify(body) } : {}) };
@@ -138,6 +161,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
       ]);
       setServiceProfiles(serviceItems); setProfiles(profileItems); setDevices(deviceItems); setNodes(nodeItems);
       await loadProcessingCatalog(authorization);
+      await loadContinuousCatalog(authorization);
       const query = new URLSearchParams(window.location.search);
       setSelectedProfile(query.get("profile") || ""); setInitialDevice(query.get("device") || "");
       setCreateOpen(query.has("profile") || query.has("device") || query.get("create") === "1");
@@ -180,7 +204,8 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   }
   const template = profiles.find(profile => profile.id === selectedProfile);
   const detailTemplate = profiles.find(profile => profile.id === updateProfile);
-  const profileName = (id: string, values = profiles) => { const profile = values.find(value => value.id === id); return profile ? `${profile.key} · ${profile.version}` : "프로필 조회 필요"; };
+  const detailContinuous = detail ? record(profiles.find(profile => profile.id === detail.vd.profileVersionId)?.spec).continuous as Schema["ContinuousConfiguration"] | undefined : undefined;
+  const profileName = (id: string | null, values = profiles) => { const profile = values.find(value => value.id === id); return profile ? `${profile.key} · ${profile.version}` : "프로필 조회 필요"; };
   const deviceName = (id: string) => devices.find(device => device.id === id)?.id || id;
   function onProfileRegistered(profile: Schema["ProfileVersion"]) {
     const update = (previous: Schema["ProfileVersion"][]) => [...previous.filter(value => value.id !== profile.id), profile];
@@ -205,6 +230,7 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
   const updateFeedback = saveFeedback?.scope === "update" ? saveFeedback : null;
   return <>
     <div className="toolbar"><a href="/profiles?kind=VD">VD 템플릿 관리 →</a><Link href="/docs/concepts/resources">리소스 구조 보기 →</Link></div>
+    <ContinuousFlow availability={!auth ? busy ? "loading" : "disconnected" : continuousError ? "unavailable" : continuousEnabled ? "enabled" : "disabled"} />
     <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
     <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
     {error && <p role="alert" className="error">{error}</p>}
@@ -230,11 +256,16 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         <div className="toolbar"><h2 id="vd-detail-title">{detail.vd.displayName}</h2><span className="stage">{stateNames[detail.vd.state]}</span></div>
         <p className="digest mono">VD ID {detail.vd.id}</p>
         <p className="hint">원본과 실행체를 교체해도 이 ID를 유지합니다. 등록 상태와 실행 준비 상태는 각각 확인합니다.</p>
-        <dl><div><dt>VD 템플릿</dt><dd>{profileName(detail.vd.profileVersionId)}</dd></div><div><dt>처리 SERVICE 모듈</dt><dd>{profileName(detail.vd.serviceProfileVersionId, serviceProfiles)}</dd></div></dl>
-        {record(profiles.find(p=>p.id===detail.vd.profileVersionId)?.spec).apiVersion==="edgeai.vd/v2" ? <VirtualDeviceExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} /> : <p className="notice">기존 앱 등록 장치를 참조하는 VD입니다. 센서용 템플릿의 새 버전을 발행하고 아래에서 템플릿과 원본 센서를 선택해 저장하세요. VD ID와 연결 이력은 유지됩니다.</p>}
-        {workflows && <p><a href={`/workflows?service=${detail.vd.serviceProfileVersionId}&vd=${detail.vd.id}`}>이 VD의 활성 Runtime으로 DAG 실행 구성 →</a></p>}
+        <dl><div><dt>VD 템플릿</dt><dd>{profileName(detail.vd.profileVersionId)}</dd></div>{detail.vd.serviceProfileVersionId && <div><dt>처리 SERVICE 모듈</dt><dd>{profileName(detail.vd.serviceProfileVersionId, serviceProfiles)}</dd></div>}</dl>
+        {detail.vd.executionMode === "CONTINUOUS_EKUIPER" ? <ContinuousExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} />
+          : record(profiles.find(p=>p.id===detail.vd.profileVersionId)?.spec).apiVersion==="edgeai.vd/v2" ? <VirtualDeviceExecution key={detail.vd.id} vd={detail.vd} auth={auth} csrf={csrf} disabled={busy} /> : <p className="notice">기존 앱 등록 장치를 참조하는 VD입니다. 센서용 템플릿의 새 버전을 발행하고 아래에서 템플릿과 원본 센서를 선택해 저장하세요. VD ID와 연결 이력은 유지됩니다.</p>}
+        {workflows && detail.vd.serviceProfileVersionId && <p><a href={`/workflows?service=${detail.vd.serviceProfileVersionId}&vd=${detail.vd.id}`}>이 VD의 활성 Runtime으로 DAG 실행 구성 →</a></p>}
         <h3>현재 원본 연결 · Source Binding</h3>{detail.activeSources.length ? <ul className="history-list">{detail.activeSources.map(source => <li key={source.id}><strong>{source.sourceKey}</strong> · {sourceNames[source.sourceKind]}<span className="block">{deviceName(source.deviceId)}</span><span className="block muted">{source.properties.length ? source.properties.join(", ") : "측정 항목 미선택"} · 최대 {source.maxAgeSeconds}초</span></li>)}</ul> : <p className="muted">활성 원본 연결이 없습니다.</p>}
-        {detail.vd.state === "REGISTERED" && <form ref={updateForm} key={`${detail.vd.id}-${detail.vd.revision}`} aria-label="VD 설정 수정" onSubmit={event => void save(event, "update")} onInvalid={() => invalid("update")}><fieldset disabled={busy} className="publish-fields"><legend>설정 수정</legend>
+        {detail.vd.state === "REGISTERED" && detail.vd.executionMode === "CONTINUOUS_EKUIPER" && !detailContinuous && <p className="notice">저장된 처리 설정을 불러오지 못했습니다. 연결 상태를 확인하고 다시 조회하세요.</p>}
+        {detail.vd.state === "REGISTERED" && detail.vd.executionMode === "CONTINUOUS_EKUIPER" && detailContinuous && <ContinuousFields key={`${detail.vd.id}-${detail.vd.revision}`} inputs={continuousInputs} enabled={continuousEnabled && !continuousError} busy={busy}
+          initial={{ displayName: detail.vd.displayName, sources: detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId, properties: source.properties, maxAgeSeconds: source.maxAgeSeconds })), continuous: detailContinuous }}
+          save={async body => { setBusy(true); try { await api(`virtual-devices/${detail.vd.id}/continuous`, write("PATCH", { revision: detail.vd.revision, ...body })); setNotice("연속 처리 설정을 저장했습니다."); try { await show(detail.vd.id); await load(); } catch { setNotice("설정은 저장됐지만 상태 조회에 실패했습니다. 다시 조회해 확인하세요."); } } finally { setBusy(false); } }} />}
+        {detail.vd.state === "REGISTERED" && detail.vd.executionMode !== "CONTINUOUS_EKUIPER" && <form ref={updateForm} key={`${detail.vd.id}-${detail.vd.revision}`} aria-label="VD 설정 수정" onSubmit={event => void save(event, "update")} onInvalid={() => invalid("update")}><fieldset disabled={busy} className="publish-fields"><legend>설정 수정</legend>
           <label>표시 이름<input name="displayName" required maxLength={128} defaultValue={detail.vd.displayName} /></label>
           <label>VD 템플릿 버전<select aria-label="수정 VD 템플릿 버전" name="profileVersionId" required value={updateProfile} onChange={e=>setUpdateProfile(e.target.value)}><option value="">센서용 템플릿 선택</option>{profiles.filter(p=>record(p.spec).apiVersion==="edgeai.vd/v2").map(p=><option key={p.id} value={p.id}>{p.key} · {p.version}</option>)}</select></label>
           <SourceFields key={updateProfile} devices={devices} spec={detailTemplate?.spec} initial={detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId, properties: source.properties, maxAgeSeconds: source.maxAgeSeconds }))} />
@@ -250,8 +281,12 @@ export function VirtualDeviceRegistry({ workflows = false }: { workflows?: boole
         {detail.vd.state === "REGISTERED" && <div className="release-controls">{confirmRelease ? <><p>이 VD의 원본 연결을 종료합니다. VD ID와 연결 이력, 원본 장치는 보존됩니다.</p><div className="toolbar"><button disabled={busy} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); setNotice("가상 장치를 해제했습니다."); })}>VD 해제 확정</button><button disabled={busy} onClick={() => setConfirmRelease(false)}>계속 사용</button></div></> : <button disabled={busy} onClick={() => setConfirmRelease(true)}>VD 해제</button>}</div>}
       </section>}
       </div><details className="create-panel" ref={createPanel} open={createOpen} onToggle={event => setCreateOpen(event.currentTarget.open)}><summary><h2 id="vd-register-title">새 가상 장치 등록</h2></summary>
+        {continuousError && <div><p className="error" role="alert">연속 처리 상태 조회에 실패했습니다. {continuousError}</p><button disabled={busy} onClick={() => void run(() => loadContinuousCatalog())}>연속 처리 상태 다시 조회</button></div>}
+        <ContinuousFields key={`continuous-${formVersion}`} inputs={continuousInputs} enabled={continuousEnabled && !continuousError} busy={busy} save={async body => { setBusy(true); try { const vd: VD = await (await api("virtual-devices/continuous", write("POST", body))).json(); await onProcessingRegistered(vd); } finally { setBusy(false); } }} />
+        <details open={!continuousEnabled}><summary>기존 표본·FFT 처리 장치 등록</summary>
         <SensorProcessingRegistration key={`processing-${formVersion}-${initialDevice}`} devices={devices} initialDevice={initialDevice} ready={processingReady} catalogError={processingError} onRetryCatalog={() => void run(() => loadProcessingCatalog())} busy={busy} onBusy={setBusy}
           create={async body => (await api("virtual-devices/processing", write("POST", body))).json()} onRegistered={onProcessingRegistered} />
+        </details>
         <details open={!!selectedProfile}><summary>템플릿으로 등록 · 고급 설정</summary>
         <fieldset disabled={busy} className="publish-fields"><VDPrerequisites profiles={[...serviceProfiles, ...profiles]} nodes={nodes} template={template}
           write={(path, body) => api(path, write("POST", body))} onProfileRegistered={onProfileRegistered} onBusy={setBusy} /></fieldset>

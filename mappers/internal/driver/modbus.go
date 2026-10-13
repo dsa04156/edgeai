@@ -37,6 +37,9 @@ type Property struct {
 	JSONPath            string  `json:"jsonPath"`
 	Sensor              string  `json:"sensor"`
 	ConfigurationSha256 string  `json:"configurationSha256,omitempty"`
+	SourceGeneration    string  `json:"sourceGeneration,omitempty"`
+	Unit                string  `json:"unit,omitempty"`
+	TimestampPath       string  `json:"timestampPath,omitempty"`
 }
 
 type Reader interface {

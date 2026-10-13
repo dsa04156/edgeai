@@ -2,13 +2,17 @@ package runtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,11 +24,15 @@ import (
 
 type configurationReports struct {
 	reports
-	observed chan *api.Twin
+	observed          chan *api.Twin
+	connectionReports atomic.Int32
 }
 
 func (s *configurationReports) ReportDeviceStatus(_ context.Context, r *api.ReportDeviceStatusRequest) (*api.ReportDeviceStatusResponse, error) {
 	for _, twin := range r.ReportedDevice.Twins {
+		if twin.PropertyName == "connection" {
+			s.connectionReports.Add(1)
+		}
 		if twin.PropertyName == "temperature" {
 			s.observed <- twin
 		}
@@ -47,7 +55,11 @@ func TestAppliedConfigurationIdentityTravelsWithCalibratedDMIObservation(t *test
 	api.RegisterDeviceManagerServiceServer(server, sink)
 	go server.Serve(listener)
 	defer server.Stop()
-	panel := New("edgeai-devices", "edgeai-virtual", dmi.Client{Socket: socket})
+	budget := filepath.Join(t.TempDir(), "budget")
+	if err := os.WriteFile(budget, []byte(strconv.FormatInt(time.Now().Add(400*time.Millisecond).UnixMilli(), 10)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	panel := New("edgeai-devices", "edgeai-virtual", dmi.Client{Socket: socket, BudgetPath: budget, BudgetGap: 300 * time.Millisecond})
 	defer panel.RemoveDevice("edgeai-devices/sensor")
 	encode := func(v any) json.RawMessage {
 		b, e := json.Marshal(v)
@@ -69,8 +81,32 @@ func TestAppliedConfigurationIdentityTravelsWithCalibratedDMIObservation(t *test
 		panel.UpdateDev(nil, instance(identity, i+1))
 		select {
 		case twin := <-sink.observed:
-			if twin.Reported.Value != strconv.Itoa(20*(i+1)) || twin.Reported.Metadata["edgeaiConfigurationSha256"] != identity || twin.Reported.Metadata["timestamp"] == "" {
-				t.Fatalf("calibrated value and applied configuration diverged: %v", twin)
+			if sink.connectionReports.Load() != 0 {
+				t.Fatal("measurement device emitted redundant connection twin")
+			}
+			if ok, _ := regexp.MatchString(`^[a-zA-Z0-9-_.,:/@#]{1,512}$`, twin.Reported.Value); !ok {
+				t.Fatal("reported value violates installed KubeEdge Twin charset/length")
+			}
+			payload, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(twin.Reported.Value, "edgeai.measurement/v1:"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var observation struct {
+				ApiVersion    string `json:"apiVersion"`
+				Value         string `json:"value"`
+				Configuration string `json:"configurationSha256"`
+				CollectedAt   int64  `json:"collectedAt"`
+			}
+			// KubeEdge 1.23 discards arbitrary DMI metadata and replaces timestamp.
+			twin.Reported.Metadata = nil
+			if err := json.Unmarshal(payload, &observation); err != nil {
+				t.Fatal("measurement identity was lost when DMI metadata was dropped:", err)
+			}
+			if observation.ApiVersion != "edgeai.measurement/v1" || observation.Value != strconv.Itoa(20*(i+1)) || observation.Configuration != identity || observation.CollectedAt <= 0 {
+				t.Fatalf("calibrated value and applied configuration diverged: %v", observation)
+			}
+			if age := time.Since(time.UnixMilli(observation.CollectedAt)); age > 350*time.Millisecond {
+				t.Fatalf("DMI sent the queued sample instead of the latest collection: age=%v", age)
 			}
 		case <-time.After(8 * time.Second):
 			t.Fatal("no calibrated DMI observation")

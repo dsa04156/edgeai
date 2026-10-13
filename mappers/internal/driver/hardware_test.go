@@ -63,6 +63,23 @@ func TestSenseHatSourceTimestampAndTypedValues(t *testing.T) {
 	}
 }
 
+func TestHardwareObservationKeepsTheFrameReceiveTimeAcrossReads(t *testing.T) {
+	s := &hardwareSource{config: Connection{DeviceID: "arduino-001"}, frames: map[string]hardwareFrame{}}
+	s.accept([]byte(`{"device_id":"arduino-001","sensor":"temperature","raw":200}`), true)
+	original := time.Now().Add(-time.Second)
+	f := s.frames["temperature"]
+	f.received = original
+	s.frames["temperature"] = f
+	h := &Hardware{source: s, config: Connection{TimeoutMs: 100}, used: map[string]uint64{}, snapshot: map[string]hardwareFrame{}}
+	p := Property{Sensor: "temperature", JSONPath: "raw", DataType: "float64", Scale: 1}
+	for range 2 {
+		observation, err := ReadObservation(context.Background(), h, p)
+		if err != nil || observation.ObservedAt != original.UnixMilli() || observation.TimeBasis != "RECEIVED" {
+			t.Fatalf("frame was marked fresh: %+v %v", observation, err)
+		}
+	}
+}
+
 func TestHardwareConnectionTestsShareOnePhysicalReader(t *testing.T) {
 	c := Connection{DeviceID: "arduino-001", DevicePath: "/dev/edgeai/unit-test-missing", BaudRate: 115200, TimeoutMs: 100}
 	a, err := newHardware("edgeai-serial-json", c)

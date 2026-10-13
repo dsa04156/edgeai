@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-processing-history
+  namespace: edgeai
+  labels: {app.kubernetes.io/part-of: edgeai, edgeai.io/processing-history: 'true'}
+spec:
+  clusterIP: None
+  selector: {edgeai.io/processing-history: 'true'}
+  ports: [{name: postgres, port: 5432, targetPort: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgeai-processing-history
+  namespace: edgeai
+  labels: {app.kubernetes.io/part-of: edgeai, edgeai.io/processing-history: 'true'}
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+spec:
+  serviceName: edgeai-processing-history
+  replicas: 1
+  selector:
+    matchLabels: {edgeai.io/processing-history: 'true'}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/part-of: edgeai, edgeai.io/processing-history: 'true'}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/hostname: etri-ser0002-cgnmsb, kubernetes.io/arch: amd64}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/worker, operator: Exists}
+                  - {key: node-role.kubernetes.io/edge, operator: DoesNotExist}
+                  - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+      securityContext: {runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, fsGroup: 70, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: postgres
+          # Reuse the project's already pinned PostgreSQL image.
+          image: public.ecr.aws/docker/library/postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+          ports: [{name: postgres, containerPort: 5432}]
+          env:
+            - {name: POSTGRES_DB, value: edgeai_history}
+            - {name: POSTGRES_USER, value: edgeai_history}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: edgeai-processing-history, key: password}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: '2', memory: 4Gi}
+            limits: {cpu: '4', memory: 8Gi}
+          readinessProbe: {exec: {command: [pg_isready, -U, edgeai_history, -d, edgeai_history]}, periodSeconds: 5}
+          livenessProbe: {exec: {command: [pg_isready, -U, edgeai_history, -d, edgeai_history]}, initialDelaySeconds: 30, periodSeconds: 10}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+      terminationGracePeriodSeconds: 60
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels: {app.kubernetes.io/part-of: edgeai, edgeai.io/processing-history: 'true'}
+        annotations: {argocd.argoproj.io/sync-options: 'Prune=false,Delete=false'}
+      spec:
+        storageClassName: local-path
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 400Gi}

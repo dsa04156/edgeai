@@ -11,6 +11,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ManagedDeviceServiceTest {
+    @Test void observationDiscoveryDoesNotChangeAnUnqualifiedLegacySensor() {
+        var profile=Map.of("protocol","virtual","host","sensor.example","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")));
+        var sensor=Map.of("metadata",Map.of("name","sensor","namespace","edgeai-devices","uid",UUID.randomUUID().toString(),"labels",Map.of("app.kubernetes.io/part-of","edgeai"),"annotations",Map.of("edgeai.io/device-profile",DeviceProfileCompiler.JSON.canonical(profile))),
+            "spec",Map.of("nodeName","edge-a","deviceModelRef",Map.of("name","temperature-model"),"properties",List.of(Map.of("name","temperature","visitors",Map.of("configData",Map.of("dataType","float64"))))));
+        read("/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/devices?labelSelector=app.kubernetes.io%2Fpart-of%3Dedgeai",Map.of("items",List.of(sensor)));
+        read("/api/v1/nodes/edge-a",Map.of("metadata",Map.of("uid",UUID.randomUUID().toString())));
+        var catalog=service().observationCatalog(Map.of());
+        assertEquals("temperature",catalog.getFirst().get("property"));assertEquals("OBSERVATION_ROUTE_UNAVAILABLE",catalog.getFirst().get("reason"));
+        verify(gateway,never()).request(eq("PUT"),anyString(),any());
+    }
+    @Test void registrationRejectsMultipleMeasurementsBeforeChangingClusterResources(){
+        String body=DeviceProfileCompiler.JSON.canonical(Map.of("name","board","targetNode","edge-a","protocol","modbus-tcp","host","192.0.2.31","properties",List.of(Map.of("name","temperature","register",40001,"dataType","float32"),Map.of("name","humidity","register",40003,"dataType","float32"))));
+        assertThrows(IllegalArgumentException.class,()->service().create(body));
+        verifyNoInteractions(gateway);
+    }
     final Instant now=Instant.parse("2026-10-07T04:30:00Z");
     final DeviceResourceGateway gateway=mock(DeviceResourceGateway.class);
     @SuppressWarnings("unchecked") final ObjectProvider<DeviceResourceGateway> provider=mock(ObjectProvider.class);
@@ -28,12 +43,26 @@ class ManagedDeviceServiceTest {
         device(true,"online",now.minusSeconds(31));assertEquals("STALE_DMI_REPORT",service().get("sensor").get("stateReason"));
         device(true,"offline",now);assertEquals("OFFLINE",service().get("sensor").get("state"));
     }
+    @Test void atomicMeasurementValuePreservesAppliedConfigurationAndCollectionTimeWhenDmiDropsMetadata(){
+        var resource=registered(List.of(property("temperature",40001)));
+        var profile=DeviceProfileCompiler.JSON.decode((String)DeviceProfileCompiler.map(DeviceProfileCompiler.map(resource.get("metadata")).get("annotations")).get("edgeai.io/device-profile"));
+        String applied=DeviceProfileCompiler.configuration(profile);long collected=now.minusSeconds(2).toEpochMilli();
+        String envelope=DeviceProfileCompiler.JSON.canonical(Map.of("apiVersion","edgeai.measurement/v1","value","0","configurationSha256",applied,"collectedAt",collected));
+        read(path("devicestatuses","sensor"),Map.of("status",Map.of("state","online","lastOnlineTime",now.toString(),"twins",List.of(Map.of("propertyName","temperature","reported",Map.of("value","edgeai.measurement/v1:"+Base64.getUrlEncoder().withoutPadding().encodeToString(envelope.getBytes(java.nio.charset.StandardCharsets.UTF_8)),"metadata",Map.of("timestamp",Long.toString(now.toEpochMilli()),"type","string")))))));
+        read("/apis/apps/v1/namespaces/edgeai-devices/deployments/"+MapperDeployment.nameFor("edge-a"),Map.of("status",Map.of("readyReplicas",1)));
+        var device=service().get("sensor");var reading=DeviceProfileCompiler.map(DeviceProfileCompiler.map(device.get("properties")).get("temperature"));
+        assertEquals("0",reading.get("value"));assertEquals(collected,reading.get("timestamp"));assertEquals(applied,reading.get("configurationSha256"));
+        assertTrue(SensorHistoryService.currentConfiguration(device,reading,Instant.ofEpochMilli(collected)));
+    }
     @Test void workflowReferencesRejectProtocolFieldsAndMissingProperties(){device(true,"online",now);assertThrows(IllegalArgumentException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("temperature"),"host","private")));assertThrows(ControlPlaneException.class,()->service().workflowDevice(Map.of("id","sensor","outputs",List.of("missing"))));}
     @Test void resourcesFromAnotherOwnerAreNeverAdopted(){device(true,"online",now);read(path("devices","sensor"),Map.of("metadata",Map.of("labels",Map.of("app.kubernetes.io/part-of","other"))));assertEquals(409,assertThrows(ControlPlaneException.class,()->service().delete("sensor")).status());verify(gateway,never()).request(eq("DELETE"),anyString(),any());}
     Map<String,Object> property(String name,int register){return Map.of("name",name,"register",register,"dataType","float32");}
     String propertySettings(List<?> properties){
         var settings=(List<?>)DeviceProfileCompiler.JSON.decode(DeviceProfileCompiler.JSON.canonical(properties));
-        for(var property:settings)DeviceProfileCompiler.map(DeviceProfileCompiler.map(DeviceProfileCompiler.map(property).get("visitors")).get("configData")).remove("configurationSha256");
+        for(var property:settings) {
+            var visitor=DeviceProfileCompiler.map(DeviceProfileCompiler.map(DeviceProfileCompiler.map(property).get("visitors")).get("configData"));
+            visitor.remove("configurationSha256");visitor.remove("sourceGeneration");visitor.remove("unit");
+        }
         return DeviceProfileCompiler.JSON.canonical(settings);
     }
     Map<String,Object> registered(List<Map<String,Object>> properties){
@@ -47,24 +76,33 @@ class ManagedDeviceServiceTest {
         when(gateway.request(eq("GET"),startsWith(path("devicemodels","edgeai-model-")),isNull())).thenReturn(new DeviceResourceGateway.Reply(404,"{}"));
         when(gateway.request(eq("POST"),eq("/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/devicemodels"),any())).thenReturn(new DeviceResourceGateway.Reply(201,"{}"));
     }
-    @Test void addingOnePropertyKeepsExistingReadingsConnectionAndMetadataWithoutCreatingAnotherMapper(){
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"vibration","vibration_","vibration______________________________________________________"})
+    void addingOneMeasurementCreatesSeparateDeviceAndKeepsOriginalAndSharedMapper(String measurement){
         var old=registered(List.of(property("temperature",40001)));allowModelCreation();
-        read(path("devicestatuses","sensor"),Map.of("status",Map.of("state","online","lastOnlineTime",now.toString())));
-        read("/apis/apps/v1/namespaces/edgeai-devices/deployments/"+MapperDeployment.nameFor("edge-a"),Map.of("status",Map.of("readyReplicas",1)));
-        when(gateway.request(eq("PUT"),eq(path("devices","sensor")),any())).thenAnswer(call->{
-            var replacement=DeviceProfileCompiler.map(call.getArgument(2));var metadata=DeviceProfileCompiler.map(replacement.get("metadata"));
-            assertEquals("41",metadata.get("resourceVersion"));assertEquals("device-uid",metadata.get("uid"));
-            assertEquals("keep",DeviceProfileCompiler.map(metadata.get("annotations")).get("external-note"));
-            var spec=DeviceProfileCompiler.map(replacement.get("spec"));var oldSpec=DeviceProfileCompiler.map(old.get("spec"));
-            assertEquals(oldSpec.get("protocol"),spec.get("protocol"));assertEquals(oldSpec.get("nodeName"),spec.get("nodeName"));
-            assertEquals(List.of("temperature","vibration","connection"),((List<?>)spec.get("properties")).stream().map(p->DeviceProfileCompiler.map(p).get("name")).toList());
-            read(path("devices","sensor"),replacement);return new DeviceResourceGateway.Reply(200,"{}");
+        var createdId=new String[1];
+        when(gateway.request(eq("GET"),startsWith(path("devices","sensor-")),isNull())).thenReturn(new DeviceResourceGateway.Reply(404,"{}"));
+        read("/api/v1/nodes/edge-a",Map.of("metadata",Map.of("labels",Map.of("node-role.kubernetes.io/edge","","kubernetes.io/arch","arm64"))));
+        String mapper=MapperDeployment.nameFor("edge-a");
+        var shared=Map.of("metadata",Map.of("labels",Map.of("app.kubernetes.io/part-of","edgeai")),"status",Map.of("readyReplicas",1));
+        read("/api/v1/namespaces/edgeai-devices/configmaps/"+mapper,shared);
+        read("/apis/apps/v1/namespaces/edgeai-devices/deployments/"+mapper,shared);
+        when(gateway.request(eq("GET"),startsWith(path("devicestatuses","sensor-")),isNull())).thenReturn(new DeviceResourceGateway.Reply(404,"{}"));
+        when(gateway.request(eq("POST"),eq("/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/devices"),any())).thenAnswer(call->{
+            var created=DeviceProfileCompiler.map(call.getArgument(2));String id=(String)DeviceProfileCompiler.map(created.get("metadata")).get("name");
+            assertDoesNotThrow(()->DeviceProfileCompiler.name(id));assertTrue(id.startsWith("sensor-"));createdId[0]=id;var spec=DeviceProfileCompiler.map(created.get("spec"));
+            assertEquals(DeviceProfileCompiler.map(old.get("spec")).get("protocol"),spec.get("protocol"));
+            assertEquals(List.of(measurement),((List<?>)spec.get("properties")).stream().map(p->DeviceProfileCompiler.map(p).get("name")).toList());
+            read(path("devices",id),created);return new DeviceResourceGateway.Reply(201,"{}");
         });
-        var result=service().addProperty("sensor",DeviceProfileCompiler.JSON.canonical(property("vibration",40003)));
-        var profile=DeviceProfileCompiler.map(result.get("profile"));assertEquals(1500,((Number)profile.get("collectionInterval")).intValue());
-        assertEquals(2,((List<?>)profile.get("properties")).size());assertEquals("ONLINE",result.get("state"));
-        verify(gateway).request(eq("POST"),eq("/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/devicemodels"),any());
-        verify(gateway,never()).request(eq("POST"),contains("/deployments"),any());verify(gateway,never()).request(eq("DELETE"),anyString(),any());
+        var result=service().addProperty("sensor",DeviceProfileCompiler.JSON.canonical(property(measurement,40003)));
+        assertEquals(createdId[0],result.get("id"));var profile=DeviceProfileCompiler.map(result.get("profile"));
+        assertEquals("sensor",profile.get("sourceName"));assertEquals(1500,((Number)profile.get("collectionInterval")).intValue());
+        assertEquals(1,((List<?>)profile.get("properties")).size());
+        assertEquals(DeviceProfileCompiler.JSON.canonical(old),gateway.request("GET",path("devices","sensor"),null).document());
+        verify(gateway,never()).request(eq("PUT"),anyString(),any());
+        verify(gateway,never()).request(eq("POST"),contains("/deployments"),any());
+        verify(gateway,never()).request(eq("DELETE"),anyString(),any());
     }
     @Test void duplicateInvalidAndForeignPropertyAdditionsNeverChangeResources(){
         registered(List.of(property("temperature",40001)));var service=service();
@@ -75,11 +113,11 @@ class ManagedDeviceServiceTest {
         assertEquals(409,assertThrows(ControlPlaneException.class,()->service.addProperty("sensor",DeviceProfileCompiler.JSON.canonical(property("vibration",40003)))).status());
         verify(gateway,never()).request(eq("PUT"),anyString(),any());verify(gateway,never()).request(eq("POST"),anyString(),any());verify(gateway,never()).request(eq("DELETE"),anyString(),any());
     }
-    @Test void concurrentPropertyAdditionFailsWithConflictAndDoesNotRemoveExistingFields(){
-        registered(List.of(property("temperature",40001)));allowModelCreation();
-        when(gateway.request(eq("PUT"),eq(path("devices","sensor")),any())).thenReturn(new DeviceResourceGateway.Reply(409,"{}"));
+    @Test void existingSiblingMeasurementIsRejectedWithoutChangingEitherDevice(){
+        registered(List.of(property("temperature",40001)));
+        read(path("devices","sensor-vibration"),Map.of("metadata",Map.of("name","sensor-vibration")));
         assertEquals(409,assertThrows(ControlPlaneException.class,()->service().addProperty("sensor",DeviceProfileCompiler.JSON.canonical(property("vibration",40003)))).status());
-        verify(gateway,never()).request(eq("DELETE"),anyString(),any());
+        verify(gateway,never()).request(eq("POST"),anyString(),any());verify(gateway,never()).request(eq("PUT"),anyString(),any());
     }
     @Test void updatingOnePropertyMergesIntoLatestProfileAndPreservesOtherFieldsWithoutRestartingMapper(){
         var old=registered(List.of(property("temperature",40001),property("vibration",40003),property("new_since_ui_load",40005)));allowModelCreation();
@@ -144,7 +182,7 @@ class ManagedDeviceServiceTest {
             assertEquals("41",metadata.get("resourceVersion"));assertEquals("device-uid",metadata.get("uid"));assertEquals("keep",DeviceProfileCompiler.map(metadata.get("annotations")).get("external-note"));
             var spec=DeviceProfileCompiler.map(replacement.get("spec"));var oldSpec=DeviceProfileCompiler.map(old.get("spec"));
             assertEquals(oldSpec.get("protocol"),spec.get("protocol"));assertEquals(oldSpec.get("nodeName"),spec.get("nodeName"));
-            var names=((List<?>)spec.get("properties")).stream().map(p->DeviceProfileCompiler.map(p).get("name")).toList();assertEquals(List.of("vibration","connection"),names);
+            var names=((List<?>)spec.get("properties")).stream().map(p->DeviceProfileCompiler.map(p).get("name")).toList();assertEquals(List.of("vibration"),names);
             var profile=DeviceProfileCompiler.map(DeviceProfileCompiler.JSON.decode((String)DeviceProfileCompiler.map(metadata.get("annotations")).get("edgeai.io/device-profile")));
             assertEquals(1500,((Number)profile.get("collectionInterval")).intValue());assertEquals("vibration",DeviceProfileCompiler.map(((List<?>)profile.get("properties")).getFirst()).get("name"));
             return new DeviceResourceGateway.Reply(200,"{}");

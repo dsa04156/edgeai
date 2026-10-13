@@ -7,6 +7,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static io.edgeai.app.support.DeviceProfileCompiler.*;
 
 class DeviceProfileCompilerTest {
+    @Test void measurementDeviceContainsOnlyItsMeasurementAndRetainsPhysicalSource(){
+        var compiled=compile(local("serial-json"),"edgeai-devices","tcp://127.0.0.1:1883");
+        assertEquals("arduino-001",compiled.profile().get("sourceName"));
+        assertEquals(1,((List<?>)map(compiled.deviceResource().get("spec")).get("properties")).size());
+        assertEquals(1,((List<?>)map(compiled.modelResource().get("spec")).get("properties")).size());
+        assertEquals("STRING",map(((List<?>)map(compiled.modelResource().get("spec")).get("properties")).getFirst()).get("type"));
+        assertEquals("int32",map(map(map(((List<?>)map(compiled.deviceResource().get("spec")).get("properties")).getFirst()).get("visitors")).get("configData")).get("dataType"));
+    }
     static Map<String,Object> local(String protocol){return new TreeMap<>(Map.of("name","physical-01","protocol",protocol,"targetNode","edge-a","protocolConfig",Map.of("devicePath",protocol.equals("sensehat")?"/dev/i2c-1":"/dev/edgeai/arduino-001","deviceId",protocol.equals("sensehat")?"sensehat-001":"arduino-001"),"properties",List.of(protocol.equals("sensehat")?Map.of("name","humidity","dataType","float64","jsonPath","humidity"):Map.of("name","acceleration_x_raw","dataType","int32","sensor","acceleration","jsonPath","x"))));}
     @Test void physicalProfilesCompileWithoutNetworkFieldsAndKeepModelReusable(){
         for(String protocol:List.of("serial-json","sensehat")){
@@ -36,7 +44,7 @@ class DeviceProfileCompilerTest {
         var second=input();second.put("name","motor-vibration-02");second.put("host","192.168.0.31");second.put("protocolConfig",Map.of("unitId",2));
         assertEquals(first.model(),compile(second,"edgeai-devices","tcp://127.0.0.1:1883").model());
         var spec=map(first.deviceResource().get("spec"));assertEquals("etri-dev0002-raspi5",spec.get("nodeName"));
-        var props=(List<?>)spec.get("properties");assertEquals(4,props.size());
+        var props=(List<?>)spec.get("properties");assertEquals(3,props.size());
         var visitor=map(map(map(props.getFirst()).get("visitors")).get("configData"));assertEquals(0,visitor.get("address"));assertEquals(1,visitor.get("scale"));
         assertEquals(configuration(first.profile()),visitor.get("configurationSha256"));
         var changed=input();var changedProperties=new ArrayList<Object>((List<?>)changed.get("properties"));var calibration=new TreeMap<>(map(changedProperties.getFirst()));calibration.put("scale",2);changedProperties.set(0,calibration);changed.put("properties",changedProperties);

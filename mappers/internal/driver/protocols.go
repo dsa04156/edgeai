@@ -69,31 +69,43 @@ func (o *OPCUA) Close() error {
 	return err
 }
 func (o *OPCUA) Read(ctx context.Context, p Property) (string, error) {
+	observation, err := o.ReadObservation(ctx, p)
+	return observation.Value, err
+}
+func (o *OPCUA) ReadObservation(ctx context.Context, p Property) (Observation, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(o.config.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	id, err := ua.ParseNodeID(p.NodeID)
 	if err != nil {
-		return "", err
+		return Observation{}, err
 	}
 	if o.client == nil {
 		o.client, err = opcua.NewClient("opc.tcp://"+net.JoinHostPort(o.config.Host, strconv.Itoa(o.config.Port))+o.config.Path, opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.SecurityPolicy("None"), opcua.AuthAnonymous(), opcua.RequestTimeout(time.Duration(o.config.TimeoutMs)*time.Millisecond), opcua.AutoReconnect(false))
 		if err != nil {
-			return "", err
+			return Observation{}, err
 		}
 		if err = o.client.Connect(ctx); err != nil {
 			_ = o.Close()
-			return "", err
+			return Observation{}, err
 		}
 	}
 	response, err := o.client.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: id, AttributeID: ua.AttributeIDValue}}, TimestampsToReturn: ua.TimestampsToReturnBoth})
 	if err != nil {
 		_ = o.Close()
-		return "", err
+		return Observation{}, err
 	}
 	if len(response.Results) != 1 || response.Results[0].Status != ua.StatusOK || response.Results[0].Value == nil {
-		return "", fmt.Errorf("OPC-UA property unavailable")
+		return Observation{}, fmt.Errorf("OPC-UA property unavailable")
 	}
-	return normalize(response.Results[0].Value.Value(), p)
+	value, err := normalize(response.Results[0].Value.Value(), p)
+	if err != nil {
+		return Observation{}, err
+	}
+	original := response.Results[0].SourceTimestamp
+	if original.IsZero() {
+		return Observation{Value: value, ObservedAt: time.Now().UnixMilli(), TimeBasis: "COLLECTED"}, nil
+	}
+	return Observation{Value: value, ObservedAt: original.UnixMilli(), TimeBasis: "SOURCE"}, nil
 }
 
 type message struct {
@@ -110,14 +122,18 @@ type MQTT struct {
 
 func (m *MQTT) Close() error { m.client.Disconnect(100); return nil }
 func (m *MQTT) Read(ctx context.Context, p Property) (string, error) {
-	if p.Topic == "" || strings.ContainsAny(p.Topic, "#+") || strings.HasPrefix(p.Topic, "edgeai/devices/") {
-		return "", fmt.Errorf("invalid input topic")
+	value, err := m.ReadObservation(ctx, p)
+	return value.Value, err
+}
+func (m *MQTT) ReadObservation(ctx context.Context, p Property) (Observation, error) {
+	if p.Topic == "" || strings.ContainsAny(p.Topic, "#+") || (strings.HasPrefix(p.Topic, "edgeai/devices/") || strings.HasPrefix(p.Topic, "edgeai/observations/")) {
+		return Observation{}, fmt.Errorf("invalid input topic")
 	}
 	timeout := time.Duration(m.config.TimeoutMs) * time.Millisecond
 	if !m.client.IsConnected() {
 		t := m.client.Connect()
 		if !t.WaitTimeout(timeout) || t.Error() != nil {
-			return "", fmt.Errorf("MQTT broker unavailable")
+			return Observation{}, fmt.Errorf("MQTT broker unavailable")
 		}
 		m.mu.Lock()
 		m.topics = map[string]bool{}
@@ -134,7 +150,7 @@ func (m *MQTT) Read(ctx context.Context, p Property) (string, error) {
 			m.mu.Unlock()
 		})
 		if !token.WaitTimeout(timeout) || token.Error() != nil {
-			return "", fmt.Errorf("MQTT subscription failed")
+			return Observation{}, fmt.Errorf("MQTT subscription failed")
 		}
 		m.mu.Lock()
 		m.topics[p.Topic] = true
@@ -149,13 +165,13 @@ func (m *MQTT) Read(ctx context.Context, p Property) (string, error) {
 		v, ok := m.messages[p.Topic]
 		m.mu.Unlock()
 		if ok && time.Since(v.received) <= time.Duration(m.config.StaleMs)*time.Millisecond {
-			return jsonValue(v.payload, p)
+			return jsonObservation(v.payload, p, v.received)
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return Observation{}, ctx.Err()
 		case <-deadline.C:
-			return "", fmt.Errorf("MQTT property stale or missing")
+			return Observation{}, fmt.Errorf("MQTT property stale or missing")
 		case <-poll.C:
 		}
 	}
@@ -170,23 +186,27 @@ type Virtual struct {
 
 func (v *Virtual) Close() error { v.client.CloseIdleConnections(); return nil }
 func (v *Virtual) Read(ctx context.Context, p Property) (string, error) {
+	value, err := v.ReadObservation(ctx, p)
+	return value.Value, err
+}
+func (v *Virtual) ReadObservation(ctx context.Context, p Property) (Observation, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(v.config.Host, strconv.Itoa(v.config.Port))+v.config.Path, nil)
 	if err != nil {
-		return "", err
+		return Observation{}, err
 	}
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return "", err
+		return Observation{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("runtime property endpoint unavailable")
+		return Observation{}, fmt.Errorf("runtime property endpoint unavailable")
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
 	if err != nil || len(b) > 65536 {
-		return "", fmt.Errorf("runtime response exceeds limit")
+		return Observation{}, fmt.Errorf("runtime response exceeds limit")
 	}
-	return jsonValue(b, p)
+	return jsonObservation(b, p, time.Now())
 }
 func jsonValue(payload []byte, p Property) (string, error) {
 	if len(payload) > 65536 {

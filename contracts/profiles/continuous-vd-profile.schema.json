@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EdgeAI continuous VD profile v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "type", "executionMode", "sources", "continuous"],
+  "properties": {
+    "apiVersion": {"const": "edgeai.vd/v3"},
+    "type": {"const": "processing"},
+    "executionMode": {"const": "CONTINUOUS_EKUIPER"},
+    "sources": {
+      "type": "object", "minProperties": 1, "maxProperties": 16,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,31}$"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["deviceModel", "required"],
+        "properties": {
+          "deviceModel": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$"},
+          "required": {"const": true}
+        }
+      }
+    },
+    "continuous": {
+      "type": "object", "additionalProperties": false, "required": ["intervalSeconds", "retentionDays", "outputs"],
+      "properties": {
+        "intervalSeconds": {"type": "integer", "minimum": 1, "maximum": 3600, "default": 1},
+        "retentionDays": {"type": "integer", "minimum": 1, "maximum": 30, "default": 7},
+        "outputs": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["name", "expression", "operation", "unit"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$"},
+              "expression": {"type": "string", "minLength": 1, "maxLength": 1024},
+              "operation": {"enum": ["scalar", "movingAverage", "minimum", "maximum", "threshold", "filter"]},
+              "unit": {"type": "string", "maxLength": 32},
+              "sampleCount": {"type": "integer", "minimum": 1, "maximum": 1024},
+              "condition": {"type": "string", "minLength": 1, "maxLength": 1024}
+            },
+            "allOf": [
+              {"if": {"properties": {"operation": {"enum": ["movingAverage", "minimum", "maximum"]}}}, "then": {"required": ["sampleCount"]}, "else": {"not": {"required": ["sampleCount"]}}},
+              {"if": {"properties": {"operation": {"const": "filter"}}}, "then": {"required": ["condition"]}}
+            ]
+          }
+        }
+      }
+    }
+  },
+  "description": "Input aliases bind to separate managed measurements. The server validates expression types, alias use and unique output names. No SERVICE, per-VD Pod, arbitrary SQL, plugins or sinks. Existing v1/v2 profiles retain their own contracts."
+}

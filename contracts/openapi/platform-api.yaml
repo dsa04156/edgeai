@@ -99,7 +99,7 @@ paths:
               $ref: '#/components/schemas/ManagedDeviceProperty'
       responses:
         "201":
-          description: 측정 항목 추가 완료. 갱신된 장치를 반환하며 첫 수집값은 아직 없을 수 있다.
+          description: 같은 물리 연결을 사용하는 별도 측정 Device를 반환한다. 첫 수집값은 아직 없을 수 있다.
           content:
             application/json:
               schema:
@@ -1833,6 +1833,89 @@ paths:
         '400': {description: UUID 형식 오류}
         '404': {description: Operation이 없습니다.}
         '503': {description: 저장소 연결 실패}
+  /api/v1/virtual-devices/continuous-catalog:
+    get:
+      tags: [VD]
+      operationId: getContinuousCatalog
+      summary: 공유 eKuiper 연속 처리 기능과 한도
+      responses:
+        '200':
+          description: 기능 활성화 상태와 지원 계산
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ContinuousCatalog'}
+  /api/v1/virtual-devices/continuous:
+    post:
+      tags: [VD]
+      operationId: createContinuousVirtualDevice
+      summary: 측정 항목을 입력으로 연속 처리 가상디바이스 등록
+      description: 입력 프로토콜은 센서 어댑터가 처리한다. SERVICE 또는 VD별 Pod를 생성하지 않으며 파생 출력은 앱에서 관리한다. 등록은 계산을 시작하지 않는다. 같은 키와 동일한 입력의 재전송은 기존 등록을 반환한다.
+      security: [{csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ContinuousCreate'}
+      responses:
+        '201': {description: 등록 완료, content: {application/json: {schema: {$ref: '#/components/schemas/VirtualDevice'}}}}
+        '200': {description: 같은 등록 재조회, content: {application/json: {schema: {$ref: '#/components/schemas/VirtualDevice'}}}}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '403': {description: CSRF 검증 실패}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/continuous:
+    patch:
+      tags: [VD]
+      operationId: updateContinuousVirtualDevice
+      summary: 연속 처리 입력과 계산식 명시적으로 수정
+      description: 새 불변 VD 프로필 버전을 참조하고 revision을 올린다. 실행 중이면 generation을 변경하고 이전 창과 결과를 차단한다. 새 센서를 자동으로 기존 계산 입력에 추가하지 않는다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ContinuousUpdate'}
+      responses:
+        '200': {description: 수정 완료, content: {application/json: {schema: {$ref: '#/components/schemas/VirtualDevice'}}}}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '403': {description: CSRF 검증 실패}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/outputs:
+    get:
+      tags: [VD]
+      operationId: getContinuousOutputs
+      summary: 파생 측정 항목별 최신 값과 품질
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: 파생 측정 항목별 행, content: {application/json: {schema: {$ref: '#/components/schemas/ContinuousOutputs'}}}}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
+  /api/v1/virtual-devices/{vdId}/outputs/{outputId}/history:
+    get:
+      tags: [VD]
+      operationId: getContinuousOutputHistory
+      summary: 출력 이력과 데이터 누락 구간 조회
+      description: 모든 계산 결과를 저장한다. bucketSeconds는 조회 결과만 집계하며 저장 주기를 바꾸지 않는다. 기본 최근 1시간, 최대 조회 기간 31일. 재연결 시 과거 결과를 재생하지 않는다.
+      parameters:
+      - {name: vdId, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: outputId, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,62}$'}}
+      - {name: from, in: query, schema: {type: string, format: date-time}}
+      - {name: to, in: query, schema: {type: string, format: date-time}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000, default: 1000}}
+      - {name: cursor, in: query, schema: {type: string, maxLength: 256}}
+      - {name: bucketSeconds, in: query, schema: {type: integer, minimum: 1, maximum: 86400}, description: cursor와 함께 사용할 수 없습니다. 결과 구간은 최대 2000개입니다.}
+      responses:
+        '200': {description: 이력과 누락 구간, content: {application/json: {schema: {$ref: '#/components/schemas/ContinuousHistory'}}}}
+        '400': {$ref: '#/components/responses/VirtualDeviceError'}
+        '404': {$ref: '#/components/responses/VirtualDeviceError'}
+        '409': {$ref: '#/components/responses/VirtualDeviceError'}
+        '503': {$ref: '#/components/responses/VirtualDeviceError'}
   /api/v1/virtual-devices/processing-catalog:
     get:
       tags: [VD]
@@ -2445,6 +2528,7 @@ components:
       required: [name, protocol, properties, targetNode]
       properties:
         name: {type: string, maxLength: 63}
+        sourceName: {type: string, maxLength: 63, description: Physical source name shared by measurement devices; defaults to protocolConfig.deviceId or name.}
         kind: {type: string, enum: [physical, virtual], default: physical}
         protocol: {type: string, enum: [modbus-tcp, opc-ua, mqtt, virtual, serial-json, sensehat]}
         host: {type: string, maxLength: 253, description: Required for network protocols; omitted for local hardware.}
@@ -2466,7 +2550,7 @@ components:
         properties:
           type: array
           minItems: 1
-          maxItems: 64
+          maxItems: 1
           items: {$ref: '#/components/schemas/ManagedDeviceProperty'}
     ManagedDevice:
       type: object
@@ -2537,6 +2621,9 @@ components:
               id: {type: string}
               available: {type: boolean}
               kind: {type: string, enum: [physical, virtual]}
+              capabilityVerification: {type: string, enum: [PER_NODE_REQUIRED], description: Configured adapter availability does not attest an old or missing mapper on a particular node.}
+              capabilityPath: {type: string, const: /capabilities}
+              configurationSchema: {type: object, additionalProperties: true, description: JSON Schema for the adapter protocolConfig object; property and connection settings remain independent from VD calculation inputs.}
     SensorRegistrationTemplate:
       type: object
       required: [id, label, serviceName, nodeName, profileName, protocol, resources, endpoint, baudRates]
@@ -4189,12 +4276,12 @@ components:
       required: [id, kind, vdId, requestedRevision, sourceRuntimeId, targetRuntimeId, state, reason, createdAt, updatedAt, finishedAt]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [VD_PROVISION, VD_REPLACE, VD_DRAIN]}
+        kind: {type: string, enum: [VD_PROVISION, VD_REPLACE, VD_DRAIN, VD_CONTINUOUS_START, VD_CONTINUOUS_REPLACE, VD_CONTINUOUS_STOP]}
         vdId: {type: string, format: uuid}
         requestedRevision: {type: integer, format: int64}
         sourceRuntimeId: {type: [string, 'null'], format: uuid}
         targetRuntimeId: {type: [string, 'null'], format: uuid}
-        state: {type: string, enum: [RUNNING, SUCCEEDED, FAILED, SUPERSEDED]}
+        state: {type: string, enum: [PENDING, RUNNING, SUCCEEDED, FAILED, SUPERSEDED]}
         reason: {type: [string, 'null']}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
@@ -4233,6 +4320,192 @@ components:
         closedRevision: {type: [integer, 'null'], format: int64}
         openedAt: {type: string, format: date-time}
         closedAt: {type: [string, 'null'], format: date-time}
+    ContinuousCatalog:
+      type: object
+      additionalProperties: false
+      required: [enabled, executionMode, operations, maxInputs, maxOutputs, inputs]
+      properties:
+        enabled: {type: boolean}
+        executionMode: {const: CONTINUOUS_EKUIPER}
+        operations: {type: array, items: {type: string, enum: [scalar, movingAverage, minimum, maximum, threshold, filter]}}
+        maxInputs: {const: 16}
+        maxOutputs: {const: 16}
+        inputs:
+          type: array
+          maxItems: 500
+          description: 수집을 추가로 실행하지 않고 조회한 측정 항목 목록. 실제 입력 수신 상태는 실행 결과에서 확인합니다.
+          items: {$ref: '#/components/schemas/ContinuousSensor'}
+    ContinuousSensor:
+      type: object
+      additionalProperties: false
+      required: [deviceId, deviceUid, deviceModel, namespace, property, type, unit, targetNode]
+      properties:
+        deviceId: {type: string}
+        deviceUid: {type: string, format: uuid}
+        deviceModel: {type: string}
+        namespace: {type: string}
+        property: {type: string}
+        type: {type: string, enum: [float32, float64, int16, uint16, int32, uint32, bool]}
+        unit: {type: string}
+        targetNode: {type: string}
+    ContinuousConfiguration:
+      type: object
+      additionalProperties: false
+      required: [intervalSeconds, retentionDays, outputs]
+      properties:
+        intervalSeconds: {type: integer, minimum: 1, maximum: 3600, default: 1}
+        retentionDays: {type: integer, minimum: 1, maximum: 30, default: 7}
+        outputs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {$ref: '#/components/schemas/ContinuousOutputDefinition'}
+    ContinuousOutputDefinition:
+      type: object
+      additionalProperties: false
+      required: [name, expression, operation, unit]
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]{0,62}$', maxLength: 63}
+        expression: {type: string, minLength: 1, maxLength: 1024, description: 입력 별칭과 숫자·불리언 상수, 괄호, 산술·비교·논리 연산만 지원합니다. 함수 호출과 SQL은 입력할 수 없습니다.}
+        operation: {type: string, enum: [scalar, movingAverage, minimum, maximum, threshold, filter]}
+        sampleCount: {type: integer, minimum: 1, maximum: 1024, description: movingAverage·minimum·maximum에만 필수. 유효한 연속 평가 횟수 기준입니다. 입력 누락 시 창을 초기화합니다.}
+        condition: {type: string, minLength: 1, maxLength: 1024, description: 결과 내보내기 조건. filter에 필수입니다.}
+        unit: {type: string, maxLength: 32}
+    ContinuousCreate:
+      type: object
+      additionalProperties: false
+      required: [key, displayName, sources, continuous]
+      properties:
+        key: {$ref: '#/components/schemas/ProfileKey'}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
+        continuous: {$ref: '#/components/schemas/ContinuousConfiguration'}
+    ContinuousUpdate:
+      type: object
+      additionalProperties: false
+      required: [revision, displayName, sources, continuous]
+      properties:
+        revision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        displayName: {type: string, minLength: 1, maxLength: 128}
+        sources: {$ref: '#/components/schemas/VirtualDeviceSources'}
+        continuous: {$ref: '#/components/schemas/ContinuousConfiguration'}
+    ContinuousExecution:
+      type: object
+      additionalProperties: false
+      required: [executionMode, enabled, state, reason]
+      properties:
+        executionMode: {const: CONTINUOUS_EKUIPER}
+        enabled: {type: boolean}
+        state: {type: string, enum: [STOPPED, STARTING, RUNNING, WAITING_INPUT, STOPPING, ERROR]}
+        reason: {type: string}
+        generation: {type: string, format: uuid}
+        desiredRunning: {type: boolean}
+        updatedAt: {type: string, format: date-time}
+        engineId: {type: string}
+        enginePodUid: {type: string, format: uuid}
+        engineLeaseExpiresAt: {type: string, format: date-time}
+    ContinuousResult:
+      type: object
+      additionalProperties: false
+      required: [vdId, outputId, generation, sequence, evaluationId, evaluationAt, value, type, unit, historyStored, sources]
+      properties:
+        vdId: {type: string, format: uuid}
+        outputId: {type: string}
+        generation: {type: string, format: uuid}
+        sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+        evaluationId: {type: string, maxLength: 100}
+        evaluationAt: {type: string, format: date-time}
+        value: {type: [number, boolean]}
+        type: {type: string, enum: [number, boolean]}
+        unit: {type: string, maxLength: 32}
+        historyStored: {type: boolean}
+        sources:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [alias, deviceUid, sourceGeneration, configurationSha256, observedAt]
+            properties:
+              alias: {type: string, pattern: '^[a-z][a-z0-9_]{0,31}$'}
+              deviceUid: {type: string, format: uuid}
+              sourceGeneration: {type: string, format: uuid}
+              configurationSha256: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+              observedAt: {type: integer, minimum: 1}
+    ContinuousOutputs:
+      type: object
+      additionalProperties: false
+      required: [vdId, executionMode, asOf, intervalSeconds, retentionDays, historyEnabled, items]
+      properties:
+        vdId: {type: string, format: uuid}
+        executionMode: {const: CONTINUOUS_EKUIPER}
+        asOf: {type: string, format: date-time}
+        intervalSeconds: {type: integer}
+        retentionDays: {type: integer}
+        historyEnabled: {type: boolean}
+        items:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, expression, operation, unit, outputId, latest, quality]
+            properties:
+              name: {type: string}
+              expression: {type: string}
+              operation: {type: string, enum: [scalar, movingAverage, minimum, maximum, threshold, filter]}
+              sampleCount: {type: integer}
+              condition: {type: string}
+              unit: {type: string}
+              outputId: {type: string}
+              quality: {type: string, enum: [VALID, STALE, NOT_AVAILABLE]}
+              latest:
+                oneOf: [{$ref: '#/components/schemas/ContinuousResult'}, {type: 'null'}]
+    ContinuousHistory:
+      type: object
+      additionalProperties: false
+      required: [vdId, outputId, from, to, retentionDays, items, gaps, truncated]
+      properties:
+        vdId: {type: string, format: uuid}
+        outputId: {type: string}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        retentionDays: {type: integer}
+        truncated: {type: boolean}
+        nextCursor: {type: string}
+        aggregation:
+          type: object
+          required: [bucketSeconds]
+          properties:
+            bucketSeconds: {type: integer}
+        gaps:
+          type: array
+          items:
+            type: object
+            required: [generation, reason, from, to]
+            properties:
+              generation: {type: string, format: uuid}
+              reason: {type: string}
+              from: {type: string, format: date-time}
+              to: {type: [string, 'null'], format: date-time}
+        items:
+          type: array
+          maxItems: 2000
+          items:
+            type: object
+            required: [evaluationAt]
+            properties:
+              evaluationAt: {type: string, format: date-time}
+              generation: {type: string, format: uuid}
+              sequence: {type: integer}
+              evaluationId: {type: string}
+              value: {type: [number, boolean]}
+              type: {type: string, enum: [number, boolean]}
+              unit: {type: string}
+              count: {type: integer}
+              min: {type: number}
+              max: {type: number}
+              average: {type: number}
     VDExecution:
       type: object
       additionalProperties: false
@@ -4251,6 +4524,8 @@ components:
         bindingsTruncated: {type: boolean}
         operations: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/VDOperation'}}
         operationsTruncated: {type: boolean}
+        continuous:
+          oneOf: [{$ref: '#/components/schemas/ContinuousExecution'}, {type: 'null'}]
     VirtualDeviceSources:
       type: array
       maxItems: 16
@@ -4502,8 +4777,9 @@ components:
         key: {$ref: '#/components/schemas/ProfileKey'}
         displayName: {type: string}
         profileVersionId: {type: string, format: uuid}
-        serviceProfileVersionId: {type: string, format: uuid}
+        serviceProfileVersionId: {type: [string, 'null'], format: uuid, description: 연속 처리 VD는 SERVICE를 참조하지 않습니다.}
         state: {type: string, enum: [REGISTERED, RELEASED], description: 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.}
+        executionMode: {type: string, enum: [CONTINUOUS_EKUIPER, VD_SUPERVISOR]}
         revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
         placement: {$ref: '#/components/schemas/VirtualDevicePlacement'}
         createdAt: {type: string, format: date-time}

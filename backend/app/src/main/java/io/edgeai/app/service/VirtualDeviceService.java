@@ -20,6 +20,7 @@ public class VirtualDeviceService {
     private final Clock clock;
     private final ManagedDeviceService managed;
     private final VDLifecycleService lifecycle;
+    @org.springframework.beans.factory.annotation.Autowired private ContinuousExecutionService continuous;
     public VirtualDeviceService(VirtualDeviceRepository repository,DeviceRepository devices,ProfileRepository profiles,NodeRepository nodes,Clock clock,VDLifecycleService lifecycle,ManagedDeviceService managed) {
         this.repository=repository;this.devices=devices;this.profiles=profiles;this.nodes=nodes;this.clock=clock;this.lifecycle=lifecycle;this.managed=managed;
     }
@@ -30,6 +31,7 @@ public class VirtualDeviceService {
         var previous=repository.findByKey(input.key());
         if(previous.isPresent())return replay(previous.get(),input.digest());
         var spec=profile(input.profileVersionId());validatePlacement(input.configuration().placement());
+        if(spec.continuous() && input.configuration().placement().nodeId()!=null)throw new IllegalArgumentException("Continuous processing uses the shared engine placement");
         boolean created=repository.create(input.key(),input.configuration().displayName(),input.profileVersionId(),spec.serviceProfileVersionId(),input.configuration().placement(),input.digest());
         var value=repository.findByKey(input.key()).orElseThrow();
         if(!created)return replay(value,input.digest());
@@ -56,7 +58,10 @@ public class VirtualDeviceService {
         if(vd.state()==VirtualDevice.State.RELEASED)throw error(409,"VD_RELEASED","해제된 VD는 수정할 수 없습니다.");
         if(vd.revision()!=input.revision())throw error(409,"VD_CONFLICT","VD가 변경되었습니다. 다시 조회한 revision으로 수정하세요.");
         var configuration=input.configuration();UUID profileId=input.profileVersionId()==null?vd.profileVersionId():input.profileVersionId();var spec=profile(profileId);validatePlacement(configuration.placement());
+        if(spec.continuous()!=profile(vd.profileVersionId()).continuous())throw new IllegalArgumentException("Execution mode cannot change; register a new virtual device");
+        if(spec.continuous() && configuration.placement().nodeId()!=null)throw new IllegalArgumentException("Continuous processing uses the shared engine placement");
         var devicesById=validateSources(spec,configuration.sources());var active=repository.activeSources(id);
+        if(spec.continuous() && continuous!=null)continuous.validateEdit(id,WorkflowInput.JSON.decode(spec.continuousJson()),configuration.sources().size());
         var current=new TreeMap<String,VDSourceSelection>();active.forEach(b->current.put(b.sourceKey(),new VDSourceSelection(b.sourceId(),b.properties(),b.maxAgeSeconds())));
         if(profileId.equals(vd.profileVersionId()) && vd.displayName().equals(configuration.displayName()) && vd.placement().equals(configuration.placement()) && current.equals(configuration.sources())
             && active.stream().allMatch(b->sameIdentity(b,devicesById.get(b.sourceKey()))))return vd;
@@ -97,6 +102,7 @@ public class VirtualDeviceService {
     }
     private VDProfileSpec profile(UUID id) {
         var spec=VirtualDeviceInput.spec(requireProfile(id,ProfileIdentity.Kind.VD).specJson());
+        if(spec.continuous())return spec;
         var service=ServiceExecutionInput.parseSpec(requireProfile(spec.serviceProfileVersionId(),ProfileIdentity.Kind.SERVICE).specJson());
         if(spec.processingJson()!=null) {
             var processing=DeviceProfileCompiler.map(WorkflowInput.JSON.decode(spec.processingJson()));
@@ -123,6 +129,7 @@ public class VirtualDeviceService {
             throw error(409,"VD_SOURCE_INCOMPATIBLE","선언된 원본 키와 필수 원본을 확인하세요.");
         var sources=new HashMap<String,VDSourceBinding>();
         var numericProperties=new HashMap<String,Set<String>>();
+        var continuousTypes=new TreeMap<String,ProcessingExpression.Type>();
         repository.lockManagedSources(requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()!=null).map(e->e.getValue().deviceId()).toList());
         // Preserve a global row-lock order for immutable legacy Device references.
         requested.entrySet().stream().filter(e->spec.sources().get(e.getKey()).deviceModel()==null).map(e->UUID.fromString(e.getValue().deviceId())).distinct().sorted()
@@ -134,6 +141,11 @@ public class VirtualDeviceService {
                 var kind=((Map<?,?>)device.get("profile")).get("kind");
                 var declared=((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(p->((Map<?,?>)p).get("name")).toList();
                 if(!declared.containsAll(selection.properties()))throw error(409,"VD_SOURCE_INCOMPATIBLE","선택한 측정 항목이 센서 규격에 없습니다.");
+                if(spec.continuous()) {
+                    if(selection.properties().size()!=1 || declared.size()!=1)throw new IllegalArgumentException("Continuous inputs require one separate measurement per Device");
+                    var property=DeviceProfileCompiler.map(((List<?>)DeviceProfileCompiler.map(device.get("profile")).get("properties")).getFirst());
+                    continuousTypes.put(entry.getKey(),ContinuousRuleCompiler.inputType((String)property.get("dataType")));
+                }
                 numericProperties.put(entry.getKey(),((List<?>)DeviceProfileCompiler.map(device.get("profile")).getOrDefault("properties",List.of())).stream().map(DeviceProfileCompiler::map)
                     .filter(property->Set.of("float32","float64","int16","uint16","int32","uint32").contains(Objects.toString(property.get("dataType"),""))).map(property->(String)property.get("name")).collect(java.util.stream.Collectors.toSet()));
                 sources.put(entry.getKey(),new VDSourceBinding(null,null,null,null,null,"virtual".equals(kind)?Device.SourceMode.SYNTHETIC:Device.SourceMode.LIVE,
@@ -155,6 +167,7 @@ public class VirtualDeviceService {
                 if(!numericProperties.getOrDefault(input.get("sourceKey"),Set.of()).contains(input.get("property")))throw error(409,"VD_SOURCE_INCOMPATIBLE","공통 처리는 숫자 측정 항목을 사용합니다.");
             }
         }
+        if(spec.continuous())ContinuousRuleCompiler.compile(new UUID(0,0),new UUID(0,0),WorkflowInput.JSON.decode(spec.continuousJson()),continuousTypes);
         return sources;
     }
     private Instant now(VirtualDevice vd) { var now=clock.instant();return now.isBefore(vd.updatedAt())?vd.updatedAt():now; }

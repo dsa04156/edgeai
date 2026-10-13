@@ -4,8 +4,8 @@ import { record } from "../../lib/vd-profile";
 import { newProcessingStep, processingNames } from "../../lib/processing";
 import type { components } from "../../lib/api-schema";
 
-type Props = { spec: Record<string, unknown>; devices: components["schemas"]["ManagedDevice"][]; update: (patch: Record<string, unknown>) => void; sensorOnly?: boolean };
-export function ProcessingFields({ spec, devices, update, sensorOnly = false }: Props) {
+type Props = { spec: Record<string, unknown>; devices: components["schemas"]["ManagedDevice"][]; update: (patch: Record<string, unknown>) => void; sensorOnly?: boolean; sensorProperty?: string };
+export function ProcessingFields({ spec, devices, update, sensorOnly = false, sensorProperty }: Props) {
   const config = record(spec.processing), pipelines = Array.isArray(config.pipelines) ? config.pipelines.map(record) : [];
   const sources = Object.keys(record(spec.sources));
   let nextName = 1;
@@ -34,7 +34,7 @@ export function ProcessingFields({ spec, devices, update, sensorOnly = false }: 
             <option value="sensor">원본 센서 측정값</option><option value="artifact">다른 VD의 처리 결과</option></select></label></>}
           {"port" in input ? <div className="form-row">{(["port", "output"] as const).map(key => <label key={key}>{prefix} · {key === "port" ? "입력 포트" : "원본 결과 이름"}<input required maxLength={63} pattern="[a-z][a-z0-9_]*" value={String(input[key] || "")} onChange={e => pipeline(index, { input: { ...input, [key]: e.target.value } })} /></label>)}</div> : <div className="form-row">
             {!sensorOnly && <label>{prefix} · 원본 슬롯<select required value={String(input.sourceKey || "")} onChange={e => pipeline(index, { input: { ...input, sourceKey: e.target.value } })}><option value="">원본 선택</option>{sources.map(key => <option key={key}>{key}</option>)}</select></label>}
-            <label>{prefix} · 측정 항목<select required value={String(input.property || "")} onChange={e => pipeline(index, { input: { ...input, property: e.target.value } })}><option value="">숫자 측정 항목 선택</option>{Boolean(input.property) && !properties.includes(String(input.property)) && <option value={String(input.property)}>{String(input.property)} · 규격 확인 필요</option>}{properties.map(property => <option key={property}>{property}</option>)}</select></label></div>}
+            {!(sensorOnly && sensorProperty) && <label>{prefix} · 측정 항목<select required value={String(input.property || "")} onChange={e => pipeline(index, { input: { ...input, property: e.target.value } })}><option value="">숫자 측정 항목 선택</option>{Boolean(input.property) && !properties.includes(String(input.property)) && <option value={String(input.property)}>{String(input.property)} · 규격 확인 필요</option>}{properties.map(property => <option key={property}>{property}</option>)}</select></label>}</div>}
           {steps.map((step, position) => {
             const label = `${prefix} · 단계 ${position + 1}`;
             const numeric = (key: string, name: string, min?: number, max?: number, increment?: number) => <label>{label} · {name}<input required type="number" min={min} max={max} step={increment || "any"} value={String(step[key] ?? "")} onChange={e => setStep(position, { [key]: Number(e.target.value) })} /></label>;

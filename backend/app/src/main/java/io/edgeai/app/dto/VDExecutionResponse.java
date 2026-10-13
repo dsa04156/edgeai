@@ -6,4 +6,11 @@ import java.util.*;
 
 public record VDExecutionResponse(UUID vdId,boolean enabled,Instant asOf,VDRuntimeResponse current,
         VDOperationResponse pendingOperation,List<VDRuntimeResponse> runtimeHistory,boolean runtimeHistoryTruncated,
-        List<VDRuntimeBinding> bindings,boolean bindingsTruncated,List<VDOperationResponse> operations,boolean operationsTruncated) {}
+        List<VDRuntimeBinding> bindings,boolean bindingsTruncated,List<VDOperationResponse> operations,boolean operationsTruncated,
+        Map<String,Object> continuous) {
+    public VDExecutionResponse(UUID vdId,boolean enabled,Instant asOf,VDRuntimeResponse current,
+        VDOperationResponse pendingOperation,List<VDRuntimeResponse> runtimeHistory,boolean runtimeHistoryTruncated,
+        List<VDRuntimeBinding> bindings,boolean bindingsTruncated,List<VDOperationResponse> operations,boolean operationsTruncated) {
+        this(vdId,enabled,asOf,current,pendingOperation,runtimeHistory,runtimeHistoryTruncated,bindings,bindingsTruncated,operations,operationsTruncated,null);
+    }
+}

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Include in an existing application overlay; retain its exact release images.
+resources:
+  - history.yaml
+# The ekuiper-namespace RBAC/policy are applied separately; an application's
+# namespace transformer must never move them into the edgeai namespace.
+patches:
+  - path: backend-patch.yaml
+  - path: backend-service-patch.yaml

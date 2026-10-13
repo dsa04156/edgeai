@@ -5,8 +5,8 @@ import type { components } from "../../lib/api-schema";
 type Schema = components["schemas"];
 type Action = "provision" | "replace" | "drain";
 const actions = { provision: "실행 시작", replace: "실행 교체", drain: "실행 종료" };
-const kinds = { VD_PROVISION: "시작", VD_REPLACE: "교체", VD_DRAIN: "종료" };
-const states = { RUNNING: "진행 중", SUCCEEDED: "완료", FAILED: "실패", SUPERSEDED: "새 요청으로 대체됨" };
+const kinds = { VD_PROVISION: "시작", VD_REPLACE: "교체", VD_DRAIN: "종료", VD_CONTINUOUS_START: "연속 계산 시작", VD_CONTINUOUS_REPLACE: "연속 계산 교체", VD_CONTINUOUS_STOP: "연속 계산 중지" };
+const states = { PENDING: "대기 중", RUNNING: "진행 중", SUCCEEDED: "완료", FAILED: "실패", SUPERSEDED: "새 요청으로 대체됨" };
 const observations = { PENDING: "생성 대기", SUBMITTED: "Pod 생성됨", READY: "준비 관측됨", UNREADY: "준비되지 않음", TERMINATED: "종료 확인됨" };
 
 function requestKey() {

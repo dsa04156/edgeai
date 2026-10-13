@@ -10,7 +10,7 @@ public final class DeviceProfileCompiler {
     public record Compilation(String id,String node,String model,Map<String,Object> profile,Map<String,Object> modelResource,Map<String,Object> deviceResource) {}
     private DeviceProfileCompiler() {}
     public static Compilation compile(Object value,String namespace,String broker) {
-        var input=map(value); fields(input,Set.of("name","kind","protocol","host","port","protocolConfig","properties","collectionInterval","targetNode"),Set.of("name","protocol","properties","targetNode"));
+        var input=map(value); fields(input,Set.of("name","sourceName","kind","protocol","host","port","protocolConfig","properties","collectionInterval","targetNode"),Set.of("name","protocol","properties","targetNode"));
         String id=name(input.get("name")),node=name(input.get("targetNode"));
         String kind=Objects.toString(input.getOrDefault("kind","physical"));
         String protocol=WorkflowInput.text(input.get("protocol"),32),mapperProtocol=mapperProtocol(protocol);
@@ -42,19 +42,20 @@ public final class DeviceProfileCompiler {
         var properties=properties(protocol,input.get("properties"));
         var modelProperties=new ArrayList<Map<String,Object>>();var deviceProperties=new ArrayList<Map<String,Object>>();
         for(var property:properties) {
-            String key=(String)property.get("name"),type=modelType((String)property.get("dataType"));
-            modelProperties.add(Map.of("name",key,"type",type,"accessMode","ReadOnly","unit",property.get("unit")));
+            String key=(String)property.get("name"),type="STRING";
+            // EdgeCore 1.23 drops arbitrary Twin metadata. Keep value, applied
+            // configuration and collection time together in one string value.
+            modelProperties.add(Map.of("name",key,"type",type,"description","edgeai.measurement/v1; wire type="+property.get("dataType"),"accessMode","ReadOnly","unit",property.get("unit")));
             var visitor=new TreeMap<>(property);visitor.remove("name");visitor.remove("unit");
             if(protocol.equals("modbus-tcp")){int register=((Number)visitor.remove("register")).intValue();String function=(String)visitor.get("function");int base=function.equals("input")?30001:function.equals("coil")?1:40001;visitor.put("address",register-base);}
             deviceProperties.add(Map.of("name",key,"desired",Map.of("value","","metadata",Map.of("type",type.toLowerCase(Locale.ROOT))),
                 "visitors",Map.of("protocolName",mapperProtocol,"configData",visitor),"collectCycle",cycle,"reportCycle",5000,"reportToCloud",true,
                 "pushMethod",Map.of("mqtt",Map.of("address",broker,"topic","edgeai/devices/"+id+"/"+key,"qos",1,"retained",false))));
         }
-        modelProperties.add(Map.of("name","connection","type","STRING","accessMode","ReadOnly"));
-        deviceProperties.add(Map.of("name","connection","desired",Map.of("value","","metadata",Map.of("type","string")),"visitors",Map.of("protocolName",mapperProtocol,"configData",Map.of("reserved",true)),"collectCycle",5000,"reportCycle",5000,"reportToCloud",true));
         var modelSpec=Map.<String,Object>of("protocol",mapperProtocol,"properties",modelProperties);
         String model="edgeai-model-"+JSON.digest("edgeai-device-model-v1",modelSpec).substring(7,31);
         var profile=new TreeMap<String,Object>();profile.putAll(input);profile.put("kind",kind);if(!local)profile.put("port",port);profile.put("collectionInterval",cycle);profile.put("protocolConfig",normalizedConfig);profile.put("properties",properties);
+        profile.put("sourceName",name(input.getOrDefault("sourceName",normalizedConfig.getOrDefault("deviceId",id))));
         String configuration=configuration(profile);
         for(var property:deviceProperties)if(!property.get("name").equals("connection"))
             map(map(property.get("visitors")).get("configData")).put("configurationSha256",configuration);
@@ -76,6 +77,7 @@ public final class DeviceProfileCompiler {
             var allowed=new HashSet<String>(Set.of("name","dataType","scale","offset","unit",binding));
             if(protocol.equals("modbus-tcp")){allowed.add("function");allowed.add("byteOrder");}else if(protocol.equals("mqtt"))allowed.add("jsonPath");
             if(protocol.equals("serial-json"))allowed.add("sensor");
+            if(Set.of("mqtt","virtual").contains(protocol))allowed.add("timestampPath");
             fields(p,allowed,Set.of("name",binding,"dataType"));
             String key=WorkflowInput.text(p.get("name"),63);
             if(!key.matches("[a-z][a-z0-9_]*")||key.equals("connection")||!names.add(key))throw new IllegalArgumentException("Invalid or duplicate property name");
@@ -96,10 +98,15 @@ public final class DeviceProfileCompiler {
                 String nodeId=WorkflowInput.text(p.get("nodeId"),512);
                 if(!nodeId.matches("(?:ns=[0-9]{1,5};)?(?:i=[0-9]+|s=[^\\p{Cntrl}]+|g=[0-9a-fA-F-]{36}|b=[A-Za-z0-9+/=]+)"))throw new IllegalArgumentException("Valid OPC-UA NodeId required");normalized.put("nodeId",nodeId);
             }else{
-                if(protocol.equals("mqtt")){String topic=WorkflowInput.text(p.get("topic"),256);if(topic.contains("#")||topic.contains("+")||topic.startsWith("edgeai/devices/")||topic.chars().anyMatch(Character::isISOControl))throw new IllegalArgumentException("Exact MQTT input topic required; output topics are reserved");normalized.put("topic",topic);}
+                if(protocol.equals("mqtt")){String topic=WorkflowInput.text(p.get("topic"),256);if(topic.contains("#")||topic.contains("+")||topic.startsWith("edgeai/devices/")||topic.startsWith("edgeai/observations/")||topic.chars().anyMatch(Character::isISOControl))throw new IllegalArgumentException("Exact MQTT input topic required; output topics are reserved");normalized.put("topic",topic);}
                 String jsonPath=Objects.toString(p.getOrDefault("jsonPath",""));if(jsonPath.length()>256||(!jsonPath.isEmpty()&&!jsonPath.matches("[a-zA-Z0-9_]+(?:\\.[a-zA-Z0-9_]+)*")))throw new IllegalArgumentException("Dot-separated JSON property path required");normalized.put("jsonPath",jsonPath);
                 if(protocol.equals("serial-json")){String sensor=WorkflowInput.text(p.get("sensor"),63);if(!sensor.matches("[a-zA-Z0-9][a-zA-Z0-9_-]*")||jsonPath.isEmpty())throw new IllegalArgumentException("Serial sensor and JSON path required");normalized.put("sensor",sensor);}
                 if(protocol.equals("sensehat")&&!Set.of("temp_humidity","temp_pressure","humidity","pressure","compass","pitch","roll","yaw","gyro_x","gyro_y","gyro_z").contains(jsonPath))throw new IllegalArgumentException("Unsupported Sense HAT property");
+            }
+            if(p.containsKey("timestampPath")) {
+                String path=WorkflowInput.text(p.get("timestampPath"),128);
+                if(!path.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*"))throw new IllegalArgumentException("Invalid timestamp path");
+                normalized.put("timestampPath",path);
             }
             for(var field:List.of("scale","offset")){Object v=p.getOrDefault(field,field.equals("scale")?1:0);if(!(v instanceof Number)||!Double.isFinite(((Number)v).doubleValue()))throw new IllegalArgumentException("Finite scaling required");normalized.put(field,v);}
             result.add(normalized);

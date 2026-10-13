@@ -6,6 +6,28 @@
 .sensor-current strong { font-size: 24px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .sensor-current span, .sensor-chart figcaption { font-size: 12px; color: var(--secondary); }
 .sensor-chart { margin: 16px 0; }
+.continuous-history-chart { margin: 16px 0; overflow-x: auto; }
+.continuous-history-chart svg { display: block; width: 100%; min-width: 340px; max-height: 320px; }
+.continuous-history-chart text { font-size: 12px; fill: var(--secondary); }
+.continuous-history-chart figcaption { font-size: 12px; color: var(--secondary); }
+.continuous-axis { fill: none; stroke: var(--line); }
+.continuous-line { fill: none; stroke: var(--signal); stroke-width: 2; }
+.continuous-dot { fill: var(--signal); }
+.continuous-gap { fill: var(--warning-surface); }
+.continuous-flow { margin-block: 16px 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.continuous-flow h2 { margin: 0; font-size: 14px; }
+.continuous-flow > .toolbar { flex-wrap: wrap; }
+.continuous-flow > .toolbar > span { font-size: 12px; }
+.continuous-flow-stages { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 24px; list-style: none; padding: 0; margin: 16px 0; }
+.continuous-flow-stages li { min-width: 0; position: relative; padding: 12px; border-radius: var(--radius); background: var(--control); overflow-wrap: anywhere; }
+.continuous-flow-stages li:not(:last-child)::after { content: '→'; position: absolute; inset-inline-end: -20px; top: 50%; translate: 0 -50%; color: var(--secondary); }
+.continuous-flow-stages strong { display: block; font-size: 13px; margin-bottom: 8px; }
+.continuous-flow-stages p { margin: 4px 0; font-size: 12px; }
+.continuous-flow-stages span { display: block; font-size: 11px; }
+@media (max-width: 900px) {
+  .continuous-flow-stages { grid-template-columns: minmax(0, 1fr); }
+  .continuous-flow-stages li:not(:last-child)::after { content: '↓'; inset-inline-end: auto; top: auto; bottom: -24px; inset-inline-start: 50%; translate: -50% 0; }
+}
 .sensor-chart svg { display: block; width: 100%; max-height: 320px; }
 .sensor-chart text { font-size: 12px; fill: var(--secondary); }
 .sensor-command { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }

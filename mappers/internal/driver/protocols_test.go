@@ -7,10 +7,22 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gopcua/opcua/server"
 	"github.com/gopcua/opcua/ua"
 )
+
+type timestampedNamespace struct{ *server.MapNamespace }
+
+func (ns *timestampedNamespace) Attribute(id *ua.NodeID, attribute ua.AttributeID) *ua.DataValue {
+	value := ns.MapNamespace.Attribute(id, attribute)
+	if attribute == ua.AttributeIDValue && value.Status == ua.StatusOK {
+		value.SourceTimestamp = time.UnixMilli(1700000000123)
+		value.EncodingMask |= ua.DataValueSourceTimestamp
+	}
+	return value
+}
 
 func TestVirtualReadsActualHTTPRuntimeAndRejectsMissingWrongTypes(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +60,7 @@ func TestOPCUAReadsRealServerAndReportsUnknownNode(t *testing.T) {
 	s := server.New(server.EndPoint("127.0.0.1", port), server.EnableSecurity("None", ua.MessageSecurityModeNone), server.EnableAuthMode(ua.UserTokenTypeAnonymous))
 	ns := server.NewMapNamespace(s, "test")
 	ns.Data["temperature"] = float32(31.25)
+	s.AddNamespace(&timestampedNamespace{ns})
 	if err = s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +71,10 @@ func TestOPCUAReadsRealServerAndReportsUnknownNode(t *testing.T) {
 	}
 	defer reader.Close()
 	p := Property{DataType: "float32", NodeID: "ns=" + strconv.Itoa(int(ns.ID())) + ";s=temperature", Scale: 1}
+	observation, err := ReadObservation(context.Background(), reader, p)
+	if err != nil || observation.TimeBasis != "SOURCE" || observation.ObservedAt != 1700000000123 {
+		t.Fatalf("native OPC-UA timestamp was not preserved: %+v %v", observation, err)
+	}
 	value, err := reader.Read(context.Background(), p)
 	if err != nil || value != "31.25" {
 		t.Fatalf("%s %v", value, err)

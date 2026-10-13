@@ -31,7 +31,7 @@ test("VD uses sensor inventory and does not offer duplicate app device registrat
   await page.getByLabel("VD 이름",{exact:true}).fill("온도 VD");
   await page.getByLabel("input · 필수 원본").selectOption(sensor.id);
   await expect(page.getByText(/1970/)).toHaveCount(0);
-  await expect(page.getByText("미수집",{exact:false})).toBeVisible();
+  await expect(page.getByText("미수집",{exact:true})).toBeVisible();
   await page.getByLabel("input · temperature 선택").check();
   await page.getByLabel("input · 최대 수신 경과 시간(초)").fill("45");
   await expect(page.getByText("원본 장치 바로 등록",{exact:true})).toHaveCount(0);

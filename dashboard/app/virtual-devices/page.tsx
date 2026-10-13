@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default function VirtualDevices() {
 
   return <main id="main-content" className="management-page virtual-devices-page">
-    <PageHeading eyebrow="INFRASTRUCTURE / VIRTUAL DEVICES" title="가상 디바이스" description="센서와 처리 기능을 선택해 가상 장치를 등록합니다. 원본 연결과 실행 위치를 교체해도 VD ID는 유지됩니다." />
+    <PageHeading eyebrow="INFRASTRUCTURE / VIRTUAL DEVICES" title="가상 디바이스" description="센서 입력과 계산을 선택해 가상 장치를 구성합니다. 연속 처리 결과는 항목별 최신값과 그래프로 확인합니다." />
     <VirtualDeviceRegistry workflows={workflowsEnabled()} />
   </main>;
 }

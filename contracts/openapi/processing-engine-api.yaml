@@ -1,0 +1,212 @@
+openapi: 3.1.0
+info:
+  title: EdgeAI shared processing engine wire API
+  version: 1.0.0
+  description: Internal engine lease and provenance contract. The backend compiles SQL; users cannot supply SQL or sinks. Both credentials are required, and the projected token must attest the current owned Pod UID in namespace ekuiper.
+servers: [{url: https://edgeai-api.edgeai.svc:18443}]
+security: [{engineCredential: [], podBoundToken: []}]
+paths:
+  /internal/v1/processing/poll:
+    post:
+      operationId: pollProcessingEngine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sessionId, sequence, reports]
+              properties:
+                sessionId: {type: string, format: uuid}
+                sequence: {$ref: '#/components/schemas/Sequence'}
+                reports:
+                  type: array
+                  maxItems: 200
+                  items: {$ref: '#/components/schemas/Report'}
+      responses:
+        '200':
+          description: '15-second lease; retry an ambiguous poll with exactly the same session, sequence and body. New process/session begins at sequence1; same-Pod replacement waits for lease expiry.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Plan'}
+        '401': {description: Credential or current Pod attestation rejected}
+        '409': {description: Expired, retired or conflicting session/sequence; rotate session and discard old pending work}
+        '503': {description: Engine feature disabled or control plane unavailable}
+  /internal/v1/processing/reset:
+    post:
+      operationId: resetProcessingWindow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sessionId, vdId, generation, reason]
+              properties:
+                sessionId: {type: string, format: uuid}
+                vdId: {type: string, format: uuid}
+                generation: {type: string, format: uuid}
+                reason: {type: string, enum: [INPUT_STALE, INPUT_MISSING, INPUT_CHANGED, ENGINE_BACKPRESSURE, EVALUATION_TIMEOUT, TICK_GAP, RULE_UNAVAILABLE]}
+      responses:
+        '200':
+          description: Current replacement generation; repeating an old-generation reset cannot reset the replacement
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [generation]
+                properties:
+                  generation: {type: string, format: uuid}
+        '401': {description: Engine credentials rejected}
+        '409': {description: Invalid lease or stopped execution}
+  /internal/v1/processing/results:
+    post:
+      operationId: acceptProcessingResults
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sessionId, results]
+              properties:
+                sessionId: {type: string, format: uuid}
+                results:
+                  type: array
+                  minItems: 1
+                  maxItems: 64
+                  items: {$ref: '#/components/schemas/Result'}
+      responses:
+        '200':
+          description: Accepted current results, including deduplicated retries; history failure does not prevent live acknowledgement. Request body limit262144 bytes. No replay or backfill.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, newResults, historyStored, replay]
+                properties:
+                  accepted: {type: integer, minimum: 1, maximum: 64}
+                  newResults: {type: integer, minimum: 0, maximum: 64}
+                  historyStored: {type: boolean}
+                  replay: {type: boolean, const: false}
+        '400': {description: Invalid slot, value, input age, proof or duplicate row within the batch}
+        '401': {description: Engine credentials rejected}
+        '409': {description: Session, generation or source identity/configuration fence changed; split rejected mixed VD batches to isolate the affected VD}
+components:
+  securitySchemes:
+    engineCredential: {type: http, scheme: bearer, description: Fresh mounted processing credential on every request}
+    podBoundToken: {type: apiKey, in: header, name: X-EdgeAI-Pod-Token, description: Fresh projected service-account token with audience edgeai-processing-engine; bound Pod name/UID and current live ownership are verified through Kubernetes}
+  schemas:
+    QualifiedObservation:
+      type: object
+      additionalProperties: false
+      description: Non-retained QoS1 MQTT packet on the exact qualified topic. Session is a canonical base36 positive int64 incarnation counter persisted on the Mapper node under the existing callback mount. Allocation is locked, atomically committed and advances across process restarts and backward clock steps. The receiver retains a monotonic session/sequence watermark and requires a new live packet after reconnect. Original observedAt is preserved even for repeated readings of a cached frame. Preserve the counter file while the sourceGeneration is unchanged; lost state requires an explicit new sourceGeneration.
+      required: [apiVersion, namespace, deviceName, property, sourceGeneration, configurationSha256, observedAt, receivedAt, timeBasis, sessionId, sequence, type, unit, value]
+      properties:
+        apiVersion: {type: string, const: edgeai.observation/v1}
+        namespace: {type: string}
+        deviceName: {type: string}
+        property: {type: string}
+        sourceGeneration: {type: string, format: uuid}
+        configurationSha256: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        observedAt: {type: integer, minimum: 1}
+        receivedAt: {type: integer, minimum: 1}
+        timeBasis: {type: string, enum: [SOURCE, RECEIVED, COLLECTED]}
+        sessionId: {type: string, pattern: '^[a-z0-9]{1,13}$'}
+        sequence: {$ref: '#/components/schemas/Sequence'}
+        type: {type: string, enum: [float32, float64, int16, uint16, int32, uint32, bool, string]}
+        unit: {type: string}
+        value: {oneOf: [{type: number}, {type: boolean}, {type: string}]}
+    Sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+    Report:
+      type: object
+      additionalProperties: false
+      required: [vdId, generation, state, reason, ruleIds]
+      properties:
+        vdId: {type: string, format: uuid}
+        generation: {type: string, format: uuid}
+        state: {type: string, enum: [RUNNING, WAITING_INPUT, STOPPED, ERROR]}
+        reason: {type: string, enum: [HEALTHY, INPUT_MISSING, INPUT_STALE, WINDOW_WARMING, RULE_UNAVAILABLE, SOURCE_CONFIGURATION_UNAVAILABLE, STOPPED, ENGINE_BACKPRESSURE, EVALUATION_TIMEOUT]}
+        ruleIds: {type: array, maxItems: 16, uniqueItems: true, items: {type: string}}
+    Input:
+      type: object
+      required: [deviceId, deviceUid]
+      description: Complete fields for valid routes; unavailable routes carry reason and selection metadata, never fabricated applied identities. The agent skips unavailable routes.
+      properties:
+        deviceId: {type: string}
+        deviceUid: {type: string, format: uuid}
+        deviceModel: {type: string}
+        namespace: {type: string}
+        property: {type: string}
+        type: {type: string, enum: [float32, float64, int16, uint16, int32, uint32, bool, string]}
+        unit: {type: string}
+        targetNode: {type: string}
+        sourceGeneration: {type: string, format: uuid}
+        configurationSha256: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        broker: {type: string, format: uri}
+        topic: {type: string, description: Exact edgeai/observations/v1/namespace/device/property topic; retained packets rejected}
+        alias: {type: string}
+        column: {type: string}
+        maxAgeSeconds: {type: integer, minimum: 1, maximum: 300}
+        reason: {type: string}
+    Rule:
+      type: object
+      required: [id, outputId, sql, type, unit, warmupTicks, conditional]
+      properties:
+        id: {type: string, pattern: '^edgeai_vd_[a-f0-9]{32}_[a-f0-9]{32}_[A-Za-z][A-Za-z0-9_]{0,62}$'}
+        outputId: {type: string}
+        sql: {type: string, description: Generated backend SQL only; engine attaches its private local callback sink}
+        type: {type: string, enum: [number, boolean]}
+        unit: {type: string}
+        warmupTicks: {type: integer, minimum: 1, maximum: 1024}
+        conditional: {type: boolean, description: A filtered-out output legitimately omits a callback}
+    Execution:
+      type: object
+      required: [vdId, generation, running, sources, rules]
+      properties:
+        vdId: {type: string, format: uuid}
+        generation: {type: string, format: uuid}
+        running: {type: boolean}
+        sources: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/Input'}}
+        rules: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/Rule'}}
+        intervalSeconds: {type: integer, minimum: 1, maximum: 3600}
+        retentionDays: {type: integer, minimum: 1, maximum: 30}
+        reason: {type: string}
+    Plan:
+      type: object
+      required: [apiVersion, engineId, enginePodUid, sessionId, serverTime, leaseExpiresAt, inputs, executions]
+      properties:
+        apiVersion: {type: string, const: edgeai.processing-plan/v1}
+        engineId: {type: string, const: central}
+        enginePodUid: {type: string, format: uuid}
+        sessionId: {type: string, format: uuid}
+        serverTime: {type: string, format: date-time}
+        leaseExpiresAt: {type: string, format: date-time}
+        inputs: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/Input'}}
+        executions: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/Execution'}}
+    Proof:
+      type: object
+      additionalProperties: false
+      required: [alias, deviceUid, sourceGeneration, configurationSha256, observedAt]
+      properties:
+        alias: {type: string, maxLength: 32}
+        deviceUid: {type: string, format: uuid}
+        sourceGeneration: {type: string, format: uuid}
+        configurationSha256: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        observedAt: {type: integer, description: Original measurement time in epoch milliseconds, checked against the aligned slot and configured maxAgeSeconds}
+    Result:
+      type: object
+      additionalProperties: false
+      required: [vdId, outputId, generation, sequence, evaluationId, evaluationAt, value, sources]
+      properties:
+        vdId: {type: string, format: uuid}
+        outputId: {type: string, maxLength: 63}
+        generation: {type: string, format: uuid}
+        sequence: {$ref: '#/components/schemas/Sequence'}
+        evaluationId: {type: string, description: 'generation:sequence'}
+        evaluationAt: {type: string, format: date-time, description: 'sequence * intervalSeconds *1000 epoch milliseconds; at most15 seconds old and1 second in the future'}
+        value: {oneOf: [{type: number}, {type: boolean}]}
+        sources: {type: array, minItems: 1, maxItems: 16, items: {$ref: '#/components/schemas/Proof'}}

@@ -37,9 +37,9 @@ export function EditDeviceProperty({ device, property, busy, onSave, onCancel }:
   </form>;
 }
 
-export function AddDeviceProperty({ device, profiles, busy, onAdd, onCancel }: { device: Device; profiles: Profile[]; busy: boolean; onAdd: (value: Property) => void; onCancel: () => void }) {
+export function AddDeviceProperty({ device, profiles, existingNames, busy, onAdd, onCancel }: { device: Device; profiles: Profile[]; existingNames: string[]; busy: boolean; onAdd: (value: Property) => void; onCancel: () => void }) {
   const protocol = device.profile.protocol;
-  const existing = new Set(device.profile.properties.map(p => p.name));
+  const existing = new Set(existingNames);
   const choices = profiles.filter(p => p.protocol === protocol).flatMap(profile => profile.properties.filter(p => !existing.has(p.name)).map(p => ({ key: `${profile.name}/${p.name}`, profile: profile.name, property: p })));
   const [selected, setSelected] = useState(choices[0]?.key ?? "");
   const [value, setValue] = useState<Property>(choices[0]?.property ?? newProperty(protocol));
@@ -48,7 +48,7 @@ export function AddDeviceProperty({ device, profiles, busy, onAdd, onCancel }: {
   const fields = <PropertyFields protocol={protocol} value={value} onChange={(field, next) => setValue(old => ({ ...old, [field]: next }))} />;
   return <form ref={form} aria-label={`${device.id} 측정 항목 추가`} className="panel publish-fields" onInvalidCapture={e => { if (e.target instanceof HTMLElement) { const details = e.target.closest("details"); if (details) details.open = true; } }} onSubmit={e => { e.preventDefault(); onAdd(value); }}>
     <h3>{device.id} · 측정 항목 추가</h3>
-    <p className="muted">{device.targetNode} · {protocol} · 기존 연결 설정과 수집 간격을 사용합니다.</p>
+    <p className="muted">{device.targetNode} · {protocol} · 기존 연결 설정과 수집 간격을 공유하는 별도 센서를 등록합니다.</p>
     <fieldset disabled={busy}><legend>추가할 항목</legend>
       <label>측정 항목 선택<select value={selected} onChange={e => { const key = e.target.value; setSelected(key); setValue(choices.find(p => p.key === key)?.property ?? newProperty(protocol)); }}>
         <option value="">직접 입력</option>{choices.map(c => <option key={c.key} value={c.key}>{c.property.name} · {c.profile}</option>)}
@@ -56,6 +56,6 @@ export function AddDeviceProperty({ device, profiles, busy, onAdd, onCancel }: {
       {!choices.length && <p className="muted">추가할 저장 규격이 없습니다. 새 항목의 이름과 값의 위치를 입력하세요.</p>}
       {selected ? <><p><strong>{value.name}</strong> · {value.dataType}{value.unit ? ` · ${value.unit}` : ""}</p><details key={selected}><summary>항목 설정 확인·수정</summary>{fields}</details></> : fields}
     </fieldset>
-    <div className="toolbar"><button className="primary" disabled={busy || device.profile.properties.length >= 64}>{busy ? "추가 중…" : "항목 추가"}</button><button type="button" disabled={busy} onClick={onCancel}>취소</button></div>
+    <div className="toolbar"><button className="primary" disabled={busy}>{busy ? "추가 중…" : "항목 추가"}</button><button type="button" disabled={busy} onClick={onCancel}>취소</button></div>
   </form>;
 }

@@ -1,0 +1,17 @@
+{
+  "apiVersion": "edgeai.vd/v3",
+  "type": "processing",
+  "executionMode": "CONTINUOUS_EKUIPER",
+  "sources": {
+    "temperature": {"deviceModel": "edgeai-model-temperature", "required": true},
+    "humidity": {"deviceModel": "edgeai-model-humidity", "required": true}
+  },
+  "continuous": {
+    "intervalSeconds": 1,
+    "retentionDays": 7,
+    "outputs": [
+      {"name": "mean_temperature", "expression": "temperature", "operation": "movingAverage", "sampleCount": 60, "unit": "°C"},
+      {"name": "humid_heat", "expression": "temperature > 30 and humidity > 70", "operation": "threshold", "unit": ""}
+    ]
+  }
+}
