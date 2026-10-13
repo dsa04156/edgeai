@@ -8,6 +8,12 @@ spec:
       containers:
       - name: api
         env:
+        - name: EDGEAI_STREAM_ENABLED
+          value: 'false'
+        - name: EDGEAI_STREAM_BINDINGS_ENABLED
+          value: 'false'
+        - name: EDGEAI_STREAM_RUNS_ENABLED
+          value: 'false'
         - name: EDGEAI_DB_PASSWORD
           valueFrom:
             secretKeyRef:
