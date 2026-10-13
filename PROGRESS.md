@@ -15,13 +15,14 @@
 ## 현재 운영 상태
 
 - 호스트 웹/API는 기존 13080/18080을 사용합니다. 실제 센서 17개가 ONLINE으로 조회됩니다.
+- 호스트 InfluxDB 원본 저장소는 READY, collector는 COLLECTING이며17개 센서 원본 계열과 UID별 이력 조회를 확인했습니다. 보관 기간은30일이며 현재 이전 Mapper의 원본은 UNVERIFIED로 표시합니다.
 - 센서용 NanoMQ는 Jetson·Pi의 노드 로컬 broker입니다. `ekuiper` namespace의 `my-ekuiper-0`은 worker `etri-ser0004-cgnms0`에서 eKuiper2.4.2를 실행합니다. `edgeai-mqtt-0` Mosquitto는 일반 STREAM용 별도 broker입니다.
 - `EDGEAI_CONTINUOUS_ENABLED=false`입니다. 운영 processing Agent·전용 history·qualified observation 경로의 배포와 수용은 남아 있으므로 eKuiper Pod Running을 실제 가상 센서 계산 중으로 해석하지 않습니다.
 - 명시적 삭제 요청으로 호스트 DB의 구형 등록 233개와 연결된 구형 VD 프로필·실행 데이터를 정리했습니다. 연속 처리 등록 30개는 보존됐으며 시험용 등록입니다. 일반 워크플로·SERVICE·센서·노드·감사 데이터와 migration은 보존했습니다.
 
 ## 검증과 한계
 
-구형 데이터 정리는 전체 DB 백업을 별도 DB에 복원해 먼저 실행했고, 실제 적용 시 삭제 대상 외 행의 동일성과 FK·trigger 복구를 확인했습니다. 최신 백엔드 단위180개와 빌드가 통과했습니다. 등록 모달과 연속 결과·기존 모듈 기능은 PC·모바일 Chromium28개로 검증했습니다. 날짜별 로그·스크린샷·일회성 결과는 Git에서 제외한 `output/verification/`에 보관합니다.
+구형 데이터 정리는 전체 DB 백업을 별도 DB에 복원해 먼저 실행했고, 실제 적용 시 삭제 대상 외 행의 동일성과 FK·trigger 복구를 확인했습니다. 당시 백엔드 단위180개와 빌드가 통과했습니다. 최신 그래프·원본 저장소·등록 모달·연속 결과·처리 버전 기능은 PC·모바일 Chromium40개와 lint/typecheck/build로 검증했습니다. 이번 그래프 작업은 기존 원본 이력 API를 연결하며 백엔드 저장 구현을 변경하지 않았습니다. 날짜별 로그·스크린샷·일회성 결과는 Git에서 제외한 `output/verification/`에 보관합니다.
 
 실제 브로커·eKuiper를 사용하는 개발 시험은 운영 센서의 24시간 연속 처리·저장·부하 수용과 구분합니다. 새 Mapper 경로의 자동 STREAM 연결, 실제 학습 모델·외부 API 전체 계약, 운영 identity/RBAC·종합 복구·합의 성능 기준은 남아 있습니다. 원본 이력의 운영 보관·복구 수용은 collector 연결과 조회 가능 여부만으로 완료를 주장하지 않습니다.
 
