@@ -170,6 +170,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
         <form onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); void action(async () => {
           const response = await post("workflows", Object.fromEntries(data)); const value = await response.json();
           const draft = dag;
+          if (workflow?.workflow.id !== value.id) { setVersion(null); setVersionJson(""); setTaskExecutions({}); }
           setWorkflow({ workflow: value, versions: [], nextOffset: null });
           setNotice(response.status === 201 ? "워크플로를 생성했습니다. DAG 버전을 발행하세요." : "동일한 워크플로가 이미 있습니다.");
           try { await showWorkflow(value.id); await loadWorkflows(0); } catch { setError("등록은 완료됐지만 저장된 상태 조회에 실패했습니다. 워크플로 새로고침으로 확인하세요."); }

@@ -130,6 +130,7 @@ test("adding a measurement uses one modal and preserves its selected source on f
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "측정 항목 추가", exact: true });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "취소", exact: true })).toBeInViewport();
   await dialog.getByLabel("항목 1 이름", { exact: true }).fill("humidity");
   await dialog.getByRole("button", { name: "항목 추가", exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveText("같은 연결의 항목을 확인하세요.");
@@ -169,14 +170,22 @@ test("DAG version publication opens a modal and closes after a successful retry"
 
 test("workflow registration stays saved when the following detail lookup fails", async ({ page }) => {
   await catalog(page); let saves = 0;
+  const previous = { id: "old-workflow", key: "previous", displayName: "이전 검사", createdAt: "2026-10-13T00:00:00Z" };
+  const oldVersion = { id: "old-version", workflowId: previous.id, version: "1.0.0", dag: { tasks: [], dependencies: [] }, digest: "sha256:" + "a".repeat(64), createdAt: previous.createdAt };
   await page.route("**/api/control-plane/workflows**", route => {
     if (route.request().method() === "POST") {
       saves++;
       return route.fulfill({ status: 201, json: { ...route.request().postDataJSON(), id: "workflow-1", createdAt: "2026-10-13T00:00:00Z" } });
     }
-    return new URL(route.request().url()).pathname.endsWith("/workflows") ? route.fulfill({ json: { items: [], nextOffset: null } }) : route.fulfill({ status: 503, json: { message: "상세 조회 실패" } });
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/workflows")) return route.fulfill({ json: { items: [previous], nextOffset: null } });
+    if (path.endsWith("/old-workflow")) return route.fulfill({ json: { workflow: previous, versions: [oldVersion], nextOffset: null } });
+    return route.fulfill({ status: 503, json: { message: "상세 조회 실패" } });
   });
   await page.goto("/workflows");
+  await page.getByRole("button", { name: /이전 검사\s*previous/ }).click();
+  await page.getByRole("button", { name: "1.0.0", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "선택한 DAG · 1.0.0", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "새 워크플로 만들기", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "워크플로 등록", exact: true });
   await dialog.getByLabel("워크플로 키", { exact: true }).fill("factory-inspection");
@@ -184,5 +193,7 @@ test("workflow registration stays saved when the following detail lookup fails",
   await dialog.getByRole("button", { name: "워크플로 생성", exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole("alert").filter({ hasText: "등록은 완료" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "공장 검사", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "선택한 DAG · 1.0.0", exact: true })).not.toBeVisible();
   expect(saves).toBe(1);
 });

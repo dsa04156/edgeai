@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-export function RegistrationDialog({ open, title, busy = false, onClose, children, cancelButton = true }: {
-  open: boolean; title: string; busy?: boolean; onClose: () => void; children: ReactNode; cancelButton?: boolean;
+export function RegistrationDialog({ open, title, busy = false, onClose, children }: {
+  open: boolean; title: string; busy?: boolean; onClose: () => void; children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -31,6 +31,6 @@ export function RegistrationDialog({ open, title, busy = false, onClose, childre
     onClose={event => { if (!event.currentTarget.open && open) onClose(); }}>
     <header className="registration-dialog-header"><h2 id={titleId} tabIndex={-1}>{title}</h2><button type="button" disabled={busy} onClick={onClose} aria-label={`${title} 닫기`}>닫기</button></header>
     <div className="registration-dialog-body">{children}</div>
-    {cancelButton && <footer className="registration-dialog-footer"><button type="button" disabled={busy} onClick={onClose}>취소</button></footer>}
+    <footer className="registration-dialog-footer"><button type="button" disabled={busy} onClick={onClose}>취소</button></footer>
   </dialog>;
 }

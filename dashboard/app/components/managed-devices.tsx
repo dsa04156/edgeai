@@ -176,10 +176,10 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
         {editing?.deviceId === d.id && editing.property.name === p.name && <tr className="sensor-editor"><td colSpan={6}><EditDeviceProperty device={d} property={editing.property} busy={busy} onSave={field => void action(() => saveProperty(d, field))} onCancel={() => editProperty(null)} /></td></tr>}
       </Fragment>))}</tbody>
     </table></div>}
-    <RegistrationDialog open={!!addingDevice} title="측정 항목 추가" busy={busy} onClose={() => addTo(null)} cancelButton={false}>
+    <RegistrationDialog open={!!addingDevice} title="측정 항목 추가" busy={busy} onClose={() => addTo(null)}>
       {addingDevice && <>
         {error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}
-        <AddDeviceProperty key={addingDevice.id} device={addingDevice} profiles={profiles} existingNames={(items ?? []).filter(other => sourceName(other) === sourceName(addingDevice) && other.targetNode === addingDevice.targetNode && other.profile.protocol === addingDevice.profile.protocol).flatMap(other => other.profile.properties.map(field => field.name))} busy={busy} onAdd={field => void action(() => addProperty(addingDevice, field))} onCancel={() => addTo(null)} />
+        <AddDeviceProperty key={addingDevice.id} device={addingDevice} profiles={profiles} existingNames={(items ?? []).filter(other => sourceName(other) === sourceName(addingDevice) && other.targetNode === addingDevice.targetNode && other.profile.protocol === addingDevice.profile.protocol).flatMap(other => other.profile.properties.map(field => field.name))} busy={busy} onAdd={field => void action(() => addProperty(addingDevice, field))} />
       </>}
     </RegistrationDialog>
   </section>;
