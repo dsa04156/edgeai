@@ -971,6 +971,207 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/virtual-devices/continuous-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공유 eKuiper 연속 처리 기능과 한도 */
+        get: operations["getContinuousCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/continuous": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 측정 항목을 입력으로 연속 처리 가상디바이스 등록
+         * @description 입력 프로토콜은 센서 어댑터가 처리한다. SERVICE 또는 VD별 Pod를 생성하지 않으며 파생 출력은 앱에서 관리한다. 등록은 계산을 시작하지 않는다. 같은 키와 동일한 입력의 재전송은 기존 등록을 반환한다.
+         */
+        post: operations["createContinuousVirtualDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/continuous": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 연속 처리 입력과 계산식 명시적으로 수정
+         * @description 새 불변 VD 프로필 버전을 참조하고 revision을 올린다. 실행 중이면 generation을 변경하고 이전 창과 결과를 차단한다. 새 센서를 자동으로 기존 계산 입력에 추가하지 않는다.
+         */
+        patch: operations["updateContinuousVirtualDevice"];
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 파생 측정 항목별 최신 값과 품질 */
+        get: operations["getContinuousOutputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/outputs/{outputId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 출력 이력과 데이터 누락 구간 조회
+         * @description 모든 계산 결과를 저장한다. bucketSeconds는 조회 결과만 집계하며 저장 주기를 바꾸지 않는다. 기본 최근 1시간, 최대 조회 기간 31일. 재연결 시 과거 결과를 재생하지 않는다.
+         */
+        get: operations["getContinuousOutputHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 등록·해제된 VD 목록 조회
+         * @description key 순서로 논리 VD를 조회합니다. REGISTERED를 Ready로 해석하지 마세요. 해제 이력도 보존합니다.
+         */
+        get: operations["listVirtualDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * VD 설정과 활성·과거 원본 연결 조회
+         * @description 최신 revision, 불변 Profile 참조와 source 이력을 조회합니다. closedAt이 null인 연결만 현재 원본입니다. 이력은 최신100개이며 더 있으면 sourceHistoryTruncated=true입니다.
+         */
+        get: operations["getVirtualDevice"];
+        put?: never;
+        post?: never;
+        /**
+         * VD 논리 해제와 원본 연결 종료
+         * @description VD를 RELEASED로 표시하고 활성 source를 닫습니다. 관리 중인 실행이 있으면 종료 Operation을 함께 기록하며 완료 전까지 이전 원본 Device 해제를 막습니다. 물리 Device는 해제하지 않으며 이력과 vdId를 유지합니다. 반복 해제는 같은 상태를 반환합니다. 응답은 논리 해제이며 실제 Pod 종료 완료를 뜻하지 않습니다. execution의 pendingOperation과 Operation 조회에서 실제 종료를 확인하세요.
+         */
+        delete: operations["releaseVirtualDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * VD 실행 시작 요청
+         * @description 현재 설정으로 지속 실행을 시작합니다. 같은 설정의 실행이 있으면 재사용하며, 다른 설정이면 종료 후 교체합니다. 현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다. 새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다. VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
+         */
+        post: operations["provisionVirtualDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * VD 실행 종료 요청
+         * @description 새 작업 수용을 중단하고 drain 후 물리 Pod 종료를 기다립니다. 제한 시간 초과는 강제 종료로 전환합니다. 실행이 없으면 즉시 SUCCEEDED이며 VD 등록은 유지됩니다. 현재 revision과 UUID Idempotency-Key를 보내세요. 같은 VD·키·요청 재전송은 동일 Operation을 반환하고 다른 요청은409입니다. 새 요청은 기존 진행 작업을 SUPERSEDED로 바꿀 수 있습니다. 같은 키의 재전송은 상태가 바뀌어도 새 실행을 만들지 않습니다. VD 실행 기능은 기본 비활성이며 비활성 요청은503입니다. 현재는 지속 실행의 준비/종료를 관리하며 VD Task 배정은 후속 연결 범위입니다.
+         */
+        post: operations["drainVirtualDeviceRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/virtual-devices/{vdId}/execution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * VD 실행 준비 상태·세대·작업 이력 조회
+         * @description asOf 시점의 일관된 DB 스냅샷입니다. ready는 RUNNING 의도·Pod Ready 관측·미만료 인증 lease를 모두 요구합니다. 과거 observedState=READY만으로 현재 준비 상태를 판단하지 마세요. current는 미종료 실행이며 없으면 null입니다. pendingOperation은 현재 진행 작업이며 runtimeHistory/bindings/operations는 각각 최신100개입니다. 각 Truncated 값이 true이면 이전 이력이 더 있습니다. 기능 비활성·VD 해제 후에도 이력은 조회 가능합니다. 세션·자격·내부 설정은 반환하지 않습니다. 성공한 Operation도 현재 실행이나 Task/Result 성공을 보장하지 않습니다.
+         */
+        get: operations["getVirtualDeviceExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1046,6 +1247,8 @@ export interface components {
                 staleMs?: number;
             };
             properties: components["schemas"]["ManagedDeviceProperty"][];
+            /** @description Physical source name shared by measurement devices; defaults to protocolConfig.deviceId or name. */
+            sourceName?: string;
         };
         ManagedDevice: {
             id: string;
@@ -1073,6 +1276,13 @@ export interface components {
                     timestamp: number;
                 };
             };
+            /**
+             * Format: date-time
+             * @description 마지막 수집 설정 변경 시각. 이 시각 이전의 twin은 새 처리 창에서 사용하지 않습니다.
+             */
+            configurationUpdatedAt?: string | null;
+            /** @description Mapper가 적용해야 할 수집 설정 식별자. 해당 식별자를 보고한 관측값만 VD 입력으로 사용합니다. */
+            configurationSha256?: string;
         };
         ManagedDevicePage: {
             items: components["schemas"]["ManagedDevice"][];
@@ -2060,7 +2270,7 @@ export interface components {
             items: components["schemas"]["WorkflowRun"][];
             nextOffset: number | null;
         };
-        Operation: components["schemas"]["OffloadOperation"];
+        Operation: components["schemas"]["OffloadOperation"] | components["schemas"]["VDOperation"];
         /** @description 과거 실행 위치 조회 전용. 새 실행은 ExecutionPolicy의 AUTO/NODE/REMOTE만 허용합니다. */
         HistoricalExecutionPolicy: {
             /** @enum {string} */
@@ -2136,6 +2346,279 @@ export interface components {
                 };
             };
         };
+        ContinuousCatalog: {
+            enabled: boolean;
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            operations: ("scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter")[];
+            /** @constant */
+            maxInputs: 16;
+            /** @constant */
+            maxOutputs: 16;
+            /** @description 수집을 추가로 실행하지 않고 조회한 측정 항목 목록. 실제 입력 수신 상태는 실행 결과에서 확인합니다. */
+            inputs: components["schemas"]["ContinuousSensor"][];
+        };
+        ContinuousConfiguration: {
+            /** @default 1 */
+            intervalSeconds: number;
+            /** @default 7 */
+            retentionDays: number;
+            outputs: components["schemas"]["ContinuousOutputDefinition"][];
+        };
+        ContinuousCreate: {
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            continuous: components["schemas"]["ContinuousConfiguration"];
+        };
+        ContinuousExecution: {
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            enabled: boolean;
+            /** @enum {string} */
+            state: "STOPPED" | "STARTING" | "RUNNING" | "WAITING_INPUT" | "STOPPING" | "ERROR";
+            reason: string;
+            /** Format: uuid */
+            generation?: string;
+            desiredRunning?: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+            engineId?: string;
+            /** Format: uuid */
+            enginePodUid?: string;
+            /** Format: date-time */
+            engineLeaseExpiresAt?: string;
+        };
+        ContinuousHistory: {
+            /** Format: uuid */
+            vdId: string;
+            outputId: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            retentionDays: number;
+            truncated: boolean;
+            nextCursor?: string;
+            aggregation?: {
+                bucketSeconds: number;
+            };
+            gaps: {
+                /** Format: uuid */
+                generation: string;
+                reason: string;
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string | null;
+            }[];
+            items: {
+                /** Format: date-time */
+                evaluationAt: string;
+                /** Format: uuid */
+                generation?: string;
+                sequence?: number;
+                evaluationId?: string;
+                value?: number | boolean;
+                /** @enum {string} */
+                type?: "number" | "boolean";
+                unit?: string;
+                count?: number;
+                min?: number;
+                max?: number;
+                average?: number;
+            }[];
+        };
+        ContinuousOutputDefinition: {
+            name: string;
+            /** @description 입력 별칭과 숫자·불리언 상수 */
+            expression: string;
+            /** @enum {string} */
+            operation: "scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter";
+            /** @description movingAverage·minimum·maximum에만 필수. 유효한 연속 평가 횟수 기준입니다. 입력 누락 시 창을 초기화합니다. */
+            sampleCount?: number;
+            /** @description 결과 내보내기 조건. filter에 필수입니다. */
+            condition?: string;
+            unit: string;
+        };
+        ContinuousOutputs: {
+            /** Format: uuid */
+            vdId: string;
+            /** @constant */
+            executionMode: "CONTINUOUS_EKUIPER";
+            /** Format: date-time */
+            asOf: string;
+            intervalSeconds: number;
+            retentionDays: number;
+            historyEnabled: boolean;
+            items: {
+                name: string;
+                expression: string;
+                /** @enum {string} */
+                operation: "scalar" | "movingAverage" | "minimum" | "maximum" | "threshold" | "filter";
+                sampleCount?: number;
+                condition?: string;
+                unit: string;
+                outputId: string;
+                /** @enum {string} */
+                quality: "VALID" | "STALE" | "NOT_AVAILABLE";
+                latest: components["schemas"]["ContinuousResult"] | null;
+            }[];
+        };
+        ContinuousResult: {
+            /** Format: uuid */
+            vdId: string;
+            outputId: string;
+            /** Format: uuid */
+            generation: string;
+            sequence: number;
+            evaluationId: string;
+            /** Format: date-time */
+            evaluationAt: string;
+            value: number | boolean;
+            /** @enum {string} */
+            type: "number" | "boolean";
+            unit: string;
+            historyStored: boolean;
+            sources: {
+                alias: string;
+                /** Format: uuid */
+                deviceUid: string;
+                /** Format: uuid */
+                sourceGeneration: string;
+                configurationSha256: string;
+                observedAt: number;
+            }[];
+        };
+        ContinuousSensor: {
+            deviceId: string;
+            /** Format: uuid */
+            deviceUid: string;
+            deviceModel: string;
+            namespace: string;
+            property: string;
+            /** @enum {string} */
+            type: "float32" | "float64" | "int16" | "uint16" | "int32" | "uint32" | "bool";
+            unit: string;
+            targetNode: string;
+        };
+        ContinuousUpdate: {
+            revision: number;
+            displayName: string;
+            sources: components["schemas"]["VirtualDeviceSources"];
+            continuous: components["schemas"]["ContinuousConfiguration"];
+        };
+        VDExecution: {
+            continuous: components["schemas"]["ContinuousExecution"] | null;
+        };
+        VDExecutionRequest: {
+            /** Format: int64 */
+            revision: number;
+        };
+        VDOperation: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "VD_PROVISION" | "VD_REPLACE" | "VD_DRAIN" | "VD_CONTINUOUS_START" | "VD_CONTINUOUS_REPLACE" | "VD_CONTINUOUS_STOP";
+            /** Format: uuid */
+            vdId: string;
+            /** Format: int64 */
+            requestedRevision: number;
+            /** Format: uuid */
+            sourceRuntimeId: string | null;
+            /** Format: uuid */
+            targetRuntimeId: string | null;
+            /** @enum {string} */
+            state: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "SUPERSEDED";
+            reason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+        };
+        VDSourceBinding: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            vdId: string;
+            sourceKey: string;
+            /** @description 센서 Device 이름. legacy 이력은 이전 앱 UUID. */
+            deviceId: string;
+            /** Format: uuid */
+            deviceUid: string | null;
+            deviceModel: string | null;
+            /** @enum {string} */
+            sourceKind: "physical" | "virtual" | "legacy";
+            properties: string[];
+            maxAgeSeconds: number;
+            /** Format: int64 */
+            openedRevision: number;
+            /** Format: int64 */
+            closedRevision: number | null;
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt: string | null;
+        };
+        VirtualDevice: {
+            /** Format: uuid */
+            id: string;
+            key: components["schemas"]["ProfileKey"];
+            displayName: string;
+            /** Format: uuid */
+            profileVersionId: string;
+            /**
+             * Format: uuid
+             * @description 연속 처리 VD는 SERVICE를 참조하지 않습니다.
+             */
+            serviceProfileVersionId: string | null;
+            /**
+             * @description 현재 논리 등록/해제. 실제 Runtime Ready 상태가 아닙니다.
+             * @enum {string}
+             */
+            state: "REGISTERED" | "RELEASED";
+            /** @enum {string} */
+            executionMode?: "CONTINUOUS_EKUIPER";
+            /** Format: int64 */
+            revision: number;
+            placement: components["schemas"]["VirtualDevicePlacement"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        VirtualDeviceDetail: {
+            vd: components["schemas"]["VirtualDevice"];
+            activeSources: components["schemas"]["VDSourceBinding"][];
+            sourceHistory: components["schemas"]["VDSourceBinding"][];
+            sourceHistoryTruncated: boolean;
+            continuous?: components["schemas"]["ContinuousConfiguration"];
+        };
+        /** @description 후속 VD provision에 사용할 배치 의도. Node는 존재해야 하며 실제 배치는 scheduler가 담당합니다. */
+        VirtualDevicePlacement: {
+            /** @constant */
+            mode: "AUTO";
+        } | {
+            /** @constant */
+            mode: "NODE";
+            /** Format: uuid */
+            nodeId: string;
+        };
+        /** @description Profile에 선언한 sourceKey마다 Device 하나. 필수 원본은 모두 지정합니다. */
+        VirtualDeviceSources: {
+            sourceKey: components["schemas"]["ProfileKey"];
+            /** @description KubeEdge 센서 Device 이름 */
+            deviceId: string;
+            /** @description BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다. */
+            properties?: string[];
+            /**
+             * @description 항목별 최신 수신값의 최대 허용 경과 시간(초)
+             * @default 30
+             */
+            maxAgeSeconds: number;
+        }[];
     };
     responses: {
         /** @description 감사 ID의 UUID 형식 또는 페이지 범위가 잘못되었습니다. */
@@ -4813,6 +5296,398 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+        };
+    };
+    getContinuousCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기능 활성화 상태와 지원 계산 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousCatalog"];
+                };
+            };
+        };
+    };
+    createContinuousVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinuousCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 등록 재조회 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            /** @description 등록 완료 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    updateContinuousVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinuousUpdate"];
+            };
+        };
+        responses: {
+            /** @description 수정 완료 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Unavailable"];
+            409: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getContinuousOutputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 파생 측정 항목별 행 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousOutputs"];
+                };
+            };
+            404: components["responses"]["Unavailable"];
+            409: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getContinuousOutputHistory: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                limit?: number;
+                cursor?: string;
+                /** @description cursor와 함께 사용할 수 없습니다. 결과 구간은 최대 2000개입니다. */
+                bucketSeconds?: number;
+            };
+            header?: never;
+            path: {
+                vdId: string;
+                outputId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 이력과 누락 구간 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinuousHistory"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            404: components["responses"]["Unavailable"];
+            409: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listVirtualDevices: {
+        parameters: {
+            query?: {
+                /** @description 한 페이지 수 */
+                limit?: number;
+                /** @description 건너뛸 수 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description VD 목록과 다음 offset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["VirtualDevice"][];
+                        nextOffset: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description VD 상세 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDeviceDetail"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            404: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    releaseVirtualDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 원본·실행 위치 변경에도 유지할 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 해제된 VD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualDevice"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    provisionVirtualDevice: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 동일 요청 재전송에서 유지할 UUID */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description 대상 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "revision": 0
+                 *     }
+                 */
+                "application/json": components["schemas"]["VDExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description 동일 요청의 기존 Operation */
+            200: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VDOperation"];
+                };
+            };
+            /** @description 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요. */
+            202: {
+                headers: {
+                    /** @description /api/v1/operations/{operationId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VDOperation"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Unavailable"];
+            409: components["responses"]["Unavailable"];
+            413: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    drainVirtualDeviceRuntime: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 동일 요청 재전송에서 유지할 UUID */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description 대상 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "revision": 0
+                 *     }
+                 */
+                "application/json": components["schemas"]["VDExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description 동일 요청의 기존 Operation */
+            200: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VDOperation"];
+                };
+            };
+            /** @description 새 Operation 저장. 응답의 state와 execution에서 실제 진행을 확인하세요. */
+            202: {
+                headers: {
+                    /** @description /api/v1/operations/{operationId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VDOperation"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            /** @description CSRF 쿠키/토큰 필요 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Unavailable"];
+            409: components["responses"]["Unavailable"];
+            413: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getVirtualDeviceExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 대상 VD UUID */
+                vdId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description VD 실행 상태와 보존된 이력 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VDExecution"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            404: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
         };
     };
 }

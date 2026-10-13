@@ -58,6 +58,18 @@ edgeai:
     admin-password-file: ${EDGEAI_STREAM_ADMIN_PASSWORD_FILE:}
     ca-file: ${EDGEAI_STREAM_CA_FILE:}
     principal-key-file: ${EDGEAI_STREAM_PRINCIPAL_KEY_FILE:}
+  continuous:
+    enabled: ${EDGEAI_CONTINUOUS_ENABLED:false}
+    namespace: ${EDGEAI_CONTINUOUS_NAMESPACE:ekuiper}
+    service-account: ${EDGEAI_CONTINUOUS_SERVICE_ACCOUNT:edgeai-processing}
+    pod-name: ${EDGEAI_CONTINUOUS_POD_NAME:my-ekuiper-0}
+    credential-file: ${EDGEAI_CONTINUOUS_CREDENTIAL_FILE:}
+    broker-node-overrides: "${EDGEAI_CONTINUOUS_BROKER_NODE_OVERRIDES:{}}"
+    history-budget-gib: ${EDGEAI_CONTINUOUS_HISTORY_BUDGET_GIB:300}
+    history:
+      url: ${EDGEAI_HISTORY_DB_URL:}
+      user: ${EDGEAI_HISTORY_DB_USER:edgeai_history}
+      password: ${EDGEAI_HISTORY_DB_PASSWORD:}
   remote:
     enabled: ${EDGEAI_REMOTE_ENABLED:false}
     provider-key: ${EDGEAI_REMOTE_PROVIDER_KEY:reference}

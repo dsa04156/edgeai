@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 const groups = [
   { label: "워크스페이스", items: [["/", "운영 현황", "overview"]] },
-  { label: "인프라", items: [["/devices", "인프라 관리", "nodes"]] },
+  { label: "인프라", items: [["/devices", "인프라 관리", "nodes"], ["/virtual-devices", "가상 센서", "sensor"]] },
   { label: "실행 관리", workflows: true, items: [["/workflows", "서비스 워크플로", "workflow"], ["/runs", "실행 · 작업 · 결과", "runs"]] },
   { label: "관리", items: [["/profiles", "실행 모듈 관리", "profile"], ["/audit", "감사 기록", "audit"], ["/docs", "프로젝트 문서", "docs"]] },
 ];

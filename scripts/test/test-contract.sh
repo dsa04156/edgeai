@@ -4,6 +4,7 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 pnpm_cmd exec openapi-typescript contracts/openapi/platform-api.yaml -o "$tmp"
 cmp dashboard/lib/api-schema.d.ts "$tmp" || { printf 'Generated contract differs. Run corepack pnpm contract:generate\n' >&2; exit 1; }
+pnpm_cmd exec openapi-typescript contracts/openapi/processing-engine-api.yaml -o "$tmp"
 pnpm_cmd exec openapi-typescript contracts/openapi/runner-api.yaml -o "$tmp"
 pnpm_cmd exec openapi-typescript contracts/openapi/remote-reference-api.yaml -o "$tmp"
 pnpm_cmd exec openapi-typescript contracts/openapi/stream-api.yaml -o "$tmp"

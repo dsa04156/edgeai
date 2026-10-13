@@ -60,6 +60,15 @@ func TestTwinReportsUseIndividuallyBudgetedRpcAndCancellation(t *testing.T) {
 	if len(got) != 3 || got[0] != "connection" || got[2] != "pitch" {
 		t.Fatal(got)
 	}
+	if err := c.ReportLatestContext(context.Background(), "edgeai-devices", "sensehat-001", "online", twins, func(string) *api.Twin { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	count := len(s.properties)
+	s.mu.Unlock()
+	if count != len(got) {
+		t.Fatal("queued Twin was sent after the latest collection became unavailable")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if c.ReportContext(ctx, "edgeai-devices", "sensehat-001", "offline", twins) == nil {

@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 @Configuration
 public class RecoveryConfiguration {
     private static final List<String> EXTERNAL_FEATURES = List.of("edgeai.runtime.enabled",
+        "edgeai.vd.enabled", "edgeai.continuous.enabled",
         "edgeai.remote.enabled", "edgeai.stream.enabled", "edgeai.stream.bindings-enabled",
         "edgeai.stream.runs-enabled", "edgeai.kubernetes.enabled");
 

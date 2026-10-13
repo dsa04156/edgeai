@@ -1,7 +1,7 @@
 package io.edgeai.domain.profile;
 
 public record ProfileIdentity(Kind kind, String key, String version) {
-    public enum Kind { DEVICE, SERVICE }
+    public enum Kind { DEVICE, SERVICE, VD }
     public ProfileIdentity {
         if (kind == null) throw new IllegalArgumentException("kind must be DEVICE or SERVICE");
         validateKey(key);

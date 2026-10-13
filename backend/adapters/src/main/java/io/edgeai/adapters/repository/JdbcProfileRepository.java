@@ -39,7 +39,7 @@ public final class JdbcProfileRepository implements ProfileRepository {
 
     @Override
     public Optional<ProfileVersion> find(UUID id) {
-        return jdbc.query("SELECT * FROM edgeai.profile_version WHERE id=? AND kind IN ('DEVICE','SERVICE')", ROW, id).stream().findFirst();
+        return jdbc.query("SELECT * FROM edgeai.profile_version WHERE id=? AND (kind IN ('DEVICE','SERVICE') OR (kind='VD' AND spec->>'apiVersion'='edgeai.vd/v3' AND spec->>'executionMode'='CONTINUOUS_EKUIPER'))", ROW, id).stream().findFirst();
     }
 
     @Override

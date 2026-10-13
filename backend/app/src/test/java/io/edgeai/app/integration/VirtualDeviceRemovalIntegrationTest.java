@@ -45,8 +45,10 @@ class VirtualDeviceRemovalIntegrationTest {
         return workflows.publish(workflow.id(),encode(Map.of("version","1.0.0","tasks",List.of(Map.of("key","root","serviceProfileVersionId",service.toString(),"parameters",Map.of())),"dependencies",List.of()))).value().id();
     }
     @Test void retiredRegistryRoutesAndProfileWritesAreUnavailable() throws Exception {
-        mvc.perform(get("/api/v1/virtual-devices")).andExpect(status().isNotFound());
-        mvc.perform(post("/api/v1/virtual-devices").with(csrf()).contentType("application/json").content("{}")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/virtual-devices")).andExpect(status().isOk()).andExpect(jsonPath("$.items[*].executionMode").value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.equalTo("CONTINUOUS_EKUIPER"))));
+        mvc.perform(get("/api/v1/virtual-devices/continuous-catalog")).andExpect(status().isOk()).andExpect(jsonPath("$.enabled").value(false));
+        mvc.perform(post("/api/v1/virtual-devices").with(csrf()).contentType("application/json").content("{}")).andExpect(status().isMethodNotAllowed());
+        mvc.perform(post("/api/v1/virtual-devices/processing").with(csrf()).contentType("application/json").content("{}")).andExpect(status().isMethodNotAllowed());
         mvc.perform(post("/api/v1/profiles/VD").with(csrf()).contentType("application/json").content(encode(Map.of("key",key(),"version","1.0.0","spec",Map.of("type","retired"))))).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/platform")).andExpect(status().isOk()).andExpect(jsonPath("$.capabilities").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("virtual-devices"))));
     }
@@ -68,6 +70,8 @@ class VirtualDeviceRemovalIntegrationTest {
         jdbc.update("INSERT INTO edgeai.profile_version(id,kind,profile_key,version,spec,digest) VALUES (?,'VD',?,'1.0.0',?::jsonb,?)",profile,key(),encode(Map.of("apiVersion","edgeai.vd/v1","serviceProfileVersionId",service.toString())),"sha256:"+"a".repeat(64));
         jdbc.update("INSERT INTO edgeai.virtual_device(id,vd_key,display_name,profile_version_id,service_profile_version_id,placement_mode,creation_digest) VALUES (?,?,'Historical VD',?,?,'AUTO',?)",vd,key(),profile,service,"sha256:"+"a".repeat(64));
         assertThat(profileRepository.find(profile)).isEmpty();
+        mvc.perform(get("/api/v1/virtual-devices/"+vd)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/virtual-devices/"+vd+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isServiceUnavailable());
         var now=Instant.now();var run=new WorkflowRun(UUID.randomUUID(),version,UUID.randomUUID(),"sha256:"+"b".repeat(64),"VD",null,"{}",RetryPolicy.disabled(),null,"PENDING",now,now,null,vd);
         new TransactionTemplate(transactions).executeWithoutResult(status->{assertThat(executionRepository.create(run)).isTrue();executionRepository.initialize(run,workflowRepository.definitions(version),Set.of("root"),Map.of());});
         var before=executionRepository.tasks(run.id());

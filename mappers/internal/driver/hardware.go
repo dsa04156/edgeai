@@ -210,3 +210,31 @@ func (h *Hardware) Read(ctx context.Context, p Property) (string, error) {
 	}
 	return jsonValue(f.payload, p)
 }
+
+func (h *Hardware) ReadObservation(ctx context.Context, p Property) (Observation, error) {
+	value, err := h.Read(ctx, p)
+	if err != nil {
+		return Observation{}, err
+	}
+	f := h.snapshot[p.Sensor]
+	observation := Observation{Value: value, ObservedAt: f.received.UnixMilli(), TimeBasis: "RECEIVED"}
+	if h.config.DevicePath == "/dev/i2c-1" {
+		var original map[string]any
+		decoder := json.NewDecoder(bytes.NewReader(f.payload))
+		decoder.UseNumber()
+		if decoder.Decode(&original) != nil {
+			return Observation{}, fmt.Errorf("invalid hardware frame")
+		}
+		origin, ok := original["origin"].(json.Number)
+		if !ok {
+			return Observation{}, fmt.Errorf("missing source timestamp")
+		}
+		n, err := origin.Int64()
+		if err != nil || n < 1000000 {
+			return Observation{}, fmt.Errorf("invalid source timestamp")
+		}
+		observation.ObservedAt = n / 1000000
+		observation.TimeBasis = "SOURCE"
+	}
+	return observation, nil
+}

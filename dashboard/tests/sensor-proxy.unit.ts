@@ -120,12 +120,12 @@ test("single property update forwards only the selected property and enforces mu
   } finally { global.fetch = original; if (previous === undefined) delete process.env.EDGEAI_API_BASE_URL; else process.env.EDGEAI_API_BASE_URL = previous; }
 });
 
-test("retired virtual-device and VD profile routes are never forwarded", async () => {
+test("retired batch, supervisor and VD profile routes are never forwarded", async () => {
   const original = global.fetch;
   let calls = 0;
   global.fetch = (async () => { calls++; throw new Error("Unexpected upstream request"); }) as typeof fetch;
   try {
-    for (const path of ["virtual-devices", "virtual-devices/11111111-1111-4111-8111-111111111111", "profiles/VD", "internal/vd/poll"]) {
+    for (const path of ["virtual-devices/processing-catalog", "virtual-devices/11111111-1111-4111-8111-111111111111/runtime", "profiles/VD", "internal/vd/poll"]) {
       for (const [method, handler] of [["GET", GET], ["POST", POST], ["PATCH", PATCH], ["DELETE", DELETE]] as const) {
         const response = await handler(new NextRequest(`http://dashboard.test/api/control-plane/${path}`, { method,
           headers: { Origin: "http://dashboard.test", "Content-Type": "application/json" } }), { params: Promise.resolve({ path: path.split("/") }) });

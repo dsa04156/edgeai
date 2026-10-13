@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -174,11 +175,33 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			p.failed(m, "MQTT data plane is required")
 			return
 		}
-		props = append(props, item{prop.Name, strings.ToLower(prop.PProperty.DataType), visitor.ConfigData, &push})
+		typ := strings.ToLower(prop.PProperty.DataType)
+		if visitor.ConfigData.ConfigurationSha256 != "" {
+			switch visitor.ConfigData.DataType {
+			case "float32":
+				typ = "float"
+			case "float64":
+				typ = "double"
+			case "bool":
+				typ = "boolean"
+			case "string":
+				typ = "string"
+			default:
+				typ = "int"
+			}
+		}
+		props = append(props, item{prop.Name, typ, visitor.ConfigData, &push})
 	}
 	if len(props) == 0 {
 		p.failed(m, "no data properties")
 		return
+	}
+	var sessions <-chan string
+	for _, prop := range props {
+		if prop.visitor.SourceGeneration != "" && prop.visitor.ConfigurationSha256 != "" {
+			sessions = observationSession(ctx, p.DMI.BudgetPath)
+			break
+		}
 	}
 	// One MQTT client per managed device; all devices share this protocol Mapper.
 	opts := mqtt.NewClientOptions().AddBroker(props[0].push.Address).SetClientID("edgeai-" + inst.Name + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)).SetConnectTimeout(2 * time.Second).SetAutoReconnect(true).SetConnectRetry(false)
@@ -187,12 +210,16 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	lastReport := time.Time{}
+	sessionID := ""
+	var sequence uint64
 	previousState := "unknown"
 	type report struct {
 		state string
 		twins []*api.Twin
 	}
 	reports := make(chan report, 1)
+	var reportMu sync.RWMutex
+	var latest report
 	reporterDone := make(chan struct{})
 	go func() {
 		defer close(reporterDone)
@@ -203,7 +230,18 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 				return
 			case value = <-reports:
 			}
-			if e := p.DMI.ReportContext(ctx, inst.Namespace, inst.Name, value.state, value.twins); e != nil && ctx.Err() == nil {
+			if e := p.DMI.ReportLatestContext(ctx, inst.Namespace, inst.Name, value.state, value.twins, func(name string) *api.Twin {
+				reportMu.RLock()
+				defer reportMu.RUnlock()
+				if latest.state == "online" {
+					for _, twin := range latest.twins {
+						if twin.PropertyName == name {
+							return twin
+						}
+					}
+				}
+				return nil
+			}); e != nil && ctx.Err() == nil {
 				log.Printf("DMI report failed device=%s: %v", inst.Name, e)
 			}
 		}
@@ -213,6 +251,7 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 		now := time.Now()
 		state := "online"
 		values := map[string]string{}
+		observations := map[string]driver.Observation{}
 		lastError := ""
 		if stream, ok := client.(interface {
 			BeginCycle(context.Context, []driver.Property) error
@@ -230,13 +269,14 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			if state == "offline" {
 				break
 			}
-			value, e := client.Read(ctx, prop.visitor)
+			observation, e := driver.ReadObservation(ctx, client, prop.visitor)
 			if e != nil {
 				state = "offline"
 				lastError = "device property read failed"
 				break
 			}
-			values[prop.name] = value
+			values[prop.name] = observation.Value
+			observations[prop.name] = observation
 		}
 		if ctx.Err() != nil {
 			return
@@ -246,7 +286,7 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			p.mu.Lock()
 			for i := range m.value.Instance.Twins {
 				if v, ok := values[m.value.Instance.Twins[i].PropertyName]; ok {
-					m.value.Instance.Twins[i].Reported = common.TwinProperty{Value: v, Metadata: common.Metadata{Type: m.value.Instance.Twins[i].ObservedDesired.Metadata.Type, Timestamp: strconv.FormatInt(now.UnixMilli(), 10)}}
+					m.value.Instance.Twins[i].Reported = common.TwinProperty{Value: v, Metadata: common.Metadata{Type: m.value.Instance.Twins[i].ObservedDesired.Metadata.Type, Timestamp: strconv.FormatInt(observations[m.value.Instance.Twins[i].PropertyName].ObservedAt, 10)}}
 				}
 			}
 			p.mu.Unlock()
@@ -258,11 +298,50 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			}
 			if publisher.IsConnected() {
 				for _, prop := range props {
-					model := common.NewDataModel(inst.Name, prop.name, inst.Namespace, common.WithType(prop.typ), common.WithValue(values[prop.name]), common.WithTimeStamp(now.UnixMilli()))
+					observation := observations[prop.name]
+					model := common.NewDataModel(inst.Name, prop.name, inst.Namespace, common.WithType(prop.typ), common.WithValue(values[prop.name]), common.WithTimeStamp(observation.ObservedAt))
 					payload, _ := json.Marshal(model)
 					t := publisher.Publish(prop.push.Topic, byte(prop.push.Qos), prop.push.Retained, payload)
 					if !t.WaitTimeout(2*time.Second) || t.Error() != nil {
 						lastError = "MQTT delivery failed"
+					}
+					if prop.visitor.SourceGeneration != "" && prop.visitor.ConfigurationSha256 != "" {
+						if sessionID == "" {
+							select {
+							case sessionID = <-sessions:
+							default:
+							}
+						}
+						if sessionID == "" {
+							lastError = "durable observation session unavailable"
+							continue
+						}
+						sequence++
+						var typed any = observation.Value
+						var typeError error
+						if prop.visitor.DataType == "bool" {
+							typed, typeError = strconv.ParseBool(observation.Value)
+						} else if prop.visitor.DataType != "string" {
+							typed, typeError = strconv.ParseFloat(observation.Value, 64)
+						}
+						if typeError != nil {
+							lastError = "invalid qualified observation type"
+							continue
+						}
+						qualified, marshalError := json.Marshal(map[string]any{
+							"apiVersion": "edgeai.observation/v1", "namespace": inst.Namespace, "deviceName": inst.Name, "property": prop.name,
+							"sourceGeneration": prop.visitor.SourceGeneration, "configurationSha256": prop.visitor.ConfigurationSha256,
+							"observedAt": observation.ObservedAt, "receivedAt": time.Now().UnixMilli(), "timeBasis": observation.TimeBasis,
+							"sessionId": sessionID, "sequence": sequence, "type": prop.visitor.DataType, "unit": prop.visitor.Unit, "value": typed,
+						})
+						if marshalError != nil {
+							lastError = "invalid qualified observation"
+						} else {
+							qualifiedToken := publisher.Publish("edgeai/observations/v1/"+inst.Namespace+"/"+inst.Name+"/"+prop.name, 1, false, qualified)
+							if !qualifiedToken.WaitTimeout(2*time.Second) || qualifiedToken.Error() != nil {
+								lastError = "qualified observation delivery failed"
+							}
+						}
 					}
 				}
 			}
@@ -274,16 +353,36 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 			m.value.Error = lastError
 			p.mu.Unlock()
 		}
-		if now.Sub(lastReport) >= reportInterval || state != previousState {
-			twins := []*api.Twin{{PropertyName: "connection", ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: state}}}
-			if state == "online" {
-				for _, prop := range props {
-					twins = append(twins, &api.Twin{PropertyName: prop.name, ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: values[prop.name], Metadata: map[string]string{"timestamp": strconv.FormatInt(now.UnixMilli(), 10), "type": prop.typ}}})
+		var twins []*api.Twin
+		if state == "online" {
+			for _, prop := range props {
+				metadata := map[string]string{"timestamp": strconv.FormatInt(observations[prop.name].ObservedAt, 10), "type": prop.typ}
+				value := values[prop.name]
+				if prop.visitor.ConfigurationSha256 != "" {
+					// KubeEdge 1.23 only preserves Reported.Value; it drops the
+					// supplied metadata and generates its own timestamp.
+					observation, _ := json.Marshal(map[string]any{"apiVersion": "edgeai.measurement/v1", "value": value, "configurationSha256": prop.visitor.ConfigurationSha256, "collectedAt": observations[prop.name].ObservedAt})
+					// Twin values accept a restricted alphabet. Raw URL base64
+					// avoids forbidden JSON punctuation and '=' padding.
+					value = "edgeai.measurement/v1:" + base64.RawURLEncoding.EncodeToString(observation)
+					metadata["type"] = "string"
+					if len(value) > 512 {
+						state = "offline"
+						p.state(m, state, 0, "DMI observation exceeds 512 characters")
+						twins = nil
+						break
+					}
 				}
+				twins = append(twins, &api.Twin{PropertyName: prop.name, ObservedDesired: &api.TwinProperty{Value: ""}, Reported: &api.TwinProperty{Value: value, Metadata: metadata}})
 			}
+		}
+		value := report{state, twins}
+		reportMu.Lock()
+		latest = value
+		reportMu.Unlock()
+		if now.Sub(lastReport) >= reportInterval || state != previousState {
 			// Coalesce latest reports while the node DMI budget is busy. Collection and
 			// MQTT telemetry keep running independently of the control-plane queue.
-			value := report{state, twins}
 			select {
 			case reports <- value:
 			default:

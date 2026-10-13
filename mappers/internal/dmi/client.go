@@ -53,6 +53,12 @@ func (c Client) Report(namespace, name, state string, twins []*api.Twin) error {
 	return c.ReportContext(context.Background(), namespace, name, state, twins)
 }
 func (c Client) ReportContext(parent context.Context, namespace, name, state string, twins []*api.Twin) error {
+	return c.ReportLatestContext(parent, namespace, name, state, twins, nil)
+}
+
+// ReportLatestContext reads each latest Twin after acquiring its shared DMI slot.
+// A nil result suppresses a queued sample when collection is now offline.
+func (c Client) ReportLatestContext(parent context.Context, namespace, name, state string, twins []*api.Twin, latest func(string) *api.Twin) error {
 	if err := c.callContext(parent, func(ctx context.Context, s api.DeviceManagerServiceClient) error {
 		if e := waitBudget(ctx, c.BudgetPath, c.BudgetGap); e != nil {
 			return e
@@ -73,6 +79,12 @@ func (c Client) ReportContext(parent context.Context, namespace, name, state str
 		if err := c.callContext(parent, func(ctx context.Context, s api.DeviceManagerServiceClient) error {
 			if e := waitBudget(ctx, c.BudgetPath, c.BudgetGap); e != nil {
 				return e
+			}
+			if latest != nil {
+				twin = latest(twin.PropertyName)
+				if twin == nil {
+					return nil
+				}
 			}
 			_, err := s.ReportDeviceStatus(ctx, &api.ReportDeviceStatusRequest{DeviceName: name, DeviceNamespace: namespace, ReportedDevice: &api.DeviceStatus{Twins: []*api.Twin{twin}}})
 			if err != nil {

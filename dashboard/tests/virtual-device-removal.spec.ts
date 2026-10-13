@@ -4,7 +4,7 @@ const workflowId = "11111111-1111-4111-8111-111111111111";
 const versionId = "22222222-2222-4222-8222-222222222222";
 const workflow = { id: workflowId, key: "remaining", displayName: "일반 워크플로", createdAt: "2026-10-12T00:00:00Z" };
 
-test("overview, profiles and workflow retain ordinary features without virtual devices", async ({ page }, testInfo) => {
+test("ordinary features and execution policies remain independent from continuous sensors", async ({ page }, testInfo) => {
   const errors: string[] = [], requested: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/api/control-plane/**", async route => {
@@ -21,7 +21,8 @@ test("overview, profiles and workflow retain ordinary features without virtual d
   await expect(page.getByRole("heading", { name: "운영 현황", exact: true })).toBeVisible();
   await expect(page.locator('.metric-strip .metric')).toHaveCount(3);
   await expect(page.locator('.metric-strip')).toHaveAttribute('aria-busy', 'false');
-  await expect(page.locator('a[href^="/virtual-devices"]')).toHaveCount(0);
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
+  await expect(page.getByRole("link", { name: "가상 센서", exact: true })).toHaveCount(1);
   await page.locator('.metric-strip').screenshot({ path: testInfo.outputPath("overview.png"), animations: "disabled" });
   await page.goto("/profiles?kind=DEVICE");
   await expect(page.getByRole("heading", { name: "실행 모듈 관리", exact: true })).toBeVisible();
@@ -41,13 +42,14 @@ test("overview, profiles and workflow retain ordinary features without virtual d
   expect(errors).toEqual([]);
 });
 
-test("removed page and management routes return 404", async ({ page, request }) => {
+test("continuous page exists while retired profile and batch management routes stay unavailable", async ({ page, request }) => {
   const response = await page.goto("/virtual-devices");
-  expect(response?.status()).toBe(404);
-  for (const path of ["virtual-devices", "profiles/VD", "virtual-devices/11111111-1111-4111-8111-111111111111/execution"]) {
+  expect(response?.status()).toBe(200);
+  for (const path of ["virtual-devices/processing-catalog", "profiles/VD", "internal/vd/poll"]) {
     expect((await request.get(`/api/control-plane/${path}`)).status()).toBe(404);
     expect((await request.post(`/api/control-plane/${path}`, { headers: { Origin: "http://127.0.0.1:13081" }, data: {} })).status()).toBe(404);
   }
+  expect((await request.post("/api/control-plane/virtual-devices", { headers: { Origin: "http://127.0.0.1:13081" }, data: {} })).status()).toBe(404);
 });
 
 test("service modules publish, retain old versions and protect referenced versions", async ({ page }, testInfo) => {

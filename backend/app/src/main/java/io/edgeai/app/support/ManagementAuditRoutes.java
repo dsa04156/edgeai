@@ -63,6 +63,17 @@ public final class ManagementAuditRoutes {
         new Route("POST","/api/v1/tasks/{taskId}/offload","offloadTask"),
         new Route("GET","/api/v1/operations/{operationId}","getOperation"),
         new Route("POST","/api/v1/devices/{deviceId}/sessions/{sessionId}/stream-token","issueDeviceStreamToken"),
+        new Route("GET","/api/v1/virtual-devices/continuous-catalog","getContinuousCatalog"),
+        new Route("POST","/api/v1/virtual-devices/continuous","createContinuousVirtualDevice"),
+        new Route("PATCH","/api/v1/virtual-devices/{vdId}/continuous","updateContinuousVirtualDevice"),
+        new Route("GET","/api/v1/virtual-devices/{vdId}/outputs","getContinuousOutputs"),
+        new Route("GET","/api/v1/virtual-devices/{vdId}/outputs/{outputId}/history","getContinuousOutputHistory"),
+        new Route("GET","/api/v1/virtual-devices","listVirtualDevices"),
+        new Route("GET","/api/v1/virtual-devices/{vdId}","getVirtualDevice"),
+        new Route("DELETE","/api/v1/virtual-devices/{vdId}","releaseVirtualDevice"),
+        new Route("POST","/api/v1/virtual-devices/{vdId}/provision","provisionVirtualDevice"),
+        new Route("POST","/api/v1/virtual-devices/{vdId}/drain","drainVirtualDeviceRuntime"),
+        new Route("GET","/api/v1/virtual-devices/{vdId}/execution","getVirtualDeviceExecution"),
         new Route("GET","/api/v1/audit-requests","listManagementAuditRequests"),
         new Route("GET","/api/v1/audit-requests/{auditId}","getManagementAuditRequest"));
     private static final AntPathMatcher MATCHER=new AntPathMatcher();

@@ -36,6 +36,11 @@ func main() {
 	var ready atomic.Bool
 	var health dmi.RecoveryHealth
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /capabilities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(map[string]any{"apiVersion": "edgeai.mapper-capabilities/v1", "protocol": c.Protocol, "observationApiVersion": "edgeai.observation/v1", "configurationHash": true, "originalObservedAt": true, "sessionOrdering": "PERSISTED_MONOTONIC", "qualifiedObservationEnabled": c.BudgetPath != ""})
+	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		if !ready.Load() {
 			http.Error(w, "DMI unavailable", 503)

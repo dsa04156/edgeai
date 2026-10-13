@@ -1,0 +1,90 @@
+package io.edgeai.adapters.repository;
+
+import io.edgeai.domain.device.Device;
+import io.edgeai.domain.repository.VirtualDeviceRepository;
+import io.edgeai.domain.vd.*;
+import java.sql.*;
+import java.time.Instant;
+import java.util.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+
+public final class JdbcVirtualDeviceRepository implements VirtualDeviceRepository {
+    private static final tools.jackson.databind.json.JsonMapper JSON=new tools.jackson.databind.json.JsonMapper();
+    private final JdbcTemplate jdbc;
+    public JdbcVirtualDeviceRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    private static Instant time(ResultSet r,String field) throws SQLException {
+        var value=r.getTimestamp(field);return value==null?null:value.toInstant();
+    }
+    private static final RowMapper<VirtualDevice> VD=(r,n)->new VirtualDevice(r.getObject("id",UUID.class),
+        r.getString("vd_key"),r.getString("display_name"),r.getObject("profile_version_id",UUID.class),
+        r.getObject("service_profile_version_id",UUID.class),VirtualDevice.State.valueOf(r.getString("state")),r.getLong("revision"),
+        new VirtualDevice.Placement(VirtualDevice.Mode.valueOf(r.getString("placement_mode")),r.getObject("node_id",UUID.class)),
+        r.getString("creation_digest"),time(r,"created_at"),time(r,"updated_at"));
+    private static final RowMapper<VDSourceBinding> SOURCE=(r,n)->new VDSourceBinding(r.getObject("id",UUID.class),
+        r.getObject("vd_id",UUID.class),r.getString("source_key"),r.getObject("device_id",UUID.class),
+        r.getObject("device_profile_version_id",UUID.class),Device.SourceMode.valueOf(r.getString("source_mode")),
+        r.getLong("opened_revision"),r.getObject("closed_revision",Long.class),time(r,"opened_at"),time(r,"closed_at"),r.getString("managed_device_id"),r.getObject("device_uid",UUID.class),r.getString("device_model"),Arrays.asList(JSON.readValue(r.getString("properties"),String[].class)),r.getInt("max_age_seconds"));
+    public boolean create(String key,String name,UUID profileId,UUID serviceId,VirtualDevice.Placement placement,String digest) {
+        return jdbc.update("""
+            INSERT INTO edgeai.virtual_device(id,vd_key,display_name,profile_version_id,service_profile_version_id,placement_mode,node_id,creation_digest)
+            VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(vd_key) DO NOTHING
+            """,UUID.randomUUID(),key,name,profileId,serviceId,placement.mode().name(),placement.nodeId(),digest)==1;
+    }
+    public Optional<VirtualDevice> find(UUID id,boolean lock) {
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE id=? AND service_profile_version_id IS NULL"+(lock?" FOR NO KEY UPDATE":""),VD,id).stream().findFirst();
+    }
+    public Optional<VirtualDevice> findByKey(String key) {
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE vd_key=? AND service_profile_version_id IS NULL",VD,key).stream().findFirst();
+    }
+    public void lockProcessingKey(String key) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtext('edgeai.processing-create'),hashtext(?))",(r,n)->true,key);
+    }
+    public Optional<String> processingCreationDigest(UUID id) {
+        return jdbc.query("SELECT request_digest FROM edgeai.vd_processing_registration WHERE vd_id=?",(r,n)->r.getString(1),id).stream().findFirst();
+    }
+    public void recordProcessingCreation(UUID id,String digest) {
+        jdbc.update("INSERT INTO edgeai.vd_processing_registration(vd_id,request_digest) VALUES (?,?) ON CONFLICT(vd_id) DO NOTHING",id,digest);
+    }
+    public List<VirtualDevice> list(int limit,int offset) {
+        return jdbc.query("SELECT * FROM edgeai.virtual_device WHERE service_profile_version_id IS NULL ORDER BY vd_key COLLATE \"C\" LIMIT ? OFFSET ?",VD,limit,offset);
+    }
+    public void update(UUID id,String name,VirtualDevice.Placement placement,VirtualDevice.State state,Instant now) {
+        jdbc.update("UPDATE edgeai.virtual_device SET display_name=?,placement_mode=?,node_id=?,state=?,revision=revision+1,updated_at=? WHERE id=?",
+            name,placement.mode().name(),placement.nodeId(),state.name(),Timestamp.from(now),id);
+    }
+    public void reconfigure(UUID id,String name,UUID profileId,UUID serviceId,VirtualDevice.Placement placement,Instant now) {
+        jdbc.update("UPDATE edgeai.virtual_device SET display_name=?,profile_version_id=?,service_profile_version_id=?,placement_mode=?,node_id=?,revision=revision+1,updated_at=? WHERE id=?",
+            name,profileId,serviceId,placement.mode().name(),placement.nodeId(),Timestamp.from(now),id);
+    }
+    public List<VDSourceBinding> activeSources(UUID id) {
+        return jdbc.query("SELECT * FROM edgeai.vd_source_binding WHERE vd_id=? AND closed_at IS NULL ORDER BY source_key COLLATE \"C\"",SOURCE,id);
+    }
+    public List<VDSourceBinding> sourceHistory(UUID id,int limit) {
+        return jdbc.query("SELECT * FROM edgeai.vd_source_binding WHERE vd_id=? ORDER BY opened_revision DESC,source_key COLLATE \"C\",id LIMIT ?",SOURCE,id,limit);
+    }
+    public void bind(VDSourceBinding b) {
+        jdbc.update("""
+            INSERT INTO edgeai.vd_source_binding(id,vd_id,source_key,device_id,device_profile_version_id,source_mode,opened_revision,opened_at,managed_device_id,device_uid,device_model,properties,max_age_seconds)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,CAST(? AS jsonb),?)
+            """,b.id(),b.vdId(),b.sourceKey(),b.deviceId(),b.deviceProfileVersionId(),b.sourceMode().name(),b.openedRevision(),Timestamp.from(b.openedAt()),b.managedDeviceId(),b.deviceUid(),b.deviceModel(),JSON.writeValueAsString(b.properties()),b.maxAgeSeconds());
+    }
+    public void close(UUID bindingId,long revision,Instant now) {
+        jdbc.update("UPDATE edgeai.vd_source_binding SET closed_revision=?,closed_at=? WHERE id=? AND closed_at IS NULL",revision,Timestamp.from(now),bindingId);
+    }
+    public boolean managedSourceInUse(String id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM edgeai.vd_source_binding b WHERE managed_device_id=? AND (closed_at IS NULL OR EXISTS (SELECT 1 FROM edgeai.vd_runtime r WHERE r.vd_id=b.vd_id AND r.observed_state<>'TERMINATED' AND r.configuration->'sources'->>b.source_key=b.id::text)))",Boolean.class,id));
+    }
+    public void lockManagedSources(Collection<String> ids) {
+        // The transaction keeps this lock through Kubernetes validation/mutation and binding commit.
+        ids.stream().distinct().sorted().forEach(id->jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "edgeai.vd-source:"+id));
+    }
+    public boolean canDeleteRegistration(UUID id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT edgeai.vd_registration_deletable(?)",Boolean.class,id));
+    }
+    public void deleteRegistration(UUID id) {
+        jdbc.queryForList("SELECT id FROM edgeai.virtual_device WHERE id=? FOR UPDATE",id);
+        jdbc.update("DELETE FROM edgeai.vd_source_binding WHERE vd_id=?",id);
+        jdbc.update("DELETE FROM edgeai.virtual_device WHERE id=?",id);
+    }
+}
