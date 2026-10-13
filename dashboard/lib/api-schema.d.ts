@@ -214,8 +214,8 @@ export interface paths {
         get: operations["listProfiles"];
         put?: never;
         /**
-         * 프로필 새 버전 등록
-         * @description DEVICE(장치 규격)와 SERVICE(서비스 규격)를 JSON 문서로 발행합니다. 발행된 내용은 불변이며 변경은 새 버전으로 등록합니다.
+         * 실행 모듈 새 버전 등록
+         * @description SERVICE 실행 모듈의 프로그램 이미지·명령·입출력·자원 설정을 JSON 문서로 발행합니다. 발행된 내용은 불변이며 변경은 새 버전으로 등록합니다. DEVICE 신규 발행은 종료되어 410을 반환합니다. Mapper 센서의 저장 규격은 /api/device-profiles를 사용합니다.
          */
         post: operations["publishProfile"];
         delete?: never;
@@ -1276,7 +1276,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -2689,11 +2689,11 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "key": "temperature-sensor",
+                 *       "key": "temperature-average",
                  *       "version": "1.0.0",
                  *       "spec": {
-                 *         "protocol": "mqtt",
-                 *         "unit": "celsius"
+                 *         "apiVersion": "edgeai/v1",
+                 *         "description": "실행 모듈 등록 실습. 실제 실행 설정은 service-execution.example.json을 참고하세요."
                  *       }
                  *     }
                  */
@@ -2730,6 +2730,15 @@ export interface operations {
                 content?: never;
             };
             409: components["responses"]["Conflict"];
+            /** @description DEVICE_PROFILE_RETIRED — 기존 앱 장치 프로필 신규 발행 종료. 센서 디바이스 관리 API를 사용하세요. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             /** @description 요청 또는 정규화된 규격이 UTF-8 64 KiB를 초과했습니다. */
             413: {
                 headers: {

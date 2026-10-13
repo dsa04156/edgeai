@@ -12,12 +12,9 @@ import { HardwareProfileFields } from "./hardware-profile-fields";
 import { EmptyState } from "../components/empty-state";
 
 type Profile = components["schemas"]["ProfileVersion"];
-type Kind = Profile["kind"];
 type Page = { items: Profile[]; nextOffset: number | null };
 type PublishFeedback = { state: "pending" | "error"; message: string }
   | { state: "success"; message: string; profileId: string; refreshError?: string };
-const kinds: Kind[] = ["DEVICE", "SERVICE"];
-const names: Record<Kind, string> = { DEVICE: "장치", SERVICE: "실행 모듈" };
 
 export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) {
   const createPanel = useRef<HTMLDetailsElement>(null);
@@ -34,7 +31,6 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
   }
   const [auth, setAuth] = useState("");
   const [csrf, setCsrf] = useState("");
-  const [kind, setKind] = useState<Kind>("DEVICE");
   const [result, setResult] = useState<Page | null>(null);
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState("");
@@ -85,10 +81,10 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
     }
     return response;
   }
-  async function load(nextKind: Kind, nextOffset: number, nextFilter: string, authorization = auth) {
+  async function load(nextOffset: number, nextFilter: string, authorization = auth) {
     const query = new URLSearchParams({ limit: "20", offset: String(nextOffset) });
     if (nextFilter) query.set("key", nextFilter);
-    const response = await api(`profiles/${nextKind}?${query}`, authorization);
+    const response = await api(`profiles/SERVICE?${query}`, authorization);
     setResult(await readProfilePage(response)); setOffset(nextOffset);
   }
   async function run(action: () => Promise<void>) {
@@ -101,10 +97,8 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
     void run(async () => {
       const authorization = "dashboard";
       const token = await (await api("csrf", authorization)).json();
-      const selectedKind = new URLSearchParams(window.location.search).get("kind");
-      const initialKind = kinds.includes(selectedKind as Kind) ? selectedKind as Kind : kind;
-      setKind(initialKind); await load(initialKind, 0, "", authorization);
-      setProfileChoices((await Promise.all(["SERVICE", "DEVICE"].map(value => registryItems<Profile>(`profiles/${value}`, path => api(path, authorization), readProfilePage)))).flat());
+      await load(0, "", authorization);
+      setProfileChoices(await registryItems<Profile>("profiles/SERVICE", path => api(path, authorization), readProfilePage));
       setNodes((await (await api("nodes?limit=100", authorization)).json()).items);
       setAuth(authorization); setCsrf(token.token);
     });
@@ -122,7 +116,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
       catch { throw new Error("JSON 문법을 확인하세요. 속성 이름과 문자열은 큰따옴표로 감싸야 합니다."); }
       if (!spec || isLosslessNumber(spec) || Array.isArray(spec) || typeof spec !== "object" || Object.keys(spec).length === 0)
         throw new Error("규격은 비어 있지 않은 JSON 객체여야 합니다.");
-      const response = await api(`profiles/${kind}`, auth, {
+      const response = await api("profiles/SERVICE", auth, {
         method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf },
         body: stringify({ key: data.get("key"), version: data.get("version"), spec }),
       });
@@ -135,7 +129,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
       };
       setPublishFeedback(feedback);
       if (createPanel.current) createPanel.current.open = false;
-      try { await load(kind, 0, filter); }
+      try { await load(0, filter); }
       catch (error) {
         setPublishFeedback({ ...feedback, refreshError: `버전은 발행됐지만 목록을 새로 불러오지 못했습니다. ${error instanceof Error ? error.message : "연결 상태를 확인하세요."}` });
       }
@@ -151,7 +145,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
       setProfileChoices(current => current.filter(value => value.id !== profile.id));
       if (detail?.id === profile.id) setDetail(null);
       setDeleting(null);
-      await load(kind, result?.items.length === 1 ? Math.max(0, offset - 20) : offset, filter);
+      await load(result?.items.length === 1 ? Math.max(0, offset - 20) : offset, filter);
       setNotice(`${profile.key} · ${profile.version} 버전을 삭제했습니다.`);
     });
   }
@@ -162,37 +156,31 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
     {error && <p role="alert" className="error">{error}</p>}
     {auth && <>
       <div className="registry-workspace"><section aria-labelledby="registry-title" aria-busy={busy}>
-        <div className="toolbar"><div><h2 id="registry-title">발행된 규격과 템플릿</h2><p className="hint">변경 사항은 새 버전으로 등록하고, 사용하지 않는 버전은 삭제할 수 있습니다.</p></div><button className="primary" disabled={busy} onClick={openCreatePanel}>새 버전 등록</button></div>
-        <fieldset className="kind-picker" disabled={busy}><legend>Profile 종류</legend>
-          {kinds.map(value => <label key={value}><input type="radio" name="kind" checked={kind === value} onChange={() => {
-            setKind(value); setSpecText(""); setDetail(null); setResult(null); setFilter(""); setDeleting(null);
-            void run(() => load(value, 0, ""));
-          }} />{names[value]} <span className="mono">{value}</span></label>)}
-        </fieldset>
+        <div className="toolbar"><div><h2 id="registry-title">등록된 실행 모듈</h2><p className="hint">같은 프로그램 설정을 여러 워크플로에서 재사용합니다. 변경은 새 버전으로 등록합니다.</p></div><button className="primary" disabled={busy} onClick={openCreatePanel}>새 버전 등록</button></div>
         <form className="toolbar filter-form" onSubmit={event => {
           event.preventDefault(); const key = String(new FormData(event.currentTarget).get("filter")).trim();
-          setFilter(key); setResult(null); void run(() => load(kind, 0, key));
+          setFilter(key); setResult(null); void run(() => load(0, key));
         }}>
-          <label>키로 찾기<input key={kind} name="filter" placeholder="전체 또는 정확한 키" maxLength={100} /></label>
+          <label>키로 찾기<input name="filter" placeholder="전체 또는 정확한 키" maxLength={100} /></label>
           <button disabled={busy}>조회</button>
         </form>
         {busy && <p role="status">불러오는 중…</p>}
-        {result && result.items.length === 0 && <EmptyState title={filter ? "일치하는 Profile이 없습니다" : "첫 프로필을 등록하세요"} description={filter ? "정확한 프로필 키를 확인하거나 검색어를 비워 전체 목록을 조회하세요." : "장치와 서비스가 사용할 규격을 정의하는 첫 단계입니다."} action={!filter && <button onClick={openCreatePanel}>{names[kind]} Profile 등록</button>} />}
+        {result && result.items.length === 0 && <EmptyState title={filter ? "일치하는 실행 모듈이 없습니다" : "첫 실행 모듈을 등록하세요"} description={filter ? "정확한 모듈 키를 확인하거나 검색어를 비워 전체 목록을 조회하세요." : "워크플로에서 사용할 프로그램의 실행 설정을 등록하세요."} action={!filter && <button onClick={openCreatePanel}>실행 모듈 등록</button>} />}
         {result && result.items.length > 0 && <div className="table-scroll"><table className="registry-table">
-          <caption className="sr-only">{names[kind]} Profile 버전 목록</caption>
+          <caption className="sr-only">실행 모듈 버전 목록</caption>
           <thead><tr><th>키 / 버전</th><th>내용 digest</th><th>발행일</th><th>관리</th></tr></thead>
           <tbody>{result.items.map(profile => <tr key={profile.id} data-selected={detail?.id === profile.id}>
             <td><button className="version-link" disabled={busy} onClick={() => { setDetail(null); void run(async () => {
-              setDetail(parse(await (await api(`profiles/${kind}/${profile.key}/versions/${profile.version}`)).text()) as Profile);
+              setDetail(parse(await (await api(`profiles/SERVICE/${profile.key}/versions/${profile.version}`)).text()) as Profile);
             }); }}>{profile.key} <span className="mono">{profile.version}</span></button></td>
             <td className="mono">{profile.digest.slice(0, 19)}…</td><td>{profile.createdAt.slice(0, 10)}</td>
             <td>{deleting === profile.id ? <div><span>이 버전을 삭제할까요?</span><div className="toolbar"><button disabled={busy} onClick={() => remove(profile)}>삭제 확인</button><button disabled={busy} onClick={() => setDeleting(null)}>취소</button></div></div>
               : <div className="toolbar"><button disabled={busy} aria-label={`${profile.key} ${profile.version} 새 버전으로 수정`} onClick={() => editProfile(profile)}>수정</button><button disabled={busy} aria-label={`${profile.key} ${profile.version} 삭제`} onClick={() => setDeleting(profile.id)}>삭제</button></div>}</td>
           </tr>)}</tbody>
         </table></div>}
-        {result && <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(kind, Math.max(0, offset - 20), filter))}>이전</button>
+        {result && <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(Math.max(0, offset - 20), filter))}>이전</button>
           <span>{Math.floor(offset / 20) + 1} 페이지</span>
-          <button disabled={busy || result.nextOffset === null} onClick={() => void run(() => load(kind, result.nextOffset!, filter))}>다음</button></div>}
+          <button disabled={busy || result.nextOffset === null} onClick={() => void run(() => load(result.nextOffset!, filter))}>다음</button></div>}
       </section>
       {detail && <section className="panel" aria-labelledby="detail-title">
         <div className="toolbar"><h2 id="detail-title" className="profile-detail-title" ref={detailTitle} tabIndex={-1}>{detail.key} · {detail.version}</h2><button disabled={busy} onClick={() => setDetail(null)}>상세 닫기</button></div>
@@ -201,27 +189,27 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
           {publishFeedback.refreshError && <p className="error" role="alert">{publishFeedback.refreshError}</p>}
         </>}
         <p className="hint">발행됨 · 이 버전의 규격은 변경되지 않습니다.</p>
-        <div className="toolbar"><button disabled={busy} onClick={() => editProfile(detail)}>새 버전으로 수정</button>{(detail.kind !== "DEVICE" && (detail.kind !== "SERVICE" || workflows)) && <a href={`/workflows?service=${detail.id}`}>{"서비스 실행 구성"} →</a>}</div>
+        <div className="toolbar"><button disabled={busy} onClick={() => editProfile(detail)}>새 버전으로 수정</button>{workflows && <a href={`/workflows?service=${detail.id}`}>워크플로에서 사용 →</a>}</div>
         <p className="mono digest">버전 ID {detail.id}</p><p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
       </section>}
       </div><details className="create-panel" ref={createPanel}>
-        <summary><h2 id="publish-title">{names[kind]} Profile 새 버전 등록</h2></summary>
+        <summary><h2 id="publish-title">실행 모듈 새 버전 등록</h2></summary>
         {editingProfile && <p className="notice">{editingProfile.key} · {editingProfile.version} 내용을 불러왔습니다. 변경 내용은 새 버전으로 발행하며 기존 버전과 사용 중인 연결은 유지됩니다.</p>}
         <form ref={publishForm} onSubmit={publish} aria-busy={publishFeedback?.state === "pending"} onInvalid={event => {
           const invalid = event.currentTarget.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input:invalid, textarea:invalid, select:invalid");
           if (event.target !== invalid || !invalid) return;
-          const message = invalid.name === "key" ? "Profile 키를 입력하세요. 영문 소문자로 시작하고 소문자·숫자·점·밑줄·하이픈을 사용할 수 있습니다."
+          const message = invalid.name === "key" ? "모듈 키를 입력하세요. 영문 소문자로 시작하고 소문자·숫자·점·밑줄·하이픈을 사용할 수 있습니다."
             : invalid.name === "version" ? "버전은 1.0.0 형식으로 입력하세요."
             : invalid.name === "spec" ? "JSON 규격을 입력하세요."
             : invalid.validationMessage;
           setPublishFeedback({ state: "error", message });
         }}>
           <fieldset disabled={busy} className="publish-fields">
-            <div className="form-row"><label>Profile 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-sensor" /></label>
+            <div className="form-row"><label>모듈 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="temperature-average" /></label>
               <label>버전<input name="version" required maxLength={32} pattern="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)" placeholder="1.0.0" /></label></div>
-            <ProfileFields kind={kind} value={specText} onChange={setSpecText} />
-            {kind === "SERVICE" && <HardwareProfileFields nodes={nodes} value={specText} onChange={setSpecText} />}
-            <label>JSON 규격<textarea aria-label="JSON 규격" name="spec" rows={9} spellCheck={false} required value={specText} onChange={e => setSpecText(e.target.value)} placeholder={'{\n  "protocol": "mqtt"\n}'} aria-describedby="spec-help" /></label>
+            <ProfileFields value={specText} onChange={setSpecText} />
+            <HardwareProfileFields nodes={nodes} value={specText} onChange={setSpecText} />
+            <label>JSON 규격<textarea aria-label="JSON 규격" name="spec" rows={9} spellCheck={false} required value={specText} onChange={e => setSpecText(e.target.value)} placeholder={'{\n  "apiVersion": "edgeai/v1",\n  "image": "실행할 프로그램 이미지"\n}'} aria-describedby="spec-help" /></label>
             <p className="hint" id="spec-help">비어 있지 않은 JSON 객체 · 최대 64 KiB. 비밀번호나 토큰을 규격에 넣지 마세요. 등록은 실행 호환성을 보장하지 않습니다.</p>
             {publishFeedback?.state === "pending" && <p role="status">{publishFeedback.message}</p>}
             {publishFeedback?.state === "error" && <p className="error" role="alert" ref={publishError} tabIndex={-1}>{publishFeedback.message}</p>}

@@ -59,7 +59,7 @@ def main():
         oid=pg.sql('SELECT oid FROM pg_database WHERE datname='+literal(database),'postgres');assert oid
         api=Api(database,work);apis.append(api)
         key='audit-'+identity
-        value,first=request('POST','profiles/DEVICE?private='+canary,profile(key),201,
+        value,first=request('POST','profiles/SERVICE?private='+canary,profile(key),201,
             {**api.headers,'Content-Type':'application/json','X-EdgeAI-Audit-Id':str(uuid.uuid4()),'X-Private-Test':canary})
         assert first
         stored=event(first)
@@ -68,7 +68,7 @@ def main():
         assert stored['outcome']['actor']=={'type':'LOCAL_BASIC','subject':'backup-test','subjectFormat':'NAME'}
         passed('real-Basic-CSRF-mutation-has-durable-server-audit-id-and-authenticated-outcome')
 
-        before=count('management_audit_request');request('GET','profiles/DEVICE');request('GET','audit-requests?limit=1')
+        before=count('management_audit_request');request('GET','profiles/SERVICE');request('GET','audit-requests?limit=1')
         assert count('management_audit_request')==before
         _,denied=request('GET','devices?private='+canary,expected=401,headers={'Authorization':'Basic invalid-'+canary})
         if denied is None:
@@ -77,15 +77,15 @@ def main():
                 assert time.monotonic()<deadline,'Read rejection was not recorded';time.sleep(.05)
             denied=sql('SELECT id FROM edgeai.management_audit_request ORDER BY started_at DESC,id DESC LIMIT 1')
         assert event(denied)['outcome']['actor']['type']=='UNAUTHENTICATED'
-        _,csrf=request('POST','profiles/DEVICE',profile('csrf-'+identity),403,headers={'Authorization':api.headers['Authorization'],'Content-Type':'application/json'})
+        _,csrf=request('POST','profiles/SERVICE',profile('csrf-'+identity),403,headers={'Authorization':api.headers['Authorization'],'Content-Type':'application/json'})
         assert event(csrf)['outcome']['actor']['type']=='UNAUTHENTICATED'
-        _,unauthorized=request('POST','profiles/DEVICE',profile('auth-'+identity),401,
+        _,unauthorized=request('POST','profiles/SERVICE',profile('auth-'+identity),401,
             headers={**api.headers,'Authorization':'Basic invalid-'+canary,'Content-Type':'application/json'})
         assert event(unauthorized)['outcome']['actor']['type']=='UNAUTHENTICATED'
         passed('successful-reads-are-not-recorded-and-real-401-CSRF403-never-trust-credential-text')
 
-        _,conflict=request('POST','profiles/DEVICE',{'key':key,'version':'1.0.0','spec':{'changed':True}},409)
-        _,invalid=request('POST','profiles/DEVICE',{},400)
+        _,conflict=request('POST','profiles/SERVICE',{'key':key,'version':'1.0.0','spec':{'changed':True}},409)
+        _,invalid=request('POST','profiles/SERVICE',{},400)
         assert event(conflict)['outcome']['httpStatus']==409 and event(invalid)['outcome']['httpStatus']==400
         target=str(uuid.uuid4())
         _,missing=request('DELETE','devices/'+target,expected=404)
@@ -95,7 +95,7 @@ def main():
         sql("CREATE FUNCTION edgeai.audit_test_reject() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned test refusal' USING ERRCODE='23514'; END; $$")
         sql('CREATE TRIGGER audit_test_admission BEFORE INSERT ON edgeai.management_audit_request FOR EACH ROW EXECUTE FUNCTION edgeai.audit_test_reject()')
         before=count('management_audit_request');rejected_key='not-created-'+identity
-        result,failed=request('POST','profiles/DEVICE',profile(rejected_key),503)
+        result,failed=request('POST','profiles/SERVICE',profile(rejected_key),503)
         assert result['code']=='AUDIT_STORE_UNAVAILABLE' and failed is None and count('management_audit_request')==before
         assert sql('SELECT count(*) FROM edgeai.profile_version WHERE profile_key='+literal(rejected_key))=='0'
         sql('DROP TRIGGER audit_test_admission ON edgeai.management_audit_request')
@@ -103,13 +103,13 @@ def main():
 
         sql('CREATE TRIGGER audit_test_completion BEFORE INSERT ON edgeai.management_audit_outcome FOR EACH ROW EXECUTE FUNCTION edgeai.audit_test_reject()')
         unknown_key='unknown-'+identity
-        created,unknown=request('POST','profiles/DEVICE',profile(unknown_key),201)
+        created,unknown=request('POST','profiles/SERVICE',profile(unknown_key),201)
         assert event(unknown,False)['state']=='OUTCOME_UNKNOWN' and event(unknown,False)['outcome'] is None
         assert sql('SELECT count(*) FROM edgeai.profile_version WHERE profile_key='+literal(unknown_key))=='1'
         sql('DROP TRIGGER audit_test_completion ON edgeai.management_audit_outcome');sql('DROP FUNCTION edgeai.audit_test_reject()')
         api.close();api=Api(database,work);apis.append(api)
         assert event(unknown,False)['state']=='OUTCOME_UNKNOWN'
-        replay,replayed=request('POST','profiles/DEVICE',profile(unknown_key),200)
+        replay,replayed=request('POST','profiles/SERVICE',profile(unknown_key),200)
         assert replay['id']==created['id'] and replayed!=unknown
         assert event(replayed)['outcome']['httpStatus']==200 and event(unknown,False)['outcome'] is None
         passed('actual-result-write-failure-preserves-201-and-unknown-intent-through-API-restart-idempotent-replay')

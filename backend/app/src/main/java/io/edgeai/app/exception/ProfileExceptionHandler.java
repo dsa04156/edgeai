@@ -11,6 +11,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice(assignableTypes = ProfileController.class)
 public class ProfileExceptionHandler {
+    @ExceptionHandler(ControlPlaneException.class)
+    ResponseEntity<ApiErrorResponse> controlled(ControlPlaneException e) { return error(e.status(), e.code(), e.getMessage()); }
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
     ResponseEntity<ApiErrorResponse> invalid(Exception e) {
         // Do not echo raw JSON or rejected values into logs/responses.

@@ -48,21 +48,21 @@ test("Swagger renders the exact contract and publishes with automatic CSRF", asy
   await page.screenshot({ path: testInfo.outputPath("swagger-ui.png"), fullPage: true });
 
   const operation = page.locator("#operations-Profile-publishProfile");
-  await expect(operation.locator(".opblock-summary-description")).toHaveText("프로필 새 버전 등록");
+  await expect(operation.locator(".opblock-summary-description")).toHaveText("실행 모듈 새 버전 등록");
   await operation.locator(".opblock-summary-control").click();
-  await expect(operation.locator(".opblock-description-wrapper").filter({ hasText: "실제 장치/런타임 호환성 검증은 후속 개발 범위" })).toBeVisible();
+  await expect(operation.locator(".opblock-description-wrapper").filter({ hasText: "DEVICE 신규 발행은 종료" })).toBeVisible();
   await operation.getByRole("button", { name: "Try it out" }).click();
-  await operation.locator(".parameters select").selectOption("DEVICE");
+  await operation.locator(".parameters select").selectOption("SERVICE");
   const key = `swagger-${randomUUID()}`;
   await operation.locator("textarea.body-param__text").fill(JSON.stringify({ key, version: "1.0.0", spec: { protocol: "mqtt" } }));
-  const published = page.waitForResponse(response => response.request().method() === "POST" && response.url() === `${api}/api/v1/profiles/DEVICE`);
+  const published = page.waitForResponse(response => response.request().method() === "POST" && response.url() === `${api}/api/v1/profiles/SERVICE`);
   await operation.getByRole("button", { name: "Execute", exact: true }).click();
   const response = await published;
   expect(response.status()).toBe(201);
   expect(response.headers()["x-edgeai-audit-id"]).toMatch(/^[a-f0-9-]{36}$/);
   expect(response.request().headers()["x-csrf-token"]).toBeTruthy();
   expect((await response.json()).key).toBe(key);
-  expect((await page.request.get(`${api}/api/v1/profiles/DEVICE/${key}/versions/1.0.0`)).status()).toBe(200);
+  expect((await page.request.get(`${api}/api/v1/profiles/SERVICE/${key}/versions/1.0.0`)).status()).toBe(200);
   await page.goto(`${api}/swagger-ui/index.html?contract=streams`);
   await expect(page.locator(".opblock")).toHaveCount(13);
   expect(await (await page.request.get(`${api}/stream-openapi.yaml`)).text()).toBe(await readFile("../contracts/openapi/stream-api.yaml", "utf8"));
