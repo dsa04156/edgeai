@@ -39,7 +39,7 @@ public class ContinuousExecutionService {
         if(vd.revision()!=revision || vd.state()==VirtualDevice.State.RELEASED && !desired.equals("STOP"))throw new ControlPlaneException(409,"VD_CONFLICT","최신 revision과 등록 상태를 확인하세요.");
         executions.lockCapacity();
         if(!desired.equals("STOP")) {
-            int before=executions.find(id).filter(ContinuousRepository.Execution::running).isPresent()?1:0;
+            int before=executions.find(id).filter(e->e.running() || e.state().equals("STOPPING")).isPresent()?1:0;
             var config=DeviceProfileCompiler.map(WorkflowInput.JSON.decode(VirtualDeviceInput.spec(profiles.find(vd.profileVersionId()).orElseThrow().specJson()).continuousJson()));
             int count=((List<?>)config.get("outputs")).size();
             if(executions.activeDevices()+1-before>200 || executions.activeOutputs()+(before==0?count:0)>500)throw new ControlPlaneException(409,"CONTINUOUS_CAPACITY_EXCEEDED","공유 엔진의 검증된 실행 용량을 초과합니다.");
@@ -62,7 +62,7 @@ public class ContinuousExecutionService {
     }
     public void validateEdit(UUID id,Object config,int inputCount) {
         executions.lockCapacity();
-        if(executions.find(id).filter(ContinuousRepository.Execution::running).isEmpty())return;
+        if(executions.find(id).filter(e->e.running() || e.state().equals("STOPPING")).isEmpty())return;
         var current=DeviceProfileCompiler.map(WorkflowInput.JSON.decode(VirtualDeviceInput.spec(profiles.find(vds.find(id,false).orElseThrow().profileVersionId()).orElseThrow().specJson()).continuousJson()));
         long bytes=executions.estimatedHistoryBytes()-ContinuousCapacity.historyBytes(current,vds.activeSources(id).size())+ContinuousCapacity.historyBytes(config,inputCount);
         int count=executions.activeOutputs()-((List<?>)current.get("outputs")).size()+((List<?>)DeviceProfileCompiler.map(config).get("outputs")).size();

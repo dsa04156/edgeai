@@ -84,6 +84,38 @@ class ContinuousRegistrationIntegrationTest {
         return Map.of("vdId",vd,"outputId","temperature","generation",generation,"sequence",slot,"evaluationId",generation+":"+slot,"evaluationAt",Instant.ofEpochSecond(slot).toString(),"value",value,
             "sources",List.of(Map.of("alias","a","deviceUid",uid.toString(),"sourceGeneration",sourceGeneration.toString(),"configurationSha256",DeviceProfileCompiler.configuration(Map.of("protocol","virtual","host","sensor-input.example","properties",List.of(Map.of("name","temperature","dataType","float64","unit","°C")))),"observedAt",slot*1000)));
     }
+    @Test @org.springframework.transaction.annotation.Transactional
+    void drainingCapacityAndNeverStartedStopsCannotExceedTheAgentsBoundedPlan() throws Exception {
+        String session=UUID.randomUUID().toString();long sequence=1;
+        var first=mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence++,"reports",List.of()))).andExpect(status().isOk()).andReturn();
+        var existing=(List<?>)((Map<?,?>)json.decode(first.getResponse().getContentAsString())).get("executions");
+        for(var raw:existing) {
+            String id=(String)((Map<?,?>)raw).get("vdId");
+            var detail=mvc.perform(get("/api/v1/virtual-devices/"+id)).andExpect(status().isOk()).andReturn();
+            var revision=((Map<?,?>)((Map<?,?>)json.decode(detail.getResponse().getContentAsString())).get("vd")).get("revision");
+            mvc.perform(post("/api/v1/virtual-devices/"+id+"/drain").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.canonical(Map.of("revision",revision)))).andExpect(status().isAccepted());
+        }
+        var cleanup=mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence++,"reports",List.of()))).andExpect(status().isOk()).andReturn();
+        var stops=(List<?>)((Map<?,?>)json.decode(cleanup.getResponse().getContentAsString())).get("executions");
+        var reports=stops.stream().map(raw->{var e=(Map<?,?>)raw;return Map.of("vdId",e.get("vdId"),"generation",e.get("generation"),"state","STOPPED","reason","STOPPED","ruleIds",List.of());}).toList();
+        mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence++,"reports",reports))).andExpect(status().isOk());
+        var ids=new ArrayList<String>();
+        for(int i=0;i<=200;i++) {
+            String body=json.canonical(Map.of("key","capacity-"+UUID.randomUUID(),"displayName","capacity","sources",List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"))),"continuous",Map.of("intervalSeconds",1,"retentionDays",7,"outputs",List.of(Map.of("name","value","expression","a","operation","scalar","unit","°C")))));
+            var created=mvc.perform(post("/api/v1/virtual-devices/continuous").with(csrf()).contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn();
+            String id=(String)((Map<?,?>)json.decode(created.getResponse().getContentAsString())).get("id");ids.add(id);
+            mvc.perform(post("/api/v1/virtual-devices/"+id+"/drain").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
+            if(i<200)mvc.perform(post("/api/v1/virtual-devices/"+id+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted());
+            if(i%25==0)mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence++,"reports",List.of()))).andExpect(status().isOk());
+        }
+        mvc.perform(post("/api/v1/virtual-devices/"+ids.getFirst()+"/drain").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted());
+        mvc.perform(post("/api/v1/virtual-devices/"+ids.getLast()+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONTINUOUS_CAPACITY_EXCEEDED"));
+        var plan=mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence++,"reports",List.of()))).andExpect(status().isOk()).andExpect(jsonPath("$.executions.length()").value(200)).andReturn();
+        var entries=(List<?>)((Map<?,?>)json.decode(plan.getResponse().getContentAsString())).get("executions");
+        var stop=(Map<?,?>)entries.stream().filter(raw->ids.getFirst().equals(((Map<?,?>)raw).get("vdId"))).findFirst().orElseThrow();
+        mvc.perform(enginePost("poll",Map.of("sessionId",session,"sequence",sequence,"reports",List.of(Map.of("vdId",stop.get("vdId"),"generation",stop.get("generation"),"state","STOPPED","reason","STOPPED","ruleIds",List.of()))))).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/virtual-devices/"+ids.getLast()+"/provision").with(csrf()).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"revision\":0}")).andExpect(status().isAccepted());
+    }
     @Test void everyResultIsStoredAndHistoryFailureDoesNotStopLiveResultsOrReplayTheGap() throws Exception {
         String body=json.canonical(Map.of("key","continuous-history-"+UUID.randomUUID(),"displayName","온도",
             "sources",List.of(Map.of("sourceKey","a","deviceId","continuous-sensor","properties",List.of("temperature"),"maxAgeSeconds",30)),

@@ -14,10 +14,20 @@ isolated_test_db() {
     blocked "Cannot create isolated test database; check PostgreSQL connection and CREATEDB permission."
   fi
   trap 'test_db_cleanup' EXIT
+  export EDGEAI_TEST_HISTORY_DB_NAME=""
+  local history_test_name="${EDGEAI_DB_NAME}_history"
+  if ! "${pg_bin:+$pg_bin/}createdb" -h "${EDGEAI_DB_HOST:-127.0.0.1}" -p "$EDGEAI_DB_PORT" -U "$EDGEAI_DB_USER" "$history_test_name"; then
+    blocked "Cannot create isolated history test database."
+  fi
+  export EDGEAI_TEST_HISTORY_DB_NAME="$history_test_name"
+  export EDGEAI_HISTORY_TEST_URL="jdbc:postgresql://${EDGEAI_DB_HOST:-127.0.0.1}:$EDGEAI_DB_PORT/$EDGEAI_TEST_HISTORY_DB_NAME"
   printf 'Isolated PostgreSQL database: %s\n' "$EDGEAI_DB_NAME"
 }
 test_db_cleanup() {
   local result=$?
+  if [[ -n "${EDGEAI_TEST_HISTORY_DB_NAME:-}" ]]; then
+    "$EDGEAI_TEST_DROPDB" --if-exists --force -h "${EDGEAI_DB_HOST:-127.0.0.1}" -p "$EDGEAI_DB_PORT" -U "$EDGEAI_DB_USER" "$EDGEAI_TEST_HISTORY_DB_NAME" || result=1
+  fi
   "$EDGEAI_TEST_DROPDB" --force -h "${EDGEAI_DB_HOST:-127.0.0.1}" -p "$EDGEAI_DB_PORT" -U "$EDGEAI_DB_USER" "$EDGEAI_DB_NAME" || result=1
   exit "$result"
 }

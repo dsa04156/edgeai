@@ -19,7 +19,7 @@ export function ContinuousFlow({ availability }: { availability: Availability })
     </ol>
     <p className="hint">센서 등록만으로 가상디바이스가 생기지는 않습니다. 입력과 계산을 등록하면 장치 1개가 생기고, 평균·최댓값·경보를 함께 넣으면 결과 3행으로 표시됩니다.</p>
     {availability === "enabled" && <p className="hint">등록 기능이 활성화되어 있습니다. 실제 계산 상태는 각 장치 상세에서 확인하세요.</p>}
-    {availability === "disabled" && <p className="hint">중앙 계산 연결이 준비되면 연속 처리 등록을 사용할 수 있습니다. 기존 표본·FFT 처리는 별도로 이용할 수 있습니다.</p>}
+    {availability === "disabled" && <p className="hint">중앙 계산 연결이 준비되면 연속 처리 등록을 사용할 수 있습니다. 입력 연결과 처리 엔진 준비가 필요합니다.</p>}
     {availability === "unavailable" && <p className="hint">현재 서버에서 연속 처리 상태를 확인하지 못했습니다. 등록 패널에서 다시 조회할 수 있습니다.</p>}
   </section>;
 }
