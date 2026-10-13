@@ -24,6 +24,7 @@ test("clicking a sensor opens its stored original graph in a bounded dialog and 
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await dialog.getByText("센서·수집 정보", { exact: true }).click();
   await expect(dialog.getByText(/InfluxDB에 저장된 센서 원본/)).toBeVisible();
   await expect(dialog.getByText(/이전 Mapper의 기록/)).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");

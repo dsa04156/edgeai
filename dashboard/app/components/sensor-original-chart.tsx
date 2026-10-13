@@ -9,5 +9,5 @@ export function OriginalChart({ history }: { history: components["schemas"]["Sen
   const interval = intervals[Math.floor((intervals.length - 1) / 2)];
   const points = values.map((point, index) => ({ ...point, breakBefore: index > 0 && (point.at - values[index - 1].at > interval * 3 || point.configuration !== values[index - 1].configuration || point.generation !== values[index - 1].generation) }));
   if (!points.length) return null;
-  return <HistoryChart key={`${history.deviceUid}/${history.property}`} data={{ name: history.property, from: Date.parse(history.from), to: Date.parse(history.to), points, connected: true, showSymbol: points.length === 1 || points.some(point => point.breakBefore) }} label={`${history.property} 원본 그래프, ${points.length}개 기록`} caption="측정값을 시간순으로 연결합니다. 수신 간격이 크게 벌어지거나 수집 설정·세대가 바뀐 구간은 선을 끊습니다." />;
+  return <HistoryChart key={`${history.deviceUid}/${history.property}`} data={{ name: history.property, from: Date.parse(history.from), to: Date.parse(history.to), points, connected: true, showSymbol: false }} label={`${history.property} 원본 그래프, ${points.length}개 기록`} caption={`${points.length}개 원본 측정값 · 시간순 표시`} />;
 }

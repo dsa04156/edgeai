@@ -44,13 +44,14 @@ export function configureChart(chart: ECharts, element: HTMLElement) {
 export function updateChart(chart: ECharts, data: HistoryChartData) {
   const boolean = data.points.every(point => point.boolean);
   const points = data.points.flatMap((point, index) => {
-    const value = { value: [point.at, point.value], unit: point.unit, boolean: point.boolean };
+    const connected = index > 0 && !point.breakBefore || index + 1 < data.points.length && !data.points[index + 1].breakBefore;
+    const value = { value: [point.at, point.value], unit: point.unit, boolean: point.boolean, symbol: data.showSymbol === false && connected ? "none" : "circle" };
     return data.connected && point.breakBefore && index ? [{ value: [(data.points[index - 1].at + point.at) / 2, null] }, value] : [value];
   });
   const gapColor = getComputedStyle(chart.getDom()).getPropertyValue("--warning-surface").trim() || "#faf4e3";
   chart.setOption({
     xAxis: { min: data.from, max: data.to },
     yAxis: { min: boolean ? 0 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.min - 1 : extent.min, max: boolean ? 1 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.max + 1 : extent.max, interval: boolean ? 1 : undefined, axisLabel: { formatter: (value: number) => formatAxisValue(value, boolean) } },
-    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: data.showSymbol ?? true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } }],
+    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } }],
   }, { replaceMerge: ["series"] });
 }

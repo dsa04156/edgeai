@@ -38,9 +38,9 @@ export function HistoryChart({ data, label, caption }: { data: HistoryChartData;
   function show(start: number, end: number) { instance.current?.dispatchAction({ type: "dataZoom", start, end }); }
   function scale(factor: number) { const span = Math.min(100, Math.max(1, (zoom.end - zoom.start) * factor)), start = Math.max(0, Math.min(100 - span, (zoom.start + zoom.end - span) / 2)); show(start, start + span); }
   return <figure className="continuous-history-chart interactive-history-chart">
-    <div className="toolbar"><button type="button" disabled={!ready || zoom.end - zoom.start <= 1} onClick={() => scale(.5)}>확대</button><button type="button" disabled={!ready || zoom.end - zoom.start >= 100} onClick={() => scale(2)}>축소</button><button type="button" disabled={!ready} onClick={() => show(0, 100)}>전체 구간</button><span role="status" aria-label="그래프 표시 구간" className="muted">전체 범위의 {Math.round(zoom.end - zoom.start)}%</span></div>
+    <div className="toolbar history-chart-toolbar"><button type="button" disabled={!ready || zoom.end - zoom.start <= 1} onClick={() => scale(.5)}>확대</button><button type="button" disabled={!ready || zoom.end - zoom.start >= 100} onClick={() => scale(2)}>축소</button><button type="button" disabled={!ready} onClick={() => show(0, 100)}>전체 구간</button><span role="status" aria-label="그래프 표시 구간" className="muted">표시 구간 {Math.round(zoom.end - zoom.start)}%</span></div>
     <div ref={container} role="img" aria-label={label} aria-busy={!ready} className="history-chart-canvas" />
     {!ready && !error && <p role="status">그래프 준비 중…</p>}{error && <p role="alert" className="error">{error}</p>}
-    <figcaption>{caption}<span className="block">마우스·터치로 값을 확인하고 아래 슬라이더로 구간을 확대합니다. 확대는 조회한 기록 안에서 적용됩니다.</span></figcaption>
+    <figcaption>{caption}<span className="block history-chart-help">마우스·터치로 값을 확인하고 아래 슬라이더로 구간을 확대합니다. 확대는 조회한 기록 안에서 적용됩니다.</span></figcaption>
   </figure>;
 }

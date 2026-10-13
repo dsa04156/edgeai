@@ -12,6 +12,42 @@
 .continuous-history-chart figcaption { font-size: 12px; color: var(--secondary); }
 .graph-latest { font-variant-numeric: tabular-nums; }
 .graph-latest strong { font-size: 28px; }
+.sensor-graph { display: grid; gap: 12px; min-width: 0; }
+.sensor-graph-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.sensor-graph-summary > div:first-child { min-width: 0; }
+.sensor-graph-metric-label { font-size: 12px; color: var(--secondary); }
+.sensor-graph-value { display: flex; align-items: baseline; gap: 8px; margin: 0; font-variant-numeric: tabular-nums; }
+.sensor-graph-value strong { font-size: 32px; font-weight: 600; overflow-wrap: anywhere; }
+.sensor-graph-value > span { font-size: 16px; color: var(--secondary); }
+.sensor-graph-approx { font-size: 20px; font-weight: 400; color: var(--secondary); margin-right: 4px; }
+.sensor-graph-state { display: grid; justify-items: end; flex-shrink: 0; gap: 4px; text-align: right; }
+.sensor-graph-state > span.muted { font-size: 11px; }
+.sensor-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 12px; border-block: 1px solid var(--line); }
+.sensor-graph-controls label { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-size: 12px; }
+.sensor-graph-period select { width: auto; min-width: 96px; }
+.sensor-graph-controls > button { margin-left: auto; }
+.sensor-graph .interactive-history-chart { margin: 0; }
+.sensor-graph .history-chart-toolbar { justify-content: flex-start; gap: 8px; }
+.sensor-graph .history-chart-toolbar > span { margin-left: auto; font-size: 11px; }
+.sensor-graph .history-chart-canvas { height: 320px; }
+.sensor-graph .history-chart-help { display: none; }
+.sensor-graph .notice, .sensor-graph .hint, .sensor-graph .error { margin: 0; font-size: 12px; }
+.sensor-graph-loading { display: grid; place-items: center; min-height: 320px; margin: 0; color: var(--secondary); }
+.sensor-graph-info, .sensor-graph-records { border-top: 1px solid var(--line); }
+.sensor-graph-info > summary, .sensor-graph-records > summary { min-height: 44px; padding-block: 10px; font-size: 12px; cursor: pointer; }
+.sensor-graph-info dl { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; margin-block: 0 12px; font-size: 12px; }
+.sensor-graph-info dt { color: var(--secondary); }
+.sensor-graph-info dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .sensor-graph { gap: 8px; }
+  .sensor-graph-value strong { font-size: 28px; }
+  .sensor-graph-state .status-badge { font-size: 11px; }
+  .sensor-graph-controls { gap: 8px; padding-block: 8px; }
+  .sensor-graph-period > span, .sensor-graph-poll-interval { display: none; }
+  .sensor-graph-period select { min-width: 88px; }
+  .sensor-graph-controls > button, .sensor-graph .history-chart-toolbar > button { padding-inline: 10px; }
+  .sensor-graph .history-chart-canvas { height: 280px; }
+}
 .continuous-flow { margin-block: 16px 24px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .continuous-flow h2 { margin: 0; font-size: 14px; }
 .continuous-flow > .toolbar { flex-wrap: wrap; }
