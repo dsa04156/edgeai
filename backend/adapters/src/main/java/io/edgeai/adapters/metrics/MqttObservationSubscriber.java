@@ -16,8 +16,10 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
     private final String clientPrefix;
     private final Map<String,Connection> connections=new HashMap<>();
     private final ExecutorService connectors=Executors.newVirtualThreadPerTaskExecutor();
+    private final ExecutorService deliveries=Executors.newFixedThreadPool(8,Thread.ofPlatform().daemon().name("sensor-archive-write-",0).factory());
+    private final Semaphore deliverySlots=new Semaphore(64,true);
     private volatile Receiver receiver;
-    private boolean closed;
+    private volatile boolean closed;
     public MqttObservationSubscriber(String clientPrefix){this.clientPrefix=clientPrefix;if(!clientPrefix.matches("[a-zA-Z0-9-]{1,40}"))throw new IllegalArgumentException("Invalid archive client ID");}
     public synchronized void configure(Map<String,Set<String>> routes,Receiver receiver) {
         if(closed)return;this.receiver=receiver;
@@ -29,21 +31,42 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
         final MqttAsyncClient client;
         final AtomicBoolean connecting=new AtomicBoolean();
         volatile Set<String> routes=Set.of(),subscribed=Set.of();
+        private final Object sessionLock=new Object();
+        private long session;
+        private volatile boolean retired;
         Connection(String address) {
             try {
                 String digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(address.getBytes(StandardCharsets.UTF_8))).substring(0,16);
                 client=new MqttAsyncClient(address.replace("tls://","ssl://"),clientPrefix+"-"+digest,new MemoryPersistence());
+                client.setManualAcks(true);
                 client.setCallback(new MqttCallback() {
-                    public void disconnected(MqttDisconnectResponse response){subscribed=Set.of();}
+                    public void disconnected(MqttDisconnectResponse response){synchronized(sessionLock){session++;subscribed=Set.of();}}
                     public void mqttErrorOccurred(MqttException error){}
                     public void deliveryComplete(IMqttToken token){}
-                    public void connectComplete(boolean reconnect,String serverURI){subscribed=Set.of();connectors.submit(Connection.this::subscribe);}
+                    public void connectComplete(boolean reconnect,String serverURI){synchronized(sessionLock){session++;subscribed=Set.of();}connectors.submit(Connection.this::subscribe);}
                     public void authPacketArrived(int reasonCode,MqttProperties properties){}
-                    public void messageArrived(String topic,MqttMessage message)throws Exception {receiver.receive(new Delivery(address,topic,message.getPayload(),message.isRetained()));}
+                    public void messageArrived(String topic,MqttMessage message)throws Exception {
+                        deliverySlots.acquire();
+                        long incarnation; synchronized(sessionLock){incarnation=session;}
+                        var target=receiver;
+                        try {deliveries.submit(()->{
+                            try {
+                                target.receive(new Delivery(address,topic,message.getPayload(),message.isRetained()));
+                                synchronized(sessionLock){
+                                    // Packet IDs may be reused after reconnect. Old work must never ACK a new session.
+                                    if(!closed&&!retired&&session==incarnation&&client.isConnected())client.messageArrivedComplete(message.getId(),message.getQos());
+                                }
+                            }catch(Exception error){
+                                boolean reconnect; synchronized(sessionLock){reconnect=!closed&&!retired&&session==incarnation;if(reconnect)session++;}
+                                if(reconnect){try{client.disconnectForcibly(100,500,false);}catch(MqttException ignored){}connectors.submit(Connection.this::connect);}
+                            }finally{deliverySlots.release();}
+                        });}catch(RejectedExecutionException error){deliverySlots.release();throw error;}
+                    }
                 });
             }catch(Exception e){throw new IllegalStateException("Archive subscriber cannot start",e);}
         }
         void connect() {
+            if(closed||retired)return;
             if(client.isConnected()){subscribe();return;}
             if(!connecting.compareAndSet(false,true))return;
             // Dual publication of 17 properties can burst above 16. Keep the window bounded
@@ -57,7 +80,7 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
                 if(!current.isEmpty()){var token=client.subscribe(current.toArray(String[]::new),current.stream().mapToInt(topic->1).toArray());token.waitForCompletion(2000);if(Arrays.stream(token.getGrantedQos()).anyMatch(qos->qos!=1))return;}subscribed=Set.copyOf(current);
             }catch(MqttException ignored){}
         }
-        public void close(){try{if(client.isConnected())client.disconnectForcibly(100,500,false);client.close();}catch(MqttException ignored){}}
+        public void close(){synchronized(sessionLock){retired=true;session++;}try{if(client.isConnected())client.disconnectForcibly(100,500,false);client.close();}catch(MqttException ignored){}}
     }
-    public synchronized void close(){closed=true;for(var connection:connections.values())connection.close();connections.clear();connectors.shutdownNow();}
+    public synchronized void close(){closed=true;for(var connection:connections.values())connection.close();connections.clear();connectors.shutdownNow();deliveries.shutdownNow();}
 }
