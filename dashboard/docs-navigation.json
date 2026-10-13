@@ -81,7 +81,7 @@
     {
       "source": "docs/guides/platform-usage.md",
       "group": "guides",
-      "description": "프로필과 앱 장치를 등록하고 참조를 확인해 정리합니다."
+      "description": "실행 모듈과 측정 센서를 모달로 등록하고 참조를 확인해 정리합니다."
     },
     {
       "source": "docs/guides/infrastructure-inventory.md",
@@ -106,8 +106,14 @@
     {
       "source": "docs/guides/virtual-devices.md",
       "group": "guides",
-      "description": "제거된 기능과 보존되는 과거 데이터의 범위",
-      "title": "기존 가상 장치 제거"
+      "description": "연속 가상 센서와 구형 BATCH·supervisor 종료·데이터 정리 범위를 구분합니다.",
+      "title": "가상 센서 방식과 구형 기능 종료"
+    },
+    {
+      "source": "docs/guides/vd-processing.md",
+      "group": "guides",
+      "description": "센서 입력·계산·출력을 등록하고 중앙 eKuiper와 결과 이력을 준비합니다.",
+      "title": "연속 가상 센서 만들기"
     },
     {
       "source": "docs/guides/workflow-editor-integration.md",

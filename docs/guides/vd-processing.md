@@ -71,6 +71,10 @@ MQTT 구독자는 저장을 마친 뒤 QoS1 ACK를 보냅니다. 지속 세션�
 
 ### 개발 검증
 
+운영 센서용 broker는 Jetson·Pi 노드의 NanoMQ입니다. 중앙 eKuiper는 별도 `ekuiper` namespace의 worker에 배치합니다. 일반 SERVICE STREAM의 Mosquitto broker는 별도 구성입니다. 원본 MQTT의 영속 저장과 계산 결과 보관 이력도 구분합니다. eKuiper 설치·Helm 배치 확인은 Agent의 실제 규칙·입력·결과 수용을 대신하지 않습니다.
+
+### 격리된 개발 검증
+
 프로젝트 로컬 PostgreSQL이 준비된 뒤 `bash scripts/dev/dev-processing-history.sh`로 별도 개발/시험 DB를 준비합니다.
 실제 Mosquitto와 [eKuiper2.4.2 full release](https://github.com/lf-edge/ekuiper/releases/tag/v2.4.2)가 필요합니다.
 `kuiper-2.4.2-linux-amd64-full.tar.gz` SHA256은
@@ -83,6 +87,7 @@ core 배포에는 agent가 사용하는 metadata REST가 포함되지 않습니�
 70회 Mapper session 교체/옛 session 재전송 거절, 인증 callback 및 공개 proxy 경로를 검사합니다.
 전체 backend PostgreSQL 검증은 `bash scripts/test/test-integration.sh`, UI는
 `bash scripts/test/test-ui.sh`입니다. 개발 테스트를 실센서·운영 부하/24시간 검증으로 해석하지 않습니다.
+통합 시험 스크립트의 `isolated_test_db`를 사용합니다. 운영/개발 관리 DB의 이름과 자격을 그대로 사용해 integrationTest를 직접 실행하지 않습니다. 시험용 등록과 결과를 사용자 센서 데이터로 표시하지 않습니다.
 
 ### Kubernetes 처리 엔진 운영 준비와 되돌리기
 
@@ -114,7 +119,7 @@ namespace `ekuiper`의 `processing-rbac.yaml`/`network-policy.yaml`은 별도로
 upstream Helm chart1.4.0을 기존 `my-ekuiper` release/`ekuiper` namespace와 기존 values로 렌더링하며,
 `EDGEAI_PROCESSING_AGENT_IMAGE=<repository@sha256:digest>` 환경 및
 `--post-renderer scripts/ops/processing-post-renderer.sh`로 agent를 붙입니다. 데이터/plugin PVC는 유지합니다.
-REST·CLI·입력·callback은 loopback이고 agent health10083만 Service에 노출됩니다.
+post-renderer 적용 후 REST·CLI·입력·callback은 loopback이고 agent health10083만 Service에 노출됩니다.
 flag가false인 준비 단계는 readiness를 얻지 못하므로 Helm `--wait`로 활성화 완료를 주장하지 않습니다.
 
 활성화는 실제 qualified source, 전용 history와 소유/보안 검증 뒤 backend의

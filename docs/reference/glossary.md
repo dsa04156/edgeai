@@ -3,7 +3,7 @@
 | 용어 | 의미 |
 |---|---|
 | ProfileVersion | 종류·키·버전으로 식별하는 발행 규격 |
-| Device | EdgeAI 앱에 등록한 입력 장치의 신원 |
+| Device | 현재 센서 관리에서는 측정 항목별 KubeEdge Device CRD; 과거 UUID 앱 Device는 별도 이력 신원 |
 | Mapper Device | KubeEdge Device CRD 이름으로 식별하는 수집 장치; UUID 앱 Device와 별도 |
 | DeviceModel | 장치 property 인터페이스를 정의하는 KubeEdge CRD; 연결 정보는 Device별 설정 |
 | DeviceStatus / DeviceTwin | KubeEdge가 보고하는 장치 연결 상태·heartbeat·최신 property 값 |
@@ -15,7 +15,12 @@
 | Data plane | 매 수집 데이터를 별도 MQTT topic으로 소비자에게 전달하는 경로 |
 | EdgeX Device (과거) | 제거된 EdgeX 실행 계층의 논리 장치; 과거 설계·검증 기록에서 사용하는 용어 |
 | ExecutionNode | 실행과 연결하는 Kubernetes 노드 관측 |
-| VD / VirtualDevice | 제거된 이전 가상 장치 기능. 과거 DB·감사 이력에서만 사용 |
+| VD / VirtualDevice | 현재는 여러 센서 입력과 계산을 등록한 CONTINUOUS_EKUIPER 가상 센서; 구형 supervisor VD는 종료 |
+| eKuiper | 공유 중앙 스트림 계산 엔진; 설치와 실제 입력·규칙·계산 활성화는 별도 |
+| processing Agent | Mapper 관측 입력·eKuiper 규칙·세대·결과 전달을 조정하는 중앙 실행체 |
+| NanoMQ | 센서 노드의 MQTT 출력 broker; 일반 STREAM Mosquitto broker와 구분 |
+| Qualified observation | 원본 신원·설정 digest·세션 순서를 검증할 수 있는 연속 계산 입력 계약 |
+| 연속 출력 | VD 계산 결과 하나; 출력별 최신값·그래프·보관 이력, 별도 CRD는 생성하지 않음 |
 | Binding | 장치·원본·실행 간 연결과 그 수명 기록 |
 | Revision | 등록 리소스의 동시 변경을 검사하는 버전 |
 | WorkflowVersion | 발행한 Spring DAG의 불변 버전 |

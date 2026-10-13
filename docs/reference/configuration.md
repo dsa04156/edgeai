@@ -49,11 +49,19 @@ Mapper 이미지의 저장소 기본값은 현재 개발 registry를 사용합�
 | `EDGEAI_STREAM_ENABLED` | `false` | 스트림 기반 기능 |
 | `EDGEAI_STREAM_BINDINGS_ENABLED` | `false` | 스트림 연결 관리 |
 | `EDGEAI_STREAM_RUNS_ENABLED` | `false` | 공개 스트림 실행 |
+| `EDGEAI_CONTINUOUS_ENABLED` | `false` | 연속 VD 등록·공유 엔진 실행·결과 수신 |
+| `EDGEAI_CONTINUOUS_NAMESPACE` | `ekuiper` | 중앙 eKuiper/Agent namespace |
+| `EDGEAI_CONTINUOUS_POD_NAME` | `my-ekuiper-0` | 승인된 중앙 처리 Pod |
+| `EDGEAI_CONTINUOUS_SERVICE_ACCOUNT` | `edgeai-processing` | 중앙 처리 Agent 신원 |
+| `EDGEAI_CONTINUOUS_CREDENTIAL_FILE` | 빈 값 | 중앙 Agent 공유 credential 파일; 활성화 시 별도 준비 |
+| `EDGEAI_CONTINUOUS_BROKER_NODE_OVERRIDES` | `{}` | 센서 노드별 broker 접근 주소 재정의 |
+| `EDGEAI_CONTINUOUS_HISTORY_BUDGET_GIB` | `300` | 연속 결과 보관 용량 예산 |
 | `EDGEAI_RECOVERY_INSPECT_ONLY` | `false` | 표시가 있는 복원 DB의 조회 전용 점검 |
 
 활성화 값만으로 필요한 키·broker·저장소·ServiceAccount를 생성하지 않습니다.
 Runtime 상세는 `.env.example`과 `backend/app/src/main/resources/application.yml`,
 Remote는 [설정 안내](../operations/remote.md), 복원은 [복구 안내](../operations/backup-and-recovery.md)를 확인합니다.
+연속 계산 결과 보관에는 `EDGEAI_HISTORY_DB_URL`, `EDGEAI_HISTORY_DB_USER`(기본 `edgeai_history`), `EDGEAI_HISTORY_DB_PASSWORD`로 전용 history DB를 연결합니다. URL/암호는 기본 빈 값이며 관리 DB와 분리합니다. eKuiper·Agent·TLS·history 배포와 실제 활성화 순서는 [연속 센서 가이드](../guides/vd-processing.md)를 따릅니다.
 
 ## DDS 배포 서비스
 

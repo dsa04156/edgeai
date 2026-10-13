@@ -25,11 +25,11 @@ Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQT
 
 각 측정 행의 **항목 수정**은 해당 항목 하나의 자료형·값 위치·단위·배율·보정값을 편집합니다. 항목 이름은 Workflow 참조를 유지하기 위해 변경하지 않습니다. `PUT /api/devices/{id}/properties/{property}`에 항목 하나의 설정만 보내며 서버가 최신 Profile에 반영합니다. 다른 항목과 연결 설정·노드·수집 간격은 유지하고 공유 Mapper Pod를 다시 만들지 않습니다. 5초 갱신과 검색 중에도 입력을 유지하며 저장 충돌이면 입력을 보존하고 오류를 표시합니다. 기존 장치의 전체 properties를 한꺼번에 편집하는 버튼은 제공하지 않습니다.
 
-각 측정 행의 **항목 삭제 → 삭제 확인**은 해당 항목만 수집 설정에서 제거합니다. 다른 항목과 공유 Mapper는 유지하며 삭제한 항목은 Workflow 입력에서도 제외됩니다. 마지막 항목이면 장치 등록도 삭제된다는 안내를 확인하고 진행합니다. 펼친 장치의 **장치 삭제 → 삭제 확인**은 모든 측정 항목을 함께 제거합니다. API의 개별 삭제 경로는 `DELETE /api/devices/{id}/properties/{property}`입니다. 저장한 Property 규격은 삭제하지 않으므로 재등록 때 불러올 수 있습니다.
+각 측정 행의 **항목 삭제 → 삭제 확인**은 해당 센서의 수집 설정을 제거합니다. 현재 CRD는 측정 항목마다 분리돼 있으므로 마지막 항목 삭제는 그 센서의 Device·DeviceStatus 등록도 제거합니다. 같은 물리 연결의 다른 센서와 공유 Mapper는 유지합니다. API의 항목 삭제 경로는 `DELETE /api/devices/{id}/properties/{property}`입니다. 저장한 Property 규격은 삭제하지 않으므로 재등록 때 불러올 수 있습니다.
 
 실행 상태의 기준은 Device/DeviceStatus CRD입니다. 앱 DB나 레포 YAML을 별도 상태 원본으로 만들지 않습니다. 등록 API는 `/api/devices`, Profile API는 `/api/device-profiles`, 지원 프로토콜은 `/api/protocols`입니다. 브라우저는 같은 출처 프록시와 기존 CSRF 토큰을 사용합니다.
 
-기존 `/api/v1/sensors/*` 경로는 410 `SENSOR_API_REPLACED`로 종료됐습니다. Arduino와 Sense HAT은 현재 실제 보드를 새 Mapper에 연결했습니다. Arduino의 `*_raw` 값은 환산 전 ADC/디지털 값이며 °C 또는 가속도 물리 단위로 표시하지 않습니다. 시리얼 endpoint는 노드의 `/run/edgeai/devices`에 존재해야 합니다. Sense HAT 지원은 v1 보드로 한정됩니다. UUID 앱 장치 이력과 CRD 이름은 다른 신원입니다. 기존 VD 등록·실행 기능은 제거됐습니다.
+기존 `/api/v1/sensors/*` 경로는 410 `SENSOR_API_REPLACED`로 종료됐습니다. Arduino와 Sense HAT은 현재 실제 보드를 새 Mapper에 연결했습니다. Arduino의 `*_raw` 값은 환산 전 ADC/디지털 값이며 °C 또는 가속도 물리 단위로 표시하지 않습니다. 시리얼 endpoint는 노드의 `/run/edgeai/devices`에 존재해야 합니다. Sense HAT 지원은 v1 보드로 한정됩니다. UUID 앱 장치 이력과 CRD 이름은 다른 신원입니다. 구형 VD BATCH·supervisor는 종료됐으며 현재 연속 가상 센서는 [별도 계산 등록](vd-processing.md)을 사용합니다.
 
 [실행 구조·환경·데이터 경로](../../deploy/kubeedge/README.md)
 

@@ -8,7 +8,8 @@ Kubernetes의 노드·실행 환경, Prometheus의 자원 측정, KubeEdge Mappe
 - 엣지 AI 서버와 엣지 디바이스를 구분하고 CPU·메모리·GPU·NPU 관측값을 조회합니다.
 - 지원 프로토콜로 센서를 등록하고 연결 상태·측정 항목별 최신값·수집 시각을 조회합니다.
 - 기존 센서의 측정 항목을 추가·삭제하고 저장한 항목 규격을 재사용합니다.
-- 장치·서비스 프로필을 버전으로 발행하고 등록된 장치에 연결합니다.
+- SERVICE 실행 모듈을 불변 버전으로 발행하고 워크플로에서 재사용합니다.
+- 선택한 센서 측정값을 연속 가상 센서로 조합하고 출력별 결과·그래프·이력을 조회하는 관리 기능을 제공합니다. 실제 계산에는 연속 처리 활성화가 필요합니다.
 - DDS 배포 구성을 작성해 Buildx·Gitea·Argo CD로 전달하거나, Spring DAG 경로에서 작업 실행과 결과를 조회합니다.
 
 ## 구성 요소
@@ -16,12 +17,14 @@ Kubernetes의 노드·실행 환경, Prometheus의 자원 측정, KubeEdge Mappe
 | 구성 요소 | 역할 |
 |---|---|
 | Dashboard | 관리 화면과 문서, 서버 측 API 프록시 |
-| Spring API | 프로필·앱 장치·DAG·실행·감사 관리, Device Manager의 장치 CRD 구성 |
+| Spring API | SERVICE·DAG·연속 VD·실행·감사 관리와 Device Manager의 장치 CRD 구성 |
 | PostgreSQL | 관리 상태, 불변 버전, 연결과 실행 이력 저장 |
 | Kubernetes | 노드 관측과 실행 Pod의 배치·수명 관리 |
 | Prometheus | 기존 exporter의 노드·가속기 지표 조회 |
 | KubeEdge | DeviceModel/Device CRD 설정과 DeviceStatus·DeviceTwin 관측 |
 | Mapper | 대상 엣지 노드에서 프로토콜별 장치를 읽고 DMI 상태·별도 MQTT 데이터를 보고 |
+| NanoMQ | 센서 노드의 MQTT 출력 broker; 중앙 연속 처리 입력과 연결 |
+| eKuiper·processing Agent | 공유 계산 엔진과 입력·규칙·출력·세대 조정; 운영 활성화 별도 |
 | Platform-Service | DDS 편집 결과를 이미지·Git·Argo CD 배포로 연결하는 별도 API |
 | Runner·MinIO·MQTT | 선택적으로 활성화하는 작업 실행, 결과 저장, 스트림 전달 |
 
@@ -45,7 +48,8 @@ DDS 배포와 Spring DAG는 입력 형식, 실행 주체, 결과 조회 방식�
 센서 ONLINE, 노드 Ready, 작업 성공도 서로 다른 상태입니다.
 [지원 범위](../reference/support.md)와 [상태 해석](../concepts/observability.md)을 기준으로 판단합니다.
 
-센서 화면은 최신값을 조회합니다. 영속 측정 이력·장치 명령 쓰기·Mapper 데이터의 자동 STREAM 연결은
-현재 제공하지 않습니다. 장치 CRD와 UUID 앱 장치 이력도 자동으로 같은 신원이 되지 않습니다.
+센서 화면은 측정 항목별 행과 Device·DeviceStatus CRD의 최신값을 조회합니다. 센서 원본의 영속 이력·장치 명령 쓰기·자동 STREAM 연결은 현재 제공하지 않습니다. 연속 가상 센서의 계산 결과 이력은 별도 구현이며 실제 저장에는 Agent·전용 history·기능 flag 준비가 필요합니다. 구형 VD supervisor와 별도 UUID 앱 장치 신규 등록은 종료됐습니다.
+
+등록 버튼은 모달을 열며 긴 입력 내용만 모달 안에서 스크롤합니다. 실패 시 입력을 유지하고 ESC·취소·닫기로 목록에 돌아갑니다. [연속 가상 센서 가이드](../guides/vd-processing.md)에서 원본 등록과 계산 등록의 관계를 확인하세요.
 
 다음 단계: [로컬 빠른 시작](../guides/local-development.md).

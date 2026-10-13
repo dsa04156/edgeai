@@ -1,53 +1,27 @@
 # 현재 상태
 
-2026-10-08 확인. KubeEdge Mapper 기반 장치 관리와 실제 센서 연결은 구현·검증돼 있으며,
-실제 학습 모델과 연속 데이터 경로를 포함한 전체 플랫폼 수용은 아직 완료되지 않았습니다.
-
-기존 가상 디바이스 등록·프로필·실행 기능은 2026-10-12 제거했습니다. 일반 장치·워크플로와 과거 실행 이력은 유지합니다. [검증 기록](docs/evidence/virtual-device-removal-2026-10-12.md).
+2026-10-13 확인. 센서 관리와 연속 가상 센서의 관리 API·계산 Agent·결과 조회 구현은 제공됩니다.
+실제 센서 수집과 중앙 연속 계산의 운영 활성화는 별도 단계입니다. 전체 플랫폼의 실모델·성능·복구 수용은 완료되지 않았습니다.
 
 ## 현재 구현
 
-- **장치 실행 계층:** Device Manager가 등록 설정을 DeviceModel/Device CRD로 컴파일하고,
-  노드·프로토콜별 공유 Mapper가 DMI로 최신값·상태를 보고합니다. 활성 EdgeX 실행 계층은
-  2026-10-07 제거했으며 Arduino Serial JSON과 Sense HAT을 새 Mapper로 연결했습니다.
-- **지원 프로토콜:** Modbus TCP, OPC-UA, MQTT 입력, Virtual HTTP JSON, Serial JSON,
-  Sense HAT v1입니다. 인증·TLS, 임의 프로토콜 발견과 센서 쓰기 제어는 아직 지원하지 않습니다.
-- **관리 화면:** 새 장치 등록·연결 테스트·수정, 저장 property 규격으로 기존 장치의 항목 추가,
-  개별 항목 삭제와 장치 삭제를 제공합니다. 마지막 항목 삭제는 장치 등록도 제거합니다.
-- **등록 화면:** 센서·측정 항목 추가·가상 장치·실행 모듈·워크플로·DAG 버전 등록은 단일 모달로 엽니다. PC·모바일의 닫기·포커스 복귀·실패 재시도와 기존 연속 처리/모듈 기능을 브라우저28개, lint·typecheck·build로 검증했습니다(2026-10-13).
-- **관측·데이터:** 장치별 항목의 최신값·보고 시각과 Mapper 준비 상태·DMI heartbeat를 조회합니다.
-  MQTT에는 매 수집 데이터를 발행하지만 해당 경로의 영속 이력 consumer·재전송 outbox는 없습니다.
-- **실행 입력:** 일반 Mapper 장치 참조 입력과 AUTO/NODE/REMOTE 실행을 유지합니다. 기존 VD의 센서 입력 snapshot은 읽기 전용 실행 이력으로 보존합니다.
-- **앱과 워크플로:** 기본 관리 화면은 로그인 입력 없이 사용하며 쓰기 요청은 CSRF 보호를 적용합니다.
-  Spring DAG가 기본 서비스 경로이고 DDS·Buildx·Gitea·Argo CD는 별도 경로로 유지합니다.
-  워크플로는 현재 기본 설정에서 활성화돼 있습니다.
+- **센서 관리:** Device Manager가 측정 항목마다 별도의 Device·DeviceStatus CRD를 구성합니다. 노드·프로토콜별 Mapper는 공유하며 Modbus TCP, OPC-UA, MQTT 입력, HTTP Virtual, Serial JSON, Sense HAT v1을 지원합니다.
+- **관측과 원본 데이터:** 최신값·시각·heartbeat는 DeviceStatus/DMI로 조회하고 매 수집 데이터는 MQTT로 발행합니다. 원본 MQTT 데이터의 영속 이력 consumer·재전송 outbox는 없습니다. 일반 DAG의 센서 입력은 Run 접수 시 최신값을 고정합니다.
+- **연속 가상 센서:** 내부 `edgeai.vd/v3 / CONTINUOUS_EKUIPER` 설정으로 여러 측정 센서를 조합합니다. 계산식·이동 평균·최솟값·최댓값·임계값·필터와 출력별 최신값·그래프·보관 이력 API를 구현했습니다. 센서 등록만으로 VD가 생기지 않으며 입력·계산을 명시적으로 등록합니다. VD마다 별도 SERVICE·supervisor·Pod를 만들지 않습니다.
+- **등록 화면:** 센서·측정 항목 추가·가상 장치·실행 모듈·워크플로·DAG 발행은 모달을 사용합니다. 긴 폼은 모달 안에서 스크롤하고 오류 시 입력을 유지합니다.
+- **일반 서비스:** SERVICE 실행 모듈과 Spring DAG, AUTO/NODE/REMOTE 정책을 유지합니다. DDS·Buildx·Gitea·Argo CD는 별도 배포 경로입니다. DEVICE 신규 발행과 구형 VD 프로필·BATCH·supervisor 경로는 종료됐습니다.
 
-사용 방법은 [센서 등록](docs/guides/sensor-registration.md),
-[Mapper 실행 계층](deploy/kubeedge/README.md), [API 참고](docs/reference/api.md)를 확인합니다.
+## 현재 운영 상태
 
-## 검증된 범위
+- 호스트 웹/API는 기존 13080/18080을 사용합니다. 실제 센서 17개가 ONLINE으로 조회됩니다.
+- 센서용 NanoMQ는 Jetson·Pi의 노드 로컬 broker입니다. `ekuiper` namespace의 `my-ekuiper-0`은 worker `etri-ser0004-cgnms0`에서 eKuiper2.4.2를 실행합니다. `edgeai-mqtt-0` Mosquitto는 일반 STREAM용 별도 broker입니다.
+- `EDGEAI_CONTINUOUS_ENABLED=false`입니다. 운영 processing Agent·전용 history·qualified observation 경로의 배포와 수용은 남아 있으므로 eKuiper Pod Running을 실제 가상 센서 계산 중으로 해석하지 않습니다.
+- 명시적 삭제 요청으로 호스트 DB의 구형 등록 233개와 연결된 구형 VD 프로필·실행 데이터를 정리했습니다. 연속 처리 등록 30개는 보존됐으며 시험용 등록입니다. 일반 워크플로·SERVICE·센서·노드·감사 데이터와 migration은 보존했습니다.
 
-CRD/DMI 등록·변경·삭제와 Modbus·확장 프로토콜, BATCH 입력 snapshot을 검증했습니다.
-Arduino·Sense HAT의 실제 읽기·Twin·MQTT 수신도 확인했으며 항목 수는 사용자 추가·삭제에 따라 바뀝니다.
-개별 항목 수정과 VD 센서 BATCH에서 실제/fixture 경계를 나누어 검증했습니다.
-Sense HAT 온도→호스트 supervisor·Runner→HTTP/분리DB/MinIO→검증 Result가 완료됐습니다.
-이 시험의 Pod 인증은 fixture이며 실제 Kubernetes Pod 배포 수용과 구분합니다.
-상세 기준·결과는 [VD 센서 BATCH 검증](docs/evidence/vd-sensor-batch.md)을 확인하세요.
-날짜별 상세 보고서·스크린샷과 일회성 검증 도구는 Git에서 제외한 `output/`에 보관합니다.
+## 검증과 한계
 
-## 개발 단계와 남은 범위
+구형 데이터 정리는 전체 DB 백업을 별도 DB에 복원해 먼저 실행했고, 실제 적용 시 삭제 대상 외 행의 동일성과 FK·trigger 복구를 확인했습니다. 최신 백엔드 단위180개와 빌드가 통과했습니다. 등록 모달과 연속 결과·기존 모듈 기능은 PC·모바일 Chromium28개로 검증했습니다. 날짜별 로그·스크린샷·일회성 결과는 Git에서 제외한 `output/verification/`에 보관합니다.
 
-구형 `state-aggregator`·장치 확장 controller·Redis·문서 사이트와 미등록 시험 Mapper·fixture를
-관련 실행체·설정까지 정리했습니다. HTTP 라우터는 30개이며 공통 인프라·실센서와 PVC/PV는
-보존했습니다. API health, 실센서 ONLINE·새 MQTT 수신과 공통 관리 화면 응답을 확인했습니다.
+실제 브로커·eKuiper를 사용하는 개발 시험은 운영 센서의 24시간 연속 처리·저장·부하 수용과 구분합니다. 센서 원본의 장기 저장, 새 Mapper 경로의 자동 STREAM 연결, 실제 학습 모델·외부 API 전체 계약, 운영 identity/RBAC·종합 복구·합의 성능 기준은 남아 있습니다.
 
-- **완료 단계:** M0–M4, M6의 해당 구현·검증 범위입니다.
-- **우선순위:** Dashboard 관리 흐름을 우선합니다. Runner/STREAM 고도화와 종합 수용은 보류합니다.
-- **통합 입력:** 새 eKuiper 가상 디바이스 연동과 MQTT 영속 소비·재전송·연속 실행 연결은 후속 범위입니다.
-- **실제 모델:** ARM/x86 Runner와 CUDA 계산·NPU 접근 증거는 있지만 학습 모델의 종단 추론 수용은 미완료입니다.
-- **운영·성능:** M5 외부 계약·상태형 복원, M8 합의 성능 기준, M9 identity/RBAC·종합 복구,
-  M10 실제 모델·2세부 연동이 남아 있습니다. 다수 항목의 DMI 보고 지연과 복구 시간도 추가 측정이 필요합니다.
-- **기술 버전:** 공식 비교의 KubeEdge 패치·Go/Next 업그레이드는 검토 제안입니다.
-  현재 운영 이미지의 patch/backport와 실제 빌드 toolchain은 별도 확인 대상입니다.
-
-단계별 게이트는 [PLAN.md](PLAN.md), 장치 간 관계는 [리소스 모델](docs/concepts/resources.md)을 확인합니다.
+사용 방법은 [센서 등록](docs/guides/sensor-registration.md), [연속 가상 센서](docs/guides/vd-processing.md), [지원 범위](docs/reference/support.md)를 확인합니다. 다음 게이트는 [PLAN.md](PLAN.md), 구형 방식의 종료·데이터 정리 원칙은 [제거 결정](docs/adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
