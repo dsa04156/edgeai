@@ -490,3 +490,5 @@ tbody tr:hover { background: #f7faff; }
 /* Commands and failure explanations remain readable while data cells truncate. */
 table td > button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 table td .error, table td .notice, table td .hint { white-space: normal; overflow-wrap: anywhere; }
+
+.vd-management .vd-delete-button, .registration-dialog .vd-delete-button { color: var(--error); }
