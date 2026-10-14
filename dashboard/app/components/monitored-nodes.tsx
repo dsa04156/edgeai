@@ -40,7 +40,7 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
       <colgroup><col style={{ width: "19%" }} /><col style={{ width: "9%" }} /><col style={{ width: "11%" }} /><col style={{ width: "11%" }} /><col style={{ width: "24%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /></colgroup>
       <thead><tr><th scope="col">디바이스</th><th scope="col">상태</th><th scope="col">CPU</th><th scope="col">메모리</th><th scope="col">GPU / NPU</th><th scope="col">온도 · 전력</th><th scope="col">수집 상태</th></tr></thead>
       <tbody>{visible.map(row => {
-        const measurements = !state.failed && state.snapshot?.status === "AVAILABLE" ? state.snapshot.items.find(item => item.nodeName === row.name)?.measurements ?? [] : [];
+        const measurements = row.measurements;
         const devices = row.devices;
         const fresh = measurements.length > 0 && measurements.every(metric => isCurrent(metric, state));
         const incomplete = devices.some(device => !device.measurements.some(metric => metric.key.endsWith("_USAGE") && isCurrent(metric, state)));
@@ -56,8 +56,8 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
             const used = values.find(m => m.key.endsWith("MEMORY_USED"));
             const total = values.find(m => m.key.endsWith("MEMORY_TOTAL"));
             const memory = used && isCurrent(used, state) ? `${(used.value / 1024 ** 3).toFixed(2)}${total && isCurrent(total, state) ? ` / ${(total.value / 1024 ** 3).toFixed(2)}` : ""} GiB` : null;
-            return <div className="resource-device" key={device.id}><span title={device.label}>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} missingLabel="사용률 미수집" />{memory && <small title={memory}>{memory}</small>}</div>;
-          }) : <span className="muted">GPU / NPU 미수집</span>}</td>
+            return <div className="resource-device" key={device.id}><span title={device.label}>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} missingLabel={device.utilizationNote ?? "사용률 미수집"} />{memory && <small title={memory}>{memory}</small>}</div>;
+          }) : <span className="muted">—</span>}</td>
           <td data-label="온도 · 전력">{physical.length ? physical.map(m => <span className="physical-metric" key={`${m.key}/${m.device}`}>{m.key.split("_")[0]} {isCurrent(m, state) ? `${m.value.toFixed(1)} ${m.unit === "CELSIUS" ? "°C" : "W"}` : "—"}</span>) : <span className="muted">미수집</span>}</td>
           <td data-label="수집 상태"><StatusBadge state={!fresh ? "STALE" : incomplete ? "UNKNOWN" : "ONLINE"} label={!fresh ? "수집 지연" : incomplete ? "일부 미수집" : "수집 정상"} /><small>{oldest ? new Date(oldest).toLocaleTimeString("ko-KR") : "미수집"}</small></td>
         </tr>;

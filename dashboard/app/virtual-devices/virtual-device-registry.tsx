@@ -79,7 +79,7 @@ export function VirtualDeviceRegistry({ initiallyOpen = false, embedded = false,
       </section>}
     </RegistrationDialog>
     <ContinuousFlow availability={availability} />
-    <RegistrationDialog open={!!graph} title={`${graph?.displayName ?? "가상디바이스"} · 가상디바이스 그래프`} closeLabel="닫기" onClose={() => setGraph(null)}>
+    <RegistrationDialog open={!!graph} title={`${graph?.displayName ?? "가상디바이스"} · 가상디바이스 그래프`} subtitle={graph?.key} variant="graph" onClose={() => setGraph(null)}>
       {graph && <ContinuousExecution key={graph.id} vd={graph} auth="" csrf="" disabled={false} graphOnly />}
     </RegistrationDialog>
     <RegistrationDialog open={createOpen} title="가상디바이스 등록" busy={busy} onClose={() => setCreateOpen(false)}>

@@ -53,7 +53,6 @@ test("tooltips preserve the stored measurement precision", async ({ page }) => {
   await expect(chart.locator("canvas")).toBeVisible();
   await chart.hover({ position: { x: (await chart.boundingBox())!.width / 2, y: 100 } });
   await expect(dialog.getByRole("tooltip")).toContainText("20.00000001 °C");
-  await dialog.getByText("원본 기록 표 · 3개", { exact: true }).click();
   await expect(dialog.getByRole("cell", { name: "20.00000001", exact: true })).toBeVisible();
 });
 
@@ -61,7 +60,6 @@ test("automatic history updates keep the zoomed time range and expanded record t
   await page.clock.install({ time: new Date() });
   const dialog = await sensor(page), chart = dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 3개", exact: true });
   await expect(chart.locator("canvas")).toBeVisible();
-  await dialog.getByText("원본 기록 표 · 3개", { exact: true }).click();
   await dialog.getByRole("button", { name: "확대", exact: true }).click();
   await page.clock.runFor(5100);
   await expect(dialog.getByRole("status", { name: "그래프 표시 구간", exact: true })).toContainText("50%");
@@ -87,11 +85,10 @@ test("virtual output charts keep storage gaps and generation boundaries while ad
   await page.goto("/virtual-devices"); await page.getByRole("button", { name: /^온도 계산\s*temperature$/ }).click();
   const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상디바이스 그래프", exact: true });
   await expect(dialog.getByRole("img", { name: "average 결과 그래프, 4개 기록", exact: true }).locator("canvas")).toBeVisible();
-  await expect(dialog.getByText("연속 기록 구간 2개 · 기록 누락 1개", { exact: true })).toBeVisible();
+  await dialog.getByText("누락 · 1개", { exact: true }).click();
   await expect(dialog.getByText(/기록 저장 중단 ·/)).toBeVisible();
   await dialog.getByRole("button", { name: "확대", exact: true }).click();
   await expect(dialog.getByRole("status", { name: "그래프 표시 구간", exact: true })).toContainText("50%");
-  await dialog.getByText("기록 표 · 4개", { exact: true }).click();
   await expect(dialog.getByRole("table").last().getByRole("row")).toHaveCount(5);
   await expect(dialog.getByRole("cell", { name: "4.0001", exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath("echarts-virtual.png"), fullPage: true });

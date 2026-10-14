@@ -12,26 +12,46 @@
 .continuous-history-chart figcaption { font-size: 12px; color: var(--secondary); }
 .graph-latest { font-variant-numeric: tabular-nums; }
 .graph-latest strong { font-size: 28px; }
-.sensor-graph { display: grid; gap: 12px; min-width: 0; }
-.sensor-graph-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.sensor-graph-summary > div:first-child { min-width: 0; }
-.sensor-graph-metric-label { font-size: 12px; color: var(--secondary); }
-.sensor-graph-value { display: flex; align-items: baseline; gap: 8px; margin: 0; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.sensor-graph-value strong { font-size: 32px; font-weight: 600; overflow-wrap: anywhere; }
-.sensor-graph-value > span { font-size: 16px; color: var(--secondary); }
-.sensor-graph-approx { font-size: 20px; font-weight: 400; color: var(--secondary); margin-right: 4px; }
-.sensor-graph-state { display: grid; justify-items: end; flex-shrink: 0; gap: 4px; text-align: right; }
-.sensor-graph-state > span.muted { font-size: 11px; }
-.sensor-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 8px; border-block: 1px solid var(--line); }
+.registration-dialog-title { min-width: 0; }
+.graph-dialog { width: min(1080px, calc(100% - 48px)); max-width: 1080px; }
+.graph-dialog .registration-dialog-header { padding: 12px 20px; background: #fafbfc; }
+.graph-dialog .registration-dialog-header h2 { font-size: 16px; }
+.graph-dialog .registration-dialog-title > p { margin: 4px 0 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph-dialog .registration-dialog-header > button { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--secondary); font-size: 27px; font-weight: 400; }
+.graph-dialog .registration-dialog-body { padding: 16px 20px; }
+.sensor-graph { display: grid; gap: 8px; min-width: 0; margin: 0; }
+.graph-current { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; margin-right: auto; font-size: 12px; }
+.graph-current strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.graph-current small { font-size: 12px; font-weight: 400; color: var(--secondary); }
+.graph-current .status-badge { font-size: 11px; }
+.sensor-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 44px; }
 .sensor-graph-controls label { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; font-size: 12px; }
-.sensor-graph-period select { width: auto; min-width: 96px; }
-.sensor-graph-controls > button { margin-left: auto; }
-.sensor-graph .interactive-history-chart { margin: 0; }
-.sensor-graph .history-chart-toolbar { justify-content: flex-start; gap: 8px; }
-.sensor-graph .history-chart-toolbar > span { margin-left: auto; font-size: 11px; }
-.sensor-graph .history-chart-canvas { height: clamp(280px, 40dvh, 360px); }
+.sensor-graph-controls .graph-output { min-width: 0; }
+.graph-output select { width: 180px; max-width: 100%; min-width: 0; }
+.sensor-graph-period select { width: auto; min-width: 96px; background: var(--panel); }
+.sensor-graph-controls .check-row { min-height: 44px; }
+.sensor-graph-controls > button { margin-left: 0; background: var(--panel); }
+.sensor-graph .interactive-history-chart { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 16px; }
+.sensor-graph .history-chart-canvas, .sensor-graph .interactive-history-chart > p { grid-column: 1 / -1; }
+.sensor-graph .history-chart-toolbar { justify-content: flex-start; gap: 4px; margin: 0; }
+.sensor-graph .history-chart-toolbar > button { min-width: 44px; padding-inline: 8px; border-color: transparent; background: transparent; font-size: 12px; }
+.sensor-graph .history-chart-toolbar > button:hover:not(:disabled) { background: var(--control); }
+.sensor-graph .history-chart-toolbar > span { margin-left: 8px; font-size: 11px; }
+.sensor-graph .history-chart-canvas { height: clamp(240px, 33dvh, 320px); }
+.sensor-graph figcaption { align-self: center; max-width: 360px; font-size: 11px; color: var(--muted); text-align: right; }
 .sensor-graph .history-chart-help { display: none; }
 .sensor-graph .notice, .sensor-graph .hint, .sensor-graph .error { margin: 0; font-size: 12px; }
+.graph-data { margin: 0; border-top: 1px solid var(--line); }
+.graph-data-heading { display: flex; align-items: center; justify-content: space-between; min-height: 44px; gap: 8px; }
+.graph-data-heading h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.graph-data-heading h3 span { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.graph-data-heading button { padding-inline: 10px; font-size: 12px; }
+.graph-data-scroll { max-height: 220px; margin: 0; overflow: auto; overscroll-behavior: contain; }
+.registry-table.graph-data-table { min-width: 0; width: 100%; }
+.graph-data-table th, .graph-data-table td { padding: 7px 8px; font-size: 12px; }
+.graph-data-table thead th { position: sticky; top: 0; z-index: 1; background: var(--control); font-size: 11px; }
+.graph-gap-details { border-top: 1px solid var(--line); }
+.graph-gap-details summary { min-height: 44px; padding-block: 10px; color: var(--warning); font-size: 12px; cursor: pointer; }
 .sensor-graph-loading { display: grid; place-items: center; min-height: 320px; margin: 0; color: var(--secondary); }
 .sensor-graph-info, .sensor-graph-records { border-top: 1px solid var(--line); }
 .sensor-graph-info > summary, .sensor-graph-records > summary { min-height: 44px; padding-block: 10px; font-size: 12px; cursor: pointer; }
@@ -39,14 +59,29 @@
 .sensor-graph-info dt { color: var(--secondary); }
 .sensor-graph-info dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
+  .graph-dialog { width: calc(100% - 16px); max-width: calc(100% - 16px); }
+  .graph-dialog .registration-dialog-header { padding: 12px 16px; }
+  .graph-dialog .registration-dialog-body { padding: 16px; }
   .sensor-graph { gap: 8px; }
-  .sensor-graph-value strong { font-size: 28px; }
-  .sensor-graph-state .status-badge { font-size: 11px; }
-  .sensor-graph-controls { gap: 8px; padding-block: 8px; }
+  .sensor-graph-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; }
+  .graph-current { gap: 4px 8px; }
+  .graph-current strong { max-width: 160px; font-size: 14px; }
+  .virtual-graph .graph-output { grid-column: 1; grid-row: 1; }
+  .virtual-graph .sensor-graph-period { grid-column: 2; grid-row: 1; }
+  .virtual-graph .graph-current { grid-column: 1; grid-row: 2; }
+  .graph-output > span { display: none; }
+  .graph-output select { width: 100%; }
+  .sensor-graph-period { justify-content: flex-end; }
   .sensor-graph-period > span, .sensor-graph-poll-interval { display: none; }
   .sensor-graph-period select { min-width: 88px; }
-  .sensor-graph-controls > button, .sensor-graph .history-chart-toolbar > button { padding-inline: 10px; }
-  .sensor-graph .history-chart-canvas { height: 280px; }
+  .sensor-graph-controls > button { padding-inline: 10px; }
+  .sensor-graph .interactive-history-chart { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sensor-graph .history-chart-toolbar { flex-wrap: wrap; }
+  .sensor-graph .history-chart-toolbar > span { margin-left: auto; font-size: 10px; }
+  .sensor-graph .history-chart-canvas { height: 250px; }
+  .sensor-graph figcaption { max-width: none; padding-block: 0 8px; text-align: left; }
+  .graph-data-scroll { max-height: 180px; }
+  .graph-data-table th, .graph-data-table td { padding-inline: 6px; }
 }
 .virtual-devices-page > .continuous-flow { margin-block: 20px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .continuous-flow h2 { margin: 0; font-size: 14px; }
