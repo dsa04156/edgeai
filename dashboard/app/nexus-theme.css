@@ -173,14 +173,14 @@ body { font-family: Pretendard, "Apple SD Gothic Neo", -apple-system, BlinkMacSy
 .topbar-connection { font-size: 12px; white-space: nowrap; }
 .console-search { display: flex; align-items: center; gap: 8px; background: var(--control); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; width: 410px; max-width: 62%; }
 .console-search .console-icon { filter: none; opacity: .6; width: 16px; height: 16px; }
-.console-search input[type=search] { min-width: 0; width: 100%; min-height: 40px; border: 0; background: transparent; color: var(--ink); padding: 8px 4px; font-size: 13px; }
+.console-search input[type=search] { min-width: 0; width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--ink); padding: 8px 4px; font-size: 13px; }
 .console-search input::placeholder { color: var(--muted); }
-.console-search button { min-height: 40px; padding: 4px; border: 0; background: transparent; color: var(--secondary); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.console-search button { min-width: 44px; min-height: 44px; padding: 4px; border: 0; background: transparent; color: var(--secondary); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 main { max-width: 1600px; padding: 24px 28px; }
 .page-heading { margin-bottom: 20px; gap: 20px; }
 .page-heading .eyebrow { display: none; }
 h1 { font-size: 28px; font-weight: 650; letter-spacing: -.025em; }
-.intro { max-width: 78ch; margin-top: 8px; font-size: 14px; line-height: 1.6; color: var(--secondary); }
+.intro { max-width: 78ch; margin-top: 8px; font-size: 14px; line-height: 1.6; color: var(--secondary); word-break: keep-all; }
 .overview-meta { margin: 12px 0; }
 .metric-strip, .metric-strip[data-count="4"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
 .metric-strip .metric { display: grid; grid-template-columns: 38px minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: start; column-gap: 12px; row-gap: 4px; padding: 18px 16px; min-height: 120px; background: #fff; border: 1px solid var(--line); border-radius: 7px; color: #182c47; }
@@ -305,6 +305,7 @@ h1 { font-size: 28px; font-weight: 650; letter-spacing: -.025em; }
 /* Shared control hierarchy for the operations workbench. */
 .toolbar { justify-content: flex-start; align-items: center; gap: 12px; }
 .toolbar > h2, .toolbar > div:first-child { margin-right: auto; }
+.toolbar:has(> label) { align-items: flex-end; }
 .toolbar h2 { font-size: 17px; font-weight: 650; }
 label { font-size: 13px; }
 input:not([type=radio]):not([type=checkbox]), textarea, select { font-size: 14px; border-radius: 8px; }
@@ -319,8 +320,8 @@ th { font-size: 12px; }
 .resource-accelerators .resource-usage { justify-content: flex-end; }
 .resource-accelerators .resource-usage meter { display: none; }
 .resource-accelerators .resource-device > small { grid-column: 1 / -1; text-align: right; margin: 0; }
-.sensor-actions { gap: 6px; min-width: 258px; }
-.sensor-actions button { padding-inline: 10px; }
+.sensor-actions { gap: 6px; min-width: 232px; }
+.sensor-actions button { padding-inline: 8px; }
 .managed-sensors td { vertical-align: middle; }
 .section-nav { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .section-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: 8px; color: var(--secondary); font-size: 14px; text-decoration: none; }
@@ -343,4 +344,13 @@ th { font-size: 12px; }
   .resource-accelerators .resource-device + .resource-device { margin: 0; border-top: 1px solid var(--line); }
   .continuous-flow summary { padding: 12px 16px; }
   .continuous-flow-content { padding-inline: 16px; }
+  .managed-sensors, .managed-sensors tbody { display: block; min-width: 0; }
+  .managed-sensors thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .managed-sensors tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .managed-sensors tbody td { display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+  .managed-sensors tbody td:first-child, .managed-sensors tbody td:last-child { grid-column: 1 / -1; min-width: 0; }
+  .managed-sensors td:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--secondary); font-size: 12px; }
+  .managed-sensors .sensor-actions { min-width: 0; }
+  .managed-sensors .sensor-editor { grid-template-columns: minmax(0, 1fr); }
+  .managed-sensors .sensor-editor td::before { content: none; }
 }

@@ -25,6 +25,7 @@ async function overview(page: Page, options: { detailFailure?: boolean; listFail
       return route.fulfill({ json: { continuous: { enabled: true, state: ["RUNNING", "WAITING_INPUT", "STOPPED"][index] } } });
     }
     if (path === "node-metrics") return route.fulfill({ json: { status: "DISABLED", fetchedAt: new Date().toISOString(), items: [] } });
+    if (path === "workflow-runs") return route.fulfill({ json: { items: [{ id: ids[0], state: "RUNNING", mode: "AUTO", createdAt: new Date().toISOString() }], nextOffset: null } });
     return route.fulfill({ json: { items: [], nextOffset: null } });
   });
   await page.goto("/");
