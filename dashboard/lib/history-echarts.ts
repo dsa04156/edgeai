@@ -24,6 +24,7 @@ function tooltip(params: unknown) {
 
 export function configureChart(chart: ECharts, element: HTMLElement) {
   const style = getComputedStyle(element);
+  const inspector = !!element.closest(".history-chart-inspector");
   const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
   const ink = token("--ink", "#202d3e"), line = token("--line", "#dfe8f3"), signal = token("--signal", "#1479ed");
   const tooltipPosition = (point: number[], _params: unknown, _dom: unknown, _rect: unknown, size: { contentSize: number[]; viewSize: number[] }) => {
@@ -33,11 +34,11 @@ export function configureChart(chart: ECharts, element: HTMLElement) {
   };
   chart.setOption({
     animation: false, color: [signal], textStyle: { fontFamily: style.fontFamily, color: ink },
-    grid: { left: 78, right: 24, top: 24, bottom: 88 },
+    grid: inspector ? { left: 68, right: 16, top: 16, bottom: 72 } : { left: 78, right: 24, top: 24, bottom: 88 },
     xAxis: { type: "time", axisLine: { lineStyle: { color: line } }, axisLabel: { color: ink, hideOverlap: true } },
-    yAxis: { type: "value", scale: true, axisLabel: { color: ink, width: 66, overflow: "truncate" }, splitLine: { lineStyle: { color: line } } },
+    yAxis: { type: "value", scale: true, splitNumber: inspector ? 4 : undefined, axisLabel: { color: ink, width: inspector ? 58 : 66, overflow: "truncate", ...(inspector ? { showMinLabel: false, showMaxLabel: false } : {}) }, splitLine: { lineStyle: { color: line } } },
     tooltip: { trigger: "axis", confine: true, position: tooltipPosition, transitionDuration: 0, renderMode: "html", formatter: tooltip, backgroundColor: token("--panel", "#ffffff"), borderColor: line, textStyle: { color: ink }, extraCssText: "box-shadow:none;border-radius:7px;" },
-    dataZoom: [{ id: "inside", type: "inside", xAxisIndex: 0, start: 0, end: 100 }, { id: "slider", type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: 12, height: 26, borderColor: line, fillerColor: token("--signal-surface", "#eaf3ff"), textStyle: { color: ink } }],
+    dataZoom: [{ id: "inside", type: "inside", xAxisIndex: 0, start: 0, end: 100 }, { id: "slider", type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: inspector ? 8 : 12, height: inspector ? 20 : 26, borderColor: line, fillerColor: token("--signal-surface", "#eaf3ff"), textStyle: { color: ink } }],
   });
 }
 

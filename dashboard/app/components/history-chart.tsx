@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ECharts, HistoryChartData } from "../../lib/history-echarts";
 
 type Zoom = { start: number; end: number };
-export function HistoryChart({ data, label, caption }: { data: HistoryChartData; label: string; caption: ReactNode }) {
+export function HistoryChart({ data, label, caption, inspector = false }: { data: HistoryChartData; label: string; caption: ReactNode; inspector?: boolean }) {
   const container = useRef<HTMLDivElement>(null), instance = useRef<ECharts | null>(null), current = useRef<HistoryChartData | null>(null);
   const [ready, setReady] = useState(false), [error, setError] = useState("");
   const [zoom, setZoom] = useState<Zoom>({ start: 0, end: 100 });
@@ -37,10 +37,12 @@ export function HistoryChart({ data, label, caption }: { data: HistoryChartData;
   }, []);
   function show(start: number, end: number) { instance.current?.dispatchAction({ type: "dataZoom", start, end }); }
   function scale(factor: number) { const span = Math.min(100, Math.max(1, (zoom.end - zoom.start) * factor)), start = Math.max(0, Math.min(100 - span, (zoom.start + zoom.end - span) / 2)); show(start, start + span); }
-  return <figure className="continuous-history-chart interactive-history-chart">
-    <div className="toolbar history-chart-toolbar"><button type="button" disabled={!ready || zoom.end - zoom.start <= 1} onClick={() => scale(.5)}>확대</button><button type="button" disabled={!ready || zoom.end - zoom.start >= 100} onClick={() => scale(2)}>축소</button><button type="button" disabled={!ready} onClick={() => show(0, 100)}>전체 구간</button><span role="status" aria-label="그래프 표시 구간" className="muted">표시 구간 {Math.round(zoom.end - zoom.start)}%</span></div>
+  const controls = <div className="toolbar history-chart-toolbar"><button type="button" disabled={!ready || zoom.end - zoom.start <= 1} onClick={() => scale(.5)}>확대</button><button type="button" disabled={!ready || zoom.end - zoom.start >= 100} onClick={() => scale(2)}>축소</button><button type="button" disabled={!ready} onClick={() => show(0, 100)}>전체 구간</button><span role="status" aria-label="그래프 표시 구간" className="muted">표시 구간 {Math.round(zoom.end - zoom.start)}%</span></div>;
+  return <figure className={`continuous-history-chart interactive-history-chart${inspector ? " history-chart-inspector" : ""}`}>
+    {!inspector && controls}
     <div ref={container} role="img" aria-label={label} aria-busy={!ready} className="history-chart-canvas" />
     {!ready && !error && <p role="status">그래프 준비 중…</p>}{error && <p role="alert" className="error">{error}</p>}
+    {inspector && controls}
     <figcaption>{caption}<span className="block history-chart-help">마우스·터치로 값을 확인하고 아래 슬라이더로 구간을 확대합니다. 확대는 조회한 기록 안에서 적용됩니다.</span></figcaption>
   </figure>;
 }
