@@ -1,3 +1,9 @@
+## 2026-10-14 콘솔 색상 보강
+
+- 사용자가 색이 부족하다고 요청하여 UniFi의56px 아이콘 메뉴·232px 자원 요약·조밀한 표 배치를 유지하면서 색상 계층을 보강한다. 기존 폰트·간격·크기·모달 및 상태 텍스트를 재사용하며 원·도넛·상태 점은 추가하지 않는다.
+- 조작색 signal/focus #1761d8, 선택 배경 signal-surface #e8f1ff, 탐색 navigation-surface #eaf1fc, 자원 요약 summary-surface #f3f7fd, 표/상단/그래프 헤더 header-surface #edf3fc다. E 마크와 현재 메뉴는 파랑/흰색, 자원 개수와 요약 숫자는 파랑, 선택 필터는 푸른 배경과 기존 선택선을 사용한다.
+- 상태는 정상 success #13734e/#e2f4e9, 진행 running #5c43b5/#eee9fc, 경고 warning #85560d/#fff1d5, 실패 error #b62e3b/#ffebee다. 실제 상태 분류는 변경하지 않고 기존 레이블에4px radius·2×7px(노드 표2×6px) 배경 배지를 사용한다. 미확인은 secondary/control로 유지한다. 경계 line #e0e8f2, 입력 control #f5f7fb/control-border #d5dfec이며 모든 컴포넌트는 공통 토큰을 참조한다.
+
 ## 2026-10-14 조합형 가상디바이스 간편 등록
 
 - 기존 UniFi 등록 모달·44px native select·폼 간격을 재사용한다. 조합 종류 → 역할/축별 센서 → 계산 방식 → 이름 순서이며 별칭·수식·단위 입력은 직접 설정으로 전환할 때만 노출한다. 선택하지 않은 센서는 자동 연결하지 않는다.

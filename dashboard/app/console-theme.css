@@ -14,7 +14,7 @@
 .graph-latest strong { font-size: 28px; }
 .registration-dialog-title { min-width: 0; }
 .graph-dialog { width: min(1080px, calc(100% - 48px)); max-width: 1080px; }
-.graph-dialog .registration-dialog-header { padding: 12px 20px; background: #fafbfc; }
+.graph-dialog .registration-dialog-header { padding: 12px 20px; background: var(--header-surface); }
 .graph-dialog .registration-dialog-header h2 { font-size: 16px; }
 .graph-dialog .registration-dialog-title > p { margin: 4px 0 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .graph-dialog .registration-dialog-header > button { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--secondary); font-size: 27px; font-weight: 400; }
@@ -178,30 +178,32 @@
 /* UniFi Site Manager reference: light navigation, a resource sidebar and aligned rows. */
 :root {
   --canvas: #ffffff; --panel: #ffffff; --ink: #252d3a; --secondary: #596574; --muted: #727e8c;
-  --line: #e9edf1; --signal: #006fff; --signal-surface: #edf5ff; --focus: #006fff;
-  --success: #24855d; --success-surface: #edf8f2; --control: #f7f8fa; --control-border: #dce1e7;
-  --error: #c24348; --error-surface: #fff2f2; --warning: #956618; --warning-surface: #fff8e9;
-  --running: #2874bf; --running-surface: #edf5ff; --radius: 6px;
+  --line: #e0e8f2; --signal: #1761d8; --signal-surface: #e8f1ff; --focus: #1761d8;
+  --navigation-surface: #eaf1fc; --summary-surface: #f3f7fd; --header-surface: #edf3fc;
+  --success: #13734e; --success-surface: #e2f4e9; --control: #f5f7fb; --control-border: #d5dfec;
+  --error: #b62e3b; --error-surface: #ffebee; --warning: #85560d; --warning-surface: #fff1d5;
+  --running: #5c43b5; --running-surface: #eee9fc; --radius: 6px;
 }
 body { font-family: Pretendard, "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
 .console-shell { grid-template-columns: 56px minmax(0, 1fr); }
-.console-sidebar { padding: 0 6px 8px; background: #fafbfc; border-right: 1px solid var(--line); z-index: 4; }
+.console-sidebar { padding: 0 6px 8px; background: var(--navigation-surface); border-right: 1px solid var(--line); z-index: 4; }
 .sidebar-brand { height: 52px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.brand-mark { width: 28px; height: 28px; border-radius: 5px; background: transparent; color: var(--ink); font-family: inherit; font-size: 24px; font-weight: 750; line-height: 1; }
+.brand-mark { width: 28px; height: 28px; border-radius: 5px; background: var(--signal); color: var(--panel); font-family: inherit; font-size: 24px; font-weight: 750; line-height: 1; }
 .brand-name { display: none; }
 .console-nav { padding-top: 8px; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-width: none; display: flex; flex-direction: column; flex: 1; }
 .nav-group { margin: 0 0 8px; }
 .nav-group > p, .nav-group a > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nav-group a { position: relative; justify-content: center; width: 44px; min-height: 44px; padding: 11px; border-radius: 4px; color: var(--muted); margin-top: 4px; }
-.nav-group a:hover { background: #eef1f5; }
-.nav-group a[aria-current] { background: var(--signal-surface); color: var(--signal); }
+.nav-group a:hover { background: var(--signal-surface); }
+.nav-group a[aria-current] { background: var(--signal); color: var(--panel); }
 .console-icon { flex-shrink: 0; }
 .nav-group .console-icon { width: 21px; height: 21px; opacity: .7; }
 .nav-group a[aria-current] .console-icon { opacity: 1; }
+.nav-group a[aria-current] img.console-icon { filter: brightness(0) invert(1); }
 .nav-group:last-child { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
-.console-topbar { min-height: 52px; gap: 20px; padding: 4px 16px; background: #f8f9fb; }
+.console-topbar { min-height: 52px; gap: 20px; padding: 4px 16px; background: var(--header-surface); }
 .breadcrumb { flex: 1; font-size: 13px; gap: 12px; min-width: 0; }
-.breadcrumb-root { font-weight: 650; color: var(--ink); font-size: 15px; }
+.breadcrumb-root { font-weight: 650; color: var(--signal); font-size: 15px; }
 .breadcrumb strong { color: var(--secondary); font-weight: 400; }
 .topbar-connection { white-space: nowrap; font-size: 12px; color: var(--secondary); }
 .connection-state.up i { background: var(--success); }
@@ -234,17 +236,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--signal); }
 .panel-heading h2 { font-size: 15px; font-weight: 600; }
 .panel-heading .small-label { display: none; }
 .panel-heading a { font-size: 12px; }
-.count-badge { display: inline-block; padding: 2px 6px; margin-left: 4px; background: var(--control); color: var(--muted); border-radius: 4px; font-size: 11px; font-weight: 400; vertical-align: middle; }
+.count-badge { display: inline-block; padding: 2px 6px; margin-left: 4px; background: var(--signal-surface); color: var(--signal); border-radius: 4px; font-size: 11px; font-weight: 500; vertical-align: middle; }
 .console-footer { padding: 12px 20px; font-size: 11px; border-color: var(--line); }
 .console-body:has(.devices-page) > .console-footer, .console-body:has(.overview-page) > .console-footer { display: none; }
 .console-footer span:last-child { font-family: inherit; }
-.status-badge { font-size: 12px; padding: 0; border-radius: 0; background: transparent; }
-.status-badge.good { color: var(--success); background: transparent; }
-.status-badge.neutral { color: var(--muted); background: transparent; }
+.status-badge { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: var(--control); }
+.status-badge.good { color: var(--success); background: var(--success-surface); }
+.status-badge.neutral { color: var(--secondary); background: var(--control); }
 .legend-dot.good { color: var(--success); }
 .stage { background: var(--control); border-color: var(--line); }
 table { font-size: 13px; table-layout: fixed; }
-th { font-size: 12px; font-weight: 400; background: var(--panel); color: var(--muted); }
+th { font-size: 12px; font-weight: 500; background: var(--header-surface); color: var(--secondary); }
 th, td { padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table td > .block, table td > .mono, table td > strong, table th > strong, table small, table .sensor-meta, table .version-link, table .version-link > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table .version-link { display: block; width: 100%; }
@@ -264,17 +266,17 @@ tbody tr:hover { background: #f7faff; }
 /* Resource categories form the secondary navigation, rather than four large cards. */
 .devices-page, .overview-page { padding: 0; }
 .inventory-workspace { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
-.inventory-sidebar { min-width: 0; position: sticky; top: 0; border-right: 1px solid var(--line); padding: 12px; min-height: calc(100dvh - 52px); }
+.inventory-sidebar { min-width: 0; position: sticky; top: 0; border-right: 1px solid var(--line); padding: 12px; min-height: calc(100dvh - 52px); background: var(--summary-surface); }
 .inventory-sidebar-heading { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 12px; gap: 8px; }
 .inventory-sidebar-heading h2 { margin: 0; font-size: 12px; }
 .inventory-sidebar-heading > span { font-size: 10px; color: var(--muted); }
 .infrastructure-counts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 0; }
 .infrastructure-count { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 8px; border: 1px solid transparent; background: transparent; min-height: 44px; }
 .infrastructure-count > span { font-size: 13px; color: inherit; white-space: nowrap; }
-.infrastructure-count > strong { font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--muted); background: transparent; padding: 0; }
+.infrastructure-count > strong { font-size: 12px; line-height: 1.5; font-weight: 600; color: var(--signal); background: var(--signal-surface); padding: 2px 6px; border-radius: 4px; }
 .infrastructure-count > small { grid-column: 2 / -1; font-size: 11px; line-height: 1.4; }
-.infrastructure-count[aria-pressed=true] { border-color: transparent; background: var(--signal-surface); color: var(--signal); }
-.infrastructure-count[aria-pressed=true] > strong { color: var(--signal); background: transparent; }
+.infrastructure-count[aria-pressed=true] { border-color: transparent; background: var(--signal-surface); color: var(--signal); box-shadow: inset 3px 0 var(--signal); }
+.infrastructure-count[aria-pressed=true] > strong { color: var(--signal); background: var(--panel); }
 .infrastructure-count .console-icon { width: 16px; height: 16px; opacity: .65; }
 .unknown-resources { width: 100%; margin-top: 12px; border-color: transparent; text-align: left; color: var(--muted); }
 .inventory-content { min-width: 0; padding: 12px 16px 24px; }
@@ -288,7 +290,7 @@ tbody tr:hover { background: #f7faff; }
 .overview-meta { margin: 0 0 16px; font-size: 12px; }
 .overview-meta .small-label { font: inherit; letter-spacing: 0; font-weight: 500; color: var(--secondary); }
 .overview-workspace { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
-.overview-sidebar { padding: 12px 16px; border-right: 1px solid var(--line); min-height: calc(100dvh - 52px); }
+.overview-sidebar { padding: 12px 16px; border-right: 1px solid var(--line); min-height: calc(100dvh - 52px); background: var(--summary-surface); }
 .overview-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .overview-sidebar-heading h2 { margin: 0; font-size: 13px; }
 .overview-sidebar-heading button { padding-inline: 8px; border: 0; background: transparent; color: var(--secondary); font-size: 12px; }
@@ -301,7 +303,7 @@ tbody tr:hover { background: #f7faff; }
 .resource-status-card h2 a { min-height: 44px; }
 .resource-status-body { grid-template-columns: 56px minmax(0, 1fr); min-height: 44px; gap: 12px; margin-top: 4px; }
 .resource-status-number { min-width: 0; display: flex; flex-direction: column; color: var(--muted); }
-.resource-status-number strong { color: var(--ink); font-size: 24px; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.resource-status-number strong { color: var(--signal); font-size: 24px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .resource-status-number > span { font-size: 11px; }
 .resource-status-card .resource-status-legend { gap: 4px; }
 .resource-status-card .resource-status-legend > div { font-size: 12px; line-height: 18px; }
@@ -319,14 +321,14 @@ tbody tr:hover { background: #f7faff; }
 .resource-toolbar > button { margin-left: auto; }
 .resource-toolbar .filter-chips { margin: 0; gap: 4px; }
 .resource-toolbar .filter-chips button { padding: 8px 10px; font-size: 12px; border: 0; }
-.resource-toolbar .filter-chips button[aria-pressed=true] { color: var(--signal); background: transparent; box-shadow: inset 0 -2px var(--signal); border-radius: 0; }
+.resource-toolbar .filter-chips button[aria-pressed=true] { color: var(--signal); background: var(--signal-surface); box-shadow: inset 0 -2px var(--signal); border-radius: 4px 4px 0 0; }
 .resource-table { table-layout: fixed; font-size: 13px; }
 .resource-table thead th { padding: 8px 10px; font-size: 12px; font-weight: 400; }
 .resource-table tbody td, .resource-table tbody th { padding: 6px 10px; height: 48px; vertical-align: middle; border-bottom: 1px solid var(--line); }
 .resource-table tbody th { min-width: 164px; max-width: 240px; background: transparent; color: var(--ink); white-space: nowrap; }
 .resource-table th strong { display: block; font-size: 13px; font-weight: 500; }
 .resource-table small { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
-.resource-table .status-badge { font-size: 11px; padding: 0; white-space: nowrap; }
+.resource-table .status-badge { font-size: 11px; padding: 2px 6px; white-space: nowrap; }
 .resource-usage { display: flex; align-items: center; gap: 6px; min-height: 20px; }
 .resource-usage strong { white-space: nowrap; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .resource-usage strong small { display: inline; font-size: 10px; margin-left: 2px; }
