@@ -162,13 +162,14 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
     </RegistrationDialog>
     {filtered?.length === 0 && <p className="empty">{search ? "일치하는 센서가 없습니다." : "등록된 센서가 없습니다. 새 장치 등록에서 연결 설정을 입력하세요."}</p>}
     {!!filtered?.length && <div className="table-scroll"><table className="registry-table managed-sensors"><caption className="sr-only">측정 항목별 센서와 최신값</caption>
+      <colgroup><col style={{ width: "17%" }} /><col style={{ width: "17%" }} /><col style={{ width: "9%" }} /><col style={{ width: "17%" }} /><col style={{ width: "17%" }} /><col style={{ width: "23%" }} /></colgroup>
       <thead><tr><th>센서</th><th>장치 / 노드</th><th>상태</th><th>최신값</th><th>수집 시각</th><th>관리</th></tr></thead>
       <tbody>{filtered.flatMap(d => d.profile.properties.map(p => <Fragment key={`${d.id}/${p.name}`}>
         <tr>
-          <td><button className="version-link" aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta">{d.id}</span></button></td>
-          <td data-label="장치 / 노드">{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
-          <td data-label="상태"><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td data-label="최신값">{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
-          <td data-label="수집 시각">{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
+          <td><button className="version-link" title={`${p.name} · ${d.id}`} aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta" title={d.id}>{d.id}</span></button></td>
+          <td data-label="장치 / 노드" title={`${sourceName(d)} · ${d.targetNode} · ${d.profile.protocol}`}>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
+          <td data-label="상태"><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td data-label="최신값" title={`${d.properties[p.name]?.value ?? "—"} ${p.unit ?? ""}`}>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
+          <td data-label="수집 시각" title={d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : undefined}>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
           <td data-label="관리"><div className="sensor-actions"><button disabled={busy} aria-label={`${d.id} ${p.name} 항목 수정`} onClick={() => editProperty(d, p)}>항목 수정</button>
             <button disabled={busy} aria-label={`${d.id} 항목 추가`} title="같은 연결에 측정 항목 추가" onClick={() => addTo(d)}>항목 추가</button>
             {deleting?.deviceId === d.id && deleting.property === p.name ? <>

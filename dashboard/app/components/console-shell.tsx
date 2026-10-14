@@ -14,7 +14,7 @@ const groups = [
 
 export function ConsoleIcon({ name }: { name: string }) {
   if (name === "docs") return <svg className="console-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 3h11l5 5v13H4zM14 3v6h6M8 13h8M8 17h6" /></svg>;
-  const icons: Record<string, string> = { overview: "diagram-3", nodes: "hdd-network", sensor: "cpu", workflow: "diagram-3", runs: "activity", profile: "diagram-3", storage: "hdd-network", audit: "bell", search: "search" };
+  const icons: Record<string, string> = { overview: "speedometer2", nodes: "hdd-network", sensor: "cpu", workflow: "diagram-3", runs: "activity", profile: "diagram-3", storage: "hdd-network", audit: "bell", search: "search" };
   return <Image className="console-icon" src={`/icons/${icons[name] || "diagram-3"}.svg`} width={18} height={18} alt="" />;
 }
 
