@@ -229,3 +229,38 @@ summary { cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--secon
 .sensor-registration-fields { border: 0; padding: 0; margin: 16px 0; display: grid; gap: 12px; min-width: 0; max-width: 640px; }
 .sensor-registration-fields label { display: grid; gap: 8px; }
 .sensor-registration-target { overflow-wrap: anywhere; }
+
+/* Status composition: one ring per current resource class, with readable numeric legends. */
+.resource-status-strip.metric-strip[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.resource-status-card.metric { padding: 16px; background: var(--panel); }
+.resource-status-card h2 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: 0; }
+.resource-status-card h2 a { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px; color: var(--ink); }
+.resource-status-card h2 a > span:last-child { color: var(--muted); font-size: 16px; }
+.resource-status-card.metric > .resource-status-donut { display: grid; place-items: center; width: 128px; height: 128px; margin: 12px auto 20px; padding: 16px; border-radius: 50%; }
+.resource-status-total { width: 100%; height: 100%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--panel); color: var(--muted); }
+.resource-status-total > span { font-size: 11px; line-height: 1.3; }
+.resource-status-card .resource-status-total strong { color: var(--ink); font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.resource-status-card .resource-status-total .compact-count { font-size: 24px; }
+.resource-status-card .resource-status-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; min-height: 76px; align-content: start; margin: 0; }
+.resource-status-card .resource-status-legend > div { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; border: 0; padding: 0; font-size: 11px; line-height: 20px; }
+.resource-status-legend dt { display: flex; align-items: center; gap: 5px; color: var(--secondary); white-space: nowrap; font-weight: 400; }
+.resource-status-legend i { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; }
+.resource-status-card .resource-status-legend dd { margin: 0; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.resource-status-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
+@media (max-width: 1100px) {
+  .resource-status-strip.metric-strip[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .resource-status-strip .resource-status-card:nth-child(2) { border-right: 0; }
+  .resource-status-strip .resource-status-card:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 700px) {
+  .resource-status-card.metric { padding: 12px; }
+  .resource-status-card h2 { font-size: 13px; }
+  .resource-status-card.metric > .resource-status-donut { width: 104px; height: 104px; padding: 12px; margin: 8px auto 12px; }
+  .resource-status-card .resource-status-total strong { font-size: 28px; }
+  .resource-status-card .resource-status-legend { grid-template-columns: 1fr; gap: 2px; min-height: 0; }
+  .resource-status-note { margin-top: 8px; font-size: 10px; }
+}
+@media (forced-colors: active) {
+  .resource-status-card.metric > .resource-status-donut { background: Canvas !important; border: 2px solid CanvasText; }
+  .resource-status-total { background: Canvas; }
+}
