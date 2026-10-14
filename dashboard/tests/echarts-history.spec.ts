@@ -8,7 +8,7 @@ async function sensor(page: Page, values = [20, 21, 22]) {
     if (path === "managed-devices") return route.fulfill({ json: { items: [{ id: "temperature-sensor", uid, targetNode: "edge-a", state: "ONLINE", profile: { name: "temperature-model", protocol: "mqtt", properties: [{ name: "temperature", dataType: "float64", unit: "°C", scale: 1, offset: 0 }] }, properties: { temperature: { value: "21", timestamp: Date.now() } } }] } });
     if (path === `data-store/sensors/${uid}/temperature/chart`) {
       const from = url.searchParams.get("from")!, to = url.searchParams.get("to")!, start = Date.parse(from), duration = Date.parse(to) - start;
-      return route.fulfill({ json: { deviceUid: uid, property: "temperature", from, to, retentionDays: 30, aggregation: { bucketSeconds: 1, method: "MEAN_MIN_MAX" }, truncated: false, items: [0.1, 0.5, 0.9].map((position, index) => ({ from: new Date(start + duration * position - 500).toISOString(), to: new Date(start + duration * position + 500).toISOString(), average: values[index], min: values[index], max: values[index], count: 1 })) } });
+      return route.fulfill({ json: { deviceUid: uid, property: "temperature", from, to, retentionDays: 30, displayMode: "ORIGINALS", totalObservations: 3, truncated: false, items: [0.1, 0.5, 0.9].map((position, index) => ({ observedAt: new Date(start + duration * position).toISOString(), value: values[index] })) } });
     }
     if (path === `data-store/sensors/${uid}/temperature/history`) {
       const from = url.searchParams.get("from")!, to = url.searchParams.get("to")!, start = Date.parse(from), duration = Date.parse(to) - start;

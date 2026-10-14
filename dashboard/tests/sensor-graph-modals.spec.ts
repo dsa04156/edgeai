@@ -5,7 +5,7 @@ const device = { id: "temperature-sensor", uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaa
 
 function chartFixture(query: URLSearchParams, count = 2, uid = device.uid) {
   const from = query.get("from")!, to = query.get("to")!, start = Date.parse(from), duration = Date.parse(to) - start;
-  return { deviceUid: uid, property: "temperature", from, to, retentionDays: 30, aggregation: { bucketSeconds: 1, method: "MEAN_MIN_MAX" }, truncated: false, items: Array.from({ length: count }, (_, index) => ({ from: new Date(start + duration * (index + 1) / (count + 1)).toISOString(), to: new Date(start + duration * (index + 1) / (count + 1) + 1000).toISOString(), average: 21.5 + index, min: 21.5 + index, max: 21.5 + index, count: 1 })) };
+  return { deviceUid: uid, property: "temperature", from, to, retentionDays: 30, displayMode: "ORIGINALS", totalObservations: count, truncated: false, items: Array.from({ length: count }, (_, index) => ({ observedAt: new Date(start + duration * (index + 1) / (count + 1)).toISOString(), value: 21.5 + index })) };
 }
 
 async function catalog(page: Page) {

@@ -1198,7 +1198,7 @@ export interface paths {
         };
         /**
          * 센서 UID별 선택 기간 전체의 그래프 조회
-         * @description 저장된 숫자·참/거짓 원본 전체를 구간별 평균·최솟값·최댓값·표본 수로 집계합니다. 구간 크기는 최대 약 600개 구간이 되도록 서버가 선택하며, 참/거짓은 0과 1로 집계합니다. 데이터가 없는 구간을 생성하거나 원본 저장 주기를 바꾸지 않습니다. 정확한 개별 측정값은 history API로 조회합니다.
+         * @description 숫자·참/거짓의 실제 측정 시각과 값을 시간순으로 조회합니다. 원본 100000개 이하의 기간은 모두 반환합니다. 이를 초과하는 긴 기간은 구간의 최초·최저·최고·마지막 실제 측정값을 선택해 기간 전체를 표시하며 SELECTED_ORIGINALS로 명시합니다. 평균·보간 값은 만들지 않습니다. 각 측정의 원본 문서·설정 식별 정보는 history API로 조회합니다.
          */
         get: operations["getSensorPeriodChart"];
         put?: never;
@@ -2483,28 +2483,27 @@ export interface components {
             /** Format: date-time */
             to: string;
             retentionDays: number;
-            /** @constant */
+            /**
+             * @description 선택 기간을 앞이나 뒤에서 자르지 않습니다. 많은 원본의 표시 선택은 displayMode로 구분합니다.
+             * @constant
+             */
             truncated: false;
-            aggregation: {
-                bucketSeconds: number;
+            /** @enum {string} */
+            displayMode: "ORIGINALS" | "SELECTED_ORIGINALS";
+            totalObservations: number;
+            selection?: {
+                windowSeconds: number;
                 /** @constant */
-                method: "MEAN_MIN_MAX";
+                method: "FIRST_MIN_MAX_LAST";
             };
             items: {
                 /**
                  * Format: date-time
-                 * @description 원본을 집계한 구간 시작. 요청 시작 및 보관 기간으로 제한됩니다.
+                 * @description 원본의 실제 측정 시각. 수집기 원본과 같은 밀리초 정밀도.
                  */
-                from: string;
-                /**
-                 * Format: date-time
-                 * @description 원본을 집계한 구간 종료. 요청 종료로 제한됩니다.
-                 */
-                to: string;
-                average: number;
-                min: number;
-                max: number;
-                count: number;
+                observedAt: string;
+                /** @description 변경하거나 평균을 계산하지 않은 실제 측정값. */
+                value: number | boolean;
             }[];
         };
         SensorOriginalHistory: {
@@ -5953,7 +5952,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간 전체 집계. 보관 기간 밖의 원본은 포함되지 않습니다. */
+            /** @description 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간의 실제 측정값. 보관 기간 밖의 원본은 포함되지 않습니다. */
             200: {
                 headers: {
                     [name: string]: unknown;

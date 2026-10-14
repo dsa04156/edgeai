@@ -2326,7 +2326,7 @@ paths:
     get:
       operationId: getSensorPeriodChart
       summary: 센서 UID별 선택 기간 전체의 그래프 조회
-      description: 저장된 숫자·참/거짓 원본 전체를 구간별 평균·최솟값·최댓값·표본 수로 집계합니다. 구간 크기는 최대 약 600개 구간이 되도록 서버가 선택하며, 참/거짓은 0과 1로 집계합니다. 데이터가 없는 구간을 생성하거나 원본 저장 주기를 바꾸지 않습니다. 정확한 개별 측정값은 history API로 조회합니다.
+      description: 숫자·참/거짓의 실제 측정 시각과 값을 시간순으로 조회합니다. 원본 100000개 이하의 기간은 모두 반환합니다. 이를 초과하는 긴 기간은 구간의 최초·최저·최고·마지막 실제 측정값을 선택해 기간 전체를 표시하며 SELECTED_ORIGINALS로 명시합니다. 평균·보간 값은 만들지 않습니다. 각 측정의 원본 문서·설정 식별 정보는 history API로 조회합니다.
       parameters:
         - {name: uid, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: property, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,62}$'}}
@@ -2334,7 +2334,7 @@ paths:
         - {name: to, in: query, schema: {type: string, format: date-time}}
       responses:
         '200':
-          description: 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간 전체 집계. 보관 기간 밖의 원본은 포함되지 않습니다.
+          description: 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간의 실제 측정값. 보관 기간 밖의 원본은 포함되지 않습니다.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SensorPeriodChart'}
@@ -4753,35 +4753,33 @@ components:
     SensorPeriodChart:
       type: object
       additionalProperties: false
-      required: [deviceUid, property, from, to, retentionDays, aggregation, items, truncated]
+      required: [deviceUid, property, from, to, retentionDays, displayMode, totalObservations, items, truncated]
       properties:
         deviceUid: {type: string, format: uuid}
         property: {type: string}
         from: {type: string, format: date-time}
         to: {type: string, format: date-time}
         retentionDays: {type: integer}
-        truncated: {type: boolean, const: false}
-        aggregation:
+        truncated: {type: boolean, const: false, description: 선택 기간을 앞이나 뒤에서 자르지 않습니다. 많은 원본의 표시 선택은 displayMode로 구분합니다.}
+        displayMode: {type: string, enum: [ORIGINALS, SELECTED_ORIGINALS]}
+        totalObservations: {type: integer, minimum: 0}
+        selection:
           type: object
           additionalProperties: false
-          required: [bucketSeconds, method]
+          required: [windowSeconds, method]
           properties:
-            bucketSeconds: {type: integer, minimum: 1, maximum: 86400}
-            method: {type: string, const: MEAN_MIN_MAX}
+            windowSeconds: {type: integer, minimum: 1, maximum: 86400}
+            method: {type: string, const: FIRST_MIN_MAX_LAST}
         items:
           type: array
-          maxItems: 2000
+          maxItems: 100000
           items:
             type: object
             additionalProperties: false
-            required: [from, to, average, min, max, count]
+            required: [observedAt, value]
             properties:
-              from: {type: string, format: date-time, description: 원본을 집계한 구간 시작. 요청 시작 및 보관 기간으로 제한됩니다.}
-              to: {type: string, format: date-time, description: 원본을 집계한 구간 종료. 요청 종료로 제한됩니다.}
-              average: {type: number}
-              min: {type: number}
-              max: {type: number}
-              count: {type: integer, minimum: 1}
+              observedAt: {type: string, format: date-time, description: 원본의 실제 측정 시각. 수집기 원본과 같은 밀리초 정밀도.}
+              value: {type: [number, boolean], description: 변경하거나 평균을 계산하지 않은 실제 측정값.}
     SensorOriginalHistory:
       type: object
       additionalProperties: false

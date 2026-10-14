@@ -13,7 +13,7 @@ public interface SensorTelemetryRepository {
         if(descending)throw new UnsupportedOperationException("Latest-first sensor history is not supported");
         return readSensor(deviceUid,property,from,to,limit,cursor);
     }
-    default Map<String,Object> readSensorChart(UUID deviceUid,String property,Instant from,Instant to,int bucketSeconds) {
+    default Map<String,Object> readSensorChart(UUID deviceUid,String property,Instant from,Instant to,int selectionSeconds) {
         throw new UnsupportedOperationException("Full-period sensor charts are not supported");
     }
     List<Map<String,Object>> sensorSeries();

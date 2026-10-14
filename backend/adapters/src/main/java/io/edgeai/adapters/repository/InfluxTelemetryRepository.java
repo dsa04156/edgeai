@@ -177,24 +177,36 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
         var result=new ArrayList<Map<String,Object>>();for(var row:rows){var document=json.readValue(row.get("_value"),Map.class);var item=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))item.put(key,document.get(key));result.add(item);}return result;
     }
-    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int bucketSeconds) {
+    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int selectionSeconds) {
         var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
-        if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
+        if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false,"displayMode","ORIGINALS","totalObservations",0);
         String base=source(rawBucket,start,to,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
-            +" |> map(fn:(r)=> ({r with _value:float(v:r._value)})) |> group(columns:[])";
-        var flux=new StringBuilder("data = ").append(base).append('\n');
-        for(var aggregate:List.of("mean","min","max","count"))flux.append("data |> aggregateWindow(every:").append(bucketSeconds).append("s,fn:").append(aggregate)
-            .append(",createEmpty:false,timeSrc:\"_start\") |> keep(columns:[\"_time\",\"_value\"]) |> sort(columns:[\"_time\"]) |> limit(n:2001) |> yield(name:").append(quote(aggregate)).append(")\n");
-        var points=new TreeMap<Instant,Map<String,Object>>();
-        for(var row:query(flux.toString())) {
-            Instant window=Instant.parse(row.get("_time"));
-            var point=points.computeIfAbsent(window,key->new TreeMap<>(Map.of("from",(key.isBefore(start)?start:key).toString(),"to",(key.plusSeconds(bucketSeconds).isAfter(to)?to:key.plusSeconds(bucketSeconds)).toString())));
-            String aggregate=row.get("result");
-            if("count".equals(aggregate))point.put("count",Long.parseLong(row.get("_value")));
-            else {double value=Double.parseDouble(row.get("_value"));if(!Double.isFinite(value))throw new IllegalStateException("Invalid chart value");point.put("mean".equals(aggregate)?"average":aggregate,value);}
+            +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,_value:float(v:r._value),kind:if r._field == \"value_boolean\" then \"B\" else \"N\"})) |> group(columns:[\"_start\",\"_stop\"])";
+        var countRows=query(base+" |> count() |> map(fn:(r)=> ({_time:time(v:"+quote(start.toString())+"),_value:r._value}))");
+        long count=countRows.isEmpty()?0:Long.parseLong(countRows.getFirst().get("_value"));
+        boolean selected=count>100000;
+        List<Map<String,String>> rows;
+        if(!selected) {
+            rows=query(base+" |> sort(columns:[\"_time\"]) |> limit(n:100001) |> keep(columns:[\"_time\",\"_value\",\"kind\"])");
+            if(rows.size()>100000)selected=true;
+        }else rows=List.of();
+        if(selected) {
+            var flux=new StringBuilder("data = ").append(base).append('\n');
+            for(var selector:List.of("first","min","max","last"))flux.append("data |> window(every:").append(selectionSeconds)
+                .append("s) |> sort(columns:[\"_time\"]) |> ").append(selector).append("() |> keep(columns:[\"_time\",\"_value\",\"kind\"]) |> group(columns:[]) |> sort(columns:[\"_time\"]) |> limit(n:2001) |> yield(name:").append(quote(selector)).append(")\n");
+            var unique=new TreeMap<String,Map<String,String>>();
+            for(var row:query(flux.toString()))unique.put(row.get("_time")+"|"+row.get("kind")+"|"+row.get("_value"),row);
+            rows=new ArrayList<>(unique.values());rows.sort(Comparator.comparing(row->Instant.parse(row.get("_time"))));
         }
-        if(points.size()>2000||points.values().stream().anyMatch(point->!point.keySet().containsAll(Set.of("average","min","max","count"))))throw new IllegalStateException("Incomplete chart aggregation");
-        return Map.of("items",points.values().stream().toList(),"truncated",false);
+        var items=new ArrayList<Map<String,Object>>();
+        for(var row:rows) {
+            double number=Double.parseDouble(row.get("_value"));if(!Double.isFinite(number))throw new IllegalStateException("Invalid original chart value");
+            Object value=number;if("B".equals(row.get("kind")))value=number!=0;
+            // The archive offsets sequences below one millisecond; the original source time is millisecond precision.
+            items.add(Map.of("observedAt",Instant.ofEpochMilli(Instant.parse(row.get("_time")).toEpochMilli()).toString(),"value",value));
+        }
+        var result=new TreeMap<String,Object>();result.put("items",items);result.put("truncated",false);result.put("displayMode",selected?"SELECTED_ORIGINALS":"ORIGINALS");result.put("totalObservations",selected?count:items.size());
+        if(selected)result.put("selection",Map.of("method","FIRST_MIN_MAX_LAST","windowSeconds",selectionSeconds));return result;
     }
     public Map<String,Object> read(UUID id,String output,Instant from,Instant to,int limit,String cursor,Integer bucket) {
         String filter="r._measurement == \"vd_result\" and r.vd_id == "+quote(id.toString())+" and r.output_id == "+quote(output);

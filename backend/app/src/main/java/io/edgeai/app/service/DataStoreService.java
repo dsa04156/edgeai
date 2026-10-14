@@ -39,7 +39,7 @@ public class DataStoreService {
         try {
             var rows=new TreeMap<>(telemetry.readSensorChart(uid,property,from,to,bucket));
             rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());
-            rows.put("aggregation",Map.of("bucketSeconds",bucket,"method","MEAN_MIN_MAX"));return rows;
+            return rows;
         }catch(RuntimeException e){throw unavailable();}
     }
     private static ControlPlaneException unavailable(){return new ControlPlaneException(503,"HISTORY_STORE_UNAVAILABLE","InfluxDB 저장소를 확인하세요.");}

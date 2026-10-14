@@ -7,7 +7,7 @@ import { formatMeasurementValue } from "./measurement-value";
 register([LineChart, ScatterChart, DataZoomComponent, GridComponent, MarkAreaComponent, TooltipComponent, CanvasRenderer]);
 export { init };
 export type { ECharts };
-export type HistoryPoint = { at: number; value: number; unit?: string; boolean?: boolean; breakBefore?: boolean; min?: number; max?: number; count?: number; bucketFrom?: number; bucketTo?: number };
+export type HistoryPoint = { at: number; value: number; unit?: string; boolean?: boolean; breakBefore?: boolean };
 export type HistoryChartData = { name: string; from: number; to: number; points: HistoryPoint[]; connected?: boolean; showSymbol?: boolean; gaps?: { from: number; to: number }[] };
 const formatAxisValue = (value: number, boolean = false) => boolean ? value ? "참" : "거짓" : Number(value.toPrecision(8)).toLocaleString(undefined, { maximumSignificantDigits: 8 });
 const escape = (text: string) => text.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]!));
@@ -15,13 +15,8 @@ const escape = (text: string) => text.replace(/[&<>"']/g, character => ({ "&": "
 function tooltip(params: unknown) {
   const rows = (Array.isArray(params) ? params : [params]).flatMap(param => {
     if (!param || typeof param !== "object" || !("data" in param)) return [];
-    if ("seriesId" in param && param.seriesId !== "observations") return [];
-    const data = param.data as { value?: unknown; unit?: string; boolean?: boolean; min?: number; max?: number; count?: number; bucketFrom?: number; bucketTo?: number };
+    const data = param.data as { value?: unknown; unit?: string; boolean?: boolean };
     if (!Array.isArray(data.value) || !Number.isFinite(data.value[0]) || !Number.isFinite(data.value[1])) return [];
-    if (data.count != null && data.bucketFrom != null && data.bucketTo != null) {
-      const unit = data.unit ? ` ${escape(data.unit)}` : "";
-      return [`${escape(new Date(data.bucketFrom).toLocaleString())} ~ ${escape(new Date(data.bucketTo).toLocaleTimeString())}<br/>평균: ${escape(formatMeasurementValue(data.value[1]))}${unit}<br/>최솟값: ${escape(formatMeasurementValue(data.min))}${unit}<br/>최댓값: ${escape(formatMeasurementValue(data.max))}${unit}<br/>원본 ${data.count.toLocaleString()}개`];
-    }
     return [`${escape(new Date(data.value[0]).toLocaleString())}<br/>${escape(formatMeasurementValue(data.boolean ? !!data.value[1] : data.value[1]))}${data.unit ? ` ${escape(data.unit)}` : ""}`];
   });
   return `<div role="tooltip">${rows.join("<br/>")}</div>`;
@@ -50,14 +45,13 @@ export function updateChart(chart: ECharts, data: HistoryChartData) {
   const boolean = data.points.every(point => point.boolean);
   const points = data.points.flatMap((point, index) => {
     const connected = index > 0 && !point.breakBefore || index + 1 < data.points.length && !data.points[index + 1].breakBefore;
-    const value = { ...point, value: [point.at, point.value], symbol: data.showSymbol === false && connected ? "none" : "circle" };
+    const value = { value: [point.at, point.value], unit: point.unit, boolean: point.boolean, symbol: data.showSymbol === false && connected ? "none" : "circle" };
     return data.connected && point.breakBefore && index ? [{ value: [(data.points[index - 1].at + point.at) / 2, null] }, value] : [value];
   });
   const gapColor = getComputedStyle(chart.getDom()).getPropertyValue("--warning-surface").trim() || "#faf4e3";
   chart.setOption({
     xAxis: { min: data.from, max: data.to },
     yAxis: { min: boolean ? 0 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.min - 1 : extent.min, max: boolean ? 1 : (extent: { min: number; max: number }) => extent.min === extent.max ? extent.max + 1 : extent.max, interval: boolean ? 1 : undefined, axisLabel: { formatter: (value: number) => formatAxisValue(value, boolean) } },
-    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } },
-      ...(["min", "max"] as const).flatMap(bound => data.points.some(point => point[bound] != null) ? [{ id: bound, name: bound === "min" ? "최솟값" : "최댓값", type: "line" as const, showSymbol: false, silent: true, lineStyle: { width: 1, opacity: .3 }, data: data.points.map(point => [point.at, point[bound] ?? null]) }] : [])],
+    series: [{ id: "observations", name: data.name, type: data.connected ? "line" : "scatter", symbolSize: 6, showSymbol: true, connectNulls: false, data: points, markArea: { silent: true, itemStyle: { color: gapColor }, data: (data.gaps ?? []).map(gap => [{ xAxis: gap.from }, { xAxis: gap.to }]) } }],
   }, { replaceMerge: ["series"] });
 }

@@ -64,6 +64,23 @@ class InfluxDataStoreIntegrationTest {
     void publish(MqttClient publisher,String topic,String payload) throws Exception {var message=new MqttMessage(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));message.setQos(1);publisher.publish(topic,message);}
     String history(){return "/api/v1/data-store/sensors/"+uid+"/temperature/history";}
     void awaitRows(int count) throws Exception {for(int n=0;n<80;n++){try{mvc.perform(get(history())).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(count));return;}catch(AssertionError e){if(n==79)throw e;Thread.sleep(100);}}}
+    @Test void sensorChartReturnsEachOriginalTimestampAndValueWithoutAveraging() throws Exception {
+        long at=Instant.now().minusSeconds(30).toEpochMilli();
+        try(var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"chart-originals-"+UUID.randomUUID())) {
+            publisher.connect();Thread.sleep(700);
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at,12.125,1));
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at+1,99.875,2));
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at+2,0.03125,3));
+            awaitRows(3);
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart")
+                .param("from",Instant.ofEpochMilli(at-3600000).toString()).param("to",Instant.ofEpochMilli(at+1000).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.displayMode").value("ORIGINALS"))
+                .andExpect(jsonPath("$.items.length()").value(3)).andExpect(jsonPath("$.aggregation").doesNotExist())
+                .andExpect(jsonPath("$.items[0].observedAt").value(Instant.ofEpochMilli(at).toString())).andExpect(jsonPath("$.items[0].value").value(12.125))
+                .andExpect(jsonPath("$.items[1].observedAt").value(Instant.ofEpochMilli(at+1).toString())).andExpect(jsonPath("$.items[1].value").value(99.875))
+                .andExpect(jsonPath("$.items[2].observedAt").value(Instant.ofEpochMilli(at+2).toString())).andExpect(jsonPath("$.items[2].value").value(0.03125));
+        }
+    }
     @Test void slowArchiveWritesDoNotSerializeIndependentMeasurements() throws Exception {
         var complete=new java.util.concurrent.CountDownLatch(40);
         var received=java.util.concurrent.ConcurrentHashMap.<String>newKeySet();
