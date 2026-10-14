@@ -237,7 +237,7 @@ summary { cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--secon
 .resource-status-card h2 a { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; border-radius: 6px; color: var(--ink); text-decoration: none; }
 .resource-status-card h2 a:active { background: var(--control); }
 .resource-status-card h2 a > span:last-child { flex-shrink: 0; color: var(--muted); font-size: 16px; }
-.resource-status-body { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 124px; margin-top: 8px; }
+.resource-status-body { flex: 1; display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 88px; margin-top: 8px; }
 .resource-status-donut { display: grid; place-items: center; width: 88px; height: 88px; margin: 0; padding: 10px; border-radius: 50%; }
 .resource-status-total { width: 100%; height: 100%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--panel); color: var(--muted); }
 .resource-status-total > span { font-size: 11px; line-height: 1.4; }
