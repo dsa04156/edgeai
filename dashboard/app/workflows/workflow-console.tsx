@@ -116,6 +116,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       ]);
       setProfiles(serviceItems); setNodes(nodeItems);
       const query = new URLSearchParams(window.location.search);
+      if (query.get("workflow")) await showWorkflow(query.get("workflow")!);
       if (query.get("run")) await showRun(query.get("run")!);
       if (query.get("service")) setDag(JSON.stringify({ tasks: [{ key: "service", serviceProfileVersionId: query.get("service"), parameters: {} }], dependencies: [] }));
       setAuth(authorization); setCsrf(token.token);

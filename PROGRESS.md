@@ -1,9 +1,12 @@
-## 2026-10-14 새 워크플로의 실시간 입력 선택 — 실제 환경 수용 진행
+## 2026-10-14 새 워크플로의 실시간 입력 선택 — 구현·실제 실행 완료
 
 - 사용자 요구: 기존 워크플로를 보존하고 새 워크플로에서 센서 값과 가상디바이스 계산 결과를 선택하며 같은 실행에서 계속 처리한다. 입력 변경은 새 불변 버전·새 실행에 적용한다.
 - 명시적WORKFLOW_DATA source Profile/Runner 계약, Run별 원본 신원 pin, 현재Attempt·Pod에 한정한 reader, 최신값1초 polling/중복 제거, EXTERNAL journal/checkpoint 복원과 END·ACK·FINALIZE 정상 종료를 연결했다. 원본·가상 실행 세대가 바뀌면 차단하고 오래된 값은 기다린다. 중간 관측 전량 전달은 보장하지 않는다.
 - 센서는 현재 NanoMQ 수집 archive, 가상디바이스는 current VALID 결과를 사용한다. UI 두 선택에서 후속 처리·연결선을 유지하고 조회/종료 실패를 재시도한다. 예제 처리기는 표본 수·마지막 값·숫자 통계를 최종 파일로 저장한다.
-- 현재 통과: 실제 PostgreSQL의 공개 MVC Run/typed pin/재요청/Scoped Reader·만료·가상 generation 변경, 실제 TLS MQTT/HTTPS/외부 체크포인트 source·중복·볼륨 복원·연속 표본 계산3개, 기존 SDK MQTT/체크포인트115개·Runner unit96개, Backend unit183개, UI PC/모바일4개·lint/build. 공개 native 이미지·현재 환경의새 workflow/실행·저장·최종 배포는 아직 수용 진행 중이며 완료로 표시하지 않는다.
+- 실제 새 워크플로 `live-input-switch`를 만들었다. 센서 버전2.0.0은 Arduino 가속도 원본39건, 가상 입력 버전2.1.0은 eKuiper 온도 계산85건을 같은 처리기로 전달했다. 두Run/각2Task가 SUCCEEDED이고 source/처리 건수·마지막 값·END와 숫자 통계가 일치했다. MinIO의 고정 objectVersion4개를 독립 TLS 조회해 크기·SHA256과 공개 결과 내용을 대조했다. 웹에서 입력만 교체·발행하며 후속 작업/연결을 보존하는 동작도 실제 API로 확인했다.
+- 실제 PostgreSQL 공개 Run/typed pin/재요청/Scoped Reader·만료·가상 generation 변경, TLS MQTT/HTTPS/EXTERNAL source·중복·볼륨 복원·연속 계산3개, SDK 전체115개(종료 시간 수정 전)와 수정 후 완료/응답 유실/취소/기한/복구29개, Runner unit96개, Backend unit183개가 통과했다. 관련 UI PC/모바일·proxy·등록·결과·배치24개, 별도 전환/Remote/측정 회귀와 lint/build·문서·계약 검사도 통과했다. Standards/Spec 잔여 지적은 각0건이다.
+- 기존 수집 API와 같은 DB를 쓰는 실행용 API를 별도 namespace/authority 범위로 운영하며 웹의 workflow session도 분리했다. 실제 Runner는 검증한 amd64 개발 이미지이며 ARM64 공식 새 release 수용으로 확대하지 않는다. 센서17 UID/설정, 등록VD74 revision/정의, NanoMQ2·eKuiper·Mapper의 Pod UID/재시작 수를 보존했다.
+- 배포 검증 중 기존 Influx의 TSI 상대 cleanup 경로가 읽기 전용 cwd에서 shard-open을 막는 문제를 확인해 기존 writable `/tmp`를 workingDir로 지정했다. 같은 PVC와 root 읽기 전용 설정을 유지하며 COLLECTING/최신 원본 저장을 재확인했다. 이 설정은 upstream orphan cleanup 결함의 우회이며 실제 orphan 삭제/24시간 부하·전량 관측 전달을 검증한 것은 아니다. 느린 완료 승인에 대한1초 HTTP 제한도15초로 수정하고 실제 HTTPS 회귀의 실패→통과를 확인했다.
 
 ## 2026-10-14 M6 조합형 가상디바이스 간편 등록
 

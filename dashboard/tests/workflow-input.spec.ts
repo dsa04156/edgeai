@@ -41,8 +41,7 @@ test("changing sensor to computed input keeps processing and connections, includ
     else return route.fulfill({ status: 404, json: {} });
     return route.fulfill({ json: body });
   });
-  await page.goto("/workflows");
-  await page.getByRole("button", { name: "실시간 입력 시험 live-input", exact: true }).click();
+  await page.goto(`/workflows?workflow=${workflowId}`);
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
   await page.getByRole("button", { name: "이 버전으로 편집하기", exact: true }).click();
   await page.getByRole("combobox", { name: /^편집할 작업/ }).selectOption("input");
