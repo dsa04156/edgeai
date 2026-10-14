@@ -53,7 +53,7 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
     void poll(); return () => { stopped = true; ++requests.value; clearTimeout(timer); };
   }, [graphOnly, selected, outputs?.historyEnabled, chart, historyRefresh]);
   useEffect(() => { const requests = chartSequence.current; return () => { ++requests.value; }; }, []);
-  async function submit() { if (!draft || commandBusy.current) return; commandBusy.current = true; setBusy(true); setNotice("");
+  async function submit() { if (!draft || commandBusy.current || disabled || !!error || !data?.continuous?.enabled || vd.state !== "REGISTERED") return; commandBusy.current = true; setBusy(true); setNotice("");
     try { await api(draft.action, { method: "POST", headers: { "X-CSRF-TOKEN": csrf, "Idempotency-Key": draft.key, "Content-Type": "application/json" }, body: JSON.stringify({ revision: draft.revision }) }); setDraft(null); setNotice("실행 요청을 저장했습니다."); await refresh(); }
     catch (error) { setNotice(error instanceof Error ? error.message : "실행 요청에 실패했습니다. 같은 요청을 다시 보낼 수 있습니다."); }
     finally { commandBusy.current = false; setBusy(false); }
@@ -61,8 +61,8 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
   const execution = data?.continuous;
   const controls = !draft ? <div className="toolbar">
     <button aria-label={managementOnly ? `${vd.displayName} 계산 시작` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || vd.state !== "REGISTERED" || execution.desiredRunning} onClick={() => setDraft({ action: "provision", key: requestKey(), revision: vd.revision })}>{managementOnly ? "시작" : "계산 시작"}</button>
-    <button aria-label={managementOnly ? `${vd.displayName} 계산 중지` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>{managementOnly ? "중지" : "계산 중지"}</button>
-  </div> : <div className="toolbar"><button aria-label={managementOnly ? `${vd.displayName} ${draft.action === "provision" ? "시작" : "중지"} 확인` : undefined} disabled={busy || disabled} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "시작 확인" : "중지 확인"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>;
+    <button aria-label={managementOnly ? `${vd.displayName} 계산 중지` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || vd.state !== "REGISTERED" || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>{managementOnly ? "중지" : "계산 중지"}</button>
+  </div> : <div className="toolbar"><button aria-label={managementOnly ? `${vd.displayName} ${draft.action === "provision" ? "시작" : "중지"} 확인` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || vd.state !== "REGISTERED"} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "시작 확인" : "중지 확인"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>;
   if (managementOnly) return <section aria-label={`${vd.displayName} 실행 관리`}>
     {controls}
     <p className="hint">{error ? "상태 확인 필요" : execution ? stateNames[execution.state] : "상태 조회 중…"}</p>

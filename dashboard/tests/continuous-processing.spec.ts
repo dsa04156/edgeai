@@ -155,6 +155,9 @@ test("settings open in a modal while start and stop stay in the list management 
   const management = list.getByRole("row").filter({ hasText: "온도 계산" }).getByRole("cell").last();
   await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeDisabled();
   await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
+  await management.scrollIntoViewIfNeeded();
+  expect(await list.evaluate(element => element.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("management-list.png") });
   const trigger = management.getByRole("button", { name: "온도 계산 설정", exact: true });
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상 장치 설정", exact: true });
@@ -200,10 +203,24 @@ test("management confirms stop and start, retaining request identity after a fai
   expect(requests[2].key).not.toBe(requests[0].key);
 });
 
+test("a failed execution read disables even a pending management confirmation", async ({ page }) => {
+  await fixture(page, true); await page.clock.install(); let fail = false;
+  await page.route(`**/api/control-plane/virtual-devices/${id}/execution`, route => fail ? route.fulfill({ status: 503, json: { message: "실행 상태 조회 실패" } }) : route.fulfill({ json: { continuous: { enabled: true, desiredRunning: true, generation, state: "RUNNING", reason: "HEALTHY" } } }));
+  await page.goto("/virtual-devices");
+  const management = page.getByRole("region", { name: "온도 계산 실행 관리", exact: true });
+  await management.getByRole("button", { name: "온도 계산 계산 중지", exact: true }).click();
+  const confirm = management.getByRole("button", { name: "온도 계산 중지 확인", exact: true });
+  await expect(confirm).toBeEnabled(); fail = true;
+  await page.clock.fastForward(11000);
+  await expect(management.getByRole("alert")).toHaveText("실행 상태 조회 실패");
+  await expect(confirm).toBeDisabled();
+});
+
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {
   await fixture(page, true);
   await page.goto("/virtual-devices");
   await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   const results = page.getByRole("region", { name: "연속 처리 결과", exact: true });
   await expect(results.getByRole("table").getByRole("row")).toHaveCount(4);
   await expect(results.getByText("기록 저장 누락", { exact: true })).toBeVisible();
@@ -252,6 +269,7 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
 test("processing versions expose the previous definition and generated SQL", async ({ page }) => {
   await fixture(page, true); await page.goto("/virtual-devices");
   await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   await page.getByRole("button", { name: "처리 정의·버전 조회", exact: true }).click();
   const versions = page.getByRole("region", { name: "처리 정의 버전", exact: true });
   await expect(versions.getByText("revision 2", { exact: true })).toBeVisible();

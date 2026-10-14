@@ -57,7 +57,7 @@ export function VirtualDeviceRegistry({ initiallyOpen = false }: { initiallyOpen
         <div className="toolbar"><h2 id="vds-title">등록된 가상 장치</h2><button disabled={busy} onClick={() => void run(async () => { await load(); await catalog(); if (detail) await show(detail.vd.id); })}>새로고침</button></div>
         {page?.items.length === 0 && <p className="hint">등록된 가상 장치가 없습니다. 가상 장치 등록에서 입력 센서와 계산을 선택하세요.</p>}
         {!!page?.items.length && <div className="table-scroll"><table className="vd-table"><caption className="sr-only">가상 장치 목록</caption><thead><tr><th>가상 장치</th><th>등록 상태</th><th>변경 버전</th><th>관리</th></tr></thead><tbody>{page.items.map(vd => <tr key={vd.id}>
-          <td><button className="version-link" aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
+          <td><button className="version-link" aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td data-label="등록 상태">{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td data-label="변경 버전">{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
         </tr>)}</tbody></table></div>}
         <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(Math.max(0, offset - 20)))}>이전</button><span>{offset / 20 + 1} 페이지</span><button disabled={busy || page?.nextOffset == null} onClick={() => void run(() => load(page!.nextOffset!))}>다음</button></div>
       </section>
@@ -66,11 +66,11 @@ export function VirtualDeviceRegistry({ initiallyOpen = false }: { initiallyOpen
       {detail && <section>
         {notice && <p className="notice" role="status">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        <ContinuousExecution key={detail.vd.id} vd={detail.vd} auth="" csrf={csrf} disabled={busy} showControls={false} />
         <h3>현재 원본 연결</h3><ul className="history-list">{detail.activeSources.map(source => <li key={source.id}>{source.sourceKey} · {source.deviceId} · {source.properties.join(", ")} · 최대 {source.maxAgeSeconds}초</li>)}</ul>
         {detail.vd.state === "REGISTERED" && detail.continuous && <ContinuousFields key={`${detail.vd.id}-${detail.vd.revision}`} inputs={inputs} enabled={enabled} busy={busy}
           initial={{ displayName: detail.vd.displayName, sources: detail.activeSources.map(source => ({ sourceKey: source.sourceKey, deviceId: source.deviceId, properties: source.properties, maxAgeSeconds: source.maxAgeSeconds })), continuous: detail.continuous }}
           save={async body => { setBusy(true); try { await api(`virtual-devices/${detail.vd.id}/continuous`, write("PATCH", { revision: detail.vd.revision, ...body })); setNotice("연속 처리 설정을 저장했습니다."); try { await show(detail.vd.id); await load(); } catch { setError("설정은 저장됐지만 상태 조회에 실패했습니다. 다시 조회해 확인하세요."); } } finally { setBusy(false); } }} />}
+        <details><summary>계산 결과·처리 버전</summary><ContinuousExecution key={detail.vd.id} vd={detail.vd} auth="" csrf={csrf} disabled={busy} showControls={false} /></details>
         {detail.vd.state === "REGISTERED" && <details><summary>가상 장치 해제</summary><p>계산을 중지하고 원본 연결을 종료합니다. 등록과 결과 이력은 보존됩니다.</p><button disabled={busy || !csrf} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); })}>해제 확정</button></details>}
       </section>}
     </RegistrationDialog>
