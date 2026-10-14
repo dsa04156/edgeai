@@ -19,7 +19,7 @@ async function fixture(page: Page, detail = false, catalog: "enabled" | "disable
     if (path === "virtual-devices/continuous-catalog") return catalog === "unavailable" ? route.fulfill({ status: 503, json: { message: "연속 처리 서버 확인 필요" } }) : route.fulfill({ json: { enabled: catalog === "enabled", inputs: sensors } });
     if (path === "virtual-devices/processing-catalog") return route.fulfill({ json: { ready: false, architectures: [], operations: [] } });
     if (path === "profiles/VD") return route.fulfill({ json: { items: [{ id: profile, key: "continuous", version: "1.0.0", kind: "VD", spec: { apiVersion: "edgeai.vd/v3", continuous: configuration } }], nextOffset: null } });
-    if (path === "virtual-devices") return route.fulfill({ json: { items: detail ? [vd] : [], nextOffset: null } });
+    if (path === "virtual-devices") return !detail && attempts >= 2 ? route.fulfill({ status: 503, json: { message: "목록 조회 실패" } }) : route.fulfill({ json: { items: detail ? [vd] : [], nextOffset: null } });
     if (path === "virtual-devices/continuous" && request.method() === "POST") {
       const body = request.postDataJSON();
       expect(body.sources).toEqual([{ sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30 }, { sourceKey: "b", deviceId: "humidity", properties: ["humidity"], maxAgeSeconds: 30 }]);
@@ -149,15 +149,83 @@ test("quick averaging shows an invalid sample count and blocks registration", as
   expect(submitted).toBe(false);
 });
 
+test("settings open in a modal while start and stop stay in the list management cell", async ({ page }, info) => {
+  await fixture(page, true); await page.goto("/virtual-devices");
+  const list = page.getByRole("table", { name: "가상 장치 목록", exact: true });
+  const management = list.getByRole("row").filter({ hasText: "온도 계산" }).getByRole("cell").last();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeDisabled();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
+  await management.scrollIntoViewIfNeeded();
+  expect(await list.evaluate(element => element.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("management-list.png") });
+  const trigger = management.getByRole("button", { name: "온도 계산 설정", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상 장치 설정", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "현재 원본 연결", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
+  await page.screenshot({ path: info.outputPath("settings-modal.png") });
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
+  await expect(page.getByRole("heading", { name: "현재 원본 연결", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("management confirms stop and start, retaining request identity after a failed stop", async ({ page }) => {
+  await fixture(page, true);
+  let running = true;
+  const requests: { action: string; key: string }[] = [];
+  await page.route(`**/api/control-plane/virtual-devices/${id}/execution`, route => route.fulfill({ json: { continuous: { enabled: true, desiredRunning: running, generation, state: running ? "RUNNING" : "STOPPED", reason: running ? "HEALTHY" : "STOPPED" } } }));
+  for (const action of ["drain", "provision"]) await page.route(`**/api/control-plane/virtual-devices/${id}/${action}`, route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ revision: 1 });
+    expect(route.request().headers()["x-csrf-token"]).toBe("test");
+    requests.push({ action, key: route.request().headers()["idempotency-key"] });
+    if (requests.length === 1) return route.fulfill({ status: 503, json: { message: "중지 요청 재시도" } });
+    running = action === "provision";
+    return route.fulfill({ status: 202, json: {} });
+  });
+  await page.goto("/virtual-devices");
+  const management = page.getByRole("region", { name: "온도 계산 실행 관리", exact: true });
+  await management.getByRole("button", { name: "온도 계산 계산 중지", exact: true }).click();
+  expect(requests).toHaveLength(0);
+  await management.getByRole("button", { name: "온도 계산 중지 확인", exact: true }).click();
+  await expect(management.getByRole("status")).toHaveText("중지 요청 재시도");
+  await management.getByRole("button", { name: "온도 계산 중지 확인", exact: true }).click();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeEnabled();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeDisabled();
+  expect(requests[1].key).toBe(requests[0].key);
+  await management.getByRole("button", { name: "온도 계산 계산 시작", exact: true }).click();
+  await management.getByRole("button", { name: "온도 계산 시작 확인", exact: true }).click();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
+  expect(requests.map(request => request.action)).toEqual(["drain", "drain", "provision"]);
+  expect(requests[2].key).not.toBe(requests[0].key);
+});
+
+test("a failed execution read disables even a pending management confirmation", async ({ page }) => {
+  await fixture(page, true); await page.clock.install(); let fail = false;
+  await page.route(`**/api/control-plane/virtual-devices/${id}/execution`, route => fail ? route.fulfill({ status: 503, json: { message: "실행 상태 조회 실패" } }) : route.fulfill({ json: { continuous: { enabled: true, desiredRunning: true, generation, state: "RUNNING", reason: "HEALTHY" } } }));
+  await page.goto("/virtual-devices");
+  const management = page.getByRole("region", { name: "온도 계산 실행 관리", exact: true });
+  await management.getByRole("button", { name: "온도 계산 계산 중지", exact: true }).click();
+  const confirm = management.getByRole("button", { name: "온도 계산 중지 확인", exact: true });
+  await expect(confirm).toBeEnabled(); fail = true;
+  await page.clock.fastForward(11000);
+  await expect(management.getByRole("alert")).toHaveText("실행 상태 조회 실패");
+  await expect(confirm).toBeDisabled();
+});
+
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {
   await fixture(page, true);
   await page.goto("/virtual-devices");
   await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   const results = page.getByRole("region", { name: "연속 처리 결과", exact: true });
   await expect(results.getByRole("table").getByRole("row")).toHaveCount(4);
   await expect(results.getByText("기록 저장 누락", { exact: true })).toBeVisible();
-  await expect(results.getByRole("button", { name: "계산 시작", exact: true })).toBeDisabled();
-  await expect(results.getByRole("button", { name: "계산 중지", exact: true })).toBeEnabled();
+  await expect(results.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
+  await expect(results.getByRole("button", { name: "계산 중지", exact: true })).toHaveCount(0);
   await results.getByRole("button", { name: "average 그래프", exact: true }).click();
   await expect(results.getByRole("img", { name: "average 결과 그래프, 4개 기록", exact: true })).toBeVisible();
   await expect(results.getByText(/기록 저장 중단 ·/)).toBeVisible();
@@ -203,6 +271,7 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
 test("processing versions expose the previous definition and generated SQL", async ({ page }) => {
   await fixture(page, true); await page.goto("/virtual-devices");
   await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   await page.getByRole("button", { name: "처리 정의·버전 조회", exact: true }).click();
   const versions = page.getByRole("region", { name: "처리 정의 버전", exact: true });
   await expect(versions.getByText("revision 2", { exact: true })).toBeVisible();
