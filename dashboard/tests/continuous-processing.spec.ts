@@ -131,6 +131,24 @@ test("quick comparison preserves its draft and automatic key when registration i
   expect(keys).toHaveLength(2); expect(keys[0]).toMatch(/^vd-[a-f0-9]{32}$/); expect(keys[1]).toBe(keys[0]);
 });
 
+test("quick averaging shows an invalid sample count and blocks registration", async ({ page }) => {
+  await fixture(page);
+  let submitted = false;
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => { submitted = true; return route.fulfill({ status: 400 }); });
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("movingAverage");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
+  await form.getByText("고급 설정 · 표본 수·주기·보관 기간", { exact: true }).click();
+  const count = form.getByLabel("최근 표본 수", { exact: true });
+  await count.fill("0");
+  await expect(count).toHaveValue("0");
+  expect(await count.evaluate((element: HTMLInputElement) => element.validity.rangeUnderflow)).toBe(true);
+  await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
+  expect(submitted).toBe(false);
+});
+
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {
   await fixture(page, true);
   await page.goto("/virtual-devices");

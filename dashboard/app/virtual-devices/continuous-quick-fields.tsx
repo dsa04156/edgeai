@@ -14,7 +14,7 @@ export function ContinuousQuickFields({ inputs, deviceId, output, selectSensor, 
   const sensor = inputs.find(input => input.deviceId === deviceId);
   const boolean = sensor?.type === "bool";
   function calculation(operation: Output["operation"]) {
-    changeOutput({ name: output.name, operation, expression: operation === "threshold" ? `a ${comparison} ${threshold}` : "a", unit: operation === "threshold" ? "" : sensor?.unit || "", ...(["movingAverage", "minimum", "maximum"].includes(operation) ? { sampleCount: output.sampleCount || 5 } : {}) });
+    changeOutput({ name: output.name, operation, expression: operation === "threshold" ? `a ${comparison} ${threshold}` : "a", unit: operation === "threshold" ? "" : sensor?.unit || "", ...(["movingAverage", "minimum", "maximum"].includes(operation) ? { sampleCount: output.sampleCount ?? 5 } : {}) });
   }
   return <>
     <label>센서<select required aria-label="센서" value={deviceId} onChange={event => selectSensor(event.target.value)}>
