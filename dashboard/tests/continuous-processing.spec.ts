@@ -48,6 +48,7 @@ test("multiple sensors and outputs preserve a failed registration without requir
   await page.goto("/virtual-devices?create=1");
   const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
   await expect(form).toBeVisible();
+  await form.getByRole("button", { name: "여러 센서·직접 계산식 설정", exact: true }).click();
   await form.getByLabel("장치 키", { exact: true }).fill(vd.key);
   await form.getByLabel("장치 이름", { exact: true }).fill(vd.displayName);
   await form.getByLabel("입력 1 센서", { exact: true }).selectOption("temperature");
@@ -71,6 +72,63 @@ test("multiple sensors and outputs preserve a failed registration without requir
   await expect(page.getByRole("alert").filter({ hasText: "등록은 완료됐지만" })).toBeVisible();
   expect(attempts()).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("quick registration creates a sensor average without typing keys or expressions", async ({ page }, info) => {
+  await fixture(page);
+  let submitted = false;
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => {
+    const body = route.request().postDataJSON();
+    expect(body.key).toMatch(/^vd-[a-f0-9]{32}$/);
+    expect(body.displayName).toBe("온도 평균");
+    expect(body.sources).toEqual([{ sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30 }]);
+    expect(body.continuous).toEqual({ intervalSeconds: 1, retentionDays: 7, outputs: [{ name: "value", expression: "a", operation: "movingAverage", sampleCount: 5, unit: "°C" }] });
+    submitted = true;
+    return route.fulfill({ status: 201, json: vd });
+  });
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await expect(form.getByLabel("장치 키", { exact: true })).not.toBeVisible();
+  await expect(form.getByLabel("입력 1 별칭", { exact: true })).not.toBeVisible();
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("movingAverage");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
+  await page.screenshot({ path: info.outputPath("quick-registration.png"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "등록했습니다" })).toBeVisible();
+  expect(submitted).toBe(true);
+});
+
+test("quick comparison preserves its draft and automatic key when registration is retried", async ({ page }) => {
+  await fixture(page);
+  const keys: string[] = [];
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => {
+    const body = route.request().postDataJSON(); keys.push(body.key);
+    expect(body.displayName).toBe("온도 경보");
+    expect(body.continuous.outputs).toEqual([{ name: "value", expression: "a > 45.5", operation: "threshold", unit: "" }]);
+    return keys.length === 1 ? route.fulfill({ status: 503, json: { message: "등록 재시도" } }) : route.fulfill({ status: 201, json: vd });
+  });
+  // getRandomValues also works on the LAN's HTTP origin, where randomUUID is absent.
+  await page.addInitScript(() => Object.defineProperty(crypto, "randomUUID", { value: undefined }));
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("threshold");
+  await form.getByLabel("비교 조건", { exact: true }).selectOption(">");
+  await form.getByLabel("기준값", { exact: true }).fill("45.5");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 경보");
+  const submit = form.getByRole("button", { name: "연속 처리 장치 등록", exact: true });
+  await submit.click();
+  await expect(form.getByRole("alert")).toHaveText("등록 재시도");
+  await expect(form.getByLabel("기준값", { exact: true })).toHaveValue("45.5");
+  await form.getByRole("button", { name: "여러 센서·직접 계산식 설정", exact: true }).click();
+  await expect(form.getByLabel("장치 이름", { exact: true })).toHaveValue("온도 경보");
+  await expect(form.getByLabel("장치 키", { exact: true })).toHaveValue(keys[0]);
+  await expect(form.getByLabel("출력 1 계산식", { exact: true })).toHaveValue("a > 45.5");
+  await submit.click();
+  await expect(page.getByRole("status").filter({ hasText: "등록했습니다" })).toBeVisible();
+  expect(keys).toHaveLength(2); expect(keys[0]).toMatch(/^vd-[a-f0-9]{32}$/); expect(keys[1]).toBe(keys[0]);
 });
 
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {

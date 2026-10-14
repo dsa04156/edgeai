@@ -19,8 +19,9 @@ test("virtual registration opens one modal without moving the page and restores 
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "가상 장치 등록", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("장치 키", { exact: true })).toBeFocused();
-  await dialog.getByLabel("장치 키", { exact: true }).fill("temperature-average");
+  await expect(dialog.getByLabel("센서", { exact: true })).toBeFocused();
+  await dialog.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await dialog.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
   await page.keyboard.press("Shift+Tab");
   expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
   expect(await page.evaluate(() => scrollY)).toBe(position);
@@ -29,7 +30,8 @@ test("virtual registration opens one modal without moving the page and restores 
   await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
   await trigger.click();
-  await expect(dialog.getByLabel("장치 키", { exact: true })).toHaveValue("temperature-average");
+  await expect(dialog.getByLabel("장치 이름", { exact: true })).toHaveValue("온도 평균");
+  await expect(dialog.getByLabel("센서", { exact: true })).toHaveValue("temperature");
   await page.screenshot({ path: info.outputPath("virtual-registration-modal.png"), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const box = await dialog.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0);
