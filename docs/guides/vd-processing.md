@@ -99,7 +99,7 @@ core 배포에는 agent가 사용하는 metadata REST가 포함되지 않습니�
 아래 기존 `deploy/kubernetes/ekuiper` component와 preflight의 history PVC/480Gi 기준은 이전 PostgreSQL 이력 배포용입니다. 이번 InfluxDB 로컬 웹 반영을 Kubernetes InfluxDB 배포 완료로 해석하지 않습니다. 클러스터 적용 시 InfluxDB PVC·bucket·전용 토큰·네트워크 설정 및 실제 부하별 용량 산정을 먼저 준비해야 합니다.
 
 기능 flag 기본값은 false입니다. 병합은 운영 엔진 활성화를 뜻하지 않습니다.
-새 agent·history·Mapper·TLS 설정의 Kubernetes 적용은 아직 수행하지 않았습니다.
+2026-10-14 호스트 운영 API·실제 센서의 qualified 입력·Kubernetes의 중앙 processing Agent/eKuiper 연결과 결과 저장은 확인했습니다. 아래 절차는 별도 Kubernetes 관리 API·DB·보안·복구 수용을 위한 운영 준비 기준이며 호스트 활성 상태와 구분합니다. 최신 검증 범위는 [PROGRESS](../../PROGRESS.md), 남은 게이트는 [PLAN](../../PLAN.md)을 확인합니다.
 `bash scripts/dev/build-processing-agent.sh`로 AMD64 정적 binary를 만들고
 `mappers/processing-agent.Dockerfile`로 이미지를 빌드해 immutable digest를 확정합니다.
 `bash scripts/ops/prepare-processing-material.sh /absolute/new/private/directory`는
