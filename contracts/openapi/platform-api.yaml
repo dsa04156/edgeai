@@ -11,6 +11,50 @@ servers:
 - url: /
 security: []
 paths:
+  /api/v1/workflow-data-sources:
+    get:
+      operationId: listWorkflowDataSources
+      tags: [Workflow]
+      summary: 실시간 워크플로 입력 선택 목록
+      description: 센서의 검증된 원본과 가상디바이스의 현재 계산 출력을 구분한다. 브로커 주소·자격 증명은 반환하지 않는다.
+      responses:
+        '200':
+          description: 선택 목록. Cache-Control no-store.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkflowDataSources'}
+        '503': {description: 원본 목록 조회를 사용할 수 없습니다.}
+  /api/v1/workflow-runs/{runId}/drain:
+    parameters:
+    - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: drainWorkflowInput
+      tags: [Run]
+      security: [{csrfToken: []}]
+      summary: 실시간 입력을 종료하고 마지막 처리 결과 저장
+      description: 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: 정상 종료 요청을 저장했습니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [runId, state]
+                properties:
+                  runId: {type: string, format: uuid}
+                  state: {type: string, const: DRAINING}
+        '400': {description: 잘못된 본문}
+        '403': {description: CSRF 검증 실패}
+        '404': {description: 실행이 없습니다.}
+        '409': {description: 데이터 입력이 없거나 이미 완료·취소 중인 실행입니다.}
+        '503': {description: 저장소 일시 장애}
   /api/devices:
     get:
       operationId: listManagedDevices
@@ -2445,6 +2489,42 @@ components:
             code: PROFILE_STORE_UNAVAILABLE
             message: Profile 저장소에 연결할 수 없습니다. 잠시 후 다시 시도하세요.
   schemas:
+    WorkflowSourceSelection:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required: [kind, deviceId, property]
+        properties:
+          kind: {type: string, const: SENSOR}
+          deviceId: {type: string, maxLength: 63, pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'}
+          property: {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
+      - type: object
+        additionalProperties: false
+        required: [kind, vdId, outputId]
+        properties:
+          kind: {type: string, const: CONTINUOUS_VD}
+          vdId: {type: string, format: uuid}
+          outputId: {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
+    WorkflowDataSources:
+      type: object
+      additionalProperties: false
+      required: [items, truncated, asOf, samplingIntervalSeconds]
+      properties:
+        asOf: {type: string, format: date-time}
+        samplingIntervalSeconds: {type: integer, const: 1}
+        truncated: {type: boolean}
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [selection, label, unit, type, available]
+            properties:
+              selection: {$ref: '#/components/schemas/WorkflowSourceSelection'}
+              label: {type: string}
+              unit: {type: string}
+              type: {type: string, description: 아직 현재 계산 결과가 없는 출력은 빈 문자열이다.}
+              available: {type: boolean, description: 센서의 검증 연결 또는 가상디바이스의 현재 유효 결과가 확인됨.}
     ManagedDeviceProperty:
       type: object
       additionalProperties: false

@@ -40,10 +40,12 @@ public final class RunnerApiService {
         response.put("telemetry",Map.of("intervalSeconds",5));
         if(assignment.spec().stream()!=null){
             var stream=assignment.spec().stream();var limits=stream.limits();
-            response.put("stream",Map.of("command",stream.command(),"args",stream.args(),
+            var document=new TreeMap<String,Object>(Map.of("command",stream.command(),"args",stream.args(),
                 "inputs",streamPorts(stream.inputs()),"outputs",streamPorts(stream.outputs()),
                 "stepTimeoutSeconds",stream.stepTimeoutSeconds(),"limits",Map.of("maxFrames",limits.maxFrames(),
                     "maxBufferBytes",limits.maxBufferBytes(),"maxStateBytes",limits.maxStateBytes())));
+            if(stream.source()!=null)document.put("source",stream.source());
+            response.put("stream",document);
         }
         starts.retainStart(Objects.requireNonNull(assignment.startAuthority()));
         // External persistence must not let concurrent cancellation or lease expiry issue a stale response.

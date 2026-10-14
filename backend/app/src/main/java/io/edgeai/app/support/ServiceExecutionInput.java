@@ -52,12 +52,13 @@ public final class ServiceExecutionInput {
             root.containsKey("stream") ? stream(root.get("stream")) : null);
     }
     private static StreamExecutionSpec stream(Object value) {
-        var s = object(value, "command", "args", "inputs", "outputs", "stepTimeoutSeconds", "limits");
+        var s = fields(value, Set.of("command", "args", "inputs", "outputs", "stepTimeoutSeconds", "limits"), Set.of("source"));
         var limits = object(s.get("limits"), "maxFrames", "maxBufferBytes", "maxStateBytes");
         return new StreamExecutionSpec(array(s.get("command")), array(s.get("args")),
             streamPorts(s.get("inputs")), streamPorts(s.get("outputs")), smallInteger(s.get("stepTimeoutSeconds")),
             new StreamExecutionSpec.Limits(smallInteger(limits.get("maxFrames")),
-                integer(limits.get("maxBufferBytes")), integer(limits.get("maxStateBytes"))));
+                integer(limits.get("maxBufferBytes")), integer(limits.get("maxStateBytes"))),
+            s.containsKey("source") ? text(s.get("source"),32) : null);
     }
     private static Map<String, StreamExecutionSpec.Port> streamPorts(Object value) {
         var result = new TreeMap<String, StreamExecutionSpec.Port>();

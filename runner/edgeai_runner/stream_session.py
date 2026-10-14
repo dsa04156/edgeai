@@ -18,6 +18,7 @@ from edgeai_runner.stream_checkpoint_client import CheckpointClient, CheckpointP
 from edgeai_runner.stream_journal import Journal, Limits
 from edgeai_runner.stream_mqtt import Link
 from edgeai_runner.stream_processor import Processor, execution_digest
+from edgeai_runner.stream_task_source import TaskSource
 from edgeai_runner.stream_protocol import _uuid
 
 
@@ -34,7 +35,7 @@ class Session:
     def __init__(self, client, run_id, input_generations, output_generations, command,
                  directory, parameters=None, *, limits=Limits(), step_timeout=60,
                  timeout=3600, create=False, cancel=None, durability='LOCAL', checkpoint_client=None,
-                 restore_latest=False, handover_latest=False):
+                 restore_latest=False, handover_latest=False, source_poll=None):
         self.closed = False
         self.processor = self.link = self.journal = None
         self.publisher = None
@@ -44,7 +45,11 @@ class Session:
         require(type(timeout) in (int, float) and math.isfinite(timeout) and 0 < timeout <= 86400)
         self.deadline = time.monotonic() + timeout
         self.client, self.run_id = client, run_id
-        require(type(input_generations) is dict and 1 <= len(input_generations) <= 16)
+        source = source_poll is not None
+        require(not source or callable(source_poll) and command == ['edgeai-workflow-input']
+                and input_generations == {} and set(output_generations) == {'sample'}
+                and durability == 'EXTERNAL' and checkpoint_client is not None)
+        require(type(input_generations) is dict and (0 if source else 1) <= len(input_generations) <= 16)
         require(type(output_generations) is dict and len(output_generations) <= 16)
         for name in (*input_generations, *output_generations):
             port_name(name)
@@ -114,8 +119,12 @@ class Session:
             work = directory / 'workload'
             if create:
                 work.mkdir(mode=0o700)
-            self.processor = Processor(self.link, command, work,
-                input_ports,output_ports,parameters,step_timeout=step_timeout,create=create and not restore_latest,cancel=self.cancel)
+            if source:
+                self.processor = TaskSource(self.link, work, output_ports, parameters, source_poll,
+                    self._request_timeout, step_timeout=step_timeout, create=create and not restore_latest, cancel=self.cancel)
+            else:
+                self.processor = Processor(self.link, command, work,
+                    input_ports,output_ports,parameters,step_timeout=step_timeout,create=create and not restore_latest,cancel=self.cancel)
             if checkpoint_client is not None:
                 self.publisher=CheckpointPublisher(checkpoint_client,self.journal,self.processor.execution_sha256,self._check)
         except BaseException:

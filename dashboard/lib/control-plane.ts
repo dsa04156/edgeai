@@ -1,11 +1,15 @@
 // Server-side configuration only; never derive the upstream from a client header or URL.
-export function controlPlaneOrigin(): string {
-  const configured = process.env.EDGEAI_API_BASE_URL;
+export function workflowControlPlane(target: string): boolean {
+  return !!process.env.EDGEAI_WORKFLOW_API_BASE_URL && /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(target);
+}
+export function controlPlaneOrigin(target = ""): string {
+  const setting = workflowControlPlane(target) ? "EDGEAI_WORKFLOW_API_BASE_URL" : "EDGEAI_API_BASE_URL";
+  const configured = process.env[setting];
   if (configured) {
     const url = new URL(configured);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
         url.pathname !== "/" || url.search || url.hash) {
-      throw new Error("EDGEAI_API_BASE_URL must be an HTTP(S) origin without credentials or a path");
+      throw new Error(`${setting} must be an HTTP(S) origin without credentials or a path`);
     }
     return url.origin;
   }

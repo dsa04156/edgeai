@@ -19,17 +19,18 @@ class WorkflowControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean WorkflowService workflows;
     @MockitoBean ExecutionService executions;
+    @MockitoBean WorkflowDataInputService dataInputs;
     @Test void commandsWithoutCsrfCannotInvokeServices() throws Exception {
         String id=UUID.randomUUID().toString();
-        for(String path:new String[]{"/workflows","/workflows/"+id+"/versions","/workflow-runs","/workflow-runs/"+id+"/cancel","/tasks/"+id+"/cancel"})
+        for(String path:new String[]{"/workflows","/workflows/"+id+"/versions","/workflow-runs","/workflow-runs/"+id+"/cancel","/workflow-runs/"+id+"/drain","/tasks/"+id+"/cancel"})
             mvc.perform(post("/api/v1"+path).contentType("application/json").content("{}")).andExpect(status().isForbidden());
-        verifyNoInteractions(workflows,executions);
+        verifyNoInteractions(workflows,executions,dataInputs);
     }
     @Test void missingIdempotencyAndMalformedIdentifiersAreControlledBadRequests() throws Exception {
         mvc.perform(post("/api/v1/workflow-runs").with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_WORKFLOW"));
         mvc.perform(get("/api/v1/tasks/not-uuid")).andExpect(status().isBadRequest());
-        verifyNoInteractions(workflows,executions);
+        verifyNoInteractions(workflows,executions,dataInputs);
     }
     @Test void unavailableStorageDoesNotExposeConnectionDetails() throws Exception {
         when(workflows.list(20,0)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("internal credential detail"));

@@ -12,6 +12,12 @@ import org.springframework.jdbc.core.RowMapper;
 public final class JdbcExecutionRepository implements ExecutionRepository {
     private final JdbcTemplate jdbc;
     public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    public void requestInputDrain(UUID runId,Instant at) {
+        jdbc.update("UPDATE edgeai.workflow_run SET input_drain_requested_at=COALESCE(input_drain_requested_at,?) WHERE id=?",Timestamp.from(at),runId);
+    }
+    public boolean inputDrainRequested(UUID runId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT input_drain_requested_at IS NOT NULL FROM edgeai.workflow_run WHERE id=?",Boolean.class,runId));
+    }
     public void lockRequestKey(UUID key) {
         jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))","edgeai-run-create:"+key);
     }

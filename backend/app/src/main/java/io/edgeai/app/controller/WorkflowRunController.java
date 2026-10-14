@@ -10,13 +10,16 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/workflow-runs")
 public class WorkflowRunController {
+    private final io.edgeai.app.service.WorkflowDataInputService dataInputs;
     private final ExecutionService service;
-    public WorkflowRunController(ExecutionService service) { this.service=service; }
+    public WorkflowRunController(ExecutionService service,io.edgeai.app.service.WorkflowDataInputService dataInputs) { this.service=service;this.dataInputs=dataInputs; }
     @PostMapping(consumes="application/json")
     public ResponseEntity<WorkflowRunResponse> create(@RequestHeader("Idempotency-Key") String key,@RequestBody String body) {
         var result=service.create(key,body);
         return ResponseEntity.status(result.created()?201:200).location(URI.create("/api/v1/workflow-runs/"+result.value().id())).body(WorkflowRunResponse.from(result.value()));
     }
+    @PostMapping(value="/{runId}/drain",consumes="application/json")
+    public java.util.Map<String,Object> drain(@PathVariable UUID runId,@RequestBody String body){return dataInputs.drain(runId,body);}
     @GetMapping
     public ResourcePageResponse<WorkflowRunResponse> list(@RequestParam(defaultValue="20") int limit,@RequestParam(defaultValue="0") int offset) {
         var values=service.list(limit,offset);return new ResourcePageResponse<>(values.stream().limit(limit).map(WorkflowRunResponse::from).toList(),values.size()>limit?offset+limit:null);

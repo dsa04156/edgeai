@@ -19,8 +19,9 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
       if (posts === 1) return route.fulfill({ status: 503, json: { message: "잠시 후 같은 요청을 재전송하세요." } });
       return route.fulfill({ status: 201, json: { ...run, offload: policy } });
     }
+    if (path.endsWith("/placements")) return route.fulfill({ json: [] });
     let body: unknown;
-    if (path === "csrf") body = { token: "fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "fixture" };
     else if (path === "profiles/SERVICE") body = { items: [], nextOffset: null };
     else if (path === "nodes") body = { items: [{ id: peerNode, name: "peer-worker", status: "READY", architecture: "amd64", operatingSystem: "linux" }], nextOffset: null };
     else if (path === "workflows") body = { items: [{ id: workflowId, key: "automatic-fixture", displayName: "자동 전환 시험", createdAt: now }], nextOffset: null };
@@ -37,11 +38,10 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture"); await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
   await page.getByRole("button", { name: "자동 전환 시험 automatic-fixture", exact: true }).click();
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
   await expect(page.getByLabel("자동 노드 전환 사용", { exact: true })).not.toBeChecked();
+  await page.getByText("고급 설정 · 재시도 및 위치 전환", { exact: true }).click();
   await page.getByLabel("자동 노드 전환 사용", { exact: true }).check();
   await page.getByLabel("CPU 사용률 기준(%)", { exact: true }).fill("");
   await page.getByLabel("메모리 사용률 기준(%)", { exact: true }).fill("");
@@ -57,6 +57,7 @@ test("automatic offload is opt-in, preserves request identity and exposes measur
   await expect(page.getByRole("region", { name: "선택한 실행", exact: true })).toContainText("자동 전환 켜짐 · 메모리 85%");
   expect(keys[0]).toMatch(/^[a-f0-9-]{36}$/); expect(keys[1]).toBe(keys[0]);
   await page.getByRole("button", { name: "analyze", exact: true }).click();
+  await page.getByText("고급 설정 · 실행 위치 전환", { exact: true }).click();
   const history = page.getByRole("region", { name: "실행 위치 전환", exact: true });
   await expect(history).toContainText("메모리 사용률 기준 충족"); await expect(history).toContainText("다른 호환 노드 자동 배치");
   await history.getByText("함께 전환하는 스트리밍 작업 2개", { exact: true }).click();

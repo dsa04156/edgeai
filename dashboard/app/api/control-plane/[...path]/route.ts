@@ -1,6 +1,6 @@
 import { workflowsEnabled } from "../../../../lib/features";
 import { NextRequest, NextResponse } from "next/server";
-import { controlPlaneOrigin } from "../../../../lib/control-plane";
+import { controlPlaneOrigin, workflowControlPlane } from "../../../../lib/control-plane";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +10,14 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const managedProperties = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties$/.test(target);
   const managedProperty = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties\/[a-z][a-z0-9_]*$/.test(target);
   const managed = /^managed-devices(\/[a-z0-9][a-z0-9.-]*)?$/.test(target) || ["device-profiles", "protocols", "device-connections/test"].includes(target);
-  if (!workflowsEnabled() && /^(workflows|workflow-runs)(\/|$)/.test(target))
+  if (!workflowsEnabled() && /^(workflows|workflow-runs|workflow-data-sources|workflow-csrf)(\/|$)/.test(target))
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const continuousAllowed = request.method === "GET" && (target === "virtual-devices" || target === "virtual-devices/continuous-catalog" || new RegExp(`^virtual-devices/${uuid}(/execution|/outputs(/[a-z][a-z0-9_]{0,62}/history)?)?$`).test(target))
     || request.method === "POST" && (target === "virtual-devices/continuous" || new RegExp(`^virtual-devices/${uuid}/(provision|drain)$`).test(target))
     || request.method === "PATCH" && new RegExp(`^virtual-devices/${uuid}/continuous$`).test(target)
     || request.method === "DELETE" && new RegExp(`^virtual-devices/${uuid}$`).test(target);
-  const allowed = request.method === "GET" ? target === "csrf" || target === "node-metrics" || target === "infrastructure"
+  const allowed = request.method === "GET" ? target === "csrf" || target === "workflow-csrf" || target === "workflow-data-sources" || target === "node-metrics" || target === "infrastructure"
     || target === "data-store" || new RegExp(`^data-store/sensors/${uuid}/[a-z][a-z0-9_]{0,62}/(history|chart)$`).test(target)
     || new RegExp(`^virtual-devices/${uuid}/processing-versions$`).test(target)
     || ["sensors/readings", "sensors/commands", "sensors/registration-options"].includes(target)
@@ -27,7 +27,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     || new RegExp(`^tasks/${uuid}/results/[a-z][a-z0-9_]*/content$`).test(target)
     || new RegExp(`^(devices|nodes)(/${uuid})?$`).test(target)
     || new RegExp(`^(workflows|workflow-runs)(/${uuid})?$|^tasks/${uuid}(/results)?$|^operations/${uuid}$`).test(target)
-    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE)$/.test(target) || ["devices", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
+    : request.method === "POST" ? /^profiles\/(DEVICE|SERVICE)$/.test(target) || ["devices", "workflows", "workflow-runs", "sensors/command", "sensors/registrations"].includes(target) || new RegExp(`^devices/${uuid}/(sessions|observations)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/drain$|^(workflow-runs|tasks)/${uuid}/cancel$|^tasks/${uuid}/offload$`).test(target)
     : request.method === "PUT" ? new RegExp(`^devices/${uuid}/attachments/${uuid}$`).test(target)
     : request.method === "DELETE" ? new RegExp(`^(devices)/${uuid}(/registration)?$`).test(target)
       || /^profiles\/(DEVICE|SERVICE)\/[a-z][a-z0-9._-]*\/versions\/[0-9]+\.[0-9]+\.[0-9]+$/.test(target)
@@ -41,8 +41,9 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
       (origin && origin !== request.nextUrl.origin && origin !== `${request.nextUrl.protocol}//${request.headers.get("host")}`))
     return NextResponse.json({ message: "같은 Dashboard에서 요청하세요." }, { status: 403 });
   const headers = new Headers();
-  const session = request.cookies.get("EDGEAI_SESSION")?.value;
-  if (session) headers.set("Cookie", `EDGEAI_SESSION=${session}`);
+  const cookie = workflowControlPlane(target) ? "EDGEAI_WORKFLOW_SESSION" : "EDGEAI_SESSION";
+  const session = request.cookies.get(cookie)?.value;
+  if (session) headers.set("Cookie", `${cookie}=${session}`);
   const csrf = request.headers.get("x-csrf-token");
   if (csrf) headers.set("X-CSRF-TOKEN", csrf);
   const idempotency = request.headers.get("idempotency-key");
@@ -71,8 +72,8 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     headers.set("Content-Type", "application/json");
   }
   try {
-    const backendPath = managedAllowed ? `/api/${target.replace(/^managed-devices/, "devices")}` : `/api/v1/${target}`;
-    const response = await fetch(`${controlPlaneOrigin()}${backendPath}${request.nextUrl.search}`, {
+    const backendPath = managedAllowed ? `/api/${target.replace(/^managed-devices/, "devices")}` : `/api/v1/${target === "workflow-csrf" ? "csrf" : target}`;
+    const response = await fetch(`${controlPlaneOrigin(target)}${backendPath}${request.nextUrl.search}`, {
       method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(managedAllowed || target.startsWith("sensors/") ? 20000 : 8000),
     });
     const outgoing = new Headers({ "Content-Type": response.headers.get("content-type") || "application/json", "Cache-Control": "no-store" });

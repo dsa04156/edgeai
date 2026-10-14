@@ -52,6 +52,8 @@ class StreamRunIntegrationTest {
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p){p.add("edgeai.runtime.namespace",()->NAMESPACE);p.add("edgeai.runtime.key-file",KEY::toString);p.add("edgeai.stream.device-key-file",KEY::toString);}
     @AfterAll static void removeKey()throws Exception{Files.delete(KEY);}
     @MockitoBean RuntimeGateway gateway;@MockitoBean S3ArtifactStore storage;@MockitoBean MosquittoStreamBroker broker;
+    @MockitoBean ManagedDeviceService managedSensors;
+    @MockitoBean SensorTelemetryRepository sensorArchive;
     @MockitoBean StreamAuthorityWorker authorityWorker;@MockitoBean StreamConnectionSettings connection;@MockitoBean StreamRunWorker scheduledWorker;
     @Autowired ProfileService profiles;@Autowired WorkflowService workflows;@Autowired DeviceService devices;@Autowired DeviceRepository deviceStore;
     @Autowired ExecutionService runs;@Autowired ExecutionRepository executions;@Autowired RuntimeLifecycleService lifecycle;@Autowired RuntimeRepository runtimes;
@@ -62,6 +64,7 @@ class StreamRunIntegrationTest {
     @Autowired StreamExecutionService streamExecution;@Autowired StreamCheckpointRepository checkpoints;
     @Autowired OffloadService offloads;@Autowired OffloadRepository offloadStore;@Autowired NodeService nodes;
     @Autowired RunnerTokenService runnerTokens;
+    @Autowired ProfileRepository profileStore;@Autowired VirtualDeviceRepository virtualStore;@Autowired ContinuousRepository continuousStore;
     private final JsonDocuments json=new JsonDocuments();
     private record Definition(UUID version,List<Map<String,Object>> inputs,List<Device> devices){}
     private String encode(Object value){return json.canonical(value);}
@@ -108,6 +111,102 @@ class StreamRunIntegrationTest {
     private UUID recoveryRun(Definition d,int attempts)throws Exception{
         var body=request(d);body.put("retry",Map.of("maxAttempts",attempts,"backoffSeconds",1,"maxElapsedSeconds",300,"retryOn",List.of("RUNTIME_LOST")));
         return UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),body,201))).get("id"));
+    }
+    @Test void workflowSourceRunPinsSensorIdentityWithoutLegacyDeviceSessionAndReplaysBeforeResolving()throws Exception {
+        String device="fixture-temperature",uid=UUID.randomUUID().toString(),generation=UUID.randomUUID().toString();
+        org.mockito.Mockito.when(managedSensors.observationCatalog(Map.of())).thenReturn(List.of(Map.of("deviceId",device,"deviceUid",uid,
+            "property","value","sourceGeneration",generation,"configurationSha256","sha256:"+"a".repeat(64),"type","float","unit","C","broker","tcp://private.fixture:1883")));
+        var catalog=perform(get("/api/v1/workflow-data-sources"),200);
+        assertThat(catalog).contains("SENSOR",device).doesNotContain("broker","private.fixture");
+        var selection=Map.of("kind","SENSOR","deviceId",device,"property","value");
+        org.mockito.Mockito.when(managedSensors.workflowObservation(device)).thenReturn(Map.of("deviceId",device,"deviceUid",uid,
+            "property","value","sourceGeneration",generation,"configurationSha256","sha256:"+"a".repeat(64),"type","float","unit","C"));
+        var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+        var source=(Map<String,Object>)spec.get("stream");source.put("source","WORKFLOW_DATA");source.put("inputs",Map.of());
+        source.put("command",List.of("edgeai-workflow-input"));source.put("args",List.of());
+        source.put("outputs",Map.of("sample",Map.of("mediaType","application/json","maxPayloadBytes",4096)));
+        UUID sourceProfile=profile(ProfileIdentity.Kind.SERVICE,spec),sinkProfile=service(List.of("input"),false,false);
+        var workflow=workflows.create(encode(Map.of("key","source-fixture-"+UUID.randomUUID(),"displayName","Switchable source"))).value();
+        perform(post("/api/v1/workflows/"+workflow.id()+"/versions").contentType("application/json").content(encode(Map.of("version","0.0.1","tasks",List.of(
+            Map.of("key","source","serviceProfileVersionId",sourceProfile.toString(),"parameters",Map.of("dataSource",Map.of("kind","SENSOR")))),"dependencies",List.of()))),400);
+        var version=workflows.publish(workflow.id(),encode(Map.of("version","1.0.0","tasks",List.of(
+            Map.of("key","source","serviceProfileVersionId",sourceProfile.toString(),"parameters",Map.of("dataSource",selection)),
+            Map.of("key","sink","serviceProfileVersionId",sinkProfile.toString(),"parameters",Map.of())),
+            "dependencies",List.of(edge("source","sink","sample","input","STREAM"))))).value();
+        var request=Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of());
+        String key=UUID.randomUUID().toString();UUID run=UUID.fromString((String)((Map<?,?>)json.decode(create(key,request,201))).get("id"));
+        var parameters=(Map<?,?>)json.decode(executions.run(run,false).orElseThrow().parametersJson());
+        assertThat(parameters.containsKey("workflowSourceBindings")).isTrue();
+        assertThat(encode(parameters)).contains(uid,generation).doesNotContain("broker","credential");
+        assertThat(store.bindings(run)).isEmpty();assertThat(routes.forRun(run,20,0)).hasSize(1);
+        claim(run,"source");claim(run,"sink");
+        org.mockito.Mockito.when(gateway.authenticatePod(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq("source-pod-proof")))
+            .thenAnswer(call->{RuntimeInstance runtime=call.getArgument(0);return new RuntimePod(runtime.jobUid(),runtime.producerPodUid(),runtime.nodeUid(),runtime.nodeName());});
+        var p=principal(run,"source");var runtime=runtimes.byAttempt(p.attemptId()).orElseThrow();
+        String inputPath="/internal/v1/attempts/"+p.attemptId()+"/streams/input";
+        var observation=new TreeMap<String,Object>(Map.of("deviceId",device,"deviceUid",uid,"property","value","sourceGeneration",generation,
+            "configurationSha256","sha256:"+"a".repeat(64),"type","float","unit","C","quality","QUALIFIED","value",21));
+        observation.put("observedAt",Instant.now().toString());observation.put("sessionId",UUID.randomUUID().toString());observation.put("sequence",1);
+        org.mockito.Mockito.when(sensorArchive.enabled()).thenReturn(true);
+        org.mockito.Mockito.when(sensorArchive.readSensor(org.mockito.ArgumentMatchers.eq(UUID.fromString(uid)),org.mockito.ArgumentMatchers.eq("value"),
+            org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(1),org.mockito.ArgumentMatchers.isNull(),org.mockito.ArgumentMatchers.eq(true)))
+            .thenReturn(Map.of("items",List.of(observation)));
+        var read=post(inputPath).header("Authorization","Bearer "+runnerTokens.issue(runtime)).header("X-EdgeAI-Pod-Token","source-pod-proof")
+            .contentType("application/json").content(identity(p));
+        mvc.perform(read).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("DATA"))
+            .andExpect(jsonPath("$.sample.value").value(21)).andExpect(jsonPath("$.sample.source.deviceUid").value(uid));
+        observation.put("observedAt",Instant.now().minusSeconds(60).toString());
+        mvc.perform(read).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("WAITING"));
+        perform(post("/api/v1/workflow-runs/"+run+"/drain").contentType("application/json").content("{}"),200);
+        mvc.perform(read).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("END"));
+        assertThat(executions.run(run,false).orElseThrow().state()).isEqualTo("RUNNING");
+        var peer=principal(run,"sink");
+        mvc.perform(post("/internal/v1/attempts/"+peer.attemptId()+"/streams/input")
+            .header("Authorization","Bearer "+runnerTokens.issue(runtimes.byAttempt(peer.attemptId()).orElseThrow()))
+            .header("X-EdgeAI-Pod-Token","source-pod-proof").contentType("application/json").content(identity(peer)))
+            .andExpect(status().isConflict());
+        org.mockito.Mockito.reset(managedSensors);
+        assertThat(create(key,request,200)).contains(run.toString());
+        org.mockito.Mockito.verifyNoInteractions(managedSensors);
+    }
+    @Test void workflowVirtualInputUsesLiveLatestWithoutHistoryAndFencesChangedGeneration()throws Exception {
+        UUID vd=new TransactionTemplate(transactions).execute(status->{
+            var config=Map.of("intervalSeconds",1,"retentionDays",7,"resultStorage",Map.of("mode","NONE"),"outputs",List.of(Map.of("name","mean","expression","a","operation","scalar","unit","C")));
+            var spec=Map.of("apiVersion","edgeai.vd/v3","type","processing","executionMode","CONTINUOUS_EKUIPER","sources",Map.of("a",Map.of("deviceModel","temp","required",true)),"continuous",config);
+            var profile=profileStore.publish(new ProfileIdentity(ProfileIdentity.Kind.VD,"vd-source-"+UUID.randomUUID(),"1.0.0"),encode(spec),json.digest("edgeai-profile-v1\nVD",spec)).version();
+            String key="vd-source-"+UUID.randomUUID();
+            virtualStore.create(key,"계산 평균",profile.id(),null,new io.edgeai.domain.vd.VirtualDevice.Placement(io.edgeai.domain.vd.VirtualDevice.Mode.AUTO,null),"sha256:"+"a".repeat(64));
+            var registration=virtualStore.findByKey(key).orElseThrow();var now=Instant.now();
+            virtualStore.bind(new io.edgeai.domain.vd.VDSourceBinding(UUID.randomUUID(),registration.id(),"a",null,null,Device.SourceMode.LIVE,
+                0,null,now,null,"fixture-temperature",UUID.randomUUID(),"temp",List.of("value"),30));
+            var engine=continuousStore.session("central");
+            continuousStore.renew("central",engine.map(ContinuousRepository.Session::podUid).orElseGet(UUID::randomUUID),
+                engine.map(ContinuousRepository.Session::sessionId).orElseGet(UUID::randomUUID),engine.map(e->e.sequence()+1).orElse(1L),"sha256:"+"d".repeat(64),now);
+            continuousStore.request(registration.id(),UUID.randomUUID(),0,"START",now);
+            var execution=continuousStore.find(registration.id()).orElseThrow();continuousStore.observe(registration.id(),execution.generation(),"RUNNING","RUNNING",now);
+            String latest=encode(Map.of("vdId",registration.id().toString(),"outputId","mean","generation",execution.generation().toString(),"sequence",1,
+                "evaluationId",execution.generation()+":1","evaluationAt",now.toString(),"value",25,"type","number","unit","C"));
+            continuousStore.appendLatest(new ContinuousRepository.Result(registration.id(),"mean",execution.generation(),execution.generation()+":1",1,now,latest));
+            return registration.id();
+        });
+        var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-stream.example.json")));
+        var source=(Map<String,Object>)spec.get("stream");source.put("source","WORKFLOW_DATA");source.put("inputs",Map.of());
+        source.put("command",List.of("edgeai-workflow-input"));source.put("args",List.of());source.put("outputs",Map.of("sample",Map.of("mediaType","application/json","maxPayloadBytes",4096)));
+        var workflow=workflows.create(encode(Map.of("key","vd-input-"+UUID.randomUUID(),"displayName","Computed input"))).value();
+        var version=workflows.publish(workflow.id(),encode(Map.of("version","1.0.0","tasks",List.of(
+            Map.of("key","source","serviceProfileVersionId",profile(ProfileIdentity.Kind.SERVICE,spec).toString(),"parameters",Map.of("dataSource",Map.of("kind","CONTINUOUS_VD","vdId",vd.toString(),"outputId","mean"))),
+            Map.of("key","sink","serviceProfileVersionId",service(List.of("input"),false,false).toString(),"parameters",Map.of())),
+            "dependencies",List.of(edge("source","sink","sample","input","STREAM"))))).value();
+        UUID run=UUID.fromString((String)((Map<?,?>)json.decode(create(UUID.randomUUID().toString(),Map.of("workflowVersionId",version.id().toString(),"execution",Map.of("mode","AUTO"),"parameters",Map.of()),201))).get("id"));
+        claim(run,"source");claim(run,"sink");var p=principal(run,"source");
+        org.mockito.Mockito.when(gateway.authenticatePod(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq("source-pod-proof")))
+            .thenAnswer(call->{RuntimeInstance runtime=call.getArgument(0);return new RuntimePod(runtime.jobUid(),runtime.producerPodUid(),runtime.nodeUid(),runtime.nodeName());});
+        var read=post("/internal/v1/attempts/"+p.attemptId()+"/streams/input").header("Authorization","Bearer "+runnerTokens.issue(runtimes.byAttempt(p.attemptId()).orElseThrow()))
+            .header("X-EdgeAI-Pod-Token","source-pod-proof").contentType("application/json").content(identity(p));
+        mvc.perform(read).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("DATA"))
+            .andExpect(jsonPath("$.sample.value").value(25)).andExpect(jsonPath("$.sample.type").value("number"));
+        new TransactionTemplate(transactions).execute(status->{var e=continuousStore.find(vd).orElseThrow();continuousStore.reset(vd,e.generation(),"SOURCE_CHANGED",Instant.now());return null;});
+        mvc.perform(read).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKFLOW_SOURCE_CHANGED"));
     }
     @Test void publicRetryNormalizesReplayKeepsBudgetAndRejectsConflictingOrInvalidPolicies()throws Exception{
         var d=definition(false,false);var body=request(d);var key=UUID.randomUUID().toString();

@@ -4,7 +4,7 @@ async function catalog(page: Page) {
   await page.route("**/api/health", route => route.fulfill({ json: { status: "UP" } }));
   await page.route("**/api/control-plane/**", route => {
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
-    if (path === "csrf") return route.fulfill({ json: { token: "fixture" } });
+    if ((path === "csrf" || path === "workflow-csrf")) return route.fulfill({ json: { token: "fixture" } });
     if (path === "infrastructure") return route.fulfill({ json: { fetchedAt: new Date().toISOString(), nodesStatus: "AVAILABLE", sensors: [], nodes: [{ name: "edge-a", kind: "EDGE_DEVICE" }] } });
     if (path === "virtual-devices/continuous-catalog") return route.fulfill({ json: { enabled: true, inputs: [{ deviceId: "temperature", deviceUid: "sensor-1", deviceModel: "temperature-model", namespace: "edgeai-devices", property: "temperature", type: "float64", unit: "°C", targetNode: "edge-a" }] } });
     return route.fulfill({ json: { items: [], nextOffset: null } });

@@ -1,3 +1,10 @@
+## 2026-10-14 새 워크플로의 실시간 입력 선택 — 실제 환경 수용 진행
+
+- 사용자 요구: 기존 워크플로를 보존하고 새 워크플로에서 센서 값과 가상디바이스 계산 결과를 선택하며 같은 실행에서 계속 처리한다. 입력 변경은 새 불변 버전·새 실행에 적용한다.
+- 명시적WORKFLOW_DATA source Profile/Runner 계약, Run별 원본 신원 pin, 현재Attempt·Pod에 한정한 reader, 최신값1초 polling/중복 제거, EXTERNAL journal/checkpoint 복원과 END·ACK·FINALIZE 정상 종료를 연결했다. 원본·가상 실행 세대가 바뀌면 차단하고 오래된 값은 기다린다. 중간 관측 전량 전달은 보장하지 않는다.
+- 센서는 현재 NanoMQ 수집 archive, 가상디바이스는 current VALID 결과를 사용한다. UI 두 선택에서 후속 처리·연결선을 유지하고 조회/종료 실패를 재시도한다. 예제 처리기는 표본 수·마지막 값·숫자 통계를 최종 파일로 저장한다.
+- 현재 통과: 실제 PostgreSQL의 공개 MVC Run/typed pin/재요청/Scoped Reader·만료·가상 generation 변경, 실제 TLS MQTT/HTTPS/외부 체크포인트 source·중복·볼륨 복원·연속 표본 계산3개, 기존 SDK MQTT/체크포인트115개·Runner unit96개, Backend unit183개, UI PC/모바일4개·lint/build. 공개 native 이미지·현재 환경의새 workflow/실행·저장·최종 배포는 아직 수용 진행 중이며 완료로 표시하지 않는다.
+
 ## 2026-10-14 M6 조합형 가상디바이스 간편 등록
 
 - 등록창에서 통합 온도·온도 편차·3축 회전/가속도·회전/가속도 XY/XZ/YZ 평면 제곱합10종을 선택하고 센서를 고르면 입력 별칭·수식·단위를 자동 구성한다. 조합값 그대로·최근 평균·최소·최대와 기존1초·창5개·전체 결과7일 보관 및 사용자 조정을 지원한다.

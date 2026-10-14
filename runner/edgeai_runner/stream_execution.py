@@ -28,7 +28,12 @@ def fields(value, names):
 
 
 def execution_spec(value):
-    fields(value, 'command args inputs outputs stepTimeoutSeconds limits')
+    fields(value, 'command args inputs outputs stepTimeoutSeconds limits' + (' source' if 'source' in value else ''))
+    source = 'source' in value
+    if source:
+        require(value['source'] == 'WORKFLOW_DATA' and value['command'] == ['edgeai-workflow-input']
+                and value['args'] == [] and value['inputs'] == {}
+                and value['outputs'] == {'sample': {'mediaType': 'application/json', 'maxPayloadBytes': 4096}})
     for name, maximum in (('command',32),('args',128)):
         items = value[name]
         require(type(items) is list and len(items) <= maximum and
@@ -36,7 +41,7 @@ def execution_spec(value):
     require(value['command'] and value['command'][0].strip())
     for direction in ('inputs','outputs'):
         ports = value[direction]
-        require(type(ports) is dict and len(ports) <= 16 and (ports or direction == 'outputs'))
+        require(type(ports) is dict and len(ports) <= 16 and (ports or direction == 'outputs' or source))
         for port, spec in ports.items():
             port_name(port); fields(spec, 'mediaType maxPayloadBytes')
             from edgeai_runner.stream_protocol import MEDIA_TYPE
@@ -77,10 +82,18 @@ def execute(runner, assignment):
     # fsGroup emptyDir is setgid: mkdir(0700) inherits 02000. This directory
     # was just created by this owner; retain the SDK's exact private-mode check.
     directory.chmod(0o700)
+    def source_poll(timeout):
+        try:
+            return runner.api('streams/input', runner.identity, max_attempts=1, request_timeout=timeout)
+        except RunnerError as error:
+            if error.code == 'CONTROL_PLANE_UNAVAILABLE':
+                return {'state': 'WAITING'}
+            raise
     session = Session(client,assignment['runId'],reply['inputs'],reply['outputs'],spec['command']+spec['args'],
         directory,assignment['parameters'],limits=limits,step_timeout=spec['stepTimeoutSeconds'],
         timeout=runner.timeout(86400),create=True,cancel=cancelled,durability='EXTERNAL',checkpoint_client=checkpoint,
-        restore_latest=reply['recovery'] != 'NEW',handover_latest=reply['recovery'] == 'HANDOVER')
+        restore_latest=reply['recovery'] != 'NEW',handover_latest=reply['recovery'] == 'HANDOVER',
+        source_poll=source_poll if spec.get('source') == 'WORKFLOW_DATA' else None)
     terminal = None
     state = None
     def finalization(timeout):
