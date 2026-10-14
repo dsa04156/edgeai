@@ -10,7 +10,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const managedProperties = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties$/.test(target);
   const managedProperty = /^managed-devices\/[a-z0-9][a-z0-9.-]*\/properties\/[a-z][a-z0-9_]*$/.test(target);
   const managed = /^managed-devices(\/[a-z0-9][a-z0-9.-]*)?$/.test(target) || ["device-profiles", "protocols", "device-connections/test"].includes(target);
-  if (!workflowsEnabled() && /^(workflows|workflow-runs|workflow-data-sources|workflow-csrf)(\/|$)/.test(target))
+  if (!workflowsEnabled() && /^(workflows|workflow-runs|workflow-data-sources)(\/|$)/.test(target))
     return NextResponse.json({ message: "지원하지 않는 경로입니다." }, { status: 404 });
   const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
   const continuousAllowed = request.method === "GET" && (target === "virtual-devices" || target === "virtual-devices/continuous-catalog" || new RegExp(`^virtual-devices/${uuid}(/execution|/outputs(/[a-z][a-z0-9_]{0,62}/history)?)?$`).test(target))

@@ -14,7 +14,6 @@ from edgeai_runner.stream_checkpoint import state_bytes
 from edgeai_runner.stream_journal import Limits
 from edgeai_runner.stream_processor import execution_digest
 from edgeai_runner.stream_protocol import Producer, _uuid
-from edgeai_runner.stream_session import Session
 
 
 def require(value):
@@ -54,6 +53,7 @@ def execution_spec(value):
 
 
 def execute(runner, assignment):
+    from edgeai_runner.stream_session import Session
     spec = assignment['stream']; limits = execution_spec(spec)
     _uuid(assignment['runId']); _uuid(assignment['taskId'])
     require(not set(spec['inputs']) & set(assignment['inputs']) and not set(spec['outputs']) & set(assignment['outputs']))

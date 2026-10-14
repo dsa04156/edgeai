@@ -1,12 +1,10 @@
 """Authenticated Task input owner; cursor and emissions share one external journal commit."""
-import os
 import re
-import stat
 import time
 
 from edgeai_runner.main import json_decode, json_encode
 from edgeai_runner.stream_journal import Backpressure, Emission
-from edgeai_runner.stream_processor import execution_digest
+from edgeai_runner.stream_processor import execution_digest, pin_execution
 from edgeai_runner.stream_protocol import Frame
 from edgeai_runner.stream_workload import WorkloadError
 
@@ -36,22 +34,7 @@ class TaskSource:
             size += len(Frame(a.binding, 9007199254740991, 'END', b'', None).encode())
             require(size <= self.journal.route_bytes)
         self.execution_sha256 = execution_digest(['edgeai-workflow-input'], parameters, {}, outputs, step_timeout)
-        digest = self.execution_sha256.encode('ascii')
-        pin = self.journal.directory / 'processor.sha256'
-        if create:
-            require(self.journal.checkpoint().revision == 0)
-            fd = os.open(pin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(fd, 'wb') as file:
-                file.write(digest); file.flush(); os.fsync(file.fileno())
-            parent = os.open(self.journal.directory, os.O_RDONLY | os.O_DIRECTORY)
-            try: os.fsync(parent)
-            finally: os.close(parent)
-        fd = os.open(pin, os.O_RDONLY | os.O_NOFOLLOW)
-        try:
-            info = os.fstat(fd)
-            require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1
-                    and stat.S_IMODE(info.st_mode) == 0o600 and os.read(fd, 65) == digest)
-        finally: os.close(fd)
+        pin_execution(self.journal, self.execution_sha256, create, require)
         saved = self.journal.checkpoint().state
         self.state = json_decode(saved) if saved else {'lastId': None, 'count': 0, 'lastSample': None, 'ended': False}
         require(type(self.state) is dict and set(self.state) == {'lastId', 'count', 'lastSample', 'ended'}

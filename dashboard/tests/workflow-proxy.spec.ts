@@ -25,6 +25,12 @@ test("optional workflow API keeps its CSRF session separate from the existing se
     expect((await GET(request("managed-devices"), context("managed-devices"))).status).toBe(200);
     expect(calls.at(-1)?.url).toBe("http://sensor.test:18080/api/devices");
     expect(calls.at(-1)?.headers.get("Cookie")).toBe("EDGEAI_SESSION=sensor-session");
+    process.env.EDGEAI_WORKFLOW_ENABLED = "false";
+    expect((await GET(request("workflows"), context("workflows"))).status).toBe(404);
+    expect((await GET(request("workflow-csrf"), context("workflow-csrf"))).status).toBe(200);
+    expect(calls.at(-1)?.url).toBe("http://workflow.test:18082/api/v1/csrf");
+    expect((await GET(request("profiles/SERVICE"), context("profiles/SERVICE"))).status).toBe(200);
+    expect(calls.at(-1)?.url).toBe("http://workflow.test:18082/api/v1/profiles/SERVICE");
     delete process.env.EDGEAI_WORKFLOW_API_BASE_URL;
     expect((await GET(request("workflow-csrf"), context("workflow-csrf"))).status).toBe(200);
     expect(calls.at(-1)?.url).toBe("http://sensor.test:18080/api/v1/csrf");
