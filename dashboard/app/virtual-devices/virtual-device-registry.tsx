@@ -6,6 +6,7 @@ import { ContinuousFields } from "./continuous-fields";
 import { ContinuousFlow } from "./continuous-flow";
 import { ContinuousExecution } from "./continuous-execution";
 import { RegistrationDialog } from "../components/registration-dialog";
+import { PageHeading } from "../components/page-heading";
 
 type Schema = components["schemas"];
 type VD = Schema["VirtualDevice"];
@@ -48,8 +49,8 @@ export function VirtualDeviceRegistry({ initiallyOpen = false }: { initiallyOpen
     setCreateOpen(false);
   }
   return <>
-    <div className="toolbar registration-actions"><button className="primary" aria-haspopup="dialog" disabled={busy} onClick={() => setCreateOpen(true)}>가상 장치 등록</button></div>
-    <ContinuousFlow availability={availability} />
+    <PageHeading eyebrow="INFRASTRUCTURE / VIRTUAL DEVICES" title="가상 디바이스" description="센서 입력과 계산을 선택하고, 항목별 결과와 그래프를 확인합니다."
+      action={<button className="primary" aria-haspopup="dialog" disabled={busy} onClick={() => setCreateOpen(true)}>가상 장치 등록</button>} />
     {!detail && notice && <p className="notice" role="status">{notice}</p>}
     {!detail && error && <p className="error" role="alert">{error}</p>}
     <div className="registry-workspace">
@@ -74,6 +75,7 @@ export function VirtualDeviceRegistry({ initiallyOpen = false }: { initiallyOpen
         {detail.vd.state === "REGISTERED" && <details><summary>가상 장치 해제</summary><p>계산을 중지하고 원본 연결을 종료합니다. 등록과 결과 이력은 보존됩니다.</p><button disabled={busy || !csrf} onClick={() => void run(async () => { await api(`virtual-devices/${detail.vd.id}`, write("DELETE")); await show(detail.vd.id); await load(); })}>해제 확정</button></details>}
       </section>}
     </RegistrationDialog>
+    <ContinuousFlow availability={availability} />
     <RegistrationDialog open={!!graph} title={`${graph?.displayName ?? "가상 장치"} · 가상 장치 그래프`} closeLabel="닫기" onClose={() => setGraph(null)}>
       {graph && <ContinuousExecution key={graph.id} vd={graph} auth="" csrf="" disabled={false} graphOnly />}
     </RegistrationDialog>

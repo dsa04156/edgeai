@@ -241,6 +241,8 @@ test("sensor-to-central flow explains separate outputs without claiming an inact
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toBeVisible();
+  await expect(flow.getByRole("list", { name: "센서부터 결과까지" })).not.toBeVisible();
+  await flow.locator("summary").click();
   await expect(flow.getByRole("list", { name: "센서부터 결과까지" }).getByRole("listitem")).toHaveCount(4);
   await expect(flow.getByText("Jetson 센서 → Mapper → NanoMQ", { exact: true })).toBeVisible();
   await expect(flow.getByText("Pi 센서 → Mapper → NanoMQ", { exact: true })).toBeVisible();

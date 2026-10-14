@@ -2,7 +2,7 @@ import Link from "next/link";
 
 type Tone = "good" | "bad" | "warning" | "running" | "neutral" | "unknown";
 type Group = { label: string; states: readonly string[]; tone: Tone };
-const colors: Record<Tone, string> = { good: "var(--signal)", bad: "var(--error)", warning: "var(--warning)", running: "var(--running)", neutral: "var(--muted)", unknown: "var(--control-border)" };
+const colors: Record<Tone, string> = { good: "var(--success)", bad: "var(--error)", warning: "var(--warning)", running: "var(--running)", neutral: "var(--muted)", unknown: "var(--control-border)" };
 export const nodeStatusGroups: readonly Group[] = [
   { label: "준비됨", states: ["READY"], tone: "good" }, { label: "준비 안 됨", states: ["NOT_READY"], tone: "bad" }, { label: "미확인", states: [], tone: "unknown" },
 ];
@@ -30,7 +30,7 @@ export function ResourceStatusCard({ title, href, states, groups, pending, note 
     <div className="resource-status-body"><div className="resource-status-donut" role="img" aria-label={description} style={{ background: stops.length ? `conic-gradient(${stops.join(", ")})` : "var(--line)" }}>
       <div className="resource-status-total" aria-hidden="true"><span>전체</span><strong className={total != null && total >= 10000 ? "compact-count" : undefined}>{total == null ? "—" : total.toLocaleString()}</strong><span>{total == null ? pending ? "확인 중" : "미확인" : "개"}</span></div>
     </div>
-    <dl className="resource-status-legend">{groups.map((group, index) => <div key={group.label}><dt><i aria-hidden="true" style={{ background: colors[group.tone] }} />{group.label}</dt><dd>{total == null ? "—" : counts[index].toLocaleString()}</dd></div>)}</dl></div>
-    <p className="resource-status-note">{total == null ? pending ? "상태를 불러오는 중…" : "상태를 확인할 수 없습니다" : total === 0 ? "등록된 항목이 없습니다" : note}</p>
+    <dl className="resource-status-legend">{groups.map((group, index) => total != null && !counts[index] ? null : <div key={group.label}><dt><i aria-hidden="true" style={{ background: colors[group.tone] }} />{group.label}</dt><dd>{total == null ? "—" : counts[index].toLocaleString()}</dd></div>)}</dl></div>
+    <p className="resource-status-note" hidden={total != null && total > 0 && !counts[groups.length - 1]}>{total == null ? pending ? "상태를 불러오는 중…" : "상태를 확인할 수 없습니다" : total === 0 ? "등록된 항목이 없습니다" : note}</p>
   </article>;
 }
