@@ -51,17 +51,17 @@ export function VirtualDeviceRegistry({ initiallyOpen = false, embedded = false,
   }
   const visible = page?.items.filter(vd => `${vd.displayName} ${vd.key}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   return <>
-    {embedded ? <div className="toolbar registration-actions"><button className="primary" aria-haspopup="dialog" disabled={busy} onClick={() => setCreateOpen(true)}>가상디바이스 등록</button></div> : <PageHeading eyebrow="INFRASTRUCTURE / VIRTUAL DEVICES" title="가상디바이스" description="센서 입력과 계산을 선택하고, 항목별 결과와 그래프를 확인합니다."
+    {!embedded && <PageHeading eyebrow="INFRASTRUCTURE / VIRTUAL DEVICES" title="가상디바이스" description="센서 입력과 계산을 선택하고, 항목별 결과와 그래프를 확인합니다."
       action={<button className="primary" aria-haspopup="dialog" disabled={busy} onClick={() => setCreateOpen(true)}>가상디바이스 등록</button>} />}
     {!detail && notice && <p className="notice" role="status">{notice}</p>}
     {!detail && error && <p className="error" role="alert">{error}</p>}
     <div className="registry-workspace">
       <section aria-labelledby="vds-title" aria-busy={busy}>
-        <div className="toolbar"><h2 id="vds-title">등록된 가상디바이스</h2><button disabled={busy} onClick={() => void run(async () => { await load(); await catalog(); onInventoryChange?.(); if (detail) await show(detail.vd.id); })}>새로고침</button></div>
+        <div className="toolbar"><h2 id="vds-title">등록된 가상디바이스</h2><button disabled={busy} onClick={() => void run(async () => { await load(); await catalog(); onInventoryChange?.(); if (detail) await show(detail.vd.id); })}>새로고침</button>{embedded && <button className="primary" aria-haspopup="dialog" disabled={busy} onClick={() => setCreateOpen(true)}>가상디바이스 등록</button>}</div>
         {page?.items.length === 0 && <p className="hint">등록된 가상디바이스가 없습니다. 가상디바이스 등록에서 입력 센서와 계산을 선택하세요.</p>}
         {!!page?.items.length && !visible.length && <p className="hint">현재 페이지에서 일치하는 가상디바이스가 없습니다.</p>}
         {!!visible.length && <div className="table-scroll"><table className="vd-table"><caption className="sr-only">가상디바이스 목록</caption><thead><tr><th>가상디바이스</th><th>등록 상태</th><th>변경 버전</th><th>관리</th></tr></thead><tbody>{visible.map(vd => <tr key={vd.id}>
-          <td><button className="version-link" aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
+          <td><button className="version-link" title={`${vd.displayName} · ${vd.key}`} aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono" title={vd.key}>{vd.key}</span></button></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
         </tr>)}</tbody></table></div>}
         <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(Math.max(0, offset - 20)))}>이전</button><span>{offset / 20 + 1} 페이지</span><button disabled={busy || page?.nextOffset == null} onClick={() => void run(() => load(page!.nextOffset!))}>다음</button></div>
       </section>
