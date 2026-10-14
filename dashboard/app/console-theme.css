@@ -47,7 +47,7 @@
 .graph-data-heading h3 span { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400; }
 .graph-data-heading button { padding-inline: 10px; font-size: 12px; }
 .graph-data-scroll { max-height: 220px; margin: 0; overflow: auto; overscroll-behavior: contain; }
-.graph-data-table { min-width: 0; width: 100%; }
+.registry-table.graph-data-table { min-width: 0; width: 100%; }
 .graph-data-table th, .graph-data-table td { padding: 7px 8px; font-size: 12px; }
 .graph-data-table thead th { position: sticky; top: 0; z-index: 1; background: var(--control); font-size: 11px; }
 .graph-gap-details { border-top: 1px solid var(--line); }
