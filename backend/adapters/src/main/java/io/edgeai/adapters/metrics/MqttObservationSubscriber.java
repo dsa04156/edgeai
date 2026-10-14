@@ -16,7 +16,7 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
     private final String clientPrefix;
     private final Map<String,Connection> connections=new HashMap<>();
     private final ExecutorService connectors=Executors.newVirtualThreadPerTaskExecutor();
-    private final ExecutorService deliveries=Executors.newFixedThreadPool(8,Thread.ofPlatform().daemon().name("sensor-archive-write-",0).factory());
+    private final ExecutorService deliveries=Executors.newFixedThreadPool(16,Thread.ofPlatform().daemon().name("sensor-archive-write-",0).factory());
     private final Semaphore deliverySlots=new Semaphore(64,true);
     private volatile Receiver receiver;
     private volatile boolean closed;
