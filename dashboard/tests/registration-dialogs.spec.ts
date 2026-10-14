@@ -13,11 +13,11 @@ async function catalog(page: Page) {
 
 test("virtual registration opens one modal without moving the page and restores focus with its draft", async ({ page }, info) => {
   await catalog(page); await page.goto("/virtual-devices");
-  const trigger = page.getByRole("button", { name: "가상 장치 등록", exact: true });
+  const trigger = page.getByRole("button", { name: "가상디바이스 등록", exact: true });
   await expect(trigger).toBeVisible();
   const position = await page.evaluate(() => scrollY);
   await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "가상 장치 등록", exact: true });
+  const dialog = page.getByRole("dialog", { name: "가상디바이스 등록", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("센서", { exact: true })).toBeFocused();
   await dialog.getByLabel("센서", { exact: true }).selectOption("temperature");

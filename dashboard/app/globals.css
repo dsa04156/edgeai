@@ -134,6 +134,13 @@ select { min-width: 0; max-width: 100%; }textarea { resize: vertical; line-heigh
 .vd-management > section, .vd-settings { margin-top: 0; }
 .vd-management .toolbar { justify-content: flex-start; gap: 8px; }
 .vd-management .hint { margin: 4px 0 0; }
+.infrastructure-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.infrastructure-count { display: grid; gap: 4px; text-align: left; padding: 16px; background: var(--panel); }
+.infrastructure-count > span { font-size: 13px; color: var(--secondary); }
+.infrastructure-count > strong { font-size: 28px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.infrastructure-count > small { font-size: 12px; color: var(--muted); }
+.infrastructure-count[aria-pressed="true"] { border-color: var(--signal); background: var(--signal-surface); }
+@media (max-width: 700px) { .infrastructure-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 .profile-detail-title { scroll-margin-top: 24px; }
 .vd-prerequisites { display: grid; gap: 12px; margin-bottom: 24px; }.vd-prerequisite { padding: 12px 16px; border: 1px solid var(--line); border-radius: 6px; scroll-margin-top: 24px; }.vd-prerequisite > summary { font-weight: 600; cursor: pointer; }.vd-prerequisite[open] > summary { margin-bottom: 16px; }.vd-prerequisite form { margin-top: 16px; }
 .notice, .error { padding: 12px 16px; border-radius: 6px; overflow-wrap: anywhere; font-size: 13px; }.notice { color: var(--signal); background: var(--signal-surface); }.error { color: var(--error); background: var(--error-surface); }

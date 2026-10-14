@@ -48,7 +48,7 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
   const submitButton = <button className="primary">{pending ? "저장 중…" : initial ? "연속 처리 설정 저장" : "연속 처리 장치 등록"}</button>;
   return <form ref={formElement} className={!advanced ? "continuous-quick" : undefined} aria-label={initial ? "연속 처리 설정 수정" : "연속 처리 장치 등록"} onSubmit={event => void submit(event)}><fieldset disabled={busy || pending || !enabled} className="publish-fields">
     {advanced && <legend>{initial ? "연속 처리 설정 수정" : "연속 처리 장치 등록"}</legend>}
-    <p className="hint">{advanced ? "입력 센서와 계산식을 지정합니다. 여러 출력도 가상 장치 1개로 등록됩니다." : "센서를 선택하고 원하는 계산을 고르세요. 계산은 eKuiper가 수행합니다."}</p>
+    <p className="hint">{advanced ? "입력 센서와 계산식을 지정합니다. 여러 출력도 가상디바이스 1개로 등록됩니다." : "센서를 선택하고 원하는 계산을 고르세요. 계산은 eKuiper가 수행합니다."}</p>
     {!enabled && <p className="notice">연속 처리 기능이 아직 활성화되지 않았습니다.</p>}
     {!advanced ? <>
       <ContinuousQuickFields inputs={choices} deviceId={sources[0].deviceId} output={configuration.outputs[0]} selectSensor={id => {

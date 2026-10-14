@@ -61,7 +61,7 @@ test("clicking a virtual device opens its saved output graph and switches output
   await page.goto("/virtual-devices");
   const trigger = page.getByRole("button", { name: /^환경 요약\s*environment-summary$/ });
   await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "환경 요약 · 가상 장치 그래프", exact: true });
+  const dialog = page.getByRole("dialog", { name: "환경 요약 · 가상디바이스 그래프", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("img", { name: "average 결과 그래프, 2개 기록", exact: true })).toBeVisible();
   await expect(dialog.getByText(/기록 저장 중단 ·/)).toBeVisible();
@@ -101,7 +101,7 @@ test("inactive virtual processing and unavailable history are explained inside t
     throw new Error(`Unexpected request: ${path}`);
   });
   await page.goto("/virtual-devices"); await page.getByRole("button", { name: /^중지된 계산\s*inactive$/ }).click();
-  const dialog = page.getByRole("dialog", { name: "중지된 계산 · 가상 장치 그래프", exact: true });
+  const dialog = page.getByRole("dialog", { name: "중지된 계산 · 가상디바이스 그래프", exact: true });
   await expect(dialog.getByText(/연속 처리가 비활성 상태/)).toBeVisible();
   await expect(dialog.getByText(/기록 저장소가 연결되지 않았습니다/)).toBeVisible();
   await expect(dialog.getByRole("cell").filter({ hasText: "마지막 값" })).toBeVisible();

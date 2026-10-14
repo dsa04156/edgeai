@@ -22,7 +22,7 @@ test("ordinary features and execution policies remain independent from continuou
   await expect(page.locator('.resource-status-strip .resource-status-card')).toHaveCount(4);
   await expect(page.locator('.resource-status-strip')).toHaveAttribute('aria-busy', 'false');
   if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
-  await expect(page.getByRole("link", { name: "가상 센서", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "가상디바이스", exact: true })).toHaveCount(0);
   await page.locator('.resource-status-strip').screenshot({ path: testInfo.outputPath("overview.png"), animations: "disabled" });
   await page.goto("/profiles?kind=DEVICE");
   await expect(page.getByRole("heading", { name: "실행 모듈 관리", exact: true })).toBeVisible();

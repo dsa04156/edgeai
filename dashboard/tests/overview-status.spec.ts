@@ -37,8 +37,8 @@ test("overview shows all four status donuts using readiness, sensor connection a
   await expect(strip.getByRole("img", { name: "엣지 AI 서버: 전체 2개, 준비됨 1개, 준비 안 됨 1개, 미확인 0개", exact: true })).toBeVisible();
   await expect(strip.getByRole("img", { name: "엣지 디바이스: 전체 2개, 준비됨 1개, 준비 안 됨 0개, 미확인 1개", exact: true })).toBeVisible();
   await expect(strip.getByRole("img", { name: "센서: 전체 3개, 온라인 1개, 오프라인 1개, 관측 만료 0개, 미확인 1개", exact: true })).toBeVisible();
-  await expect(strip.getByRole("img", { name: "가상 디바이스: 전체 3개, 계산 중 1개, 입력 대기 1개, 전환 중 0개, 중지·비활성 1개, 오류 0개, 미확인 0개", exact: true })).toBeVisible();
-  await expect(strip.getByRole("link", { name: "가상 디바이스 상태 상세", exact: true })).toHaveAttribute("href", "/virtual-devices");
+  await expect(strip.getByRole("img", { name: "가상디바이스: 전체 3개, 계산 중 1개, 입력 대기 1개, 전환 중 0개, 중지·비활성 1개, 오류 0개, 미확인 0개", exact: true })).toBeVisible();
+  await expect(strip.getByRole("link", { name: "가상디바이스 상태 상세", exact: true })).toHaveAttribute("href", "/devices?view=virtual");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await strip.locator(".resource-status-card").evaluateAll(cards => cards.every(card => {
     const heading = card.querySelector("h2")!.getBoundingClientRect();
@@ -69,21 +69,21 @@ test("slow virtual execution reads do not block ordinary status or manual refres
     await overview(page, { virtualGate });
     await expect(page.getByRole("img", { name: /^센서: 전체 3개, 온라인 1개,/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "새로고침", exact: true })).toBeEnabled();
-    await expect(page.getByRole("img", { name: "가상 디바이스: 불러오는 중", exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "가상디바이스: 불러오는 중", exact: true })).toBeVisible();
     release();
-    await expect(page.getByRole("img", { name: /^가상 디바이스: 전체 3개, 계산 중 1개,/ })).toBeVisible();
+    await expect(page.getByRole("img", { name: /^가상디바이스: 전체 3개, 계산 중 1개,/ })).toBeVisible();
   } finally { release(); }
 });
 
 test("an unavailable virtual execution stays unknown without discarding registered counts", async ({ page }) => {
   await overview(page, { detailFailure: true });
-  await expect(page.getByRole("img", { name: "가상 디바이스: 전체 3개, 계산 중 1개, 입력 대기 0개, 전환 중 0개, 중지·비활성 1개, 오류 0개, 미확인 1개", exact: true })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("가상 디바이스 실행 상태 1개");
+  await expect(page.getByRole("img", { name: "가상디바이스: 전체 3개, 계산 중 1개, 입력 대기 0개, 전환 중 0개, 중지·비활성 1개, 오류 0개, 미확인 1개", exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("가상디바이스 실행 상태 1개");
 });
 
 test("status card headings, rings and legends stay separate across responsive widths", async ({ page }) => {
   await overview(page);
-  await expect(page.getByRole("img", { name: /^가상 디바이스: 전체 3개,/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^가상디바이스: 전체 3개,/ })).toBeVisible();
   for (const width of [320, 390, 768, 1150, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.locator(".resource-status-card").evaluateAll(cards => cards.every(card => {
@@ -100,10 +100,10 @@ test("status card headings, rings and legends stay separate across responsive wi
 
 test("failed virtual inventory is unknown while a successfully empty inventory is zero", async ({ page }) => {
   await overview(page, { listFailure: true });
-  await expect(page.getByRole("img", { name: "가상 디바이스: 상태를 확인할 수 없습니다", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "가상디바이스: 상태를 확인할 수 없습니다", exact: true })).toBeVisible();
   await page.unroute("**/api/control-plane/**");
   await overview(page, { empty: true });
-  await expect(page.getByRole("img", { name: /^가상 디바이스: 전체 0개,/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^가상디바이스: 전체 0개,/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^센서: 전체 0개,/ })).toBeVisible();
 });
 

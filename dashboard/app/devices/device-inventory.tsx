@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { StatusBadge } from "../components/status-badge";
 import { ConnectionPanel } from "../components/connection-panel";
@@ -9,13 +9,22 @@ import { NodeMetricsNotice, NodeUsage } from "../components/node-usage";
 import { MonitoredNodes } from "../components/monitored-nodes";
 import { infrastructureLabels, useInfrastructure, type InfrastructureKind } from "../../lib/infrastructure";
 import { ManagedDevices } from "../components/managed-devices";
+import { VirtualDeviceRegistry } from "../virtual-devices/virtual-device-registry";
+import { InfrastructureCounts } from "./infrastructure-counts";
+import { useVirtualDeviceCount } from "../../lib/virtual-device-count";
 
 type Node = components["schemas"]["ExecutionNode"];
-export function DeviceInventory() {
-  const [view,setView]=useState("servers"), [search,setSearch]=useState(""), [selectedNode,setSelectedNode]=useState("");
+export function DeviceInventory({ initialView = "servers", initialCreateOpen = false }: { initialView?: string; initialCreateOpen?: boolean }) {
+  const [view,setView]=useState(initialView), [search,setSearch]=useState(""), [selectedNode,setSelectedNode]=useState("");
+  const [createVirtual, setCreateVirtual] = useState(initialCreateOpen);
   const [auth,setAuth]=useState(false), [busy,setBusy]=useState(false), [error,setError]=useState("");
   const [metricsRefresh,setMetricsRefresh]=useState(0);
-  const metrics=useNodeMetrics(view!=="sensors",metricsRefresh), infrastructure=useInfrastructure(metricsRefresh);
+  const metrics=useNodeMetrics(view!=="sensors" && view!=="virtual",metricsRefresh), infrastructure=useInfrastructure(metricsRefresh);
+  const virtual = useVirtualDeviceCount(metricsRefresh);
+  const refreshCounts = useCallback(() => setMetricsRefresh(value => value + 1), []);
+  const classified = infrastructure.snapshot?.nodesStatus === "AVAILABLE" ? infrastructure.snapshot.nodes : null;
+  const sensors = infrastructure.snapshot?.sensorsStatus === "AVAILABLE" ? infrastructure.snapshot.sensors : null;
+  const pending = !infrastructure.snapshot && !infrastructure.failed;
   const group: InfrastructureKind=view==="servers"?"EDGE_AI_SERVER":view==="edge"?"EDGE_DEVICE":"UNKNOWN";
   const [nodes,setNodes]=useState<Node[]>([]), [nodeOffset,setNodeOffset]=useState(0), [nextNodeOffset,setNextNodeOffset]=useState<number|null>(null);
   async function loadNodes(nextOffset=nodeOffset) {
@@ -26,18 +35,28 @@ export function DeviceInventory() {
   async function run(action:()=>Promise<void>) {setBusy(true);setError("");try{await action();}catch(e){setError(e instanceof Error?e.message:"조회하지 못했습니다.");}finally{setBusy(false);}}
   function connect() {void run(async()=>{
     const query=new URLSearchParams(window.location.search), requested=query.get("view");
-    const nextView=requested==="devices"||query.has("device")||query.has("profile")?"sensors":["servers","edge","sensors","unknown"].includes(requested||"")?requested!:"servers";setView(nextView);
+    const nextView=requested==="devices"||query.has("device")||query.has("profile")?"sensors":["servers","edge","sensors","virtual","unknown"].includes(requested||"")?requested!:"servers";setView(nextView);
     setSelectedNode(query.get("node")||"");setSearch(query.get("search")||"");
-    if(nextView!=="sensors")await loadNodes(0);setAuth(true);
+    if(nextView!=="sensors" && nextView!=="virtual")await loadNodes(0);setAuth(true);
   });}
+  function chooseView(value: string) {
+    setView(value); setSearch(""); setCreateVirtual(false);
+    const url = new URL(window.location.href); url.searchParams.set("view", value); url.searchParams.delete("create"); window.history.replaceState(window.history.state, "", url);
+    if (value !== "sensors" && value !== "virtual") void run(() => loadNodes(0));
+  }
   return <>
     <ConnectionPanel connected={auth} busy={busy} onConnect={connect}/>
     {error&&<p role="alert" className="error">{error}</p>}
-    <div className="inventory-controls"><div className="filter-chips" role="group" aria-label="장치 관리 보기">
-      {[["servers","엣지 AI 서버"],["edge","엣지 디바이스"],["sensors","센서"],...(infrastructure.snapshot?.nodesStatus!=="AVAILABLE"||infrastructure.snapshot.nodes.some(node=>node.kind==="UNKNOWN")?[["unknown","분류 미확인"]]:[])].map(([value,label])=><button key={value} aria-pressed={view===value} onClick={()=>{setView(value);setSearch("");}}>{label}</button>)}
-    </div><label>현재 페이지에서 검색<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름 · 장비 · 측정 항목"/></label></div>
+    <InfrastructureCounts selected={view} select={chooseView} items={[
+      { key: "servers", label: "엣지 AI 서버", count: classified?.filter(node => node.kind === "EDGE_AI_SERVER").length ?? null, pending },
+      { key: "edge", label: "엣지 디바이스", count: classified?.filter(node => node.kind === "EDGE_DEVICE").length ?? null, pending },
+      { key: "sensors", label: "센서", count: sensors?.length ?? null, pending },
+      { key: "virtual", label: "가상디바이스", count: virtual.count, pending: virtual.pending },
+    ]} />
+    <div className="inventory-controls">{(infrastructure.snapshot?.nodesStatus!=="AVAILABLE"||infrastructure.snapshot.nodes.some(node=>node.kind==="UNKNOWN")) && <button aria-pressed={view === "unknown"} onClick={() => chooseView("unknown")}>분류 미확인</button>}<label>현재 페이지에서 검색<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름 · 장비 · 측정 항목"/></label></div>
     {view==="sensors"&&<section className="console-panel"><ManagedDevices search={search}/></section>}
-      {view !== "sensors" && <section aria-labelledby="nodes-title"><div className="toolbar"><h2 id="nodes-title">{infrastructureLabels[group]}</h2><button disabled={busy} onClick={() => { setMetricsRefresh(value => value + 1); void run(() => loadNodes()); }}>새로고침</button></div>
+    {view === "virtual" && <VirtualDeviceRegistry embedded search={search} initiallyOpen={createVirtual} onInventoryChange={refreshCounts} />}
+      {view !== "sensors" && view !== "virtual" && <section aria-labelledby="nodes-title"><div className="toolbar"><h2 id="nodes-title">{infrastructureLabels[group]}</h2><button disabled={busy} onClick={() => { setMetricsRefresh(value => value + 1); void run(() => loadNodes()); }}>새로고침</button></div>
         <NodeMetricsNotice state={metrics} />
         {infrastructure.snapshot?.nodesStatus !== "AVAILABLE" && <p role="status">장비 분류를 확인할 수 없습니다. 수집된 노드는 ‘분류 미확인’에서 볼 수 있습니다.</p>}
         <MonitoredNodes state={metrics} inventory={nodes} infrastructure={infrastructure.snapshot} kind={group} search={search} />

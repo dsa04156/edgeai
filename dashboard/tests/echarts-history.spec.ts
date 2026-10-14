@@ -85,7 +85,7 @@ test("virtual output charts keep storage gaps and generation boundaries while ad
     return route.fulfill({ json: { items: [], nextOffset: null } });
   });
   await page.goto("/virtual-devices"); await page.getByRole("button", { name: /^온도 계산\s*temperature$/ }).click();
-  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상 장치 그래프", exact: true });
+  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상디바이스 그래프", exact: true });
   await expect(dialog.getByRole("img", { name: "average 결과 그래프, 4개 기록", exact: true }).locator("canvas")).toBeVisible();
   await expect(dialog.getByText("연속 기록 구간 2개 · 기록 누락 1개", { exact: true })).toBeVisible();
   await expect(dialog.getByText(/기록 저장 중단 ·/)).toBeVisible();

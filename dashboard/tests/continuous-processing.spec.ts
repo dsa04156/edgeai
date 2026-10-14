@@ -151,7 +151,7 @@ test("quick averaging shows an invalid sample count and blocks registration", as
 
 test("settings open in a modal while start and stop stay in the list management cell", async ({ page }, info) => {
   await fixture(page, true); await page.goto("/virtual-devices");
-  const list = page.getByRole("table", { name: "가상 장치 목록", exact: true });
+  const list = page.getByRole("table", { name: "가상디바이스 목록", exact: true });
   const management = list.getByRole("row").filter({ hasText: "온도 계산" }).getByRole("cell").last();
   await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeDisabled();
   await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
@@ -160,7 +160,7 @@ test("settings open in a modal while start and stop stay in the list management 
   await page.screenshot({ path: info.outputPath("management-list.png") });
   const trigger = management.getByRole("button", { name: "온도 계산 설정", exact: true });
   await trigger.click();
-  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상 장치 설정", exact: true });
+  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상디바이스 설정", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "현재 원본 연결", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
@@ -249,7 +249,7 @@ test("sensor-to-central flow explains separate outputs without claiming an inact
   await expect(flow.getByText("처리 agent ↔ eKuiper", { exact: true })).toBeVisible();
   await expect(flow.getByText(/결과는 항목마다 별도 행과 그래프로/)).toBeVisible();
   await expect(flow.getByText(/계산 중|연결 완료/)).toHaveCount(0);
-  await page.getByRole("button", { name: "가상 장치 등록", exact: true }).click();
+  await page.getByRole("button", { name: "가상디바이스 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -260,7 +260,7 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow.getByText("연속 처리 상태 확인 필요", { exact: true })).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "가상 장치 등록", exact: true }).click();
+  await page.getByRole("button", { name: "가상디바이스 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   await expect(page.getByRole("form", { name: "센서 처리 장치 등록", exact: true })).toHaveCount(0);
   await expect(page.getByText("기존 표본·FFT 처리 장치 등록", { exact: true })).toHaveCount(0);
