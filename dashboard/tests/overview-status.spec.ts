@@ -91,7 +91,7 @@ test("status card headings, rings and legends stay separate across responsive wi
       const donut = card.querySelector(".resource-status-donut")!.getBoundingClientRect();
       const legend = card.querySelector(".resource-status-legend")!.getBoundingClientRect();
       const bounds = card.getBoundingClientRect();
-      return heading.width >= 110 && heading.bottom <= donut.top && donut.left >= bounds.left && donut.right <= bounds.right &&
+      return bounds.height <= 260 && heading.width >= 110 && heading.bottom <= donut.top && donut.left >= bounds.left && donut.right <= bounds.right &&
         legend.left >= bounds.left && legend.right <= bounds.right && (legend.top >= donut.bottom || legend.left >= donut.right);
     })), `No overlapping status contents at ${width}px`).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No page overflow at ${width}px`).toBe(true);
@@ -105,4 +105,25 @@ test("failed virtual inventory is unknown while a successfully empty inventory i
   await overview(page, { empty: true });
   await expect(page.getByRole("img", { name: /^가상 디바이스: 전체 0개,/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^센서: 전체 0개,/ })).toBeVisible();
+});
+
+test("GPU inventory without usage does not report collection as fully healthy", async ({ page }) => {
+  await overview(page);
+  let hasUsage = false;
+  await page.route("**/api/control-plane/node-metrics", route => route.fulfill({ json: {
+    status: "AVAILABLE", fetchedAt: new Date().toISOString(), maxAgeSeconds: 90,
+    items: [{ nodeName: "server-a", accelerators: [{ device: "pci:0000:01:00.0", kind: "GPU", vendor: "NVIDIA", model: "NVIDIA GPU", fresh: true, observedAt: new Date().toISOString() }],
+      measurements: [{ key: "CPU_USAGE", device: "", value: 10, unit: "PERCENT", fresh: true, observedAt: new Date().toISOString() }, ...(hasUsage ? [{ key: "GPU_USAGE", device: "pci:0000:01:00.0", value: 0, unit: "PERCENT", fresh: true, observedAt: new Date().toISOString() }] : [])] }],
+  } }));
+  await page.reload();
+  const row = page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: "server-a" }) });
+  await expect(row).toContainText("NVIDIA GPU");
+  await expect(row).toContainText("사용률 미수집");
+  await expect(row).toContainText("일부 미수집");
+  await expect(row).not.toContainText("수집 정상");
+  hasUsage = true;
+  await page.getByRole("button", { name: "새로고침", exact: true }).click();
+  await expect(row.locator('[data-label="GPU / NPU"]')).toContainText("0.0%");
+  await expect(row).toContainText("수집 정상");
+  await expect(row).not.toContainText("사용률 미수집");
 });

@@ -232,36 +232,28 @@ summary { cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--secon
 
 /* Status cards are independent of the older icon-and-number metric grid. */
 .resource-status-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
-.resource-status-card { container-type: inline-size; min-width: 0; display: flex; flex-direction: column; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.resource-status-card { min-width: 0; display: flex; flex-direction: column; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .resource-status-card h2 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; }
 .resource-status-card h2 a { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; border-radius: 6px; color: var(--ink); text-decoration: none; }
 .resource-status-card h2 a:active { background: var(--control); }
 .resource-status-card h2 a > span:last-child { flex-shrink: 0; color: var(--muted); font-size: 16px; }
-.resource-status-body { display: grid; gap: 20px; margin-top: 12px; }
-.resource-status-donut { display: grid; place-items: center; width: 128px; height: 128px; margin: 0 auto; padding: 14px; border-radius: 50%; }
+.resource-status-body { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 124px; margin-top: 8px; }
+.resource-status-donut { display: grid; place-items: center; width: 88px; height: 88px; margin: 0; padding: 10px; border-radius: 50%; }
 .resource-status-total { width: 100%; height: 100%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--panel); color: var(--muted); }
 .resource-status-total > span { font-size: 11px; line-height: 1.4; }
-.resource-status-total strong { color: var(--ink); font-size: 34px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.resource-status-total strong { color: var(--ink); font-size: 28px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .resource-status-total .compact-count { font-size: 24px; }
-.resource-status-card .resource-status-legend { display: grid; grid-template-columns: 1fr; gap: 8px 16px; align-content: start; margin: 0; }
-.resource-status-card .resource-status-legend > div { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; border: 0; padding: 0; font-size: 12px; line-height: 20px; }
+.resource-status-card .resource-status-legend { display: grid; grid-template-columns: 1fr; gap: 3px; align-content: start; margin: 0; }
+.resource-status-card .resource-status-legend > div { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; border: 0; padding: 0; font-size: 11px; line-height: 18px; }
 .resource-status-legend dt { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--secondary); font-size: inherit; line-height: inherit; font-weight: 400; word-break: keep-all; }
 .resource-status-legend i { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; }
 .resource-status-card .resource-status-legend dd { flex-shrink: 0; margin: 0; color: var(--ink); font-size: inherit; line-height: inherit; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
-.resource-status-note { margin: auto 0 0; padding-top: 16px; color: var(--muted); font-size: 11px; line-height: 1.5; word-break: keep-all; }
-@container (min-width: 250px) {
-  .resource-status-card .resource-status-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.resource-status-note { margin: auto 0 0; padding-top: 12px; color: var(--muted); font-size: 11px; line-height: 1.5; word-break: keep-all; }
 @media (max-width: 1200px) {
   .resource-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .resource-status-strip { grid-template-columns: 1fr; gap: 12px; }
-  .resource-status-card { padding: 16px; }
-  .resource-status-body { grid-template-columns: 112px minmax(0, 1fr); gap: 16px; align-items: center; margin-top: 8px; }
-  .resource-status-donut { width: 104px; height: 104px; padding: 12px; }
-  .resource-status-total strong { font-size: 28px; }
-  .resource-status-card .resource-status-legend { grid-template-columns: 1fr; gap: 4px; }
 }
 @media (forced-colors: active) {
   .resource-status-donut { background: Canvas !important; border: 2px solid CanvasText; }

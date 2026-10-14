@@ -7,8 +7,9 @@ import { monitoredNodes } from "../../lib/monitored-nodes";
 import { StatusBadge } from "./status-badge";
 import type { InfrastructureKind, InfrastructureSnapshot } from "../../lib/infrastructure";
 
-function Usage({ metric, state }: { metric?: NodeMetric; state: NodeMetricsState }) {
+function Usage({ metric, state, missingLabel }: { metric?: NodeMetric; state: NodeMetricsState; missingLabel?: string }) {
   const value = metric && isCurrent(metric, state) ? metric.value : undefined;
+  if (value === undefined && missingLabel) return <span className="muted">{metric ? "사용률 관측 만료" : missingLabel}</span>;
   return <div className="resource-usage"><strong>{value === undefined ? "—" : value.toFixed(1)}{value !== undefined && <small>%</small>}</strong>
     {value !== undefined && <meter min={0} max={100} value={value} aria-label={`사용률 ${value.toFixed(1)}%`} />}</div>;
 }
@@ -37,6 +38,7 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
         const measurements = !state.failed && state.snapshot?.status === "AVAILABLE" ? state.snapshot.items.find(item => item.nodeName === row.name)?.measurements ?? [] : [];
         const devices = row.devices;
         const fresh = measurements.length > 0 && measurements.every(metric => isCurrent(metric, state));
+        const incomplete = devices.some(device => !device.measurements.some(metric => metric.key.endsWith("_USAGE") && isCurrent(metric, state)));
         const oldest = measurements.length ? Math.min(...measurements.map(m => Date.parse(m.observedAt))) : null;
         const physical = measurements.filter(m => m.unit === "CELSIUS" || m.unit === "WATTS");
         return <tr key={row.name}>
@@ -49,10 +51,10 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
             const used = values.find(m => m.key.endsWith("MEMORY_USED"));
             const total = values.find(m => m.key.endsWith("MEMORY_TOTAL"));
             const memory = used && isCurrent(used, state) ? `${(used.value / 1024 ** 3).toFixed(2)}${total && isCurrent(total, state) ? ` / ${(total.value / 1024 ** 3).toFixed(2)}` : ""} GiB` : null;
-            return <div className="resource-device" key={device.id}><span>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} />{memory && <small>{memory}</small>}</div>;
+            return <div className="resource-device" key={device.id}><span>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} missingLabel="사용률 미수집" />{memory && <small>{memory}</small>}</div>;
           }) : <span className="muted">GPU / NPU 미수집</span>}</td>
           <td data-label="온도 · 전력">{physical.length ? physical.map(m => <span className="physical-metric" key={`${m.key}/${m.device}`}>{m.key.split("_")[0]} {isCurrent(m, state) ? `${m.value.toFixed(1)} ${m.unit === "CELSIUS" ? "°C" : "W"}` : "—"}</span>) : <span className="muted">미수집</span>}</td>
-          <td data-label="수집 상태"><StatusBadge state={fresh ? "ONLINE" : "STALE"} label={fresh ? "수집 정상" : "수집 지연"} /><small>{oldest ? new Date(oldest).toLocaleTimeString("ko-KR") : "미수집"}</small></td>
+          <td data-label="수집 상태"><StatusBadge state={!fresh ? "STALE" : incomplete ? "UNKNOWN" : "ONLINE"} label={!fresh ? "수집 지연" : incomplete ? "일부 미수집" : "수집 정상"} /><small>{oldest ? new Date(oldest).toLocaleTimeString("ko-KR") : "미수집"}</small></td>
         </tr>;
       })}</tbody>
     </table></div>
