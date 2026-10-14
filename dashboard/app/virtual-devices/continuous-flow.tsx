@@ -10,7 +10,7 @@ const availabilityText: Record<Availability, string> = {
 
 export function ContinuousFlow({ availability }: { availability: Availability }) {
   return <section aria-labelledby="continuous-flow-title" className="continuous-flow">
-    <div className="toolbar"><h2 id="continuous-flow-title">연속 처리 흐름</h2><span className="muted" role="status">{availabilityText[availability]}</span></div>
+    <details><summary><h2 id="continuous-flow-title">연속 처리 흐름</h2><span className="muted" role="status">{availabilityText[availability]}</span></summary><div className="continuous-flow-content">
     <ol aria-label="센서부터 결과까지" className="continuous-flow-stages">
       <li><strong>센서 노드에서 수집</strong><span className="muted">입력 경로 예시</span><p>Jetson 센서 → Mapper → NanoMQ</p><p>Pi 센서 → Mapper → NanoMQ</p></li>
       <li><strong>중앙에서 계산</strong><p>처리 agent ↔ eKuiper</p><span className="muted">유효한 입력으로 평균·최댓값·임계값 등을 계산</span></li>
@@ -21,5 +21,6 @@ export function ContinuousFlow({ availability }: { availability: Availability })
     {availability === "enabled" && <p className="hint">등록 기능이 활성화되어 있습니다. 실제 계산 상태는 각 장치 상세에서 확인하세요.</p>}
     {availability === "disabled" && <p className="hint">중앙 계산 연결이 준비되면 연속 처리 등록을 사용할 수 있습니다. 입력 연결과 처리 엔진 준비가 필요합니다.</p>}
     {availability === "unavailable" && <p className="hint">현재 서버에서 연속 처리 상태를 확인하지 못했습니다. 등록 패널에서 다시 조회할 수 있습니다.</p>}
+    </div></details>
   </section>;
 }

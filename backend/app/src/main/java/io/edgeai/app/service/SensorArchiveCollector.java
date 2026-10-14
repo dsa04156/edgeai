@@ -30,6 +30,7 @@ public class SensorArchiveCollector implements AutoCloseable {
     private volatile String status="DISABLED";
     private final AtomicLong stored=new AtomicLong(),invalid=new AtomicLong();
     private final AtomicLong waiting=new AtomicLong();
+    private final Object[] measurementLocks=java.util.stream.IntStream.range(0,64).mapToObj(n->new Object()).toArray();
     public SensorArchiveCollector(ManagedDeviceService devices,SensorTelemetryRepository telemetry,Clock clock,SensorObservationSubscriber subscriber,
         @Value("${edgeai.data-store.raw.enabled:false}") boolean enabled,@Value("${edgeai.data-store.raw.broker-node-overrides:{}}") String overrides,
         @Value("${edgeai.data-store.raw.interval-ms:5000}") long intervalMs,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection) {
@@ -60,7 +61,12 @@ public class SensorArchiveCollector implements AutoCloseable {
         boolean pending=false;
         try {
             while(!closed) {
-                try{telemetry.append(observation);stored.incrementAndGet();return;}
+                try{
+                    // Original and qualified topics for one measurement must reconcile serially.
+                    int stripe=Math.floorMod(Objects.hash(observation.deviceUid(),observation.property()),measurementLocks.length);
+                    synchronized(measurementLocks[stripe]){telemetry.append(observation);}
+                    stored.incrementAndGet();return;
+                }
                 catch(RuntimeException e){if(!pending){waiting.incrementAndGet();pending=true;}Thread.sleep(500);}
             }
             throw new IllegalStateException("Archive stopped before acknowledgement");

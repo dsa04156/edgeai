@@ -37,7 +37,7 @@ export function EditDeviceProperty({ device, property, busy, onSave, onCancel }:
   </form>;
 }
 
-export function AddDeviceProperty({ device, profiles, existingNames, busy, onAdd, onCancel }: { device: Device; profiles: Profile[]; existingNames: string[]; busy: boolean; onAdd: (value: Property) => void; onCancel: () => void }) {
+export function AddDeviceProperty({ device, profiles, existingNames, busy, onAdd }: { device: Device; profiles: Profile[]; existingNames: string[]; busy: boolean; onAdd: (value: Property) => void }) {
   const protocol = device.profile.protocol;
   const existing = new Set(existingNames);
   const choices = profiles.filter(p => p.protocol === protocol).flatMap(profile => profile.properties.filter(p => !existing.has(p.name)).map(p => ({ key: `${profile.name}/${p.name}`, profile: profile.name, property: p })));
@@ -56,6 +56,6 @@ export function AddDeviceProperty({ device, profiles, existingNames, busy, onAdd
       {!choices.length && <p className="muted">추가할 저장 규격이 없습니다. 새 항목의 이름과 값의 위치를 입력하세요.</p>}
       {selected ? <><p><strong>{value.name}</strong> · {value.dataType}{value.unit ? ` · ${value.unit}` : ""}</p><details key={selected}><summary>항목 설정 확인·수정</summary>{fields}</details></> : fields}
     </fieldset>
-    <div className="toolbar"><button className="primary" disabled={busy}>{busy ? "추가 중…" : "항목 추가"}</button><button type="button" disabled={busy} onClick={onCancel}>취소</button></div>
+    <div className="toolbar"><button className="primary" disabled={busy}>{busy ? "추가 중…" : "항목 추가"}</button></div>
   </form>;
 }

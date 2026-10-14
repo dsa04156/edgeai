@@ -11,6 +11,7 @@ import { StatusBadge } from "../components/status-badge";
 import { ConnectionPanel } from "../components/connection-panel";
 import { hardwareLabel } from "../../lib/hardware";
 import { GraphEditor } from "./graph-editor";
+import { RegistrationDialog } from "../components/registration-dialog";
 import { RuntimeMeasurements } from "./runtime-measurements";
 import { StreamInputFields, type StreamInput } from "./stream-inputs";
 import { StreamRoutes } from "./stream-routes";
@@ -37,6 +38,8 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
   const router = useRouter();
   const [auth, setAuth] = useState(""); const [csrf, setCsrf] = useState("");
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [workflows, setWorkflows] = useState<Schema["WorkflowPage"] | null>(null); const [workflowOffset, setWorkflowOffset] = useState(0);
   const [workflow, setWorkflow] = useState<Schema["WorkflowDetail"] | null>(null); const [versionOffset, setVersionOffset] = useState(0);
   const [version, setVersion] = useState<Schema["WorkflowVersion"] | null>(null); const [versionJson, setVersionJson] = useState("");
@@ -152,34 +155,45 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
 
   return <>
     <ConnectionPanel connected={!!auth} busy={busy} onConnect={connect} />
-    <div aria-live="polite" aria-atomic="true">{notice && <p className="notice">{notice}</p>}</div>
-    {error && <p className="error" role="alert">{error}</p>}
+    <div aria-live="polite" aria-atomic="true">{!createOpen && !publishOpen && notice && <p className="notice">{notice}</p>}</div>
+    {!createOpen && !publishOpen && error && <p className="error" role="alert">{error}</p>}
     {auth && <>
       {view === "builder" && <>
       <section aria-labelledby="workflows-title" aria-busy={busy}>
-        <div className="toolbar"><h2 id="workflows-title">등록된 워크플로</h2><button disabled={busy} onClick={() => void action(() => loadWorkflows())}>워크플로 새로고침</button></div>
+        <div className="toolbar"><h2 id="workflows-title">등록된 워크플로</h2><button disabled={busy} onClick={() => void action(() => loadWorkflows())}>워크플로 새로고침</button><button className="primary" disabled={busy} aria-haspopup="dialog" onClick={() => { setError(""); setCreateOpen(true); }}>새 워크플로 만들기</button></div>
         {busy && <p role="status">처리 중…</p>}
         {workflows?.items.length ? <div className="table-scroll"><table><caption className="sr-only">워크플로 목록</caption><thead><tr><th>워크플로</th><th>생성 시각</th></tr></thead><tbody>{workflows.items.map(w => <tr key={w.id} data-selected={workflow?.workflow.id === w.id}><td><button className="version-link" disabled={busy} onClick={() => void action(() => showWorkflow(w.id))}>{w.displayName}<span>{w.key}</span></button></td><td>{new Date(w.createdAt).toLocaleString()}</td></tr>)}</tbody></table></div> : <p className="empty">아직 등록된 워크플로가 없습니다.</p>}
         <div className="pagination"><button disabled={busy || workflowOffset === 0} onClick={() => void action(() => loadWorkflows(workflowOffset - 20))}>이전 워크플로</button><span>{workflowOffset / 20 + 1} 페이지</span><button disabled={busy || workflows?.nextOffset == null} onClick={() => void action(() => loadWorkflows(workflows!.nextOffset!))}>다음 워크플로</button></div>
       </section>
-      <details className="create-panel" open={!workflows?.items.length || undefined}><summary><h2 id="workflow-create-title">새 워크플로 만들기</h2></summary>
+      <RegistrationDialog open={createOpen} title="워크플로 등록" busy={busy} onClose={() => setCreateOpen(false)}>
+        {error && <p className="error" role="alert">{error}</p>}
         <form onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); void action(async () => {
           const response = await post("workflows", Object.fromEntries(data)); const value = await response.json();
-          const draft = dag; await showWorkflow(value.id); setDag(draft); await loadWorkflows(0); setNotice(response.status === 201 ? "워크플로를 생성했습니다. DAG 버전을 발행하세요." : "동일한 워크플로가 이미 있습니다."); form.reset();
+          const draft = dag;
+          if (workflow?.workflow.id !== value.id) { setVersion(null); setVersionJson(""); setTaskExecutions({}); }
+          setWorkflow({ workflow: value, versions: [], nextOffset: null });
+          setNotice(response.status === 201 ? "워크플로를 생성했습니다. DAG 버전을 발행하세요." : "동일한 워크플로가 이미 있습니다.");
+          try { await showWorkflow(value.id); await loadWorkflows(0); } catch { setError("등록은 완료됐지만 저장된 상태 조회에 실패했습니다. 워크플로 새로고침으로 확인하세요."); }
+          setDag(draft); form.reset(); setCreateOpen(false);
         }); }}><fieldset disabled={busy} className="publish-fields"><div className="form-row"><label>워크플로 키<input name="key" required maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="factory-inspection" /></label><label>워크플로 이름<input name="displayName" required maxLength={128} placeholder="공장 검사" /></label></div><button className="primary">워크플로 생성</button></fieldset></form>
-      </details>
+      </RegistrationDialog>
       <section className="workflow-builder-panel" aria-label="서비스 워크플로 편집"><GraphEditor key={workflow?.workflow.id || "draft"} profiles={profiles} value={dag} onApply={setDag} disabled={busy} /></section>
       {workflow && <section className="panel" aria-labelledby="workflow-detail-title"><h2 id="workflow-detail-title">{workflow.workflow.displayName}</h2><p className="digest mono">Workflow ID {workflow.workflow.id}</p>
         <h3>발행된 DAG 버전</h3>
         {workflow.versions.length ? <ul className="history-list">{workflow.versions.map(v => <li key={v.id}><button className="version-link" disabled={busy} onClick={() => void action(() => showVersion(v.workflowId, v.version))}>{v.version}</button> · {new Date(v.createdAt).toLocaleString()}</li>)}</ul> : <p className="muted">발행된 버전이 없습니다.</p>}
         <div className="pagination"><button disabled={busy || versionOffset === 0} onClick={() => void action(() => showWorkflow(workflow.workflow.id, versionOffset - 10))}>이전 버전</button><span>{versionOffset / 10 + 1} 페이지</span><button disabled={busy || workflow.nextOffset == null} onClick={() => void action(() => showWorkflow(workflow.workflow.id, workflow.nextOffset!))}>다음 버전</button></div>
-        <h3>새 DAG 버전 발행</h3>
+        <button className="primary" disabled={busy} aria-haspopup="dialog" onClick={() => { setError(""); setPublishOpen(true); }}>새 DAG 버전 발행</button>
+        <RegistrationDialog open={publishOpen} title="DAG 버전 발행" busy={busy} onClose={() => setPublishOpen(false)}>
+        {error && <p className="error" role="alert">{error}</p>}
         <form onSubmit={event => { event.preventDefault(); const number = String(new FormData(event.currentTarget).get("version")); void action(async () => {
           const document = objectJson(dag);
           if (Object.keys(document).sort().join(",") !== "dependencies,tasks") throw new Error("DAG에는 tasks와 dependencies만 입력하세요.");
           const response = await post(`workflows/${workflow.workflow.id}/versions`, { version: number, ...document }); const v = await response.json();
-          await showWorkflow(workflow.workflow.id); await showVersion(workflow.workflow.id, v.version); setNotice(response.status === 201 ? "DAG 버전을 발행했습니다." : "같은 내용의 DAG 버전이 이미 있습니다.");
+          setNotice(response.status === 201 ? "DAG 버전을 발행했습니다." : "같은 내용의 DAG 버전이 이미 있습니다.");
+          try { await showWorkflow(workflow.workflow.id); await showVersion(workflow.workflow.id, v.version); } catch { setError("발행은 완료됐지만 저장된 상태 조회에 실패했습니다. 워크플로 새로고침으로 확인하세요."); }
+          setPublishOpen(false);
         }); }}><fieldset disabled={busy} className="publish-fields"><label>DAG 버전<input name="version" defaultValue="1.0.0" required maxLength={32} /></label><details><summary>DAG JSON 직접 편집</summary><label>DAG JSON<textarea rows={14} required value={dag} onChange={e => setDag(e.target.value)} spellCheck={false} /></label></details><p className="hint">SERVICE Profile 버전과 작업 간 연결을 입력합니다. 순환·중복 입력 포트는 허용하지 않으며 발행 후 변경은 새 버전으로 남깁니다.</p><button className="primary">DAG 발행</button></fieldset></form>
+        </RegistrationDialog>
       </section>}
       {version && <section className="panel" aria-labelledby="selected-version-title"><h2 id="selected-version-title">선택한 DAG · {version.version}</h2><p className="digest mono">버전 ID {version.id}</p><p className="digest mono">{version.digest}</p><p>{version.dag.tasks.length}개 ServiceTask · {version.dag.dependencies.length}개 연결</p><button disabled={busy} onClick={() => setDag(versionJson)}>이 버전으로 편집하기</button><details><summary>발행된 DAG JSON</summary><pre aria-label="발행된 DAG JSON">{versionJson}</pre></details>
         <h3>실행 요청</h3><form onSubmit={event => { event.preventDefault(); const nodeId = String(new FormData(event.currentTarget).get("nodeId")); void action(async () => {

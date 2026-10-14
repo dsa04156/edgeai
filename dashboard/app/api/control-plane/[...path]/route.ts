@@ -18,7 +18,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
     || request.method === "PATCH" && new RegExp(`^virtual-devices/${uuid}/continuous$`).test(target)
     || request.method === "DELETE" && new RegExp(`^virtual-devices/${uuid}$`).test(target);
   const allowed = request.method === "GET" ? target === "csrf" || target === "node-metrics" || target === "infrastructure"
-    || target === "data-store" || new RegExp(`^data-store/sensors/${uuid}/[a-z][a-z0-9_]{0,62}/history$`).test(target)
+    || target === "data-store" || new RegExp(`^data-store/sensors/${uuid}/[a-z][a-z0-9_]{0,62}/(history|chart)$`).test(target)
     || new RegExp(`^virtual-devices/${uuid}/processing-versions$`).test(target)
     || ["sensors/readings", "sensors/commands", "sensors/registration-options"].includes(target)
     || new RegExp(`^audit-requests(/${uuid})?$`).test(target)

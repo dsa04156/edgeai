@@ -27,13 +27,16 @@ CRD/property 인터페이스를 사용합니다. 과거 VD가 참조했던 장�
 별도 앱 장치 등록은 종료됐으며, 이전 UUID 장치·세션은 기존 실행 이력을 위한 호환 데이터로만 보존합니다.
 
 센서 화면의 저장 Property 규격은 프로토콜별 항목 설정을 재사용하며 `/api/device-profiles`로 관리합니다.
-이 규격과 `/api/v1/profiles`의 버전형 DEVICE/SERVICE 프로필은 다른 리소스입니다.
-기존 장치의 항목 추가·삭제는 연결 설정을 재사용하고 새 장치나 공유 Mapper를 만들지 않습니다.
+이 규격과 `/api/v1/profiles/SERVICE`의 버전형 실행 모듈은 다른 리소스입니다.
+기존 연결의 항목 추가는 같은 노드·프로토콜·연결 설정을 사용하는 별도 측정 센서와 Device·DeviceStatus CRD를 추가합니다. 공유 Mapper는 재사용합니다.
 
-## 과거 가상 장치 이력
+## 연속 가상 센서
 
-기존 VD 등록·프로필·실행 기능은 제거됐습니다. 기존 DB 참조와 실행 이력은 보존합니다.
-[제거 범위](../guides/virtual-devices.md)를 확인하세요.
+`CONTINUOUS_EKUIPER` VD는 명시적으로 선택한 센서 입력·별칭과 내부 `edgeai.vd/v3` 계산 설정을 보관합니다. VD마다 SERVICE·supervisor·Pod를 만들지 않고 공유 중앙 엔진을 사용합니다. 여러 센서를 한 VD로 조합할 수 있으며 여러 출력은 별도 결과 행·그래프로 표시합니다. 계산 출력의 Device·DeviceStatus CRD는 만들지 않습니다.
+
+센서 등록만으로 가상 센서가 자동 생성되지는 않습니다. 예를 들어 하나의 온도 센서에서 평균·최댓값·경보를 한 등록에 추가하면 VD1개와 결과3행이며, 각각 별도로 등록하면 VD3개입니다. 입력 수와 등록 수를 같은 값으로 세지 않습니다.
+
+센서의 HTTP Virtual 수집 프로토콜은 외부 HTTP JSON endpoint를 읽습니다. 중앙 eKuiper 계산 VD와 구분합니다. 구형 VD 프로필·BATCH·supervisor는 종료됐으며 구형 데이터의 정리와 보존 조건은 [종료 범위](../guides/virtual-devices.md)를 확인합니다.
 
 ## 서비스와 워크플로
 

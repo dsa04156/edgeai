@@ -22,7 +22,7 @@ function Search({ query = "", group = "", records = false }: { query?: string; g
   return <section className="docs-search" aria-label="문서 검색">
     <div className="docs-search-heading"><strong>문서 검색</strong><span>제목, 경로, 본문에서 찾습니다.</span></div>
     <form action="/docs#documents" role="search"><label className="docs-sr-only" htmlFor="doc-query">문서 검색어</label>
-      <input id="doc-query" name="q" type="search" placeholder="예: 센서, GPU, 배포, 가상 디바이스" defaultValue={query} maxLength={200} />
+      <input id="doc-query" name="q" type="search" placeholder="예: 센서, GPU, 배포, 가상디바이스" defaultValue={query} maxLength={200} />
       <label className="docs-sr-only" htmlFor="doc-group">검색 범위</label><select id="doc-group" name="group" defaultValue={group}><option value="">모든 분야</option>{docGroups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
       <button type="submit">검색</button>
       <label className="docs-record-toggle"><input type="checkbox" name="records" value="1" defaultChecked={records} /> 심화 자료·개발 기록 포함</label>

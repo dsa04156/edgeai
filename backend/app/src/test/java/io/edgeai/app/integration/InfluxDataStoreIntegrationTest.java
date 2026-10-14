@@ -64,6 +64,44 @@ class InfluxDataStoreIntegrationTest {
     void publish(MqttClient publisher,String topic,String payload) throws Exception {var message=new MqttMessage(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));message.setQos(1);publisher.publish(topic,message);}
     String history(){return "/api/v1/data-store/sensors/"+uid+"/temperature/history";}
     void awaitRows(int count) throws Exception {for(int n=0;n<80;n++){try{mvc.perform(get(history())).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(count));return;}catch(AssertionError e){if(n==79)throw e;Thread.sleep(100);}}}
+    @Test void sensorChartReturnsEachOriginalTimestampAndValueWithoutAveraging() throws Exception {
+        long at=Instant.now().minusSeconds(30).toEpochMilli();
+        try(var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"chart-originals-"+UUID.randomUUID())) {
+            publisher.connect();Thread.sleep(700);
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at,12.125,1));
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at+1,99.875,2));
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at+2,0.03125,3));
+            awaitRows(3);
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart")
+                .param("from",Instant.ofEpochMilli(at-3600000).toString()).param("to",Instant.ofEpochMilli(at+1000).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.displayMode").value("ORIGINALS"))
+                .andExpect(jsonPath("$.items.length()").value(3)).andExpect(jsonPath("$.aggregation").doesNotExist())
+                .andExpect(jsonPath("$.items[0].observedAt").value(Instant.ofEpochMilli(at).toString())).andExpect(jsonPath("$.items[0].value").value(12.125))
+                .andExpect(jsonPath("$.items[1].observedAt").value(Instant.ofEpochMilli(at+1).toString())).andExpect(jsonPath("$.items[1].value").value(99.875))
+                .andExpect(jsonPath("$.items[2].observedAt").value(Instant.ofEpochMilli(at+2).toString())).andExpect(jsonPath("$.items[2].value").value(0.03125));
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart")
+                .param("from",Instant.ofEpochMilli(at).plusNanos(1).toString()).param("to",Instant.ofEpochMilli(at+1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
+        }
+    }
+    @Test void slowArchiveWritesDoNotSerializeIndependentMeasurements() throws Exception {
+        var complete=new java.util.concurrent.CountDownLatch(40);
+        var received=java.util.concurrent.ConcurrentHashMap.<String>newKeySet();
+        var topics=Set.of("archive-load/a","archive-load/b","archive-load/c","archive-load/d");
+        try(var subscriber=new io.edgeai.adapters.metrics.MqttObservationSubscriber("archive-load-"+UUID.randomUUID().toString().substring(0,8));
+            var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"archive-load-publisher-"+UUID.randomUUID())) {
+            subscriber.configure(Map.of("tcp://127.0.0.1:"+brokerPort,topics),delivery->{
+                Thread.sleep(150);
+                if(received.add(new String(delivery.payload(),java.nio.charset.StandardCharsets.UTF_8)))complete.countDown();
+            });
+            for(int n=0;n<100&&!subscriber.connected();n++)Thread.sleep(20);
+            org.junit.jupiter.api.Assertions.assertTrue(subscriber.connected());
+            publisher.connect();
+            for(int n=0;n<40;n++)publish(publisher,"archive-load/"+(char)('a'+n%4),Integer.toString(n));
+            org.junit.jupiter.api.Assertions.assertTrue(complete.await(3,java.util.concurrent.TimeUnit.SECONDS),"All 40 independent measurements must complete bounded slow archive writes");
+            org.junit.jupiter.api.Assertions.assertEquals(40,received.size());
+        }
+    }
     @Test void qualifiedMetadataStillArchivesLegacyOriginalsAndReconcilesDualPublication() throws Exception {
         long at=Instant.now().toEpochMilli();String legacy=json.canonical(Map.of("DeviceName","archive-sensor","PropertyName","temperature","Namespace","edgeai-devices","Value","23.5","Type","float64","TimeStamp",Long.toString(at)));
         try(var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"legacy-archive-"+UUID.randomUUID())) {

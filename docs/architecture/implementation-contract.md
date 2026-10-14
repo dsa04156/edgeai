@@ -1,6 +1,6 @@
 # 구현 계약 — M0–M6 작업 기준
 
-> 2026-10-12: 기존 VD 기능을 제거했습니다. 아래 VD 설명·검증은 이전 버전의 이력입니다. 현재 범위는 [제거 결정](../adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
+> 2026-10-13: 현재 VD는 내부 v3 연속 계산입니다. 아래 M0–M6의 UUID 앱 장치·공개 VD 프로필·supervisor 수용 기록은 과거 구현입니다. 현재 범위는 [연속 센서 안내](../guides/vd-processing.md)와 [제거·후속 결정](../adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
 
 > **개발 기준 자료** — 단계별 설계·수용 조건과 당시 판단을 보존한 문서입니다.
 > 현재 사용자 기능과 기본 설정은 [지원 범위](../reference/support.md)와 [API 참고](../reference/api.md)를 확인하세요.
@@ -12,7 +12,18 @@ M4 구현·검증 완료, M5 재시도·명시적 노드 전환은 실제 kind·
 VD의 현재 수용 범위는 [당시 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/m6-vd-task-execution.md)를 따른다.
 별도 전체 계약 원문은 아직 확인되지 않았다.
 
-## 현재 수용 범위
+## 현재 관리·연속 센서 계약
+
+- 센서는 측정 항목별 Device·DeviceStatus CRD로 관리하고 노드·프로토콜별 Mapper를 공유합니다. 새 항목은 기존 연결 설정을 사용하는 별도 센서로 등록합니다.
+- SERVICE만 실행 모듈로 공개 발행합니다. DEVICE 신규 발행, 공개 VD 프로필, 구형 VD BATCH·supervisor·poll·Workflow VD 실행 정책은 종료됐습니다.
+- `CONTINUOUS_EKUIPER`는 내부 `edgeai.vd/v3`와 명시적 입력 선택을 사용합니다. VD별 SERVICE·Pod를 만들지 않으며 공유 Agent/eKuiper가 세대·lease·입력 유효성·결과를 조정합니다.
+- 여러 입력과 출력은 VD1개의 설정으로 등록할 수 있고 각 출력은 결과 행·그래프로 구분합니다. 계산 출력 CRD와 센서 등록 시 자동 VD 생성은 제공하지 않습니다.
+- 일반 SERVICE 워크플로의 AUTO/NODE/REMOTE, 불변 버전, Task의 새 Attempt와 검증된 Result 계약은 유지합니다.
+- 등록은 모달이며 실패 입력을 보존합니다. 저장 성공 뒤 조회만 실패한 경우 이미 저장됐음을 명시합니다.
+- 연속 flag는 기본 false입니다. Agent·qualified Mapper 입력·TLS·전용 history 배포와 실제 센서의 운영 수용은 구현/개발 시험과 별도입니다.
+- 구형 데이터의 기본 참조 보호는 유지합니다. 사용자가 명시한 일괄 정리는 백업 복원 검증과 참조 분석 후 확정 범위만 적용하며 migration·삭제 대상 외 데이터·감사는 보존합니다.
+
+## M0 당시 수용 범위
 
 1. JDK 21 / Gradle wrapper / Node 22 / pnpm lockfile로 반복 빌드 가능하다.
 2. Flyway가 실제 PostgreSQL에서 schema를 초기화한다.

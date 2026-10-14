@@ -13,7 +13,9 @@
 | 센서 ONLINE/OFFLINE | KubeEdge DeviceStatus + Mapper 준비 여부 | DMI 연결 보고와 heartbeat 만료 |
 | 센서 최신값 | KubeEdge DeviceStatus twins | 마지막 DMI 반영값과 원본 시각 |
 | 고주기 센서 데이터 | 별도 MQTT topic | 매 수집의 DataModel 값과 시각 |
-| 앱 장치 연결 | 현재 Device Session의 Observation | 해당 에이전트가 보고한 연결 상태 |
+| 연속 VD 실행 | processing Agent의 엔진 lease·generation | 중앙 계산의 실제 준비·실행 상태 |
+| 연속 출력 최신값 | 검증된 계산 결과·시각·quality | 유효 결과, stale·미수집과 저장 누락을 구분 |
+| 연속 결과 그래프 | 전용 history 기록·누락/세대 구간 | 원본 센서의 전체 MQTT 이력을 뜻하지 않음 |
 | 작업 성공 | Task·Attempt 및 검증된 Result | 플랫폼 실행 계약의 완료 상태 |
 
 ## 실시간의 의미
@@ -40,6 +42,7 @@ GPU 메모리와 호스트 메모리는 서로 다른 지표입니다. 장착 �
 센서 heartbeat가 최신이면 값이 동일해 Twin 시각이 오래돼도 ONLINE을 유지할 수 있습니다.
 항목별 수집 지속 여부가 필요하면 별도 MQTT의 DataModel 시각과 수신을 확인합니다.
 MQTT 발행 성공은 영속 저장이나 상위 Workflow 처리 완료를 의미하지 않습니다.
+eKuiper Pod Running이나 VD 등록 성공도 실제 계산 실행과 다릅니다. flag=false이면 비활성이고, 엔진 lease가 만료되거나 입력이 오래되면 현재 실행·출력의 상태를 확인해야 합니다. 시험용 온도 기록을 실제 보드의 최신 측정값으로 해석하지 않습니다.
 
 ## 비동기 작업
 

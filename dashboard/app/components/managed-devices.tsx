@@ -4,6 +4,8 @@ import type { components } from "../../lib/api-schema";
 import { useInfrastructure } from "../../lib/infrastructure";
 import { StatusBadge } from "./status-badge";
 import { AddDeviceProperty, EditDeviceProperty, newProperty as property, PropertyFields } from "./managed-device-property";
+import { RegistrationDialog } from "./registration-dialog";
+import { SensorGraph } from "./sensor-graph";
 
 type Device = components["schemas"]["ManagedDevice"];
 type Input = components["schemas"]["ManagedDeviceInput"];
@@ -19,7 +21,9 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   const [items, setItems] = useState<Device[] | null>(null); const [profiles, setProfiles] = useState<Profile[]>([]);
   const [properties, setProperties] = useState<Property[]>([property()]); const [editing, setEditing] = useState<{ deviceId: string; property: Property } | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [failed, setFailed] = useState(false);
-  const [deleting, setDeleting] = useState<Deletion | null>(null); const panel = useRef<HTMLDetailsElement>(null); const form = useRef<HTMLFormElement>(null);
+  const [deleting, setDeleting] = useState<Deletion | null>(null); const form = useRef<HTMLFormElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [graph, setGraph] = useState<{ deviceId: string; deviceUid: string; property: Property } | null>(null);
   const section = useRef<HTMLElement>(null); const noticeElement = useRef<HTMLParagraphElement>(null);
   const registerButton = useRef<HTMLButtonElement>(null);
   const errorElement = useRef<HTMLParagraphElement>(null); const [addingId, setAddingId] = useState<string | null>(null);
@@ -47,9 +51,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   }
   function open() {
     setAddingId(null); setEditing(null); setDeleting(null);
-    setProtocol("modbus-tcp"); setProperties([property()]); setError(""); setNotice("");
-    if (panel.current) { panel.current.open = true; panel.current.scrollIntoView({ block: "start" }); }
-    setTimeout(() => form.current?.querySelector<HTMLInputElement>('input[name="name"]')?.focus(), 0);
+    setError(""); setNotice(""); setCreateOpen(true);
   }
   function input(): Input {
     if (!form.current || !form.current.reportValidity()) throw new Error("필수 입력을 확인하세요.");
@@ -66,9 +68,8 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   async function action(fn: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "요청 실패"); requestAnimationFrame(() => errorElement.current?.focus()); } finally { setBusy(false); } }
   function addTo(device: Device | null) {
     const previous = addingId; setEditing(null); setAddingId(device?.id ?? null); setError(""); setNotice(""); setDeleting(null);
-    if (panel.current) panel.current.open = false;
-    if (device) requestAnimationFrame(() => section.current?.querySelector<HTMLFormElement>('form[aria-label]')?.scrollIntoView({ block: "start" }));
-    else requestAnimationFrame(() => {
+    setCreateOpen(false);
+    if (!device) requestAnimationFrame(() => {
       const target = Array.from(section.current?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(button => button.getAttribute("aria-label") === `${previous} 항목 추가`);
       (target ?? registerButton.current)?.focus();
     });
@@ -76,9 +77,9 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   function editProperty(device: Device | null, field?: Property) {
     const previous = editing;
     setEditing(device && field ? { deviceId: device.id, property: field } : null); setAddingId(null); setDeleting(null); setError(""); setNotice("");
-    if (panel.current) panel.current.open = false;
+    setCreateOpen(false);
     requestAnimationFrame(() => {
-      if (device) section.current?.querySelector<HTMLFormElement>('form[aria-label]')?.scrollIntoView({ block: "start" });
+      if (device) section.current?.querySelector<HTMLFormElement>('form[aria-label$="측정 항목 수정"]')?.scrollIntoView({ block: "start" });
       else {
         const target = Array.from(section.current?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(button => button.getAttribute("aria-label") === `${previous?.deviceId} ${previous?.property.name} 항목 수정`);
         (target ?? registerButton.current)?.focus();
@@ -120,7 +121,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
     }) ?? null);
     if (editing?.deviceId === device.id) {
       setEditing(null); setProtocol("modbus-tcp"); setProperties([property()]);
-      if (panel.current) panel.current.open = false;
+      setCreateOpen(false);
     }
     setRefresh(v => v + 1);
     setNotice(field ? `${device.id} · ${field.name} 항목을 삭제했습니다.` : `${device.id} 장치 등록을 삭제했습니다.`);
@@ -128,18 +129,22 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   }
   function submit(e: FormEvent<HTMLFormElement>) { e.preventDefault(); void action(async () => {
     const body = input(); await write("managed-devices", "POST", body);
-    setRefresh(v => v + 1); setNotice(`${body.name} 설정을 적용했습니다. 연결 상태 보고를 기다립니다.`); if (panel.current) panel.current.open = false;
+    setRefresh(v => v + 1); setNotice(`${body.name} 설정을 적용했습니다. 연결 상태 보고를 기다립니다.`); setCreateOpen(false); form.current?.reset(); setProperties([property(protocol)]);
   }); }
   function update(index: number, field: keyof Property, value: string | number) { setProperties(old => old.map((p, i) => i === index ? { ...p, [field]: value } : p)); }
   const filtered = items?.filter(d => d.id === addingId || d.id === editing?.deviceId || d.id === deleting?.deviceId || `${d.id} ${sourceName(d)} ${d.targetNode} ${d.profile.properties.map(p => p.name).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
+  const addingDevice = items?.find(d => d.id === addingId);
+  const graphDevice = items?.find(d => d.id === graph?.deviceId && d.uid === graph?.deviceUid && d.profile.properties.some(p => p.name === graph?.property.name));
+  const graphProperty = graphDevice?.profile.properties.find(p => p.name === graph?.property.name) ?? graph?.property;
   return <section ref={section} aria-label="센서 등록과 수집 상태">
-    <div className="toolbar"><h2>등록 센서</h2><button onClick={() => setRefresh(v => v + 1)}>새로고침</button><button ref={registerButton} className="primary" disabled={busy} onClick={() => open()}>새 장치 등록</button></div>
-    <p className="muted">측정 항목마다 별도 센서로 표시합니다. 연결 상태와 최신값은 5초마다 갱신합니다.</p>
+    <div className="toolbar sensor-list-toolbar"><h2>등록 센서</h2><span className="list-update-note" title="측정 항목마다 별도 센서로 표시합니다. 연결 상태와 최신값은 5초마다 갱신합니다.">5초마다 갱신</span><button onClick={() => setRefresh(v => v + 1)}>새로고침</button><button ref={registerButton} className="primary" disabled={busy} onClick={() => open()}>새 장치 등록</button></div>
     {failed && <p role="alert" className="error">현재 상태 조회에 실패했습니다. {items ? "아래는 마지막 조회 결과입니다." : "API 연결을 확인하세요."}</p>}
-    {notice && <p ref={noticeElement} tabIndex={-1} role="status" className="notice">{notice}</p>}
-    {error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}
-    <details ref={panel} hidden={!!addingId || !!editing} className="panel"><summary>새 장치 연결 설정</summary>
-      <form ref={form} onSubmit={submit} className="publish-fields">
+    {!createOpen && !addingDevice && notice && <p ref={noticeElement} tabIndex={-1} role="status" className="notice">{notice}</p>}
+    {!createOpen && !addingDevice && error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}
+    <RegistrationDialog open={createOpen} title="센서 등록" busy={busy} onClose={() => setCreateOpen(false)}>
+      {createOpen && notice && <p role="status" className="notice">{notice}</p>}
+      {createOpen && error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}
+      <form ref={form} onSubmit={submit} className="publish-fields" aria-label="센서 등록">
         <div className="form-row"><label>센서 이름<input name="name" required pattern={"[a-z0-9][a-z0-9.\\-]*"} maxLength={63} defaultValue="" /></label><label>종류<input readOnly aria-label="장치 종류" value={protocol === "virtual" ? "Virtual" : "Physical"} /></label><label>프로토콜<select aria-label="프로토콜" value={protocol} onChange={e => { const next = e.target.value as Protocol; setProtocol(next); setProperties([property(next)]); }}>{Object.keys(ports).map(p => <option key={p}>{p}</option>)}</select></label></div>
         <label>저장한 측정 항목<select key={protocol} defaultValue="" onChange={e => { const [profile, name] = e.target.value.split("/"); const selected = profiles.find(p => p.name === profile)?.properties.find(p => p.name === name); if (selected) setProperties([selected]); }}><option value="">직접 입력</option>{profiles.filter(p => p.protocol === protocol).flatMap(p => p.properties.map(field => <option key={`${p.name}/${field.name}`} value={`${p.name}/${field.name}`}>{field.name} · {p.name}</option>))}</select></label>
         {!localHardware && <label>물리 장치 이름 (선택)<input name="sourceName" maxLength={63} placeholder="같은 연결을 사용하는 센서의 장치 이름" /></label>}
@@ -153,27 +158,36 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
         <fieldset><legend>측정 항목</legend>{protocol === "modbus-tcp" && <p className="muted">Holding 40001 / Input 30001 / Coil 1은 각각 주소 0입니다.</p>}<PropertyFields protocol={protocol} value={properties[0]} onChange={(field, value) => update(0, field, value)} /></fieldset>
         <div className="toolbar"><button disabled={busy} className="primary">{busy ? "처리 중…" : "장치 등록"}</button><button disabled={busy} type="button" onClick={() => void action(async () => { const result = await (await write("device-connections/test", "POST", input())).json(); if (!result.connected) throw new Error(result.error); setNotice(`연결 확인: ${result.value}`); })}>연결 테스트</button><button disabled={busy} type="button" onClick={() => void action(async () => { const d = input(); await write("device-profiles", "POST", { name: d.name, protocol: d.protocol, properties }); setRefresh(v => v + 1); setNotice("Property 규격을 저장했습니다."); })}>Property 규격 저장</button></div>
       </form>
-    </details>
+    </RegistrationDialog>
     {filtered?.length === 0 && <p className="empty">{search ? "일치하는 센서가 없습니다." : "등록된 센서가 없습니다. 새 장치 등록에서 연결 설정을 입력하세요."}</p>}
     {!!filtered?.length && <div className="table-scroll"><table className="registry-table managed-sensors"><caption className="sr-only">측정 항목별 센서와 최신값</caption>
+      <colgroup><col style={{ width: "17%" }} /><col style={{ width: "17%" }} /><col style={{ width: "9%" }} /><col style={{ width: "17%" }} /><col style={{ width: "17%" }} /><col style={{ width: "23%" }} /></colgroup>
       <thead><tr><th>센서</th><th>장치 / 노드</th><th>상태</th><th>최신값</th><th>수집 시각</th><th>관리</th></tr></thead>
       <tbody>{filtered.flatMap(d => d.profile.properties.map(p => <Fragment key={`${d.id}/${p.name}`}>
         <tr>
-          <td><strong>{p.name}</strong><span className="sensor-meta">{d.id}</span></td>
-          <td>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
-          <td><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
-          <td>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
-          <td><div className="sensor-actions"><button disabled={busy} aria-label={`${d.id} ${p.name} 항목 수정`} onClick={() => editProperty(d, p)}>항목 수정</button>
-            <button disabled={busy} aria-label={`${d.id} 항목 추가`} onClick={() => addTo(d)}>같은 연결에 추가</button>
+          <td><button className="version-link" title={`${p.name} · ${d.id}`} aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta" title={d.id}>{d.id}</span></button></td>
+          <td data-label="장치 / 노드" title={`${sourceName(d)} · ${d.targetNode} · ${d.profile.protocol}`}>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
+          <td data-label="상태"><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td data-label="최신값" title={`${d.properties[p.name]?.value ?? "—"} ${p.unit ?? ""}`}>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
+          <td data-label="수집 시각" title={d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : undefined}>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
+          <td data-label="관리"><div className="sensor-actions"><button disabled={busy} aria-label={`${d.id} ${p.name} 항목 수정`} onClick={() => editProperty(d, p)}>항목 수정</button>
+            <button disabled={busy} aria-label={`${d.id} 항목 추가`} title="같은 연결에 측정 항목 추가" onClick={() => addTo(d)}>항목 추가</button>
             {deleting?.deviceId === d.id && deleting.property === p.name ? <>
               <span>{p.name} 센서를 삭제할까요?</span><button disabled={busy} aria-label={`${d.id} ${p.name} 삭제 확인`} onClick={() => void action(() => remove(d, p))}>삭제 확인</button>
               <button disabled={busy} onClick={() => selectDeletion(null)}>취소</button>
             </> : <button disabled={busy} aria-label={`${d.id} ${p.name} 항목 삭제`} onClick={() => selectDeletion({ deviceId: d.id, property: p.name })}>항목 삭제</button>}
           </div></td>
         </tr>
-        {addingId === d.id && <tr className="sensor-editor"><td colSpan={6}><AddDeviceProperty device={d} profiles={profiles} existingNames={(items ?? []).filter(other => sourceName(other) === sourceName(d) && other.targetNode === d.targetNode && other.profile.protocol === d.profile.protocol).flatMap(other => other.profile.properties.map(field => field.name))} busy={busy} onAdd={field => void action(() => addProperty(d, field))} onCancel={() => addTo(null)} /></td></tr>}
         {editing?.deviceId === d.id && editing.property.name === p.name && <tr className="sensor-editor"><td colSpan={6}><EditDeviceProperty device={d} property={editing.property} busy={busy} onSave={field => void action(() => saveProperty(d, field))} onCancel={() => editProperty(null)} /></td></tr>}
       </Fragment>))}</tbody>
     </table></div>}
+    <RegistrationDialog open={!!graph} title={`${graph?.property.name ?? "센서"} · 센서 그래프`} closeLabel="닫기" onClose={() => setGraph(null)}>
+      {graph && graphProperty && <SensorGraph key={`${graph.deviceUid}/${graph.property.name}`} device={graphDevice} deviceUid={graph.deviceUid} property={graphProperty} failed={failed} />}
+    </RegistrationDialog>
+    <RegistrationDialog open={!!addingDevice} title="측정 항목 추가" busy={busy} onClose={() => addTo(null)}>
+      {addingDevice && <>
+        {error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}
+        <AddDeviceProperty key={addingDevice.id} device={addingDevice} profiles={profiles} existingNames={(items ?? []).filter(other => sourceName(other) === sourceName(addingDevice) && other.targetNode === addingDevice.targetNode && other.profile.protocol === addingDevice.profile.protocol).flatMap(other => other.profile.properties.map(field => field.name))} busy={busy} onAdd={field => void action(() => addProperty(addingDevice, field))} />
+      </>}
+    </RegistrationDialog>
   </section>;
 }

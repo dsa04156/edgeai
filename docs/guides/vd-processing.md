@@ -1,13 +1,15 @@
-# 연속 센서 계산으로 가상 디바이스 만들기
+# 연속 센서 계산으로 가상디바이스 만들기
 
 ## 연속 센서 계산
 
-웹의 **가상 센서** 화면에서 센서 노드 → 중앙 계산 → 결과 저장 → 항목별 조회 흐름을 확인할 수 있습니다.
+인프라 관리 상단에서 엣지 AI 서버·엣지 디바이스·센서·가상디바이스의 전체 등록 개수를 확인하고 해당 목록을 엽니다. 가상디바이스 개수는 해제 이력을 제외하며 검색 결과 수와 별개입니다. 조회 실패는0개 대신 —로 표시합니다. 관리 메뉴에는 프로젝트 문서만 표시합니다.
+
+웹의 **인프라 관리 → 가상디바이스** 화면에서 센서 노드 → 중앙 계산 → 결과 저장 → 항목별 조회 흐름을 확인할 수 있습니다.
 화면의 ‘등록 가능’은 관리 API 설정이며 실제 계산 실행 상태와 다릅니다. ‘비활성’이면 중앙 처리 연결 준비가 남아 있고,
 ‘상태 확인 필요’이면 조회 실패 상태입니다. 현재 센서 목록을 유지합니다. 이전 표본·FFT VD 등록은 종료됐습니다.
 
 `CONTINUOUS_EKUIPER`는 등록한 센서의 최신 유효값을1–3600초 간격으로 조합합니다.
-웹의 **가상 장치 등록 → 연속 처리 장치 등록**에서 입력 센서와 별칭을 고르고 출력 항목을 추가합니다.
+웹의 **가상디바이스 등록**은 센서·계산 방식·장치 이름을 고르면 됩니다. 기본값은1초 계산, 평균/최솟값/최댓값에 최근5개 표본, 전체 결과7일 보관이며 고급 설정에서 바꿀 수 있습니다. 장치 키와 입력 별칭·계산식·단위는 자동으로 적용됩니다. 여러 센서 조합·직접 식·여러 출력·선택 저장은 **여러 센서·직접 계산식 설정**에서 지정합니다. ESC·취소·닫기로 돌아가도 등록 초안을 유지하며, 저장 실패는 같은 모달 안에 표시합니다.
 예를 들어 온도 센서 하나를 별칭 `a`로 연결하고 `average`, `maximum`, `alarm`을 등록하면
 VD 1개와 결과 3행이 생깁니다. 각각 독립 VD로 등록하면 VD 3개가 됩니다. 입력·출력은 VD당 최대 16개이고
 연속 VD를 다른 연속 VD의 입력으로 연결하는 기능은 이번 버전에 포함하지 않습니다.
@@ -18,8 +20,11 @@ VD 1개와 결과 3행이 생깁니다. 각각 독립 VD로 등록하면 VD 3개
 센서를 새로 등록하면 선택 목록에 자동으로 추가되며, 기존 연결은 사용자가 설정을 저장할 때 바뀝니다.
 원본 MQTT/ModbusTCP/OPCUA/SerialJSON/SenseHAT/HTTPJSON 수집 프로토콜은 계산 설정과 분리됩니다.
 
-장치 상세에서 **계산 시작**을 요청한 뒤 실제 계산 엔진 보고를 기다립니다. 출력마다 최신값·계산 시각·
-유효 상태가 별도 행에 표시됩니다. 각 행의 그래프로 기록을 조회합니다. 누락·세대 변경 구간은 선을 연결하지
+가상디바이스 이름을 누르면 **가상디바이스 그래프** 모달이 열리고 첫 출력의 저장된 이력을 자동 조회합니다. 출력마다 최신값·계산 시각·유효 상태가 별도 행에 표시됩니다. 각 행의 **그래프**로 출력을 전환하고 **조회 기간**을 선택합니다. 최신 결과는3초, 그래프는5초마다 갱신하며 ESC·닫기로 목록에 돌아갑니다. 기록 저장소가 연결되지 않았다면 최신 결과와 미연결 안내를 표시합니다.
+
+ECharts의 툴팁으로 계산 시각·값·단위를 확인하고 시간축 슬라이더와 **확대·축소·전체 구간**으로 현재 조회한 기록을 탐색합니다. 확대 중에도 자동 갱신과 기록 표를 유지합니다. 누락 구간은 배경으로 구분하고 처리 세대 변경·미수신 구간의 선은 연결하지 않습니다.
+
+장치 행의 **관리**에서 **시작 / 중지**를 누르고 확인한 뒤 실제 계산 엔진 보고를 기다립니다. **설정**은 별도 모달로 열려 입력 연결·계산 정의·저장 정책을 수정합니다. 등록 완료 시에는 목록으로 돌아오며 상세를 자동으로 펼치지 않습니다. 그래프 모달에서는 계산을 시작하거나 중지하지 않습니다. 누락·세대 변경 구간은 선을 연결하지
 않으며 저장 중단은 따로 표시합니다. 저장 장애 중에는 최신 결과를 표시하고 선택된 결과를 PostgreSQL 임시 대기열에 둡니다. 복구 후 InfluxDB로 다시 전달하고 완료한 대기열 항목은 제거합니다. 대기열 기본 상한은 100,000개이며 보존 기간이 지난 대기 결과는 만료됩니다.
 원본 센서 CRD는 측정 항목별로 유지하고 계산 결과의 CRD는 만들지 않습니다.
 
@@ -71,6 +76,10 @@ MQTT 구독자는 저장을 마친 뒤 QoS1 ACK를 보냅니다. 지속 세션�
 
 ### 개발 검증
 
+운영 센서용 broker는 Jetson·Pi 노드의 NanoMQ입니다. 중앙 eKuiper는 별도 `ekuiper` namespace의 worker에 배치합니다. 일반 SERVICE STREAM의 Mosquitto broker는 별도 구성입니다. 원본 MQTT의 영속 저장과 계산 결과 보관 이력도 구분합니다. eKuiper 설치·Helm 배치 확인은 Agent의 실제 규칙·입력·결과 수용을 대신하지 않습니다.
+
+### 격리된 개발 검증
+
 프로젝트 로컬 PostgreSQL이 준비된 뒤 `bash scripts/dev/dev-processing-history.sh`로 별도 개발/시험 DB를 준비합니다.
 실제 Mosquitto와 [eKuiper2.4.2 full release](https://github.com/lf-edge/ekuiper/releases/tag/v2.4.2)가 필요합니다.
 `kuiper-2.4.2-linux-amd64-full.tar.gz` SHA256은
@@ -83,13 +92,14 @@ core 배포에는 agent가 사용하는 metadata REST가 포함되지 않습니�
 70회 Mapper session 교체/옛 session 재전송 거절, 인증 callback 및 공개 proxy 경로를 검사합니다.
 전체 backend PostgreSQL 검증은 `bash scripts/test/test-integration.sh`, UI는
 `bash scripts/test/test-ui.sh`입니다. 개발 테스트를 실센서·운영 부하/24시간 검증으로 해석하지 않습니다.
+통합 시험 스크립트의 `isolated_test_db`를 사용합니다. 운영/개발 관리 DB의 이름과 자격을 그대로 사용해 integrationTest를 직접 실행하지 않습니다. 시험용 등록과 결과를 사용자 센서 데이터로 표시하지 않습니다.
 
 ### Kubernetes 처리 엔진 운영 준비와 되돌리기
 
 아래 기존 `deploy/kubernetes/ekuiper` component와 preflight의 history PVC/480Gi 기준은 이전 PostgreSQL 이력 배포용입니다. 이번 InfluxDB 로컬 웹 반영을 Kubernetes InfluxDB 배포 완료로 해석하지 않습니다. 클러스터 적용 시 InfluxDB PVC·bucket·전용 토큰·네트워크 설정 및 실제 부하별 용량 산정을 먼저 준비해야 합니다.
 
 기능 flag 기본값은 false입니다. 병합은 운영 엔진 활성화를 뜻하지 않습니다.
-새 agent·history·Mapper·TLS 설정의 Kubernetes 적용은 아직 수행하지 않았습니다.
+2026-10-14 호스트 운영 API·실제 센서의 qualified 입력·Kubernetes의 중앙 processing Agent/eKuiper 연결과 결과 저장은 확인했습니다. 아래 절차는 별도 Kubernetes 관리 API·DB·보안·복구 수용을 위한 운영 준비 기준이며 호스트 활성 상태와 구분합니다. 최신 검증 범위는 [PROGRESS](../../PROGRESS.md), 남은 게이트는 [PLAN](../../PLAN.md)을 확인합니다.
 `bash scripts/dev/build-processing-agent.sh`로 AMD64 정적 binary를 만들고
 `mappers/processing-agent.Dockerfile`로 이미지를 빌드해 immutable digest를 확정합니다.
 `bash scripts/ops/prepare-processing-material.sh /absolute/new/private/directory`는
@@ -114,7 +124,7 @@ namespace `ekuiper`의 `processing-rbac.yaml`/`network-policy.yaml`은 별도로
 upstream Helm chart1.4.0을 기존 `my-ekuiper` release/`ekuiper` namespace와 기존 values로 렌더링하며,
 `EDGEAI_PROCESSING_AGENT_IMAGE=<repository@sha256:digest>` 환경 및
 `--post-renderer scripts/ops/processing-post-renderer.sh`로 agent를 붙입니다. 데이터/plugin PVC는 유지합니다.
-REST·CLI·입력·callback은 loopback이고 agent health10083만 Service에 노출됩니다.
+post-renderer 적용 후 REST·CLI·입력·callback은 loopback이고 agent health10083만 Service에 노출됩니다.
 flag가false인 준비 단계는 readiness를 얻지 못하므로 Helm `--wait`로 활성화 완료를 주장하지 않습니다.
 
 활성화는 실제 qualified source, 전용 history와 소유/보안 검증 뒤 backend의

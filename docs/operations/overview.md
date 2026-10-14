@@ -20,6 +20,8 @@
 | 데이터가 최근 값인가? | exporter 원본 시각, DeviceStatus heartbeat와 항목별 Twin 시각, 필요한 경우 별도 MQTT 수신 |
 | 자원 분류가 맞는가? | Kubernetes 라벨과 소유 Device CRD의 protocol·targetNode |
 | 센서가 연결됐는가? | DeviceStatus, Mapper readiness, API의 유효 ONLINE/OFFLINE과 stateReason |
+| 가상 센서가 실제 계산 중인가? | 연속 처리 flag·Agent/eKuiper lease·generation·입력 신선도·출력 시각 |
+| 계산 결과가 보관되는가? | InfluxDB 연결·저장 정책·storageStatus·historyStored·누락 구간; 센서 원본과 계산 결과 구분 |
 | 배포가 반영됐는가? | 원하는 Git revision, Argo sync/health, 실행 이미지 digest |
 | 작업이 완료됐는가? | 해당 Run·Task·Result 또는 DDS 서비스 자체의 결과 |
 | 변경 요청이 처리됐는가? | 감사 접수·HTTP 결과와 대상 리소스 상태 |
@@ -35,3 +37,4 @@ Twin 최신값과 매 수집 MQTT 데이터는 별도 경로입니다. 현재 Ma
 
 연결 장애는 [문제 해결](troubleshooting.md), 변경 추적은 [감사 기록](management-audit.md)을 사용합니다.
 복구 도구는 전용 자원과 확인된 입력에 적용하는 구성 요소입니다. 개별 명령 성공을 전체 서비스 재가동으로 해석하지 않습니다.
+연속 처리의 배포·활성화·되돌리기는 [운영 준비](../guides/vd-processing.md#kubernetes-처리-엔진-운영-준비와-되돌리기)를 따릅니다. 구형 등록 데이터의 명시적 정리는 [종료 범위](../guides/virtual-devices.md#종료된-방식)를 확인합니다. 일반 등록 삭제를 거절하는 참조 보호와 사용자가 승인한 구형 데이터 정리는 다른 작업입니다.

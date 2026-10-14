@@ -1,6 +1,6 @@
 # API 참고
 
-프로필·UUID 앱 장치·실행 관리 API는 `/api/v1`, KubeEdge Device Manager는 `/api/devices` 등 별도 경로를 사용합니다.
+SERVICE·연속 가상 센서·워크플로·실행 관리 API는 `/api/v1`, KubeEdge 센서 관리는 `/api/devices` 등 별도 경로를 사용합니다. 현재 센서는 측정 항목별 CRD이며 UUID 앱 장치 이력과 별도입니다.
 Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 정의 원본은 `contracts/openapi/platform-api.yaml`이며 이 페이지의 목록은 해당 계약에서 생성합니다.
 
@@ -22,14 +22,27 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 |---|---|
 | `/api/devices`, `/api/devices/{id}` | CRD 이름으로 식별하는 Mapper 장치의 등록·조회·수정·삭제 |
 | `/api/devices/{id}/properties` | 기존 연결에 측정 항목 하나 추가 (`POST`) |
-| `/api/devices/{id}/properties/{property}` | 항목 하나 삭제 (`DELETE`); 마지막 항목이면 장치 등록도 삭제 |
+| `/api/devices/{id}/properties/{property}` | 항목 하나 수정 (`PUT`)·삭제 (`DELETE`); 마지막 항목이면 센서 CRD 등록도 삭제 |
 | `/api/device-profiles` | 프로토콜별 저장 Property 규격 |
 | `/api/device-connections/test`, `/api/protocols` | 대상 Mapper 연결 테스트, 지원 프로토콜 목록 |
-| `/api/v1/devices`, `/api/v1/profiles` | UUID 앱 Device·Session, 버전형 DEVICE/SERVICE 프로필 |
+| `/api/v1/profiles/SERVICE` | 공개 실행 모듈의 불변 버전; DEVICE·VD 신규 발행은 종료 |
 
 기존 `/api/v1/sensors/*`는 410 `SENSOR_API_REPLACED`로 종료됐습니다. 아래 생성 목록에는
 호환 응답을 위한 deprecated operation도 포함됩니다. 이전 이력·명령 기능이 유지된다는 뜻은 아닙니다.
 새 장치 경로와 기존 UUID 앱 등록은 자동으로 병합되지 않습니다.
+
+## 연속 가상 센서 API
+
+| 경로 | 역할 |
+|---|---|
+| `/api/v1/virtual-devices/continuous-catalog` | 기능 활성 여부·선택 가능한 측정 센서·처리 종류 |
+| `/api/v1/virtual-devices/continuous` | 내부 v3 연속 가상 센서 등록 (`POST`) |
+| `/api/v1/virtual-devices/{id}/continuous` | revision 기반 입력·계산 설정 변경 (`PATCH`) |
+| `/api/v1/virtual-devices/{id}/execution` | 계산 엔진의 실제 상태·generation·lease |
+| `/api/v1/virtual-devices/{id}/outputs` | 출력별 최신 결과·quality·저장 상태 |
+| `/api/v1/virtual-devices/{id}/outputs/{outputId}/history` | 보관 결과·집계·누락 구간 |
+
+`CONTINUOUS_EKUIPER`는 일반 SERVICE Runner·구형 VD supervisor와 다른 실행 계약입니다. 공개 VD 프로필과 구형 processing-catalog·poll은 제공하지 않으며 웹 프록시에서 차단합니다. 중앙 엔진 내부 API는 실행 주체의 인증·신원 검증을 요구합니다. flag 기본값과 배포 조건은 [연속 센서 가이드](../guides/vd-processing.md)를 확인합니다.
 
 ## 요청 규칙
 
@@ -57,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **57개**입니다.
+계약에 정의된 operation은 **72개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -118,6 +131,21 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/v1/sensors/readings` | `getSensorReadings` |
 | `GET` | `/api/v1/sensors/commands` | `getSensorCommands` |
 | `POST` | `/api/v1/sensors/command` | `executeSensorCommand` |
+| `GET` | `/api/v1/virtual-devices/continuous-catalog` | `getContinuousCatalog` |
+| `POST` | `/api/v1/virtual-devices/continuous` | `createContinuousVirtualDevice` |
+| `PATCH` | `/api/v1/virtual-devices/{vdId}/continuous` | `updateContinuousVirtualDevice` |
+| `GET` | `/api/v1/virtual-devices/{vdId}/outputs` | `getContinuousOutputs` |
+| `GET` | `/api/v1/virtual-devices/{vdId}/outputs/{outputId}/history` | `getContinuousOutputHistory` |
+| `GET` | `/api/v1/virtual-devices` | `listVirtualDevices` |
+| `GET` | `/api/v1/virtual-devices/{vdId}` | `getVirtualDevice` |
+| `DELETE` | `/api/v1/virtual-devices/{vdId}` | `releaseVirtualDevice` |
+| `POST` | `/api/v1/virtual-devices/{vdId}/provision` | `provisionVirtualDevice` |
+| `POST` | `/api/v1/virtual-devices/{vdId}/drain` | `drainVirtualDeviceRuntime` |
+| `GET` | `/api/v1/virtual-devices/{vdId}/execution` | `getVirtualDeviceExecution` |
+| `GET` | `/api/v1/data-store` | `getDataStore` |
+| `GET` | `/api/v1/data-store/sensors/{uid}/{property}/chart` | `getSensorPeriodChart` |
+| `GET` | `/api/v1/data-store/sensors/{uid}/{property}/history` | `getSensorOriginalHistory` |
+| `GET` | `/api/v1/virtual-devices/{id}/processing-versions` | `getProcessingVersions` |
 <!-- END GENERATED OPERATIONS -->
 
 기능별 사용 조건은 [지원 범위](support.md)를 확인합니다.

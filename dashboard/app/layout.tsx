@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ConsoleShell } from "./components/console-shell";
 import { workflowsEnabled } from "../lib/features";
 import "./globals.css";
-import "./nexus-theme.css";
+import "./console-theme.css";
 
 export const metadata: Metadata = {
   title: "EdgeAI · Control Plane",

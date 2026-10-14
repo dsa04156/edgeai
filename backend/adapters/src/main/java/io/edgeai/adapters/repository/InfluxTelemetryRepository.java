@@ -147,27 +147,72 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         return result;
     }
     private Map<String,Object> documents(String source,Instant from,Instant to,int limit,String cursor) {
+        return documents(source,from,to,limit,cursor,false);
+    }
+    private Map<String,Object> documents(String source,Instant from,Instant to,int limit,String cursor,boolean descending) {
         String continuation="";
         if(cursor!=null)try {
-            String[] parts=new String(Base64.getUrlDecoder().decode(cursor),StandardCharsets.UTF_8).split("\\|",-1);if(parts.length!=2)throw new IllegalArgumentException();
-            Instant at=Instant.parse(parts[0]);if(at.isBefore(from)||!at.isBefore(to)||parts[1].length()>100)throw new IllegalArgumentException();
-            continuation=" |> filter(fn:(r)=> r._time > time(v:"+quote(parts[0])+") or (r._time == time(v:"+quote(parts[0])+") and r.series > "+quote(parts[1])+"))";
+            String[] parts=new String(Base64.getUrlDecoder().decode(cursor),StandardCharsets.UTF_8).split("\\|",-1);
+            int offset=descending?1:0;if(parts.length!=2+offset||descending&&!parts[0].equals("desc"))throw new IllegalArgumentException();
+            Instant at=Instant.parse(parts[offset]);if(at.isBefore(from)||!at.isBefore(to)||parts[offset+1].length()>100)throw new IllegalArgumentException();
+            String comparator=descending?" < ":" > ";
+            continuation=" |> filter(fn:(r)=> r._time"+comparator+"time(v:"+quote(parts[offset])+") or (r._time == time(v:"+quote(parts[offset])+") and r.series"+comparator+quote(parts[offset+1])+"))";
         }catch(RuntimeException e){throw new IllegalArgumentException("Invalid telemetry cursor");}
-        var rows=query(source+continuation+" |> group(columns:[]) |> sort(columns:[\"_time\",\"series\"]) |> limit(n:"+(limit+1)+")");
+        var rows=query(source+continuation+" |> group(columns:[]) |> sort(columns:[\"_time\",\"series\"],desc:"+descending+") |> limit(n:"+(limit+1)+")");
         var items=new ArrayList<Map<String,Object>>();
         for(var row:rows.stream().limit(limit).toList())items.add(json.readValue(row.get("_value"),Map.class));
         var result=new TreeMap<String,Object>();result.put("items",items);result.put("truncated",rows.size()>limit);
-        if(rows.size()>limit){var last=rows.get(limit-1);result.put("nextCursor",Base64.getUrlEncoder().withoutPadding().encodeToString((last.get("_time")+"|"+last.get("series")).getBytes(StandardCharsets.UTF_8)));}
+        if(rows.size()>limit){var last=rows.get(limit-1);result.put("nextCursor",Base64.getUrlEncoder().withoutPadding().encodeToString(((descending?"desc|":"")+last.get("_time")+"|"+last.get("series")).getBytes(StandardCharsets.UTF_8)));}
         return result;
     }
     public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor) {
+        return readSensor(uid,property,from,to,limit,cursor,false);
+    }
+    @Override public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor,boolean descending) {
         var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
         if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
-        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor);
+        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor,descending);
     }
     public List<Map<String,Object>> sensorSeries() {
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
         var result=new ArrayList<Map<String,Object>>();for(var row:rows){var document=json.readValue(row.get("_value"),Map.class);var item=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))item.put(key,document.get(key));result.add(item);}return result;
+    }
+    private static Instant originalBoundary(Instant at) {
+        var millis=at.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);return millis.isBefore(at)?millis.plusMillis(1):millis;
+    }
+    private long sensorChartCount(String source,Instant from) {
+        var rows=query(source+" |> count() |> map(fn:(r)=> ({_time:time(v:"+quote(from.toString())+"),_value:r._value}))");
+        return rows.isEmpty()?0:Long.parseLong(rows.getFirst().get("_value"));
+    }
+    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int selectionSeconds) {
+        var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=originalBoundary(from.isBefore(minimum)?minimum:from);var stop=originalBoundary(to);
+        if(!start.isBefore(stop))return Map.of("items",List.of(),"truncated",false,"displayMode","ORIGINALS","totalObservations",0);
+        String base=source(rawBucket,start,stop,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
+            +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,_value:float(v:r._value),kind:if r._field == \"value_boolean\" then \"B\" else \"N\"})) |> group(columns:[\"_start\",\"_stop\"])";
+        long count=sensorChartCount(base,start);
+        boolean selected=count>100000;
+        List<Map<String,String>> rows;
+        if(!selected) {
+            rows=query(base+" |> sort(columns:[\"_time\"]) |> limit(n:100001) |> keep(columns:[\"_time\",\"_value\",\"kind\"])");
+            if(rows.size()>100000){count=Math.max(rows.size(),sensorChartCount(base,start));selected=true;}
+        }else rows=List.of();
+        if(selected) {
+            var flux=new StringBuilder("data = ").append(base).append('\n');
+            for(var selector:List.of("first","min","max","last"))flux.append("data |> window(every:").append(selectionSeconds)
+                .append("s) |> sort(columns:[\"_time\"]) |> ").append(selector).append("() |> keep(columns:[\"_time\",\"_value\",\"kind\"]) |> group(columns:[]) |> sort(columns:[\"_time\"]) |> limit(n:2001) |> yield(name:").append(quote(selector)).append(")\n");
+            var unique=new TreeMap<String,Map<String,String>>();
+            for(var row:query(flux.toString()))unique.put(row.get("_time")+"|"+row.get("kind")+"|"+row.get("_value"),row);
+            rows=new ArrayList<>(unique.values());rows.sort(Comparator.comparing(row->Instant.parse(row.get("_time"))));
+        }
+        var items=new ArrayList<Map<String,Object>>();
+        for(var row:rows) {
+            double number=Double.parseDouble(row.get("_value"));if(!Double.isFinite(number))throw new IllegalStateException("Invalid original chart value");
+            Object value=number;if("B".equals(row.get("kind")))value=number!=0;
+            // The archive offsets sequences below one millisecond; the original source time is millisecond precision.
+            items.add(Map.of("observedAt",Instant.ofEpochMilli(Instant.parse(row.get("_time")).toEpochMilli()).toString(),"value",value));
+        }
+        var result=new TreeMap<String,Object>();result.put("items",items);result.put("truncated",false);result.put("displayMode",selected?"SELECTED_ORIGINALS":"ORIGINALS");result.put("totalObservations",selected?count:items.size());
+        if(selected)result.put("selection",Map.of("method","FIRST_MIN_MAX_LAST","windowSeconds",selectionSeconds));return result;
     }
     public Map<String,Object> read(UUID id,String output,Instant from,Instant to,int limit,String cursor,Integer bucket) {
         String filter="r._measurement == \"vd_result\" and r.vd_id == "+quote(id.toString())+" and r.output_id == "+quote(output);

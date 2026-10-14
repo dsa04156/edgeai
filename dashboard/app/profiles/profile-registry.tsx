@@ -10,6 +10,7 @@ import { nextProfileVersion, readProfilePage } from "../../lib/profile-version";
 import { ProfileFields } from "./profile-fields";
 import { HardwareProfileFields } from "./hardware-profile-fields";
 import { EmptyState } from "../components/empty-state";
+import { RegistrationDialog } from "../components/registration-dialog";
 
 type Profile = components["schemas"]["ProfileVersion"];
 type Page = { items: Profile[]; nextOffset: number | null };
@@ -17,17 +18,14 @@ type PublishFeedback = { state: "pending" | "error"; message: string }
   | { state: "success"; message: string; profileId: string; refreshError?: string };
 
 export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) {
-  const createPanel = useRef<HTMLDetailsElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const publishForm = useRef<HTMLFormElement>(null);
   const publishError = useRef<HTMLParagraphElement>(null);
   const detailTitle = useRef<HTMLHeadingElement>(null);
   function openCreatePanel() {
-    if (!createPanel.current) return;
     setPublishFeedback(null);
     setEditingProfile(null);
-    createPanel.current.open = true;
-    createPanel.current.scrollIntoView({ block: "start" });
-    createPanel.current.querySelector<HTMLInputElement>('input[name="key"]')?.focus({ preventScroll: true });
+    setCreateOpen(true);
   }
   const [auth, setAuth] = useState("");
   const [csrf, setCsrf] = useState("");
@@ -56,11 +54,10 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
   }
   const publishedId = publishFeedback?.state === "success" ? publishFeedback.profileId : null;
   useEffect(() => {
-    if (publishedId) {
+    if (publishedId && !createOpen && !busy) {
       detailTitle.current?.focus({ preventScroll: true });
-      detailTitle.current?.scrollIntoView({ block: "start" });
     }
-  }, [publishedId]);
+  }, [publishedId, createOpen, busy]);
   useEffect(() => {
     if (publishFeedback?.state !== "error") return;
     const target = publishForm.current?.querySelector<HTMLElement>("input:invalid, textarea:invalid, select:invalid") || publishError.current;
@@ -128,11 +125,11 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
         message: response.status === 201 ? "새 버전을 발행했습니다." : "같은 내용의 버전이 이미 발행되어 있습니다. 기존 버전을 표시합니다.",
       };
       setPublishFeedback(feedback);
-      if (createPanel.current) createPanel.current.open = false;
       try { await load(0, filter); }
       catch (error) {
         setPublishFeedback({ ...feedback, refreshError: `버전은 발행됐지만 목록을 새로 불러오지 못했습니다. ${error instanceof Error ? error.message : "연결 상태를 확인하세요."}` });
       }
+      setCreateOpen(false);
     } catch (error) {
       setPublishFeedback({ state: "error", message: error instanceof Error ? error.message : "연결 상태를 확인하세요." });
     } finally { setBusy(false); }
@@ -192,8 +189,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
         <div className="toolbar"><button disabled={busy} onClick={() => editProfile(detail)}>새 버전으로 수정</button>{workflows && <a href={`/workflows?service=${detail.id}`}>워크플로에서 사용 →</a>}</div>
         <p className="mono digest">버전 ID {detail.id}</p><p className="mono digest">{detail.digest}</p><pre aria-label="발행된 JSON 규격">{stringify(detail.spec, null, 2)}</pre>
       </section>}
-      </div><details className="create-panel" ref={createPanel}>
-        <summary><h2 id="publish-title">실행 모듈 새 버전 등록</h2></summary>
+      </div><RegistrationDialog open={createOpen} title="실행 모듈 등록" busy={busy} onClose={() => setCreateOpen(false)}>
         {editingProfile && <p className="notice">{editingProfile.key} · {editingProfile.version} 내용을 불러왔습니다. 변경 내용은 새 버전으로 발행하며 기존 버전과 사용 중인 연결은 유지됩니다.</p>}
         <form ref={publishForm} onSubmit={publish} aria-busy={publishFeedback?.state === "pending"} onInvalid={event => {
           const invalid = event.currentTarget.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input:invalid, textarea:invalid, select:invalid");
@@ -216,7 +212,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
             <button className="primary" type="submit">{publishFeedback?.state === "pending" ? "발행 중…" : "버전 발행"}</button>
           </fieldset>
         </form>
-      </details>
+      </RegistrationDialog>
     </>}
   </>;
 }

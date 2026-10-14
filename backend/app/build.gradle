@@ -42,6 +42,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/StreamCheckpointIntegrationTest.class'
     exclude '**/StreamSourceCompletionIntegrationTest.class'
     exclude '**/InfluxDataStoreIntegrationTest.class'
+    exclude '**/NanoMqArchiveIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -109,5 +110,19 @@ tasks.named('processResources') {
     from(rootProject.file('../contracts/openapi/platform-api.yaml')) {
         into 'static'
         rename { 'openapi.yaml' }
+    }
+}
+
+tasks.register('nanoMqIntegrationTest', Test) {
+    description = 'Requires an explicit isolated NanoMQ endpoint on1884; verifies durable MQTT burst delivery.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/NanoMqArchiveIntegrationTest.class'
+    inputs.property('nanoMqTestUrl', providers.environmentVariable('EDGEAI_NANOMQ_TEST_URL').orElse(''))
+    outputs.upToDateWhen { false }
+    doFirst {
+        if (!(System.getenv('EDGEAI_NANOMQ_TEST_URL') ==~ /tcp:\/\/[^\/]+:1884/)) {
+            throw new GradleException('Select an isolated NanoMQ endpoint on1884 with EDGEAI_NANOMQ_TEST_URL')
+        }
     }
 }

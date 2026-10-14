@@ -1189,6 +1189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-store/sensors/{uid}/{property}/chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 센서 UID별 선택 기간 전체의 그래프 조회
+         * @description 숫자·참/거짓의 실제 측정 시각과 값을 시간순으로 조회합니다. 원본 100000개 이하의 기간은 모두 반환합니다. 이를 초과하는 긴 기간은 구간의 최초·최저·최고·마지막 실제 측정값을 선택해 기간 전체를 표시하며 SELECTED_ORIGINALS로 명시합니다. 평균·보간 값은 만들지 않습니다. 각 측정의 원본 문서·설정 식별 정보는 history API로 조회합니다.
+         */
+        get: operations["getSensorPeriodChart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-store/sensors/{uid}/{property}/history": {
         parameters: {
             query?: never;
@@ -2452,6 +2472,38 @@ export interface components {
                 observedAt: string;
                 /** @enum {string} */
                 quality: "QUALIFIED" | "UNVERIFIED";
+            }[];
+        };
+        SensorPeriodChart: {
+            /** Format: uuid */
+            deviceUid: string;
+            property: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            retentionDays: number;
+            /**
+             * @description 선택 기간을 앞이나 뒤에서 자르지 않습니다. 많은 원본의 표시 선택은 displayMode로 구분합니다.
+             * @constant
+             */
+            truncated: false;
+            /** @enum {string} */
+            displayMode: "ORIGINALS" | "SELECTED_ORIGINALS";
+            totalObservations: number;
+            selection?: {
+                windowSeconds: number;
+                /** @constant */
+                method: "FIRST_MIN_MAX_LAST";
+            };
+            items: {
+                /**
+                 * Format: date-time
+                 * @description 원본의 실제 측정 시각. 수집기 원본과 같은 밀리초 정밀도.
+                 */
+                observedAt: string;
+                /** @description 변경하거나 평균을 계산하지 않은 실제 측정값. */
+                value: number | boolean;
             }[];
         };
         SensorOriginalHistory: {
@@ -5885,6 +5937,34 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    getSensorPeriodChart: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                uid: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간의 실제 측정값. 보관 기간 밖의 원본은 포함되지 않습니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorPeriodChart"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     getSensorOriginalHistory: {
         parameters: {
             query?: {
@@ -5892,6 +5972,8 @@ export interface operations {
                 to?: string;
                 limit?: number;
                 cursor?: string;
+                /** @description desc는 최신 원본부터 조회하며 다음 cursor는 더 이전 기록으로 이동합니다. */
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {

@@ -19,7 +19,7 @@ async function fixture(page: Page, detail = false, catalog: "enabled" | "disable
     if (path === "virtual-devices/continuous-catalog") return catalog === "unavailable" ? route.fulfill({ status: 503, json: { message: "연속 처리 서버 확인 필요" } }) : route.fulfill({ json: { enabled: catalog === "enabled", inputs: sensors } });
     if (path === "virtual-devices/processing-catalog") return route.fulfill({ json: { ready: false, architectures: [], operations: [] } });
     if (path === "profiles/VD") return route.fulfill({ json: { items: [{ id: profile, key: "continuous", version: "1.0.0", kind: "VD", spec: { apiVersion: "edgeai.vd/v3", continuous: configuration } }], nextOffset: null } });
-    if (path === "virtual-devices") return route.fulfill({ json: { items: detail ? [vd] : [], nextOffset: null } });
+    if (path === "virtual-devices") return !detail && attempts >= 2 ? route.fulfill({ status: 503, json: { message: "목록 조회 실패" } }) : route.fulfill({ json: { items: detail ? [vd] : [], nextOffset: null } });
     if (path === "virtual-devices/continuous" && request.method() === "POST") {
       const body = request.postDataJSON();
       expect(body.sources).toEqual([{ sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30 }, { sourceKey: "b", deviceId: "humidity", properties: ["humidity"], maxAgeSeconds: 30 }]);
@@ -48,6 +48,7 @@ test("multiple sensors and outputs preserve a failed registration without requir
   await page.goto("/virtual-devices?create=1");
   const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
   await expect(form).toBeVisible();
+  await form.getByRole("button", { name: "여러 센서·직접 계산식 설정", exact: true }).click();
   await form.getByLabel("장치 키", { exact: true }).fill(vd.key);
   await form.getByLabel("장치 이름", { exact: true }).fill(vd.displayName);
   await form.getByLabel("입력 1 센서", { exact: true }).selectOption("temperature");
@@ -73,15 +74,158 @@ test("multiple sensors and outputs preserve a failed registration without requir
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("quick registration creates a sensor average without typing keys or expressions", async ({ page }, info) => {
+  await fixture(page);
+  let submitted = false;
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => {
+    const body = route.request().postDataJSON();
+    expect(body.key).toMatch(/^vd-[a-f0-9]{32}$/);
+    expect(body.displayName).toBe("온도 평균");
+    expect(body.sources).toEqual([{ sourceKey: "a", deviceId: "temperature", properties: ["temperature"], maxAgeSeconds: 30 }]);
+    expect(body.continuous).toEqual({ intervalSeconds: 1, retentionDays: 7, outputs: [{ name: "value", expression: "a", operation: "movingAverage", sampleCount: 5, unit: "°C" }] });
+    submitted = true;
+    return route.fulfill({ status: 201, json: vd });
+  });
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await expect(form.getByLabel("장치 키", { exact: true })).not.toBeVisible();
+  await expect(form.getByLabel("입력 1 별칭", { exact: true })).not.toBeVisible();
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("movingAverage");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
+  await page.screenshot({ path: info.outputPath("quick-registration.png"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "등록했습니다" })).toBeVisible();
+  expect(submitted).toBe(true);
+});
+
+test("quick comparison preserves its draft and automatic key when registration is retried", async ({ page }) => {
+  await fixture(page);
+  const keys: string[] = [];
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => {
+    const body = route.request().postDataJSON(); keys.push(body.key);
+    expect(body.displayName).toBe("온도 경보");
+    expect(body.continuous.outputs).toEqual([{ name: "value", expression: "a > 45.5", operation: "threshold", unit: "" }]);
+    return keys.length === 1 ? route.fulfill({ status: 503, json: { message: "등록 재시도" } }) : route.fulfill({ status: 201, json: vd });
+  });
+  // getRandomValues also works on the LAN's HTTP origin, where randomUUID is absent.
+  await page.addInitScript(() => Object.defineProperty(crypto, "randomUUID", { value: undefined }));
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("threshold");
+  await form.getByLabel("비교 조건", { exact: true }).selectOption(">");
+  await form.getByLabel("기준값", { exact: true }).fill("45.5");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 경보");
+  const submit = form.getByRole("button", { name: "연속 처리 장치 등록", exact: true });
+  await submit.click();
+  await expect(form.getByRole("alert")).toHaveText("등록 재시도");
+  await expect(form.getByLabel("기준값", { exact: true })).toHaveValue("45.5");
+  await form.getByRole("button", { name: "여러 센서·직접 계산식 설정", exact: true }).click();
+  await expect(form.getByLabel("장치 이름", { exact: true })).toHaveValue("온도 경보");
+  await expect(form.getByLabel("장치 키", { exact: true })).toHaveValue(keys[0]);
+  await expect(form.getByLabel("출력 1 계산식", { exact: true })).toHaveValue("a > 45.5");
+  await submit.click();
+  await expect(page.getByRole("status").filter({ hasText: "등록했습니다" })).toBeVisible();
+  expect(keys).toHaveLength(2); expect(keys[0]).toMatch(/^vd-[a-f0-9]{32}$/); expect(keys[1]).toBe(keys[0]);
+});
+
+test("quick averaging shows an invalid sample count and blocks registration", async ({ page }) => {
+  await fixture(page);
+  let submitted = false;
+  await page.route("**/api/control-plane/virtual-devices/continuous", route => { submitted = true; return route.fulfill({ status: 400 }); });
+  await page.goto("/virtual-devices?create=1");
+  const form = page.getByRole("form", { name: "연속 처리 장치 등록", exact: true });
+  await form.getByLabel("센서", { exact: true }).selectOption("temperature");
+  await form.getByLabel("계산 방식", { exact: true }).selectOption("movingAverage");
+  await form.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
+  await form.getByText("고급 설정 · 표본 수·주기·보관 기간", { exact: true }).click();
+  const count = form.getByLabel("최근 표본 수", { exact: true });
+  await count.fill("0");
+  await expect(count).toHaveValue("0");
+  expect(await count.evaluate((element: HTMLInputElement) => element.validity.rangeUnderflow)).toBe(true);
+  await form.getByRole("button", { name: "연속 처리 장치 등록", exact: true }).click();
+  expect(submitted).toBe(false);
+});
+
+test("settings open in a modal while start and stop stay in the list management cell", async ({ page }, info) => {
+  await fixture(page, true); await page.goto("/virtual-devices");
+  const list = page.getByRole("table", { name: "가상디바이스 목록", exact: true });
+  const management = list.getByRole("row").filter({ hasText: "온도 계산" }).getByRole("cell").last();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeDisabled();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
+  await management.scrollIntoViewIfNeeded();
+  expect(await list.evaluate(element => element.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("management-list.png") });
+  const trigger = management.getByRole("button", { name: "온도 계산 설정", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "온도 계산 · 가상디바이스 설정", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "현재 원본 연결", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
+  await page.screenshot({ path: info.outputPath("settings-modal.png") });
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
+  await expect(page.getByRole("heading", { name: "현재 원본 연결", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("management confirms stop and start, retaining request identity after a failed stop", async ({ page }) => {
+  await fixture(page, true);
+  let running = true;
+  const requests: { action: string; key: string }[] = [];
+  await page.route(`**/api/control-plane/virtual-devices/${id}/execution`, route => route.fulfill({ json: { continuous: { enabled: true, desiredRunning: running, generation, state: running ? "RUNNING" : "STOPPED", reason: running ? "HEALTHY" : "STOPPED" } } }));
+  for (const action of ["drain", "provision"]) await page.route(`**/api/control-plane/virtual-devices/${id}/${action}`, route => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ revision: 1 });
+    expect(route.request().headers()["x-csrf-token"]).toBe("test");
+    requests.push({ action, key: route.request().headers()["idempotency-key"] });
+    if (requests.length === 1) return route.fulfill({ status: 503, json: { message: "중지 요청 재시도" } });
+    running = action === "provision";
+    return route.fulfill({ status: 202, json: {} });
+  });
+  await page.goto("/virtual-devices");
+  const management = page.getByRole("region", { name: "온도 계산 실행 관리", exact: true });
+  await management.getByRole("button", { name: "온도 계산 계산 중지", exact: true }).click();
+  expect(requests).toHaveLength(0);
+  await management.getByRole("button", { name: "온도 계산 중지 확인", exact: true }).click();
+  await expect(management.getByRole("status")).toHaveText("중지 요청 재시도");
+  await management.getByRole("button", { name: "온도 계산 중지 확인", exact: true }).click();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 시작", exact: true })).toBeEnabled();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeDisabled();
+  expect(requests[1].key).toBe(requests[0].key);
+  await management.getByRole("button", { name: "온도 계산 계산 시작", exact: true }).click();
+  await management.getByRole("button", { name: "온도 계산 시작 확인", exact: true }).click();
+  await expect(management.getByRole("button", { name: "온도 계산 계산 중지", exact: true })).toBeEnabled();
+  expect(requests.map(request => request.action)).toEqual(["drain", "drain", "provision"]);
+  expect(requests[2].key).not.toBe(requests[0].key);
+});
+
+test("a failed execution read disables even a pending management confirmation", async ({ page }) => {
+  await fixture(page, true); await page.clock.install(); let fail = false;
+  await page.route(`**/api/control-plane/virtual-devices/${id}/execution`, route => fail ? route.fulfill({ status: 503, json: { message: "실행 상태 조회 실패" } }) : route.fulfill({ json: { continuous: { enabled: true, desiredRunning: true, generation, state: "RUNNING", reason: "HEALTHY" } } }));
+  await page.goto("/virtual-devices");
+  const management = page.getByRole("region", { name: "온도 계산 실행 관리", exact: true });
+  await management.getByRole("button", { name: "온도 계산 계산 중지", exact: true }).click();
+  const confirm = management.getByRole("button", { name: "온도 계산 중지 확인", exact: true });
+  await expect(confirm).toBeEnabled(); fail = true;
+  await page.clock.fastForward(11000);
+  await expect(management.getByRole("alert")).toHaveText("실행 상태 조회 실패");
+  await expect(confirm).toBeDisabled();
+});
+
 test("one VD displays three separate output rows and a chart with an explicit storage gap", async ({ page }) => {
   await fixture(page, true);
   await page.goto("/virtual-devices");
-  await page.getByRole("button", { name: /^온도 계산\s*temperature-calculations$/ }).click();
+  await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   const results = page.getByRole("region", { name: "연속 처리 결과", exact: true });
   await expect(results.getByRole("table").getByRole("row")).toHaveCount(4);
   await expect(results.getByText("기록 저장 누락", { exact: true })).toBeVisible();
-  await expect(results.getByRole("button", { name: "계산 시작", exact: true })).toBeDisabled();
-  await expect(results.getByRole("button", { name: "계산 중지", exact: true })).toBeEnabled();
+  await expect(results.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
+  await expect(results.getByRole("button", { name: "계산 중지", exact: true })).toHaveCount(0);
   await results.getByRole("button", { name: "average 그래프", exact: true }).click();
   await expect(results.getByRole("img", { name: "average 결과 그래프, 4개 기록", exact: true })).toBeVisible();
   await expect(results.getByText(/기록 저장 중단 ·/)).toBeVisible();
@@ -93,26 +237,30 @@ test("one VD displays three separate output rows and a chart with an explicit st
 
 test("sensor-to-central flow explains separate outputs without claiming an inactive engine is running", async ({ page }) => {
   await fixture(page, false, "disabled");
-  await page.goto("/virtual-devices?create=1");
+  await page.goto("/virtual-devices");
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toBeVisible();
+  await expect(flow.getByRole("list", { name: "센서부터 결과까지" })).not.toBeVisible();
+  await flow.locator("summary").click();
   await expect(flow.getByRole("list", { name: "센서부터 결과까지" }).getByRole("listitem")).toHaveCount(4);
   await expect(flow.getByText("Jetson 센서 → Mapper → NanoMQ", { exact: true })).toBeVisible();
   await expect(flow.getByText("Pi 센서 → Mapper → NanoMQ", { exact: true })).toBeVisible();
   await expect(flow.getByText("처리 agent ↔ eKuiper", { exact: true })).toBeVisible();
   await expect(flow.getByText(/결과는 항목마다 별도 행과 그래프로/)).toBeVisible();
   await expect(flow.getByText(/계산 중|연결 완료/)).toHaveCount(0);
+  await page.getByRole("button", { name: "가상디바이스 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("an unavailable catalog stays unknown and retired batch registration stays absent", async ({ page }) => {
   await fixture(page, false, "unavailable");
-  await page.goto("/virtual-devices?create=1");
+  await page.goto("/virtual-devices");
   const flow = page.getByRole("region", { name: "연속 처리 흐름", exact: true });
   await expect(flow.getByText("연속 처리 상태 확인 필요", { exact: true })).toBeVisible();
   await expect(flow.getByText("연속 처리 비활성", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "가상디바이스 등록", exact: true }).click();
   await expect(page.getByRole("form", { name: "연속 처리 장치 등록", exact: true }).getByRole("button", { name: "연속 처리 장치 등록", exact: true })).toBeDisabled();
   await expect(page.getByRole("form", { name: "센서 처리 장치 등록", exact: true })).toHaveCount(0);
   await expect(page.getByText("기존 표본·FFT 처리 장치 등록", { exact: true })).toHaveCount(0);
@@ -122,7 +270,8 @@ test("an unavailable catalog stays unknown and retired batch registration stays 
 
 test("processing versions expose the previous definition and generated SQL", async ({ page }) => {
   await fixture(page, true); await page.goto("/virtual-devices");
-  await page.getByRole("button", { name: /^온도 계산\s*temperature-calculations$/ }).click();
+  await page.getByRole("button", { name: "온도 계산 설정", exact: true }).click();
+  await page.getByText("계산 결과·처리 버전", { exact: true }).click();
   await page.getByRole("button", { name: "처리 정의·버전 조회", exact: true }).click();
   const versions = page.getByRole("region", { name: "처리 정의 버전", exact: true });
   await expect(versions.getByText("revision 2", { exact: true })).toBeVisible();

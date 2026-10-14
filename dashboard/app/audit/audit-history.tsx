@@ -7,13 +7,13 @@ type Audit = components["schemas"]["ManagementAudit"];
 type AuditPage = components["schemas"]["ManagementAuditPage"];
 const operations: Record<string, string> = {
   deleteProfileVersion: "프로필 버전 삭제", deleteDeviceRegistration: "장치 등록 삭제",
-  deleteVirtualDeviceRegistration: "가상 장치 등록 영구 삭제", executeSensorCommand: "센서 명령 실행",
+  deleteVirtualDeviceRegistration: "가상디바이스 등록 영구 삭제", executeSensorCommand: "센서 명령 실행",
   publishProfile: "프로필 버전 발행", registerDevice: "장치 등록", updateDevice: "장치 수정", releaseDevice: "장치 해제",
   attachDevice: "장치·노드 연결", openDeviceSession: "장치 세션 시작", reportDeviceObservation: "장치 상태 보고",
   createWorkflow: "워크플로 등록", publishWorkflowVersion: "워크플로 버전 발행", createWorkflowRun: "워크플로 실행 요청",
   cancelWorkflowRun: "실행 취소 요청", cancelTask: "작업 취소 요청", offloadTask: "작업 실행 위치 전환",
-  createVirtualDevice: "가상 장치 등록", updateVirtualDevice: "가상 장치 수정", releaseVirtualDevice: "가상 장치 해제",
-  provisionVirtualDevice: "가상 장치 시작", replaceVirtualDeviceRuntime: "가상 장치 실행 교체", drainVirtualDeviceRuntime: "가상 장치 종료",
+  createVirtualDevice: "가상디바이스 등록", updateVirtualDevice: "가상디바이스 수정", releaseVirtualDevice: "가상디바이스 해제",
+  provisionVirtualDevice: "가상디바이스 시작", replaceVirtualDeviceRuntime: "가상디바이스 실행 교체", drainVirtualDeviceRuntime: "가상디바이스 종료",
   issueDeviceStreamToken: "장치 스트림 토큰 발급", unmappedManagementRequest: "등록되지 않은 관리 요청",
 };
 function operation(value: Audit) { return operations[value.operation] || (["GET", "HEAD", "OPTIONS"].includes(value.method) ? "관리 정보 조회" : "관리 요청"); }
