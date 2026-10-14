@@ -427,7 +427,7 @@ tbody tr:hover { background: #f7faff; }
   .resource-table .resource-usage strong, .resource-table th strong { font-size: 13px; }
 }
 @media (max-width: 359px) {
-  .overview-workspace > .resource-status-strip { grid-template-columns: minmax(0, 1fr); }
+  .overview-sidebar > .resource-status-strip { grid-template-columns: minmax(0, 1fr); }
   .resource-status-body { grid-template-columns: 56px minmax(0, 1fr); justify-items: stretch; }
 }
 
