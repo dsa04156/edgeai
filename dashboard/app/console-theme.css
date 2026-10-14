@@ -20,6 +20,7 @@
 .sensor-graph-dialog .registration-dialog-header > button { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--secondary); font-size: 27px; font-weight: 400; }
 .sensor-graph-dialog .registration-dialog-body { padding: 16px 20px; }
 .sensor-graph { display: grid; gap: 8px; min-width: 0; margin: 0; }
+.sensor-graph > button { justify-self: start; }
 .sensor-graph-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 0 12px; border-bottom: 1px solid var(--line); }
 .sensor-graph-summary > div:first-child { min-width: 0; }
 .sensor-graph-metric-label { font-size: 11px; color: var(--muted); }
