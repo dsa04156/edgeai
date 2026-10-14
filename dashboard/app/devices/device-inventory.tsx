@@ -12,6 +12,7 @@ import { ManagedDevices } from "../components/managed-devices";
 import { VirtualDeviceRegistry } from "../virtual-devices/virtual-device-registry";
 import { InfrastructureCounts } from "./infrastructure-counts";
 import { useVirtualDeviceCount } from "../../lib/virtual-device-count";
+import { ConsoleIcon } from "../components/console-shell";
 
 type Node = components["schemas"]["ExecutionNode"];
 export function DeviceInventory({ initialView = "servers", initialCreateOpen = false }: { initialView?: string; initialCreateOpen?: boolean }) {
@@ -47,13 +48,14 @@ export function DeviceInventory({ initialView = "servers", initialCreateOpen = f
   return <>
     <ConnectionPanel connected={auth} busy={busy} onConnect={connect}/>
     {error&&<p role="alert" className="error">{error}</p>}
-    <InfrastructureCounts selected={view} select={chooseView} items={[
+    <div className="inventory-workspace"><aside className="inventory-sidebar" aria-label="리소스 보기"><h2>리소스</h2><p className="hint">전체 등록 기준</p><InfrastructureCounts selected={view} select={chooseView} items={[
       { key: "servers", label: "엣지 AI 서버", count: classified?.filter(node => node.kind === "EDGE_AI_SERVER").length ?? null, pending },
       { key: "edge", label: "엣지 디바이스", count: classified?.filter(node => node.kind === "EDGE_DEVICE").length ?? null, pending },
       { key: "sensors", label: "센서", count: sensors?.length ?? null, pending },
       { key: "virtual", label: "가상디바이스", count: virtual.count, pending: virtual.pending },
     ]} />
-    <div className="inventory-controls">{(infrastructure.snapshot?.nodesStatus!=="AVAILABLE"||infrastructure.snapshot.nodes.some(node=>node.kind==="UNKNOWN")) && <button aria-pressed={view === "unknown"} onClick={() => chooseView("unknown")}>분류 미확인</button>}<label>현재 페이지에서 검색<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름 · 장비 · 측정 항목"/></label></div>
+    {(infrastructure.snapshot?.nodesStatus!=="AVAILABLE"||infrastructure.snapshot.nodes.some(node=>node.kind==="UNKNOWN")) && <button className="unknown-resources" aria-pressed={view === "unknown"} onClick={() => chooseView("unknown")}>분류 미확인</button>}</aside><div className="inventory-content">
+    <div className="inventory-controls"><label><span className="sr-only">현재 페이지에서 검색</span><ConsoleIcon name="search" /><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름 · 장비 · 측정 항목 검색"/></label></div>
     {view==="sensors"&&<section className="console-panel"><ManagedDevices search={search}/></section>}
     {view === "virtual" && <VirtualDeviceRegistry embedded search={search} initiallyOpen={createVirtual} onInventoryChange={refreshCounts} />}
       {view !== "sensors" && view !== "virtual" && <section aria-labelledby="nodes-title"><div className="toolbar"><h2 id="nodes-title">{infrastructureLabels[group]}</h2><button disabled={busy} onClick={() => { setMetricsRefresh(value => value + 1); void run(() => loadNodes()); }}>새로고침</button></div>
@@ -67,5 +69,6 @@ export function DeviceInventory({ initialView = "servers", initialCreateOpen = f
         <div className="pagination"><button disabled={busy || nodeOffset === 0} onClick={() => void run(() => loadNodes(Math.max(0, nodeOffset - 20)))}>이전 노드</button><span>{nodeOffset / 20 + 1} 페이지</span><button disabled={busy || nextNodeOffset === null} onClick={() => void run(() => loadNodes(nextNodeOffset!))}>다음 노드</button></div>
         </details>
       </section>}
+    </div></div>
   </>;
 }

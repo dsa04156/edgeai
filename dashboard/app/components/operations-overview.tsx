@@ -79,13 +79,13 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
       action={<button disabled={busy} onClick={() => { setBusy(true); setVirtual(previous => ({ ...previous, pending: true })); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button>} />
     <div className="overview-meta"><span className="small-label">자원 현황</span><span>{snapshot ? `${snapshot.at.toLocaleTimeString("ko-KR")} 조회 · 10초마다 갱신` : "서버에서 상태를 확인하고 있습니다"}</span></div>
     {!!errors.length && <p className="error" role="alert">{errors.join(" · ")} 조회에 실패했습니다. 해당 항목은 확인할 수 없음으로 표시합니다.</p>}
-    <div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>
+    <div className="overview-workspace"><div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>
       <ResourceStatusCard title="엣지 AI 서버" href="/devices?view=servers" states={classified?.filter(node => node.kind === "EDGE_AI_SERVER").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
       <ResourceStatusCard title="엣지 디바이스" href="/devices?view=edge" states={classified?.filter(node => node.kind === "EDGE_DEVICE").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
       <ResourceStatusCard title="센서" href="/devices?view=sensors" states={sensorStates} groups={sensorStatusGroups} pending={sensorPending} note={devices ? "측정 항목별 연결 상태" : "연결 상태 확인 필요"} />
       <ResourceStatusCard title="가상디바이스" href="/devices?view=virtual" states={virtual.value?.states ?? null} groups={virtualStatusGroups} pending={virtual.pending} note={virtual.value?.failures ? "일부 실행 상태 확인 필요" : "실제 계산 실행 상태"} />
     </div>
-    <div className="overview-grid">
+    <div className="overview-content"><div className="overview-grid">
       <section className="console-panel node-panel" aria-labelledby="cluster-title">
         <div className="panel-heading"><div><h2 id="cluster-title">노드별 자원 현황 {!!monitored.length && <span className="count-badge">{monitored.length}개 노드</span>}</h2></div><Link href="/devices?view=nodes">자원 상세 →</Link></div>
         <NodeMetricsNotice state={metrics} />
@@ -104,5 +104,6 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
     {workflows && <section className="console-panel recent-runs" aria-labelledby="recent-runs-title"><div className="panel-heading"><div><p className="small-label">RECENT EXECUTIONS</p><h2 id="recent-runs-title">최근 실행</h2></div><Link href="/runs">모든 실행 보기 ↗</Link></div>
       {!snapshot ? <p className="empty">실행 이력을 불러오는 중…</p> : !runs ? <p className="empty">실행 이력을 확인할 수 없습니다.</p> : !runs.length ? <div className="empty"><strong>아직 실행 요청이 없습니다.</strong><p>서비스를 연결하고 첫 워크플로를 실행하세요.</p><Link href="/workflows" className="button-link primary">Workflow Builder 열기</Link></div> : <div className="table-scroll"><table><caption className="sr-only">최근 실행 요청</caption><thead><tr><th>실행</th><th>상태</th><th>배치 정책</th><th>요청 시각</th><th><span className="sr-only">상세</span></th></tr></thead><tbody>{runs.slice(0, 6).map(run => <tr key={run.id}><td><Link className="run-id mono" href={`/runs?run=${run.id}`} title={run.id}>{run.id.slice(0, 8)}<span className="muted">…{run.id.slice(-4)}</span></Link></td><td><StatusBadge state={run.state} /></td><td>{run.mode === "NODE" ? nodes?.find(n => n.id === run.nodeId)?.name || "노드 지정" : { AUTO: "자동 배치", REMOTE: "원격 실행", VD: "과거 가상디바이스 실행" }[run.mode]}</td><td className="muted">{time(run.createdAt)}</td><td><Link href={`/runs?run=${run.id}`} aria-label={`${run.id} 실행 상세`}>상세 ↗</Link></td></tr>)}</tbody></table></div>}
     </section>}
+    </div></div>
   </>;
 }
