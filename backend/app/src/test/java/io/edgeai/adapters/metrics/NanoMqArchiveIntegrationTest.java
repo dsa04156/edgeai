@@ -6,11 +6,9 @@ import java.util.concurrent.*;
 import org.eclipse.paho.mqttv5.client.*;
 import org.eclipse.paho.mqttv5.common.*;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Run only against an explicitly selected isolated NanoMQ broker; never publishes sensor topics. */
-@EnabledIfEnvironmentVariable(named="EDGEAI_NANOMQ_TEST_URL",matches="tcp://[^/]+:1884")
 class NanoMqArchiveIntegrationTest {
     @Test void burstSurvivesSlowDurableReceiversWithoutWaitingForBrokerRetry() throws Exception {
         String address=System.getenv("EDGEAI_NANOMQ_TEST_URL");

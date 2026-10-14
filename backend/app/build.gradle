@@ -42,6 +42,7 @@ tasks.register('integrationTest', Test) {
     exclude '**/StreamCheckpointIntegrationTest.class'
     exclude '**/StreamSourceCompletionIntegrationTest.class'
     exclude '**/InfluxDataStoreIntegrationTest.class'
+    exclude '**/NanoMqArchiveIntegrationTest.class'
     shouldRunAfter tasks.named('test')
 }
 
@@ -117,4 +118,9 @@ tasks.register('nanoMqIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/NanoMqArchiveIntegrationTest.class'
+    doFirst {
+        if (!(System.getenv('EDGEAI_NANOMQ_TEST_URL') ==~ /tcp:\/\/[^\/]+:1884/)) {
+            throw new GradleException('Select an isolated NanoMQ endpoint on1884 with EDGEAI_NANOMQ_TEST_URL')
+        }
+    }
 }
