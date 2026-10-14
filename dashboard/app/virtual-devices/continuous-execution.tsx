@@ -28,7 +28,7 @@ function HistoryChart({ history, interval, unit }: { history: History; interval:
   </>} />;
 }
 
-export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = false }: { vd: Schema["VirtualDevice"]; auth: string; csrf: string; disabled: boolean; graphOnly?: boolean }) {
+export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = false, managementOnly = false, showControls = true }: { vd: Schema["VirtualDevice"]; auth: string; csrf: string; disabled: boolean; graphOnly?: boolean; managementOnly?: boolean; showControls?: boolean }) {
   const [data, setData] = useState<Schema["VDExecution"] | null>(null); const [outputs, setOutputs] = useState<Schema["ContinuousOutputs"] | null>(null);
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<{ action: "provision" | "drain"; key: string; revision: number } | null>(null);
@@ -36,8 +36,8 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const sequence = useRef({ value: 0 }), chartSequence = useRef({ value: 0 }), commandBusy = useRef(false);
   const api = useCallback(async (path: string, init?: RequestInit) => { const response = await fetch(`/api/control-plane/virtual-devices/${vd.id}/${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000), ...init, headers: { Authorization: auth, ...init?.headers } }); const value = await response.json(); if (!response.ok) throw new Error(value.message || "조회하지 못했습니다."); return value; }, [vd.id, auth]);
-  const refresh = useCallback(async () => { const request = ++sequence.current.value; try { const [execution, rows] = await Promise.all([api("execution"), api("outputs")]); if (request === sequence.current.value) { setData(execution); setOutputs(rows); setError(""); if (graphOnly) setSelected(current => rows.historyEnabled ? rows.items.some((row: Schema["ContinuousOutputs"]["items"][number]) => row.outputId === current) ? current : rows.items[0]?.outputId ?? "" : ""); } } catch (error) { if (request === sequence.current.value) setError(error instanceof Error ? error.message : "조회하지 못했습니다."); } }, [api, graphOnly]);
-  useEffect(() => { const requests = sequence.current; let stopped = false; let timer: ReturnType<typeof setTimeout>; const poll = async () => { await refresh(); if (!stopped) timer = setTimeout(poll, 3000); }; void poll(); return () => { stopped = true; ++requests.value; clearTimeout(timer); }; }, [refresh, vd.revision]);
+  const refresh = useCallback(async () => { const request = ++sequence.current.value; try { const [execution, rows] = await Promise.all([api("execution"), managementOnly ? Promise.resolve(null) : api("outputs")]); if (request === sequence.current.value) { setData(execution); setOutputs(rows); setError(""); if (graphOnly && rows) setSelected(current => rows.historyEnabled ? rows.items.some((row: Schema["ContinuousOutputs"]["items"][number]) => row.outputId === current) ? current : rows.items[0]?.outputId ?? "" : ""); } } catch (error) { if (request === sequence.current.value) setError(error instanceof Error ? error.message : "조회하지 못했습니다."); } }, [api, graphOnly, managementOnly]);
+  useEffect(() => { const requests = sequence.current; let stopped = false; let timer: ReturnType<typeof setTimeout>; const poll = async () => { await refresh(); if (!stopped) timer = setTimeout(poll, managementOnly ? 10000 : 3000); }; void poll(); return () => { stopped = true; ++requests.value; clearTimeout(timer); }; }, [refresh, vd.revision, managementOnly]);
   const retentionDays = outputs?.retentionDays || 7, intervalSeconds = outputs?.intervalSeconds || 1;
   const chart = useCallback(async (outputId = selected, reset = true) => {
     if (!outputId) return; const request = ++chartSequence.current.value; setSelected(outputId); if (reset) { setHistoryError(""); setHistory(null); }
@@ -59,6 +59,16 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
     finally { commandBusy.current = false; setBusy(false); }
   }
   const execution = data?.continuous;
+  const controls = !draft ? <div className="toolbar">
+    <button aria-label={managementOnly ? `${vd.displayName} 계산 시작` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || vd.state !== "REGISTERED" || execution.desiredRunning} onClick={() => setDraft({ action: "provision", key: requestKey(), revision: vd.revision })}>{managementOnly ? "시작" : "계산 시작"}</button>
+    <button aria-label={managementOnly ? `${vd.displayName} 계산 중지` : undefined} disabled={busy || disabled || !!error || !execution?.enabled || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>{managementOnly ? "중지" : "계산 중지"}</button>
+  </div> : <div className="toolbar"><button aria-label={managementOnly ? `${vd.displayName} ${draft.action === "provision" ? "시작" : "중지"} 확인` : undefined} disabled={busy || disabled} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "시작 확인" : "중지 확인"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>;
+  if (managementOnly) return <section aria-label={`${vd.displayName} 실행 관리`}>
+    {controls}
+    <p className="hint">{error ? "상태 확인 필요" : execution ? stateNames[execution.state] : "상태 조회 중…"}</p>
+    {error && <p role="alert" className="error">{error}</p>}
+    {notice && <p role="status" className="notice">{notice}</p>}
+  </section>;
   return <section aria-label="연속 처리 결과"><div className="toolbar"><h3>{graphOnly ? "출력별 결과 그래프" : "연속 처리"}</h3><button disabled={busy || disabled} onClick={() => void refresh()}>결과 새로고침</button></div>
     {!graphOnly && <ProcessingVersions key={vd.id} vdId={vd.id} auth={auth} />}
     {error && <p role="alert" className="error">{error} 마지막 조회 값을 표시합니다.</p>}
@@ -66,8 +76,7 @@ export function ContinuousExecution({ vd, auth, csrf, disabled, graphOnly = fals
     {execution && <><p className="stage">{error ? "상태 확인 필요" : stateNames[execution.state]} · {reasons[execution.reason] || "상태 확인 중"}</p>
       {!execution.enabled && <p className="notice">연속 처리가 비활성 상태입니다. 저장된 결과가 있으면 조회할 수 있습니다.</p>}
       <p className="hint">{graphOnly ? "저장된 출력 이력을 조회하며, 그래프는 5초마다 갱신합니다." : `모든 입력이 유효할 때 ${intervalSeconds}초마다 계산합니다.`} 보관 기간 {retentionDays}일.</p>
-      {!graphOnly && (!draft ? <div className="toolbar"><button disabled={busy || disabled || !!error || !execution.enabled || vd.state !== "REGISTERED" || execution.desiredRunning} onClick={() => setDraft({ action: "provision", key: requestKey(), revision: vd.revision })}>계산 시작</button><button disabled={busy || disabled || !!error || !execution.enabled || !execution.desiredRunning} onClick={() => setDraft({ action: "drain", key: requestKey(), revision: vd.revision })}>계산 중지</button></div>
-        : <div className="toolbar"><button disabled={busy || disabled} onClick={() => void submit()}>{busy ? "요청 중…" : draft.action === "provision" ? "계산 시작 요청" : "계산 중지 요청"}</button><button disabled={busy} onClick={() => setDraft(null)}>취소</button></div>)}
+      {!graphOnly && showControls && controls}
     </>}
     {notice && <p role="status" className="notice">{notice}</p>}
     {outputs && <div className="table-scroll"><table className="registry-table"><caption className="sr-only">계산 출력 항목별 최신 결과</caption><thead><tr><th>출력 항목</th><th>최신값</th><th>계산 시각</th><th>상태</th><th>기록</th></tr></thead><tbody>{outputs.items.map(row => <tr key={row.outputId}><td><strong>{row.name}</strong><span className="block muted">{row.expression}</span></td><td>{displayValue(row.latest?.value)} {row.unit}</td><td>{row.latest ? new Date(row.latest.evaluationAt).toLocaleString() : "미계산"}</td><td>{error ? "조회 확인 필요" : { VALID: "유효", STALE: "마지막 값", NOT_AVAILABLE: "미수신" }[row.quality]}{row.latest && <span className="block muted">{row.latest.storageStatus === "SKIPPED" ? "저장 정책 제외" : row.latest.historyStored ? "저장 완료" : row.latest.storageStatus === "PENDING" ? "저장 대기" : row.latest.storageStatus === "EXPIRED" ? "보관 기간 만료" : "기록 저장 누락"}</span>}</td><td><button disabled={busy || !outputs.historyEnabled} aria-pressed={selected === row.outputId} onClick={() => { if (graphOnly) { setSelected(row.outputId); setHistoryRefresh(value => value + 1); } else void chart(row.outputId); }}>{row.name} 그래프</button></td></tr>)}</tbody></table></div>}
