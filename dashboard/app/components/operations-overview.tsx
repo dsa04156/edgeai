@@ -10,11 +10,17 @@ import { useNodeMetrics } from "../../lib/node-metrics";
 import { NodeMetricsNotice } from "./node-usage";
 import { monitoredNodes } from "../../lib/monitored-nodes";
 import { MonitoredNodes } from "./monitored-nodes";
-import { ConsoleIcon } from "./console-shell";
 import { infrastructureLabels, useInfrastructure, type InfrastructureKind } from "../../lib/infrastructure";
+import { ResourceStatusCard, nodeStatusGroups, sensorStatusGroups, virtualStatusGroups } from "./resource-status-card";
+import { virtualDeviceStatuses, type VirtualDeviceStatuses } from "../../lib/virtual-device-status";
 
 type Schema = components["schemas"];
 type Snapshot = { nodes: Schema["ExecutionNode"][] | null; devices: Schema["ManagedDevice"][] | null; profiles: Schema["ProfileVersion"][] | null; runs: Schema["RunPage"] | null; errors: string[]; at: Date };
+const overviewRequest = (signal: AbortSignal) => async (path: string) => {
+  const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
+  if (!response.ok) throw new Error("조회 실패");
+  return response;
+};
 const time = (value: string) => new Date(value).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export function OperationsOverview({ workflows }: { workflows: boolean }) {
@@ -22,14 +28,11 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
   const [refresh, setRefresh] = useState(0);
   const metrics = useNodeMetrics(true, refresh);
   const [busy, setBusy] = useState(true);
+  const [virtual, setVirtual] = useState<{ value: VirtualDeviceStatuses | null; error: string | null; pending: boolean }>({ value: null, error: null, pending: true });
   const infrastructure = useInfrastructure(refresh);
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
-    const request = async (path: string) => {
-      const response = await fetch(`/api/control-plane/${path}`, { cache: "no-store", signal: controller.signal });
-      if (!response.ok) throw new Error("조회 실패");
-      return response;
-    };
+    const request = overviewRequest(controller.signal);
     const profilesRequest = registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", request);
     async function load() {
       const values = await Promise.allSettled([
@@ -42,28 +45,46 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
       const [nodes, devices, runs, profiles] = values;
       setSnapshot({ nodes: nodes.status === "fulfilled" ? nodes.value : null, devices: devices.status === "fulfilled" ? devices.value : null, runs: runs.status === "fulfilled" ? runs.value : null,
         profiles: profiles.status === "fulfilled" ? profiles.value : null,
-        errors: values.flatMap((result, index) => result.status === "rejected" ? [["실행 노드", "장치", "실행 이력", "서비스 프로필"][index]] : []), at: new Date() });
+        errors: values.flatMap((result, index) => result.status === "rejected" ? [["실행 노드", "센서 상태", "실행 이력", "서비스 프로필"][index]] : []), at: new Date() });
       setBusy(false); timer = setTimeout(load, 10000);
     }
     void load(); return () => { controller.abort(); clearTimeout(timer); };
   }, [workflows, refresh]);
+  useEffect(() => {
+    const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    const request = overviewRequest(controller.signal);
+    setVirtual(previous => ({ ...previous, pending: true }));
+    async function load() {
+      try {
+        const value = await virtualDeviceStatuses(request);
+        if (!controller.signal.aborted) setVirtual({ value, error: value.failures ? `가상 디바이스 실행 상태 ${value.failures}개` : null, pending: false });
+      } catch {
+        if (!controller.signal.aborted) setVirtual({ value: null, error: "가상 디바이스 목록", pending: false });
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(load, 10000);
+      }
+    }
+    void load(); return () => { controller.abort(); clearTimeout(timer); };
+  }, [refresh]);
   const nodes = snapshot?.nodes;
   const devices = snapshot?.devices;
   const runs = snapshot?.runs?.items;
   const monitored = monitoredNodes(metrics, nodes || [], infrastructure.snapshot);
   const classified = infrastructure.snapshot?.nodesStatus === "AVAILABLE" ? infrastructure.snapshot.nodes : null;
   const sensors = infrastructure.snapshot?.sensorsStatus === "AVAILABLE" ? infrastructure.snapshot.sensors : null;
-  const activeDevices = devices;
-  const online = activeDevices?.filter(device => device.state === "ONLINE").length;
+  const sensorPending = (!infrastructure.snapshot && !infrastructure.failed) || !snapshot;
+  const sensorStates = sensorPending ? null : sensors?.map(sensor => devices?.find(device => device.id === sensor.name)?.state ?? "UNKNOWN") ?? null;
+  const errors = [...(snapshot?.errors ?? []), ...(virtual.error ? [virtual.error] : [])];
   return <>
     <PageHeading eyebrow="WORKSPACE / OVERVIEW" title="운영 현황" description="AI 서비스와 현장 장비의 상태를 한눈에 확인하세요."
       action={<button disabled={busy} onClick={() => { setBusy(true); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button>} />
     <div className="overview-meta"><span className="small-label">자원 현황</span><span>{snapshot ? `${snapshot.at.toLocaleTimeString("ko-KR")} 조회 · 10초마다 갱신` : "서버에서 상태를 확인하고 있습니다"}</span></div>
-    {!!snapshot?.errors.length && <p className="error" role="alert">{snapshot.errors.join(" · ")} 조회에 실패했습니다. 해당 항목은 확인할 수 없음으로 표시합니다.</p>}
-    <div className="metric-strip" data-count="3" aria-label="자원 현황" aria-busy={busy}>
-      <Link href="/devices?view=servers" className="metric"><span className="metric-icon blue"><ConsoleIcon name="nodes" /></span><span className="metric-label">엣지 AI 서버</span><div><strong>{classified?.filter(node => node.kind === "EDGE_AI_SERVER").length ?? "—"}</strong></div></Link>
-      <Link href="/devices?view=edge" className="metric"><span className="metric-icon purple"><ConsoleIcon name="nodes" /></span><span className="metric-label">엣지 디바이스</span><div><strong>{classified?.filter(node => node.kind === "EDGE_DEVICE").length ?? "—"}</strong></div></Link>
-      <Link href="/devices?view=sensors" className="metric"><span className="metric-icon purple"><ConsoleIcon name="sensor" /></span><span className="metric-label">센서 · Mapper 장치</span><div><strong>{sensors?.length ?? "—"}</strong></div><small>KubeEdge 등록 목록</small></Link>
+    {!!errors.length && <p className="error" role="alert">{errors.join(" · ")} 조회에 실패했습니다. 해당 항목은 확인할 수 없음으로 표시합니다.</p>}
+    <div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>
+      <ResourceStatusCard title="엣지 AI 서버" href="/devices?view=servers" states={classified?.filter(node => node.kind === "EDGE_AI_SERVER").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
+      <ResourceStatusCard title="엣지 디바이스" href="/devices?view=edge" states={classified?.filter(node => node.kind === "EDGE_DEVICE").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
+      <ResourceStatusCard title="센서" href="/devices?view=sensors" states={sensorStates} groups={sensorStatusGroups} pending={sensorPending} note={devices ? "측정 항목별 연결 상태" : "연결 상태 확인 필요"} />
+      <ResourceStatusCard title="가상 디바이스" href="/virtual-devices" states={virtual.value?.states ?? null} groups={virtualStatusGroups} pending={virtual.pending} note={virtual.value?.failures ? "일부 실행 상태 확인 필요" : "실제 계산 실행 상태"} />
     </div>
     <div className="overview-grid">
       <section className="console-panel node-panel" aria-labelledby="cluster-title">
@@ -79,7 +100,6 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
         <ol className="pipeline-steps">{[
           ["/profiles", "Profile 등록", "장치 · 서비스 규격과 버전 정의"], ["/devices", "장치 연결", "실장치와 실행 노드 확인"], ...(workflows ? [["/workflows", "워크플로 실행", "서비스 연결 → 발행 → 실행 요청"]] : []),
         ].map(([href, title, description], index) => <li key={href}><Link href={href}><span className="step-number mono">0{index + 1}</span><div><strong>{title}</strong><small>{description}</small></div><span aria-hidden="true">↗</span></Link></li>)}</ol>
-        <div className="device-summary"><h3>센서 디바이스 연결 상태</h3><div><span><i className="legend-dot good" />온라인</span><strong>{online ?? "—"}</strong></div><div><span><i className="legend-dot warning" />오프라인 · 관측 만료</span><strong>{activeDevices?.filter(d => ["OFFLINE", "STALE"].includes(d.state)).length ?? "—"}</strong></div><div><span><i className="legend-dot neutral" />보고 없음</span><strong>{activeDevices?.filter(d => d.state === "UNKNOWN").length ?? "—"}</strong></div></div>
       </section>
     </div>
     {workflows && <section className="console-panel recent-runs" aria-labelledby="recent-runs-title"><div className="panel-heading"><div><p className="small-label">RECENT EXECUTIONS</p><h2 id="recent-runs-title">최근 실행</h2></div><Link href="/runs">모든 실행 보기 ↗</Link></div>

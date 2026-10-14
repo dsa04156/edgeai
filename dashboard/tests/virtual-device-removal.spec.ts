@@ -19,11 +19,11 @@ test("ordinary features and execution policies remain independent from continuou
   });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "운영 현황", exact: true })).toBeVisible();
-  await expect(page.locator('.metric-strip .metric')).toHaveCount(3);
-  await expect(page.locator('.metric-strip')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('.resource-status-strip .resource-status-card')).toHaveCount(4);
+  await expect(page.locator('.resource-status-strip')).toHaveAttribute('aria-busy', 'false');
   if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
   await expect(page.getByRole("link", { name: "가상 센서", exact: true })).toHaveCount(1);
-  await page.locator('.metric-strip').screenshot({ path: testInfo.outputPath("overview.png"), animations: "disabled" });
+  await page.locator('.resource-status-strip').screenshot({ path: testInfo.outputPath("overview.png"), animations: "disabled" });
   await page.goto("/profiles?kind=DEVICE");
   await expect(page.getByRole("heading", { name: "실행 모듈 관리", exact: true })).toBeVisible();
   await expect(page.getByRole("radio")).toHaveCount(0);
@@ -36,7 +36,8 @@ test("ordinary features and execution policies remain independent from continuou
   await expect(mode.locator("option")).toHaveCount(3);
   expect(await mode.locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["AUTO", "NODE", "REMOTE"]);
   await expect(page.locator('option[value="VD"]')).toHaveCount(0);
-  expect(requested.some(path => path.startsWith("virtual-devices") || path.startsWith("profiles/VD"))).toBe(false);
+  expect(requested.some(path => path.startsWith("profiles/VD"))).toBe(false);
+  expect(requested.filter(path => path.startsWith("virtual-devices")).every(path => path === "virtual-devices" || path.endsWith("/execution"))).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.getByRole("group", { name: "작업별 실행 위치", exact: true }).screenshot({ path: testInfo.outputPath("workflow.png"), animations: "disabled" });
   expect(errors).toEqual([]);

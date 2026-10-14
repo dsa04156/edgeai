@@ -50,7 +50,9 @@ DCGM의 `Hostname`에 exporter Pod 이름이 들어오는 것을 확인했다. �
 - 데이터 입력 장치는 별도 Device 등록 목록이다. 물리 노드를 Device 레코드로 복제하지 않는다.
 - `node_accelerator_info`와 `node_hardware_inventory_success`의 원본 시각·up·수집 성공을
   검사해 장착 정보를 표시한다. Hailo처럼 사용률이 없는 장치도 목록·NPU 필터에 포함하고
-  사용률은 `—`로 둔다. 만료된 장착 정보만으로 장치가 현재 있다고 표시하지 않는다.
+  사용률은 `사용률 미수집`으로 표시한다. CPU·메모리가 정상이어도 장착된 가속기의 사용률이
+  빠지면 행의 수집 상태는 `일부 미수집`이다. 실제 사용률0은 정상 수치로 표시하며
+  만료된 사용률은 `사용률 관측 만료`로 구분한다. 만료된 장착 정보만으로 장치가 현재 있다고 표시하지 않는다.
 - UUID·PCI 주소는 내부 연결용으로만 사용하며 화면 본문과 툴팁에 표시하지 않는다.
   장치 모델명을 표시하고 같은 이름이 여러 개면 순번으로 구분한다. 모델의 PCI 제품 코드도 생략한다.
   DCGM/Intel은 PCI 주소 정규화로 연결한다. 주소가 없는 Jetson/Spark/Mobilint는
@@ -79,5 +81,13 @@ PromQL 시간 처리 기준: [Prometheus HTTP API](https://prometheus.io/docs/pr
 사용률이 없어도 신뢰할 수 있는 장착 정보는 목록에 표시할 수 있습니다.
 DeepX 등 새로운 가속기는 호스트 인식과 inventory/exporter 분류를 먼저 확인합니다.
 특정 개발 장비의 관측 결과는 [가속기 검증 기록](https://github.com/dsa04156/edgeai/blob/6fe4429688d2a4c79ad8697be262862b9e8701c1/docs/evidence/accelerator-inventory-2026-10-06.md)에 보존합니다.
+
+NVIDIA GPU 장착 정보만 있고 사용률이 빠지면 DCGM exporter와 NVIDIA device plugin의
+컨테이너 시작 상태를 확인합니다. `NVML: Driver Not Loaded`가 있으면 수집기 재시작 전에
+해당 호스트의 `uname -r`, `modinfo nvidia`, `nvidia-smi`를 확인합니다. 커널 업데이트 후
+이전 커널용 모듈만 남아 있을 수 있으므로, 사용 중인 드라이버 계열과 현재 커널에 맞는
+Ubuntu 모듈 패키지를 확인합니다. 복구 후에는 호스트 인식뿐 아니라 Pod Ready,
+Kubernetes GPU allocatable, 실제 node-metrics API의 사용률·시각까지 다시 확인합니다.
+패키지 설치 기준은 [Ubuntu NVIDIA 드라이버 안내](https://ubuntu.com/server/docs/how-to/graphics/install-nvidia-drivers/)를 따릅니다.
 
 다음 단계: [관측값 해석](../concepts/observability.md), [문제 해결](../operations/troubleshooting.md).
