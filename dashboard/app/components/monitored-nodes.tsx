@@ -9,7 +9,7 @@ import type { InfrastructureKind, InfrastructureSnapshot } from "../../lib/infra
 
 function Usage({ metric, state, missingLabel }: { metric?: NodeMetric; state: NodeMetricsState; missingLabel?: string }) {
   const value = metric && isCurrent(metric, state) ? metric.value : undefined;
-  if (value === undefined && missingLabel) return <span className="muted">{metric ? "사용률 관측 만료" : missingLabel}</span>;
+  if (value === undefined && missingLabel) return <div className="resource-usage"><span className="muted">{metric ? "사용률 관측 만료" : missingLabel}</span></div>;
   return <div className="resource-usage"><strong>{value === undefined ? "—" : value.toFixed(1)}{value !== undefined && <small>%</small>}</strong>
     {value !== undefined && <meter min={0} max={100} value={value} aria-label={`사용률 ${value.toFixed(1)}%`} />}</div>;
 }
