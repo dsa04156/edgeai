@@ -3,6 +3,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 import { ContinuousQuickFields } from "./continuous-quick-fields";
+import { ContinuousPresetFields } from "./continuous-preset-fields";
+import { continuousPresets, presetReady, presetUnit } from "./continuous-presets";
 
 type Schema = components["schemas"];
 type Source = Schema["VirtualDeviceSources"][number];
@@ -20,11 +22,27 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
   const [configuration, setConfiguration] = useState<Configuration>(initial?.continuous || { intervalSeconds: 1, retentionDays: 7, outputs: [{ name: "value", expression: "a", operation: "scalar", unit: "" }] });
   const [feedback, setFeedback] = useState(""); const [pending, setPending] = useState(false);
   const [advanced, setAdvanced] = useState(Boolean(initial));
+  const [presetId, setPresetId] = useState("");
   const [registrationKey, setRegistrationKey] = useState("");
   const [displayName, setDisplayName] = useState(initial?.displayName || "");
   const formElement = useRef<HTMLFormElement>(null);
   const feedbackElement = useRef<HTMLParagraphElement>(null);
   const choices = inputs;
+  const preset = continuousPresets.find(item => item.id === presetId);
+  const ready = advanced || !preset || presetReady(preset, choices, sources);
+  const currentConfiguration = !advanced && preset ? { ...configuration, outputs: [{ ...configuration.outputs[0], expression: preset.expression, unit: presetUnit(preset, choices, sources) }] } : configuration;
+  function selectPreset(id: string) {
+    const next = continuousPresets.find(item => item.id === id);
+    setPresetId(id);
+    setSources((next?.slots || [null]).map((_, index) => ({ sourceKey: String.fromCharCode(97 + index), deviceId: "", properties: [], maxAgeSeconds: 30 })));
+    setConfiguration(value => ({ ...value, outputs: [{ name: "value", expression: next?.expression || "a", operation: "scalar", unit: "" }] }));
+    if (!displayName || displayName === preset?.label) setDisplayName(next?.label || "");
+  }
+  function selectPresetSensor(index: number, id: string) {
+    const sensor = choices.find(item => item.deviceId === id);
+    const next = sources.map((row, n) => n === index ? { ...row, deviceId: id, properties: sensor ? [sensor.property] : [] } : row);
+    setSources(next);
+  }
   function source(index: number, patch: Partial<Source>) { setSources(rows => rows.map((row, n) => n === index ? { ...row, ...patch } : row)); }
   function output(index: number, patch: Partial<Output>) { setConfiguration(value => ({ ...value, outputs: value.outputs.map((row, n) => n === index ? { ...row, ...patch } : row) })); }
   const storage = configuration.resultStorage || { mode: "ALL" as const };
@@ -35,27 +53,28 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
     });
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (pending || busy || !enabled) return;
+    event.preventDefault(); if (pending || busy || !enabled || !ready) return;
     const key = initial ? undefined : registrationKey || `vd-${[...crypto.getRandomValues(new Uint8Array(16))].map(value => value.toString(16).padStart(2, "0")).join("")}`;
     if (key) setRegistrationKey(key);
     setPending(true); setFeedback("");
-    try { await save({ ...(initial ? {} : { key }), displayName, sources, continuous: configuration }); }
+    try { await save({ ...(initial ? {} : { key }), displayName, sources, continuous: currentConfiguration }); }
     catch (error) { setFeedback(error instanceof Error ? error.message : "저장하지 못했습니다."); requestAnimationFrame(() => feedbackElement.current?.focus()); }
     finally { setPending(false); }
   }
   const nameField = <label>장치 이름<input name="displayName" required maxLength={128} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="예: 온도 평균" /></label>;
   const feedbackField = feedback && <p ref={feedbackElement} tabIndex={-1} role="alert" className="error">{feedback}</p>;
-  const submitButton = <button className="primary">{pending ? "저장 중…" : initial ? "연속 처리 설정 저장" : "연속 처리 장치 등록"}</button>;
+  const submitButton = <button className="primary" disabled={!ready}>{pending ? "저장 중…" : initial ? "연속 처리 설정 저장" : "연속 처리 장치 등록"}</button>;
   return <form ref={formElement} className={!advanced ? "continuous-quick" : undefined} aria-label={initial ? "연속 처리 설정 수정" : "연속 처리 장치 등록"} onSubmit={event => void submit(event)}><fieldset disabled={busy || pending || !enabled} className="publish-fields">
     {advanced && <legend>{initial ? "연속 처리 설정 수정" : "연속 처리 장치 등록"}</legend>}
     <p className="hint">{advanced ? "입력 센서와 계산식을 지정합니다. 여러 출력도 가상디바이스 1개로 등록됩니다." : "센서를 선택하고 원하는 계산을 고르세요. 계산은 eKuiper가 수행합니다."}</p>
     {!enabled && <p className="notice">연속 처리 기능이 아직 활성화되지 않았습니다.</p>}
     {!advanced ? <>
-      <ContinuousQuickFields inputs={choices} deviceId={sources[0].deviceId} output={configuration.outputs[0]} selectSensor={id => {
+      <label>조합 종류<select aria-label="조합 종류" value={presetId} onChange={event => selectPreset(event.target.value)}><option value="">단일 센서</option>{continuousPresets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+      {preset ? <ContinuousPresetFields preset={preset} inputs={choices} sources={sources} output={currentConfiguration.outputs[0]} selectSensor={selectPresetSensor} changeOutput={row => setConfiguration(value => ({ ...value, outputs: [row] }))} /> : <ContinuousQuickFields inputs={choices} deviceId={sources[0].deviceId} output={configuration.outputs[0]} selectSensor={id => {
         const device = choices.find(item => item.deviceId === id);
         source(0, { deviceId: id, properties: device ? [device.property] : [] });
         setConfiguration(value => ({ ...value, outputs: value.outputs.map(row => device?.type === "bool" ? { name: row.name, expression: "a", operation: "scalar", unit: device.unit || "" } : { ...row, unit: row.operation === "threshold" ? "" : device?.unit || "" }) }));
-      }} changeOutput={row => setConfiguration(value => ({ ...value, outputs: [row] }))} />
+      }} changeOutput={row => setConfiguration(value => ({ ...value, outputs: [row] }))} />}
       {nameField}
       <p className="hint">{configuration.intervalSeconds}초마다 계산 · {windowOperation(configuration.outputs[0].operation) && `최근 ${configuration.outputs[0].sampleCount}개 값 사용 · `}모든 결과 {configuration.retentionDays}일 보관</p>
       {feedbackField}{submitButton}
@@ -64,7 +83,7 @@ export function ContinuousFields({ inputs, initial, enabled, busy, save }: {
         <label>계산 간격(초)<input type="number" required min={1} max={3600} value={configuration.intervalSeconds} onChange={event => setConfiguration(value => ({ ...value, intervalSeconds: Number(event.target.value) }))} /></label>
         <label>결과 보관 기간(일)<input type="number" required min={1} max={30} value={configuration.retentionDays} onChange={event => setConfiguration(value => ({ ...value, retentionDays: Number(event.target.value) }))} /></label>
       </div></details>
-      <button type="button" onClick={() => { setAdvanced(true); requestAnimationFrame(() => formElement.current?.querySelector<HTMLInputElement>("input")?.focus()); }}>여러 센서·직접 계산식 설정</button>
+      <button type="button" onClick={() => { setConfiguration(currentConfiguration); setAdvanced(true); requestAnimationFrame(() => formElement.current?.querySelector<HTMLInputElement>("input")?.focus()); }}>여러 센서·직접 계산식 설정</button>
     </> : <>
     <div className="form-row">{!initial && <label>장치 키<input name="key" value={registrationKey} onChange={event => setRegistrationKey(event.target.value)} maxLength={100} pattern="[a-z][a-z0-9]*([._\-][a-z0-9]+)*" placeholder="비워 두면 자동 생성" /></label>}{nameField}</div>
     <fieldset className="publish-fields"><legend>입력 센서 · 최대 16개</legend>

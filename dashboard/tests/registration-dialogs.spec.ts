@@ -19,7 +19,7 @@ test("virtual registration opens one modal without moving the page and restores 
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "가상디바이스 등록", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("센서", { exact: true })).toBeFocused();
+  await expect(dialog.getByLabel("조합 종류", { exact: true })).toBeFocused();
   await dialog.getByLabel("센서", { exact: true }).selectOption("temperature");
   await dialog.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
   await page.keyboard.press("Shift+Tab");
