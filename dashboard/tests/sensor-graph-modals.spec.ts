@@ -43,6 +43,22 @@ test("clicking a sensor opens its stored original graph in a bounded dialog and 
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
 });
 
+test("a truncated original string remains available in full from its history cell", async ({ page }) => {
+  await catalog(page);
+  const value = "sensor-original-value/".repeat(30);
+  await page.route(`**/data-store/sensors/${device.uid}/temperature/history?*`, route => route.fulfill({ json: {
+    deviceUid: device.uid, property: "temperature", retentionDays: 30, truncated: false,
+    items: [{ observedAt: new Date().toISOString(), value, unit: "", quality: "QUALIFIED", type: "string" }],
+  } }));
+  await page.goto("/devices?view=sensors");
+  await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("원본 기록 표 · 1개", { exact: true }).click();
+  const cell = dialog.getByRole("cell", { name: value, exact: true });
+  await expect(cell).toBeVisible();
+  await expect(cell).toHaveAttribute("title", value);
+});
+
 test("clicking a virtual device opens its saved output graph and switches outputs in the same dialog", async ({ page }, info) => {
   await catalog(page);
   const vd = { id: "11111111-1111-4111-8111-111111111111", key: "environment-summary", displayName: "환경 요약", revision: 1, state: "REGISTERED", executionMode: "CONTINUOUS_EKUIPER" };
