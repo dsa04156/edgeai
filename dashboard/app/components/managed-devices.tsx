@@ -180,7 +180,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
         {editing?.deviceId === d.id && editing.property.name === p.name && <tr className="sensor-editor"><td colSpan={6}><EditDeviceProperty device={d} property={editing.property} busy={busy} onSave={field => void action(() => saveProperty(d, field))} onCancel={() => editProperty(null)} /></td></tr>}
       </Fragment>))}</tbody>
     </table></div>}
-    <RegistrationDialog open={!!graph} title={`${graph?.property.name ?? "센서"} · 센서 그래프`} subtitle={`${graph?.deviceId ?? ""} · ${graphDevice?.targetNode ?? "저장된 센서 기록"}`} variant="sensor-graph" onClose={() => setGraph(null)}>
+    <RegistrationDialog open={!!graph} title={`${graph?.property.name ?? "센서"} · 센서 그래프`} subtitle={`${graph?.deviceId ?? ""} · ${graphDevice?.targetNode ?? "저장된 센서 기록"}`} variant="graph" onClose={() => setGraph(null)}>
       {graph && graphProperty && <SensorGraph key={`${graph.deviceUid}/${graph.property.name}`} device={graphDevice} deviceUid={graph.deviceUid} property={graphProperty} failed={failed} />}
     </RegistrationDialog>
     <RegistrationDialog open={!!addingDevice} title="측정 항목 추가" busy={busy} onClose={() => addTo(null)}>
