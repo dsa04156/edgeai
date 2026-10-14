@@ -177,18 +177,24 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
         var result=new ArrayList<Map<String,Object>>();for(var row:rows){var document=json.readValue(row.get("_value"),Map.class);var item=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))item.put(key,document.get(key));result.add(item);}return result;
     }
+    private static Instant originalBoundary(Instant at) {
+        var millis=at.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);return millis.isBefore(at)?millis.plusMillis(1):millis;
+    }
+    private long sensorChartCount(String source,Instant from) {
+        var rows=query(source+" |> count() |> map(fn:(r)=> ({_time:time(v:"+quote(from.toString())+"),_value:r._value}))");
+        return rows.isEmpty()?0:Long.parseLong(rows.getFirst().get("_value"));
+    }
     @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int selectionSeconds) {
-        var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
-        if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false,"displayMode","ORIGINALS","totalObservations",0);
-        String base=source(rawBucket,start,to,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
+        var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=originalBoundary(from.isBefore(minimum)?minimum:from);var stop=originalBoundary(to);
+        if(!start.isBefore(stop))return Map.of("items",List.of(),"truncated",false,"displayMode","ORIGINALS","totalObservations",0);
+        String base=source(rawBucket,start,stop,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
             +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,_value:float(v:r._value),kind:if r._field == \"value_boolean\" then \"B\" else \"N\"})) |> group(columns:[\"_start\",\"_stop\"])";
-        var countRows=query(base+" |> count() |> map(fn:(r)=> ({_time:time(v:"+quote(start.toString())+"),_value:r._value}))");
-        long count=countRows.isEmpty()?0:Long.parseLong(countRows.getFirst().get("_value"));
+        long count=sensorChartCount(base,start);
         boolean selected=count>100000;
         List<Map<String,String>> rows;
         if(!selected) {
             rows=query(base+" |> sort(columns:[\"_time\"]) |> limit(n:100001) |> keep(columns:[\"_time\",\"_value\",\"kind\"])");
-            if(rows.size()>100000)selected=true;
+            if(rows.size()>100000){count=Math.max(rows.size(),sensorChartCount(base,start));selected=true;}
         }else rows=List.of();
         if(selected) {
             var flux=new StringBuilder("data = ").append(base).append('\n');

@@ -79,6 +79,9 @@ class InfluxDataStoreIntegrationTest {
                 .andExpect(jsonPath("$.items[0].observedAt").value(Instant.ofEpochMilli(at).toString())).andExpect(jsonPath("$.items[0].value").value(12.125))
                 .andExpect(jsonPath("$.items[1].observedAt").value(Instant.ofEpochMilli(at+1).toString())).andExpect(jsonPath("$.items[1].value").value(99.875))
                 .andExpect(jsonPath("$.items[2].observedAt").value(Instant.ofEpochMilli(at+2).toString())).andExpect(jsonPath("$.items[2].value").value(0.03125));
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart")
+                .param("from",Instant.ofEpochMilli(at).plusNanos(1).toString()).param("to",Instant.ofEpochMilli(at+1).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
         }
     }
     @Test void slowArchiveWritesDoNotSerializeIndependentMeasurements() throws Exception {
