@@ -115,7 +115,7 @@ def execute(runner, assignment):
                     require(assigned.media_type == declared['mediaType'] and assigned.max_payload_bytes <= declared['maxPayloadBytes'])
         while True:
             runner.timeout()
-            if terminal is not None and finalization(min(1,runner.timeout())):
+            if terminal is not None and finalization(min(15,runner.timeout())):
                 break
             try:
                 session.step()
@@ -135,7 +135,7 @@ def execute(runner, assignment):
                 if terminal is None:
                     raise
                 session.close()
-                while not finalization(min(1,runner.timeout())):
+                while not finalization(min(15,runner.timeout())):
                     cancelled.wait(min(.1,runner.timeout()))
                 break
             cancelled.wait(.005)

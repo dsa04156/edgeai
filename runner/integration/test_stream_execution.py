@@ -34,7 +34,7 @@ class StreamExecutionTest(unittest.TestCase):
         self.recovery = 'NEW'; self.unavailable = 0
         self.hold_grant=False;self.granted=threading.Event();self.release_grant=threading.Event()
         self.finalized_calls=0;self.finalized_status=None;self.reject_during_download=False;self.swap_final_routes=False
-        self.checkpoint_actor=None;self.complete_status=None
+        self.checkpoint_actor=None;self.complete_status=None;self.complete_delay=0
         self.telemetry=[];self.telemetry_status=200;self.metric_sequence=0
         profile = json.loads((ROOT/'contracts/profiles/service-stream.example.json').read_text())
         self.spec = profile['stream']; self.spec['command'] = [sys.executable,str(ROOT/'runner/examples/stream_sum.py')]
@@ -93,7 +93,11 @@ class StreamExecutionTest(unittest.TestCase):
                     if owner.unavailable:
                         owner.unavailable-=1;return self.reply(503,{})
                     if owner.finalize and owner.hold_grant:
-                        owner.granted.set();owner.release_grant.wait(8)
+                        owner.granted.set()
+                        # The grant exists, but every reply is lost until the fixture releases it.
+                        if not owner.release_grant.wait(.1):
+                            self.connection.shutdown(2); self.connection.close(); return
+                    time.sleep(owner.complete_delay)
                     try:
                         if owner.complete_status:return self.reply(owner.complete_status,{})
                         return self.reply(200,{'state':'FINALIZE' if owner.finalize else 'WAITING',
@@ -184,6 +188,13 @@ class StreamExecutionTest(unittest.TestCase):
         temporary.write_text(json.dumps({'sequence':self.metric_sequence,'observedAt':datetime.now(timezone.utc).isoformat(),'latencyMicros':1200}))
         temporary.replace(self.root/'work/telemetry.json')
         return predicate()
+
+    def test_slow_verified_completion_response_still_commits_the_final_result(self):
+        # Actual HTTPS reply models durable history publication taking more than one second.
+        self.complete_delay = 1.25
+        self.finalize = True
+        self.start(); self.emit(); self.finish(True)
+        self.assertTrue(self.commits)
 
     def test_measurements_span_live_stream_and_finalization_with_one_sequence(self):
         self.assignment['telemetry']={'intervalSeconds':1}
