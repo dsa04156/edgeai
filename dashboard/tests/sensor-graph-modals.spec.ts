@@ -2,12 +2,19 @@ import { test, expect, type Page } from "@playwright/test";
 
 const device = { id: "temperature-sensor", uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", targetNode: "edge-a", state: "ONLINE", profile: { name: "temperature-model", protocol: "mqtt", sourceName: "environment", properties: [{ name: "temperature", dataType: "float64", unit: "°C", scale: 1, offset: 0 }] }, properties: { temperature: { value: "21.5", timestamp: Date.now() } } };
 
+
+function chartFixture(query: URLSearchParams, count = 2, uid = device.uid) {
+  const from = query.get("from")!, to = query.get("to")!, start = Date.parse(from), duration = Date.parse(to) - start;
+  return { deviceUid: uid, property: "temperature", from, to, retentionDays: 30, aggregation: { bucketSeconds: 1, method: "MEAN_MIN_MAX" }, truncated: false, items: Array.from({ length: count }, (_, index) => ({ from: new Date(start + duration * (index + 1) / (count + 1)).toISOString(), to: new Date(start + duration * (index + 1) / (count + 1) + 1000).toISOString(), average: 21.5 + index, min: 21.5 + index, max: 21.5 + index, count: 1 })) };
+}
+
 async function catalog(page: Page) {
   await page.route("**/api/health", route => route.fulfill({ json: { status: "UP" } }));
   await page.route("**/api/control-plane/**", route => {
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
     if (path === "infrastructure") return route.fulfill({ json: { fetchedAt: new Date().toISOString(), nodesStatus: "AVAILABLE", sensors: [], nodes: [] } });
     if (path === "managed-devices") return route.fulfill({ json: { items: [device] } });
+    if (path.endsWith("/temperature/chart")) return route.fulfill({ json: chartFixture(new URL(route.request().url()).searchParams, path.includes(device.uid) ? 2 : 1, path.split("/")[2]) });
     if (path === `data-store/sensors/${device.uid}/temperature/history`) {
       const query = new URL(route.request().url()).searchParams;
       return route.fulfill({ json: { deviceUid: device.uid, property: "temperature", from: query.get("from"), to: query.get("to"), retentionDays: 30, truncated: false, items: [21.5, 22.5].map((value, index) => ({ deviceUid: device.uid, deviceId: device.id, property: "temperature", unit: "°C", type: "float64", quality: "UNVERIFIED", observedAt: new Date(Date.now() - 60000 + index * 1000).toISOString(), value })) } });
@@ -23,7 +30,7 @@ test("clicking a sensor opens its stored original graph in a bounded dialog and 
   await expect(trigger).toBeVisible(); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await dialog.getByText("센서·수집 정보", { exact: true }).click();
   await expect(dialog.getByText(/InfluxDB에 저장된 센서 원본/)).toBeVisible();
   await expect(dialog.getByText(/이전 Mapper의 기록/)).toBeVisible();
@@ -75,11 +82,11 @@ test("stored sensor records remain available after closing and reloading the pag
   await page.goto("/devices?view=sensors");
   const trigger = page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await trigger.click();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await page.reload(); await trigger.click();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
 });
 
 test("inactive virtual processing and unavailable history are explained inside the graph dialog", async ({ page }) => {
@@ -105,6 +112,7 @@ test("inactive virtual processing and unavailable history are explained inside t
 test("sensor history periods, pagination, store failures and empty records stay within the modal", async ({ page }) => {
   await catalog(page); let fail = false, empty = false;
   const queries: URLSearchParams[] = [];
+  await page.route("**/api/control-plane/data-store/sensors/**/chart?**", route => route.fulfill({ json: chartFixture(new URL(route.request().url()).searchParams, empty ? 0 : 1) }));
   await page.route("**/api/control-plane/data-store/sensors/**/history?**", route => {
     const query = new URL(route.request().url()).searchParams; queries.push(query);
     if (fail) return route.fulfill({ status: 503, json: { message: "InfluxDB 저장소를 확인하세요." } });
@@ -112,17 +120,17 @@ test("sensor history periods, pagination, store failures and empty records stay 
   });
   await page.goto("/devices?view=sensors"); await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 1개 기록", exact: true })).toBeVisible();
-  expect(Date.parse(queries[0].get("to")!) - Date.parse(queries[0].get("from")!)).toBe(900000);
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 1개", exact: true })).toBeVisible();
+  expect(Date.parse(queries[0].get("to")!) - Date.parse(queries[0].get("from")!)).toBe(300000);
   await dialog.getByRole("checkbox", { name: "자동 갱신 · 5초", exact: true }).uncheck();
   await dialog.getByLabel("조회 기간", { exact: true }).selectOption("60");
   await expect.poll(() => Date.parse(queries.at(-1)!.get("to")!) - Date.parse(queries.at(-1)!.get("from")!)).toBe(3600000);
   await expect(dialog.getByText("원본 이력 조회 중…", { exact: true })).not.toBeVisible();
   const period = queries.at(-1)!; expect(Date.parse(period.get("to")!) - Date.parse(period.get("from")!)).toBe(3600000);
   await dialog.getByRole("button", { name: "이전 기록", exact: true }).click();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 1개", exact: true })).toBeVisible();
   expect(queries.at(-1)!.get("cursor")).toBe("cursor-a"); expect(queries.at(-1)!.get("from")).toBe(period.get("from")); expect(queries.at(-1)!.get("to")).toBe(period.get("to"));
-  await dialog.getByText("기록 표 · 2개", { exact: true }).click();
+  await dialog.getByText("원본 기록 표 · 2개", { exact: true }).click();
   await expect(dialog.getByRole("table").getByRole("row")).toHaveCount(3);
   fail = true; await dialog.getByRole("button", { name: "그래프 조회", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("InfluxDB 저장소"); await expect(dialog.getByRole("img")).toHaveCount(0);
@@ -141,16 +149,17 @@ test("a recreated sensor name keeps the open graph on its original UID", async (
   });
   await page.goto("/devices?view=sensors"); const trigger = page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   replaced = true; await page.clock.runFor(5100);
   await expect(dialog.getByText(/현재 등록에서 이 센서 UID를 찾지 못했습니다/)).toBeVisible();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await trigger.click();
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 1개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 1개", exact: true })).toBeVisible();
 });
 
 test("automatic sensor history refresh retains the open record table and recovers from a temporary outage", async ({ page }) => {
   await page.clock.install({ time: new Date() }); await catalog(page); let failed = false, count = 2;
+  await page.route("**/api/control-plane/data-store/sensors/**/chart?**", route => route.fulfill({ json: chartFixture(new URL(route.request().url()).searchParams, count) }));
   await page.route("**/api/control-plane/data-store/sensors/**/history?**", route => {
     if (failed) return route.fulfill({ status: 503, json: { message: "일시 저장소 오류" } });
     const query = new URL(route.request().url()).searchParams;
@@ -158,13 +167,13 @@ test("automatic sensor history refresh retains the open record table and recover
   });
   await page.goto("/devices?view=sensors"); await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
-  await dialog.getByText("기록 표 · 2개", { exact: true }).click();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
+  await dialog.getByText("원본 기록 표 · 2개", { exact: true }).click();
   failed = true; await page.clock.runFor(5100);
   await expect(dialog.getByRole("alert")).toContainText("일시 저장소 오류");
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 2개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await expect(dialog.getByRole("table")).toBeVisible();
   failed = false; count = 3; await page.clock.runFor(5100);
-  await expect(dialog.getByRole("img", { name: "temperature 원본 그래프, 3개 기록", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 3개", exact: true })).toBeVisible();
   await expect(dialog.getByRole("alert")).toHaveCount(0); await expect(dialog.getByRole("table")).toBeVisible();
 });

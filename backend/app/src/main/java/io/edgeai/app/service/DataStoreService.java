@@ -29,6 +29,19 @@ public class DataStoreService {
         try{var rows=new TreeMap<>(order.equals("desc")?telemetry.readSensor(uid,property,from,to,limit,cursor,true):telemetry.readSensor(uid,property,from,to,limit,cursor));rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());return rows;}
         catch(IllegalArgumentException e){throw e;}catch(RuntimeException e){throw unavailable();}
     }
+    public Map<String,Object> chart(UUID uid,String property,String fromText,String toText) {
+        if(!property.matches("[a-z][a-z0-9_]{0,62}"))throw new IllegalArgumentException("Invalid measurement property");
+        Instant to=toText==null?clock.instant():parseTime(toText),from=fromText==null?to.minusSeconds(3600):parseTime(fromText);
+        Duration period=Duration.between(from,to);
+        if(!from.isBefore(to)||period.compareTo(Duration.ofDays(31))>0)throw new IllegalArgumentException("Invalid measurement period");
+        long target=Math.max(1,(period.toMillis()+599999)/600000);
+        int bucket=java.util.stream.IntStream.of(1,2,5,10,15,30,60,120,300,600,1800,3600,7200,14400,21600,43200,86400).filter(seconds->seconds>=target).findFirst().orElseThrow();
+        try {
+            var rows=new TreeMap<>(telemetry.readSensorChart(uid,property,from,to,bucket));
+            rows.put("deviceUid",uid.toString());rows.put("property",property);rows.put("from",from.toString());rows.put("to",to.toString());rows.put("retentionDays",telemetry.rawRetentionDays());
+            rows.put("aggregation",Map.of("bucketSeconds",bucket,"method","MEAN_MIN_MAX"));return rows;
+        }catch(RuntimeException e){throw unavailable();}
+    }
     private static ControlPlaneException unavailable(){return new ControlPlaneException(503,"HISTORY_STORE_UNAVAILABLE","InfluxDB 저장소를 확인하세요.");}
     private static Instant parseTime(String text){try{return Instant.parse(text);}catch(java.time.format.DateTimeParseException e){throw new IllegalArgumentException("Invalid measurement timestamp");}}
 }

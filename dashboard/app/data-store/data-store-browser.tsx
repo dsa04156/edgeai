@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { components } from "../../lib/api-schema";
-import { OriginalChart } from "../components/sensor-original-chart";
+import { SensorPeriodChart } from "../components/sensor-period-chart";
 import { formatMeasurementValue as display } from "../../lib/measurement-value";
 
 type Schema = components["schemas"];
@@ -22,6 +22,7 @@ export function DataStoreBrowser() {
   const [loading, setLoading] = useState(true), [selected, setSelected] = useState<Sensor | null>(null), [hours, setHours] = useState(1);
   const [history, setHistory] = useState<History | null>(null), [historyError, setHistoryError] = useState("");
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [chart, setChart] = useState<Schema["SensorPeriodChart"] | null>(null);
   const sequences = useRef({ catalog: 0, history: 0 }), historyHeading = useRef<HTMLHeadingElement>(null);
   const refresh = useCallback(() => {
     const sequence = ++sequences.current.catalog;
@@ -34,10 +35,10 @@ export function DataStoreBrowser() {
     const to = next && history ? history.to : new Date().toISOString();
     const from = next && history ? history.from : new Date(Date.parse(to) - Math.min(hours, (catalog?.rawRetentionDays || 30) * 24) * 3600000).toISOString();
     const params = new URLSearchParams({ from, to, limit: "1000", order: "desc", ...(next && history?.nextCursor ? { cursor: history.nextCursor } : {}) });
-    if (!next) setHistory(null);
+    if (!next) { setHistory(null); setChart(null); }
     try {
-      const rows = await request<History>(`data-store/sensors/${sensor.deviceUid}/${sensor.property}/history?${params}`);
-      if (sequence === sequences.current.history) { setHistory(previous => next && previous ? { ...rows, items: [...previous.items, ...rows.items] } : rows); if (!next) requestAnimationFrame(() => historyHeading.current?.focus()); }
+      const [rows, chartRows] = await Promise.all([request<History>(`data-store/sensors/${sensor.deviceUid}/${sensor.property}/history?${params}`), next ? Promise.resolve(null) : request<Schema["SensorPeriodChart"]>(`data-store/sensors/${sensor.deviceUid}/${sensor.property}/chart?${new URLSearchParams({ from, to })}`)]);
+      if (sequence === sequences.current.history) { setHistory(previous => next && previous ? { ...rows, items: [...previous.items, ...rows.items] } : rows); if (chartRows) setChart(chartRows); if (!next) requestAnimationFrame(() => historyHeading.current?.focus()); }
     } catch (error) { if (sequence === sequences.current.history) setHistoryError(error instanceof Error ? error.message : "이력을 조회하지 못했습니다."); }
     finally { if (sequence === sequences.current.history) setHistoryBusy(false); }
   }
@@ -49,8 +50,8 @@ export function DataStoreBrowser() {
   {catalog?.status === "READY" && <section aria-label="보관 중인 센서 원본"><h2>센서 원본</h2>{!catalog.sensors.length ? <p className="hint">보관 중인 원본이 없습니다. 수집 상태와 센서의 MQTT 출력 경로를 확인하세요.</p> : <div className="table-scroll"><table className="registry-table"><caption className="sr-only">센서 UID별 보관 중인 원본 항목</caption><thead><tr><th>센서 · 항목</th><th>최근 측정 시각</th><th>식별 상태</th><th>이력</th></tr></thead><tbody>{catalog.sensors.map(sensor => <tr key={`${sensor.deviceUid}:${sensor.property}`}><td><strong>{sensor.deviceId}</strong><span className="block muted">{sensor.property} · {sensor.unit || "단위 없음"}</span></td><td>{new Date(sensor.observedAt).toLocaleString()}</td><td>{sensor.quality === "QUALIFIED" ? "수집 설정 확인됨" : "이전 Mapper · 설정 미검증"}</td><td><button disabled={historyBusy} onClick={() => void load(sensor)} aria-label={`${sensor.deviceId} ${sensor.property} 이력`}>원본 이력</button></td></tr>)}</tbody></table></div>}{catalog.truncated && <p className="hint">처음 500개 보관 항목을 표시합니다.</p>}</section>}
   {selected && <section aria-label={`${selected.deviceId} ${selected.property} 원본 이력`}><div className="toolbar"><h2 ref={historyHeading} tabIndex={-1}>{selected.deviceId} · {selected.property}</h2><label>조회 기간<select value={hours} onChange={event => setHours(Number(event.target.value))}>{[1, 6, 24, 168, 720].filter(hours => hours <= (catalog?.rawRetentionDays || 30) * 24).map(hours => <option key={hours} value={hours}>{hours}시간</option>)}</select></label><button disabled={historyBusy} onClick={() => void load()}>기간 조회</button></div>
     {historyError && <p className="error" role="alert">{historyError}</p>}{historyBusy && <p role="status">원본 이력 조회 중…</p>}
-    {history && <>{!history.items.length ? <p className="hint">이 기간에 보관된 원본이 없습니다.</p> : <><OriginalChart history={history} /><div className="table-scroll"><table className="registry-table"><caption className="sr-only">센서 원본 이력</caption><thead><tr><th>측정 시각</th><th>값</th><th>식별 상태</th><th>원본</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.observedAt).toLocaleString()}</td><td>{display(row.value)} {row.unit}</td><td>{row.quality === "QUALIFIED" ? "확인됨" : "미검증"}</td><td><details><summary>원본 · 식별 정보</summary><pre>{JSON.stringify({ deviceUid: row.deviceUid, configurationSha256: row.configurationSha256, sourceGeneration: row.sourceGeneration, timeBasis: row.timeBasis, rawPayload: row.rawPayload }, null, 2)}</pre></details></td></tr>)}</tbody></table></div></>}
-      {history.nextCursor && <button disabled={historyBusy || history.items.length >= 2000} onClick={() => void load(selected, true)}>이전 기록</button>}{history.truncated && <p className="hint">조회 기간의 최신 기록부터 일부를 표시합니다.{history.items.length >= 2000 ? " 표시 한도 2000개에 도달했습니다. 조회 기간을 줄여 확인하세요." : " 이전 기록으로 이어서 조회할 수 있습니다."}</p>}
+    {history && <>{!history.items.length ? <p className="hint">이 기간에 보관된 원본이 없습니다.</p> : <>{chart && <SensorPeriodChart chart={chart} unit={selected.unit || ""} boolean={selected.type === "bool" || selected.type === "boolean"} />}<div className="table-scroll"><table className="registry-table"><caption className="sr-only">센서 원본 이력</caption><thead><tr><th>측정 시각</th><th>값</th><th>식별 상태</th><th>원본</th></tr></thead><tbody>{history.items.map((row, index) => <tr key={index}><td>{new Date(row.observedAt).toLocaleString()}</td><td>{display(row.value)} {row.unit}</td><td>{row.quality === "QUALIFIED" ? "확인됨" : "미검증"}</td><td><details><summary>원본 · 식별 정보</summary><pre>{JSON.stringify({ deviceUid: row.deviceUid, configurationSha256: row.configurationSha256, sourceGeneration: row.sourceGeneration, timeBasis: row.timeBasis, rawPayload: row.rawPayload }, null, 2)}</pre></details></td></tr>)}</tbody></table></div></>}
+      {history.nextCursor && <button disabled={historyBusy || history.items.length >= 2000} onClick={() => void load(selected, true)}>이전 기록</button>}{history.truncated && <p className="hint">원본 기록 표는 최신 기록부터 일부를 표시합니다. 그래프는 선택 기간 전체를 표시합니다.{history.items.length >= 2000 ? " 원본 표 한도 2000개에 도달했습니다. 개별 값을 더 확인하려면 조회 기간을 줄이세요." : " 이전 기록으로 이어서 조회할 수 있습니다."}</p>}
     </>}
   </section>}
   </>;

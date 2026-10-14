@@ -177,6 +177,25 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
         var result=new ArrayList<Map<String,Object>>();for(var row:rows){var document=json.readValue(row.get("_value"),Map.class);var item=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))item.put(key,document.get(key));result.add(item);}return result;
     }
+    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int bucketSeconds) {
+        var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
+        if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
+        String base=source(rawBucket,start,to,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
+            +" |> map(fn:(r)=> ({r with _value:float(v:r._value)})) |> group(columns:[])";
+        var flux=new StringBuilder("data = ").append(base).append('\n');
+        for(var aggregate:List.of("mean","min","max","count"))flux.append("data |> aggregateWindow(every:").append(bucketSeconds).append("s,fn:").append(aggregate)
+            .append(",createEmpty:false,timeSrc:\"_start\") |> keep(columns:[\"_time\",\"_value\"]) |> sort(columns:[\"_time\"]) |> limit(n:2001) |> yield(name:").append(quote(aggregate)).append(")\n");
+        var points=new TreeMap<Instant,Map<String,Object>>();
+        for(var row:query(flux.toString())) {
+            Instant window=Instant.parse(row.get("_time"));
+            var point=points.computeIfAbsent(window,key->new TreeMap<>(Map.of("from",(key.isBefore(start)?start:key).toString(),"to",(key.plusSeconds(bucketSeconds).isAfter(to)?to:key.plusSeconds(bucketSeconds)).toString())));
+            String aggregate=row.get("result");
+            if("count".equals(aggregate))point.put("count",Long.parseLong(row.get("_value")));
+            else {double value=Double.parseDouble(row.get("_value"));if(!Double.isFinite(value))throw new IllegalStateException("Invalid chart value");point.put("mean".equals(aggregate)?"average":aggregate,value);}
+        }
+        if(points.size()>2000||points.values().stream().anyMatch(point->!point.keySet().containsAll(Set.of("average","min","max","count"))))throw new IllegalStateException("Incomplete chart aggregation");
+        return Map.of("items",points.values().stream().toList(),"truncated",false);
+    }
     public Map<String,Object> read(UUID id,String output,Instant from,Instant to,int limit,String cursor,Integer bucket) {
         String filter="r._measurement == \"vd_result\" and r.vd_id == "+quote(id.toString())+" and r.output_id == "+quote(output);
         if(bucket==null)return documents(resultsSource(from,to,filter+" and r._field == \"document\""),from,to,limit,cursor);

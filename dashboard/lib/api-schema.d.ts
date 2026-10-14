@@ -1189,6 +1189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-store/sensors/{uid}/{property}/chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 센서 UID별 선택 기간 전체의 그래프 조회
+         * @description 저장된 숫자·참/거짓 원본 전체를 구간별 평균·최솟값·최댓값·표본 수로 집계합니다. 구간 크기는 최대 약 600개 구간이 되도록 서버가 선택하며, 참/거짓은 0과 1로 집계합니다. 데이터가 없는 구간을 생성하거나 원본 저장 주기를 바꾸지 않습니다. 정확한 개별 측정값은 history API로 조회합니다.
+         */
+        get: operations["getSensorPeriodChart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-store/sensors/{uid}/{property}/history": {
         parameters: {
             query?: never;
@@ -2452,6 +2472,39 @@ export interface components {
                 observedAt: string;
                 /** @enum {string} */
                 quality: "QUALIFIED" | "UNVERIFIED";
+            }[];
+        };
+        SensorPeriodChart: {
+            /** Format: uuid */
+            deviceUid: string;
+            property: string;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            retentionDays: number;
+            /** @constant */
+            truncated: false;
+            aggregation: {
+                bucketSeconds: number;
+                /** @constant */
+                method: "MEAN_MIN_MAX";
+            };
+            items: {
+                /**
+                 * Format: date-time
+                 * @description 원본을 집계한 구간 시작. 요청 시작 및 보관 기간으로 제한됩니다.
+                 */
+                from: string;
+                /**
+                 * Format: date-time
+                 * @description 원본을 집계한 구간 종료. 요청 종료로 제한됩니다.
+                 */
+                to: string;
+                average: number;
+                min: number;
+                max: number;
+                count: number;
             }[];
         };
         SensorOriginalHistory: {
@@ -5882,6 +5935,34 @@ export interface operations {
                     "application/json": components["schemas"]["DataStoreCatalog"];
                 };
             };
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getSensorPeriodChart: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                uid: string;
+                property: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간 전체 집계. 보관 기간 밖의 원본은 포함되지 않습니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorPeriodChart"];
+                };
+            };
+            400: components["responses"]["Unavailable"];
             503: components["responses"]["Unavailable"];
         };
     };

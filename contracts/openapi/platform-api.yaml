@@ -2322,6 +2322,24 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DataStoreCatalog'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/data-store/sensors/{uid}/{property}/chart:
+    get:
+      operationId: getSensorPeriodChart
+      summary: 센서 UID별 선택 기간 전체의 그래프 조회
+      description: 저장된 숫자·참/거짓 원본 전체를 구간별 평균·최솟값·최댓값·표본 수로 집계합니다. 구간 크기는 최대 약 600개 구간이 되도록 서버가 선택하며, 참/거짓은 0과 1로 집계합니다. 데이터가 없는 구간을 생성하거나 원본 저장 주기를 바꾸지 않습니다. 정확한 개별 측정값은 history API로 조회합니다.
+      parameters:
+        - {name: uid, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: property, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,62}$'}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: 시작 포함·종료 미포함, 기본 최근 1시간·최대 31일 기간 전체 집계. 보관 기간 밖의 원본은 포함되지 않습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SensorPeriodChart'}
+        '400': {$ref: '#/components/responses/Unavailable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /api/v1/data-store/sensors/{uid}/{property}/history:
     get:
       operationId: getSensorOriginalHistory
@@ -4732,6 +4750,38 @@ components:
               type: {type: string}
               observedAt: {type: string, format: date-time}
               quality: {type: string, enum: [QUALIFIED, UNVERIFIED]}
+    SensorPeriodChart:
+      type: object
+      additionalProperties: false
+      required: [deviceUid, property, from, to, retentionDays, aggregation, items, truncated]
+      properties:
+        deviceUid: {type: string, format: uuid}
+        property: {type: string}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        retentionDays: {type: integer}
+        truncated: {type: boolean, const: false}
+        aggregation:
+          type: object
+          additionalProperties: false
+          required: [bucketSeconds, method]
+          properties:
+            bucketSeconds: {type: integer, minimum: 1, maximum: 86400}
+            method: {type: string, const: MEAN_MIN_MAX}
+        items:
+          type: array
+          maxItems: 2000
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to, average, min, max, count]
+            properties:
+              from: {type: string, format: date-time, description: 원본을 집계한 구간 시작. 요청 시작 및 보관 기간으로 제한됩니다.}
+              to: {type: string, format: date-time, description: 원본을 집계한 구간 종료. 요청 종료로 제한됩니다.}
+              average: {type: number}
+              min: {type: number}
+              max: {type: number}
+              count: {type: integer, minimum: 1}
     SensorOriginalHistory:
       type: object
       additionalProperties: false
