@@ -137,8 +137,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
   const graphDevice = items?.find(d => d.id === graph?.deviceId && d.uid === graph?.deviceUid && d.profile.properties.some(p => p.name === graph?.property.name));
   const graphProperty = graphDevice?.profile.properties.find(p => p.name === graph?.property.name) ?? graph?.property;
   return <section ref={section} aria-label="센서 등록과 수집 상태">
-    <div className="toolbar"><h2>등록 센서</h2><button onClick={() => setRefresh(v => v + 1)}>새로고침</button><button ref={registerButton} className="primary" disabled={busy} onClick={() => open()}>새 장치 등록</button></div>
-    <p className="muted">측정 항목마다 별도 센서로 표시합니다. 연결 상태와 최신값은 5초마다 갱신합니다.</p>
+    <div className="toolbar sensor-list-toolbar"><h2>등록 센서</h2><span className="list-update-note" title="측정 항목마다 별도 센서로 표시합니다. 연결 상태와 최신값은 5초마다 갱신합니다.">5초마다 갱신</span><button onClick={() => setRefresh(v => v + 1)}>새로고침</button><button ref={registerButton} className="primary" disabled={busy} onClick={() => open()}>새 장치 등록</button></div>
     {failed && <p role="alert" className="error">현재 상태 조회에 실패했습니다. {items ? "아래는 마지막 조회 결과입니다." : "API 연결을 확인하세요."}</p>}
     {!createOpen && !addingDevice && notice && <p ref={noticeElement} tabIndex={-1} role="status" className="notice">{notice}</p>}
     {!createOpen && !addingDevice && error && <p ref={errorElement} tabIndex={-1} role="alert" className="error">{error}</p>}

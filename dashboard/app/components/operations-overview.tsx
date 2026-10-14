@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { components } from "../../lib/api-schema";
 import { registryItems } from "../../lib/registry";
-import { PageHeading } from "./page-heading";
 import { StatusBadge } from "./status-badge";
 import { useNodeMetrics } from "../../lib/node-metrics";
 import { NodeMetricsNotice } from "./node-usage";
@@ -75,24 +74,21 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
   const sensorStates = sensorPending ? null : sensors?.map(sensor => devices?.find(device => device.id === sensor.name)?.state ?? "UNKNOWN") ?? null;
   const errors = [...(snapshot?.errors ?? []), ...(virtual.error ? [virtual.error] : [])];
   return <>
-    <PageHeading eyebrow="WORKSPACE / OVERVIEW" title="운영 현황" description="AI 서비스와 현장 장비의 상태를 한눈에 확인하세요."
-      action={<button disabled={busy} onClick={() => { setBusy(true); setVirtual(previous => ({ ...previous, pending: true })); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button>} />
-    <div className="overview-meta"><span className="small-label">자원 현황</span><span>{snapshot ? `${snapshot.at.toLocaleTimeString("ko-KR")} 조회 · 10초마다 갱신` : "서버에서 상태를 확인하고 있습니다"}</span></div>
+    <h1 className="sr-only">운영 현황</h1>
     {!!errors.length && <p className="error" role="alert">{errors.join(" · ")} 조회에 실패했습니다. 해당 항목은 확인할 수 없음으로 표시합니다.</p>}
-    <div className="overview-workspace"><div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>
+    <div className="overview-workspace"><aside className="overview-sidebar"><div className="overview-sidebar-heading"><h2>자원 현황</h2><button disabled={busy} onClick={() => { setBusy(true); setVirtual(previous => ({ ...previous, pending: true })); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button></div><p className="overview-updated">{snapshot ? `${snapshot.at.toLocaleTimeString("ko-KR")} 조회 · 10초마다 갱신` : "서버에서 상태를 확인하고 있습니다"}</p><div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>
       <ResourceStatusCard title="엣지 AI 서버" href="/devices?view=servers" states={classified?.filter(node => node.kind === "EDGE_AI_SERVER").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
       <ResourceStatusCard title="엣지 디바이스" href="/devices?view=edge" states={classified?.filter(node => node.kind === "EDGE_DEVICE").map(node => node.status) ?? null} groups={nodeStatusGroups} pending={!infrastructure.snapshot && !infrastructure.failed} note="현재 노드 준비 상태" />
       <ResourceStatusCard title="센서" href="/devices?view=sensors" states={sensorStates} groups={sensorStatusGroups} pending={sensorPending} note={devices ? "측정 항목별 연결 상태" : "연결 상태 확인 필요"} />
       <ResourceStatusCard title="가상디바이스" href="/devices?view=virtual" states={virtual.value?.states ?? null} groups={virtualStatusGroups} pending={virtual.pending} note={virtual.value?.failures ? "일부 실행 상태 확인 필요" : "실제 계산 실행 상태"} />
-    </div>
+    </div></aside>
     <div className="overview-content"><div className="overview-grid">
       <section className="console-panel node-panel" aria-labelledby="cluster-title">
         <div className="panel-heading"><div><h2 id="cluster-title">노드별 자원 현황 {!!monitored.length && <span className="count-badge">{monitored.length}개 노드</span>}</h2></div><Link href="/devices?view=nodes">자원 상세 →</Link></div>
         <NodeMetricsNotice state={metrics} />
         {infrastructure.failed && <p className="error" role="status">장비 분류와 센서 목록을 불러오지 못했습니다.</p>}
         {(["EDGE_AI_SERVER", "EDGE_DEVICE", ...(monitored.some(node => node.kind === "UNKNOWN") ? ["UNKNOWN"] : [])] as InfrastructureKind[]).map(kind => <section key={kind} aria-label={infrastructureLabels[kind]} className="infrastructure-group">
-          <h3>{infrastructureLabels[kind]} <span className="count-badge">{classified ? monitored.filter(node => node.kind === kind).length : "—"}</span></h3>
-          <MonitoredNodes state={metrics} inventory={nodes || []} infrastructure={infrastructure.snapshot} kind={kind} />
+          <MonitoredNodes state={metrics} inventory={nodes || []} infrastructure={infrastructure.snapshot} kind={kind} heading={<>{infrastructureLabels[kind]} <span className="count-badge">{classified ? monitored.filter(node => node.kind === kind).length : "—"}</span></>} />
         </section>)}
       </section>
       <section className="console-panel operation-guide" aria-labelledby="pipeline-title"><div className="panel-heading"><div><p className="small-label">OPERATE YOUR PIPELINE</p><h2 id="pipeline-title">실행 준비</h2></div><span className="mono muted">01 — {workflows ? "03" : "02"}</span></div>

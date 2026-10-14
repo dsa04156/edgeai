@@ -14,12 +14,14 @@ function Usage({ metric, state, missingLabel }: { metric?: NodeMetric; state: No
     {value !== undefined && <meter min={0} max={100} value={value} aria-label={`사용률 ${value.toFixed(1)}%`} />}</div>;
 }
 
-export function MonitoredNodes({ state, inventory = [], search = "", infrastructure, kind }: {
+export function MonitoredNodes({ state, inventory = [], search = "", infrastructure, kind, heading, action }: {
   state: NodeMetricsState;
   inventory?: components["schemas"]["ExecutionNode"][];
   search?: string;
   infrastructure?: InfrastructureSnapshot | null;
   kind?: InfrastructureKind;
+  heading?: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   const [filter, setFilter] = useState("ALL");
   const rows = monitoredNodes(state, inventory, infrastructure).filter(row => !kind || row.kind === kind);
@@ -27,10 +29,12 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
     && `${row.name} ${row.kinds.join(" ")} ${row.devices.map(d => d.label).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   return <>
     <div className="resource-toolbar">
+      {heading && <h3>{heading}</h3>}
       <div className="filter-chips" role="group" aria-label="모니터링 노드 필터">
         {[["ALL", `전체 ${rows.length}`], ["GPU", "GPU"], ["NPU", "NPU"]].map(([value, label]) =>
           <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}
       </div>
+      {action}
     </div>
     <div className="table-scroll resource-table-wrap"><table className="resource-table"><caption className="sr-only">노드별 실측 자원 사용량</caption>
       <colgroup><col style={{ width: "19%" }} /><col style={{ width: "9%" }} /><col style={{ width: "11%" }} /><col style={{ width: "11%" }} /><col style={{ width: "24%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /></colgroup>
