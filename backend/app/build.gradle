@@ -118,6 +118,8 @@ tasks.register('nanoMqIntegrationTest', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     include '**/NanoMqArchiveIntegrationTest.class'
+    inputs.property('nanoMqTestUrl', providers.environmentVariable('EDGEAI_NANOMQ_TEST_URL').orElse(''))
+    outputs.upToDateWhen { false }
     doFirst {
         if (!(System.getenv('EDGEAI_NANOMQ_TEST_URL') ==~ /tcp:\/\/[^\/]+:1884/)) {
             throw new GradleException('Select an isolated NanoMQ endpoint on1884 with EDGEAI_NANOMQ_TEST_URL')
