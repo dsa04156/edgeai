@@ -1711,6 +1711,10 @@ export interface components {
             operatingSystem: string;
             /** @enum {string} */
             status: "READY" | "NOT_READY" | "UNKNOWN";
+            /** @description 현재 Kubernetes Node status.allocatable. GPU·NPU 표시는 양수인 가속기 리소스만 포함합니다. */
+            allocatable?: {
+                [key: string]: string;
+            };
         };
         ClusterSensor: {
             name: string;
