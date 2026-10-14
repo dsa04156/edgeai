@@ -57,13 +57,13 @@ export function VirtualDeviceRegistry({ initiallyOpen = false }: { initiallyOpen
         <div className="toolbar"><h2 id="vds-title">등록된 가상 장치</h2><button disabled={busy} onClick={() => void run(async () => { await load(); await catalog(); if (detail) await show(detail.vd.id); })}>새로고침</button></div>
         {page?.items.length === 0 && <p className="hint">등록된 가상 장치가 없습니다. 가상 장치 등록에서 입력 센서와 계산을 선택하세요.</p>}
         {!!page?.items.length && <div className="table-scroll"><table className="vd-table"><caption className="sr-only">가상 장치 목록</caption><thead><tr><th>가상 장치</th><th>등록 상태</th><th>변경 버전</th><th>관리</th></tr></thead><tbody>{page.items.map(vd => <tr key={vd.id}>
-          <td><button className="version-link" aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td data-label="등록 상태">{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td data-label="변경 버전">{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
+          <td><button className="version-link" aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono">{vd.key}</span></button></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button></div></td>
         </tr>)}</tbody></table></div>}
         <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(Math.max(0, offset - 20)))}>이전</button><span>{offset / 20 + 1} 페이지</span><button disabled={busy || page?.nextOffset == null} onClick={() => void run(() => load(page!.nextOffset!))}>다음</button></div>
       </section>
     </div>
     <RegistrationDialog open={!!detail} title={`${detail?.vd.displayName ?? "가상 장치"} · 가상 장치 설정`} busy={busy} closeLabel="닫기" onClose={() => { setDetail(null); requestAnimationFrame(() => settingsTrigger.current?.focus({ preventScroll: true })); }}>
-      {detail && <section>
+      {detail && <section className="vd-settings">
         {notice && <p className="notice" role="status">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <h3>현재 원본 연결</h3><ul className="history-list">{detail.activeSources.map(source => <li key={source.id}>{source.sourceKey} · {source.deviceId} · {source.properties.join(", ")} · 최대 {source.maxAgeSeconds}초</li>)}</ul>
