@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+- storage.yaml
+- databases.yaml
+- backups.yaml
+- network-policy.yaml
+patches:
+- path: api-patch.yaml
+- target:
+    kind: ConfigMap
+    name: edgeai-config
+  patch: |
+    apiVersion: v1
+    data:
+      EDGEAI_DB_HOST: edgeai-postgres-hdd
+      EDGEAI_INFLUX_ORG: edgeai
+      EDGEAI_INFLUX_TOKEN_FILE: /var/run/edgeai-influx/api-token
+      EDGEAI_INFLUX_URL: http://edgeai-influxdb-hdd:8086
+      EDGEAI_RAW_HISTORY_ENABLED: 'false'
+      EDGEAI_RUNTIME_ENABLED: 'false'
+    kind: ConfigMap
+    metadata:
+      name: edgeai-config
+- target:
+    kind: StatefulSet
+    name: edgeai-postgres
+  patch: |
+    apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: edgeai-postgres
+    spec:
+      replicas: 0

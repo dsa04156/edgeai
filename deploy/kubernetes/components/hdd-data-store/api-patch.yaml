@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        env:
+        - name: EDGEAI_STREAM_ENABLED
+          value: 'false'
+        - name: EDGEAI_STREAM_BINDINGS_ENABLED
+          value: 'false'
+        - name: EDGEAI_STREAM_RUNS_ENABLED
+          value: 'false'
+        - name: EDGEAI_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: edgeai-postgres-hdd
+              key: password
+        volumeMounts:
+        - name: influx-api
+          mountPath: /var/run/edgeai-influx
+          readOnly: true
+      volumes:
+      - name: influx-api
+        secret:
+          secretName: edgeai-influxdb-api
+          defaultMode: 288
+          items:
+          - key: token
+            path: api-token

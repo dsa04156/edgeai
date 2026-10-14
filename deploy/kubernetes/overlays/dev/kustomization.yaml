@@ -6,6 +6,7 @@ resources:
   - ingress.yaml
 components:
   - ../../components/stream
+  - ../../components/hdd-data-store
 patches:
   - patch: |-
       apiVersion: apps/v1
@@ -19,8 +20,8 @@ patches:
               kubernetes.io/hostname: etri-ser0001-cg0msb
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:b65c6bb53717d66926d60976200c7065b1b823730a0f50b3a95c71c2210bcb80
+    digest: sha256:d6bba7192786955af3e73e0816710fba8f17dead176046d43a26cae92e1e0b1f
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:3ae52abc011adb1ab876b7c8e5e5b96b6bf1ff7c087e99545fffb26b40e84a24
+    digest: sha256:06c4caec2ec4595569504d84d08a911430e829e5d72644b88615be0f20112be0
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:b122af528bc8a9562d37659c2502d17b7da9f73e6492edf7dac193d30822907b
+    digest: sha256:970945dad572a675c8ef4d46c3ff380f14971f82e2749e656e5753d0e2e02ab7

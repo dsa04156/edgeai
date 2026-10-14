@@ -17,3 +17,5 @@ spec:
     - {group: apps, kind: Deployment}
     - {group: apps, kind: StatefulSet}
     - {group: networking.k8s.io, kind: Ingress}
+    - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: batch, kind: CronJob}
