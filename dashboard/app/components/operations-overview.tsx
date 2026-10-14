@@ -53,7 +53,6 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
     const request = overviewRequest(controller.signal);
-    setVirtual(previous => ({ ...previous, pending: true }));
     async function load() {
       try {
         const value = await virtualDeviceStatuses(request);
@@ -77,7 +76,7 @@ export function OperationsOverview({ workflows }: { workflows: boolean }) {
   const errors = [...(snapshot?.errors ?? []), ...(virtual.error ? [virtual.error] : [])];
   return <>
     <PageHeading eyebrow="WORKSPACE / OVERVIEW" title="운영 현황" description="AI 서비스와 현장 장비의 상태를 한눈에 확인하세요."
-      action={<button disabled={busy} onClick={() => { setBusy(true); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button>} />
+      action={<button disabled={busy} onClick={() => { setBusy(true); setVirtual(previous => ({ ...previous, pending: true })); setRefresh(value => value + 1); }}>{busy ? "불러오는 중…" : "새로고침"}</button>} />
     <div className="overview-meta"><span className="small-label">자원 현황</span><span>{snapshot ? `${snapshot.at.toLocaleTimeString("ko-KR")} 조회 · 10초마다 갱신` : "서버에서 상태를 확인하고 있습니다"}</span></div>
     {!!errors.length && <p className="error" role="alert">{errors.join(" · ")} 조회에 실패했습니다. 해당 항목은 확인할 수 없음으로 표시합니다.</p>}
     <div className="resource-status-strip" aria-label="자원 현황" aria-busy={busy || virtual.pending}>

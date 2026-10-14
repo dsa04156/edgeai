@@ -166,11 +166,11 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
       <tbody>{filtered.flatMap(d => d.profile.properties.map(p => <Fragment key={`${d.id}/${p.name}`}>
         <tr>
           <td><button className="version-link" aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta">{d.id}</span></button></td>
-          <td>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
-          <td><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
-          <td>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
-          <td><div className="sensor-actions"><button disabled={busy} aria-label={`${d.id} ${p.name} 항목 수정`} onClick={() => editProperty(d, p)}>항목 수정</button>
-            <button disabled={busy} aria-label={`${d.id} 항목 추가`} onClick={() => addTo(d)}>같은 연결에 추가</button>
+          <td data-label="장치 / 노드">{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
+          <td data-label="상태"><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td data-label="최신값">{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
+          <td data-label="수집 시각">{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>
+          <td data-label="관리"><div className="sensor-actions"><button disabled={busy} aria-label={`${d.id} ${p.name} 항목 수정`} onClick={() => editProperty(d, p)}>항목 수정</button>
+            <button disabled={busy} aria-label={`${d.id} 항목 추가`} title="같은 연결에 측정 항목 추가" onClick={() => addTo(d)}>항목 추가</button>
             {deleting?.deviceId === d.id && deleting.property === p.name ? <>
               <span>{p.name} 센서를 삭제할까요?</span><button disabled={busy} aria-label={`${d.id} ${p.name} 삭제 확인`} onClick={() => void action(() => remove(d, p))}>삭제 확인</button>
               <button disabled={busy} onClick={() => selectDeletion(null)}>취소</button>
