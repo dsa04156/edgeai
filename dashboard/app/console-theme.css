@@ -40,7 +40,7 @@
 .sensor-graph .interactive-history-chart { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 16px; }
 .sensor-graph .history-chart-canvas, .sensor-graph .interactive-history-chart > p { grid-column: 1 / -1; }
 .sensor-graph .history-chart-toolbar { justify-content: flex-start; gap: 4px; margin: 0; }
-.sensor-graph .history-chart-toolbar > button { padding-inline: 8px; border-color: transparent; background: transparent; font-size: 12px; }
+.sensor-graph .history-chart-toolbar > button { min-width: 44px; padding-inline: 8px; border-color: transparent; background: transparent; font-size: 12px; }
 .sensor-graph .history-chart-toolbar > button:hover:not(:disabled) { background: var(--control); }
 .sensor-graph .history-chart-toolbar > span { margin-left: 8px; font-size: 11px; }
 .sensor-graph .history-chart-canvas { height: clamp(280px, 42dvh, 360px); }
