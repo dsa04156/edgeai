@@ -111,3 +111,10 @@ tasks.named('processResources') {
         rename { 'openapi.yaml' }
     }
 }
+
+tasks.register('nanoMqIntegrationTest', Test) {
+    description = 'Requires an explicit isolated NanoMQ endpoint on1884; verifies durable MQTT burst delivery.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/NanoMqArchiveIntegrationTest.class'
+}

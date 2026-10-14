@@ -94,9 +94,10 @@ public final class MqttObservationSubscriber implements SensorObservationSubscri
             if(closed||retired)return;
             if(client.isConnected()){subscribe();return;}
             if(!connecting.compareAndSet(false,true))return;
-            // Dual publication of 17 properties can burst above 16. Keep the window bounded
-            // to reduce exposure to NanoMQ 0.25.6's delayed resend path on small bursts.
-            connectors.submit(()->{try{var options=new MqttConnectionOptions();options.setCleanStart(false);options.setSessionExpiryInterval(86400L);options.setReceiveMaximum(64);options.setAutomaticReconnect(true);options.setConnectionTimeout(2);options.setKeepAliveInterval(15);client.connect(options).waitForCompletion(3000);}catch(MqttException ignored){}finally{connecting.set(false);}});
+            // A connection may have more deliveries awaiting durable FIFO ACKs than the
+            // global64 write slots: e.g.22/s with4.5s ACK latency exceeds64. Keep
+            // the broker window bounded while avoiding NanoMQ's quota-exhaustion retry path.
+            connectors.submit(()->{try{var options=new MqttConnectionOptions();options.setCleanStart(false);options.setSessionExpiryInterval(86400L);options.setReceiveMaximum(256);options.setAutomaticReconnect(true);options.setConnectionTimeout(2);options.setKeepAliveInterval(15);client.connect(options).waitForCompletion(3000);}catch(MqttException ignored){}finally{connecting.set(false);}});
         }
         synchronized void subscribe() {
             try {
