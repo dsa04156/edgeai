@@ -18,6 +18,10 @@ export function ConsoleIcon({ name }: { name: string }) {
   return <Image className="console-icon" src={`/icons/${icons[name] || "diagram-3"}.svg`} width={18} height={18} alt="" />;
 }
 
+export function ResourceIcon({ kind }: { kind: string }) {
+  return <span className="resource-icon" data-resource={kind} aria-hidden="true" />;
+}
+
 export function ConsoleShell({ children, workflows }: { children: React.ReactNode; workflows: boolean }) {
   const path = usePathname();
   const isDocs = path === "/docs" || path.startsWith("/docs/");

@@ -5,6 +5,7 @@ import type { components } from "../../lib/api-schema";
 import { isCurrent, type NodeMetric, type NodeMetricsState } from "../../lib/node-metrics";
 import { monitoredNodes } from "../../lib/monitored-nodes";
 import { StatusBadge } from "./status-badge";
+import { ResourceIcon } from "./console-shell";
 import type { InfrastructureKind, InfrastructureSnapshot } from "../../lib/infrastructure";
 
 function Usage({ metric, state, missingLabel }: { metric?: NodeMetric; state: NodeMetricsState; missingLabel?: string }) {
@@ -46,8 +47,9 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
         const incomplete = devices.some(device => !device.measurements.some(metric => metric.key.endsWith("_USAGE") && isCurrent(metric, state)));
         const oldest = measurements.length ? Math.min(...measurements.map(m => Date.parse(m.observedAt))) : null;
         const physical = measurements.filter(m => m.unit === "CELSIUS" || m.unit === "WATTS");
+        const resource = row.kind === "EDGE_AI_SERVER" ? "servers" : row.kind === "EDGE_DEVICE" ? "edge" : "unknown";
         return <tr key={row.name}>
-          <th scope="row"><strong title={row.name}>{row.name}</strong>{row.node && <small>{row.node.architecture} · {row.node.operatingSystem}</small>}</th>
+          <th scope="row"><div className="resource-identity" data-resource={resource}><ResourceIcon kind={resource} /><div><strong title={row.name}>{row.name}</strong>{row.node && <small>{row.node.architecture} · {row.node.operatingSystem}</small>}</div></div></th>
           <td data-label="상태"><StatusBadge state={row.status} label={row.status === "READY" ? "Ready" : row.status === "NOT_READY" ? "NotReady" : "Unknown"} /></td>
           <td data-label="CPU"><Usage metric={measurements.find(m => m.key === "CPU_USAGE")} state={state} /></td>
           <td data-label="메모리"><Usage metric={measurements.find(m => m.key === "MEMORY_USAGE")} state={state} /></td>
@@ -56,7 +58,7 @@ export function MonitoredNodes({ state, inventory = [], search = "", infrastruct
             const used = values.find(m => m.key.endsWith("MEMORY_USED"));
             const total = values.find(m => m.key.endsWith("MEMORY_TOTAL"));
             const memory = used && isCurrent(used, state) ? `${(used.value / 1024 ** 3).toFixed(2)}${total && isCurrent(total, state) ? ` / ${(total.value / 1024 ** 3).toFixed(2)}` : ""} GiB` : null;
-            return <div className="resource-device" key={device.id}><span title={device.label}>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} missingLabel={device.utilizationNote ?? "사용률 미수집"} />{memory && <small title={memory}>{memory}</small>}</div>;
+            return <div className="resource-device" data-accelerator={device.kind} key={device.id}><span title={device.label}>{device.label}</span><Usage metric={values.find(m => m.key.endsWith("_USAGE"))} state={state} missingLabel={device.utilizationNote ?? "사용률 미수집"} />{memory && <small title={memory}>{memory}</small>}</div>;
           }) : <span className="muted">—</span>}</td>
           <td data-label="온도 · 전력">{physical.length ? physical.map(m => <span className="physical-metric" key={`${m.key}/${m.device}`}>{m.key.split("_")[0]} {isCurrent(m, state) ? `${m.value.toFixed(1)} ${m.unit === "CELSIUS" ? "°C" : "W"}` : "—"}</span>) : <span className="muted">미수집</span>}</td>
           <td data-label="수집 상태"><StatusBadge state={!fresh ? "STALE" : incomplete ? "UNKNOWN" : "ONLINE"} label={!fresh ? "수집 지연" : incomplete ? "일부 미수집" : "수집 정상"} /><small>{oldest ? new Date(oldest).toLocaleTimeString("ko-KR") : "미수집"}</small></td>

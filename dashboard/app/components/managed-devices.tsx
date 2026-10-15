@@ -4,6 +4,7 @@ import type { components } from "../../lib/api-schema";
 import { useInfrastructure } from "../../lib/infrastructure";
 import { StatusBadge } from "./status-badge";
 import { AddDeviceProperty, EditDeviceProperty, newProperty as property, PropertyFields } from "./managed-device-property";
+import { ResourceIcon } from "./console-shell";
 import { RegistrationDialog } from "./registration-dialog";
 import { SensorGraph } from "./sensor-graph";
 
@@ -165,7 +166,7 @@ export function ManagedDevices({ search = "" }: { search?: string }) {
       <thead><tr><th>센서</th><th>장치 / 노드</th><th>상태</th><th>최신값</th><th>수집 시각</th><th>관리</th></tr></thead>
       <tbody>{filtered.flatMap(d => d.profile.properties.map(p => <Fragment key={`${d.id}/${p.name}`}>
         <tr>
-          <td><button className="version-link" title={`${p.name} · ${d.id}`} aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta" title={d.id}>{d.id}</span></button></td>
+          <td><div className="resource-identity" data-resource="sensors"><ResourceIcon kind="sensors" /><button className="version-link" title={`${p.name} · ${d.id}`} aria-haspopup="dialog" aria-label={`${d.id} ${p.name} 그래프`} onClick={() => setGraph({ deviceId: d.id, deviceUid: d.uid, property: p })}>{p.name}<span className="sensor-meta" title={d.id}>{d.id}</span></button></div></td>
           <td data-label="장치 / 노드" title={`${sourceName(d)} · ${d.targetNode} · ${d.profile.protocol}`}>{sourceName(d)}<span className="sensor-meta">{d.targetNode} · {d.profile.protocol}</span></td>
           <td data-label="상태"><StatusBadge state={failed ? "UNKNOWN" : d.state} /></td><td data-label="최신값" title={`${d.properties[p.name]?.value ?? "—"} ${p.unit ?? ""}`}>{d.properties[p.name]?.value ?? "—"} {p.unit}</td>
           <td data-label="수집 시각" title={d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : undefined}>{d.properties[p.name]?.timestamp ? new Date(d.properties[p.name].timestamp).toLocaleString() : "—"}</td>

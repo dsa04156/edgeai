@@ -5,6 +5,7 @@ import type { components, operations } from "../../lib/api-schema";
 import { ContinuousFields } from "./continuous-fields";
 import { ContinuousFlow } from "./continuous-flow";
 import { ContinuousExecution } from "./continuous-execution";
+import { ResourceIcon } from "../components/console-shell";
 import { RegistrationDialog } from "../components/registration-dialog";
 import { PageHeading } from "../components/page-heading";
 
@@ -87,7 +88,7 @@ export function VirtualDeviceRegistry({ initiallyOpen = false, embedded = false,
         {page && !registered.length && <p className="hint">{page.nextOffset !== null || offset > 0 ? "현재 페이지에 등록된 가상디바이스가 없습니다. 이전·다음 페이지를 확인하세요." : "등록된 가상디바이스가 없습니다. 가상디바이스 등록에서 입력 센서와 계산을 선택하세요."}</p>}
         {!!registered.length && !visible.length && <p className="hint">현재 페이지에서 일치하는 가상디바이스가 없습니다.</p>}
         {!!visible.length && <div className="table-scroll"><table className="vd-table"><caption className="sr-only">가상디바이스 목록</caption><thead><tr><th>가상디바이스</th><th>등록 상태</th><th>변경 버전</th><th>관리</th></tr></thead><tbody>{visible.map(vd => <tr key={vd.id}>
-          <td><button className="version-link" title={`${vd.displayName} · ${vd.key}`} aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono" title={vd.key}>{vd.key}</span></button></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button><button className="vd-delete-button" disabled={busy || !csrf} aria-haspopup="dialog" aria-label={`${vd.displayName} 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(vd); }}>삭제</button></div></td>
+          <td><div className="resource-identity" data-resource="virtual"><ResourceIcon kind="virtual" /><button className="version-link" title={`${vd.displayName} · ${vd.key}`} aria-haspopup="dialog" disabled={busy} onClick={() => setGraph(vd)}>{vd.displayName}<span className="mono" title={vd.key}>{vd.key}</span></button></div></td><td>{vd.state === "RELEASED" ? "해제됨" : "등록됨"}</td><td>{vd.revision}</td><td><div className="vd-management"><ContinuousExecution key={vd.id} vd={vd} auth="" csrf={csrf} disabled={busy || !csrf} managementOnly /><button disabled={busy} aria-haspopup="dialog" aria-label={`${vd.displayName} 설정`} onClick={event => { settingsTrigger.current = event.currentTarget; void run(() => show(vd.id)); }}>설정</button><button className="vd-delete-button" disabled={busy || !csrf} aria-haspopup="dialog" aria-label={`${vd.displayName} 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(vd); }}>삭제</button></div></td>
         </tr>)}</tbody></table></div>}
         <div className="pagination"><button disabled={busy || offset === 0} onClick={() => void run(() => load(Math.max(0, offset - 20)))}>이전</button><span>{offset / 20 + 1} 페이지</span><button disabled={busy || page?.nextOffset == null} onClick={() => void run(() => load(page!.nextOffset!))}>다음</button></div>
       </section>
