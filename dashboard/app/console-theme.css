@@ -181,8 +181,8 @@
   --line: #e6e9ee; --signal: #1761d8; --signal-surface: #e8f1ff; --focus: #1761d8;
   --navigation-surface: #f7f8fa; --summary-surface: #fafbfc; --header-surface: #f7f8fa;
   --server: #1761d8; --server-surface: #e8f1ff;
-  --edge: #087f87; --edge-surface: #e2f4f3;
-  --sensor: #a85c15; --sensor-surface: #fff0dd;
+  --edge: #08747d; --edge-surface: #e2f4f3;
+  --sensor: #a05612; --sensor-surface: #fff0dd;
   --virtual: #7751c9; --virtual-surface: #f0eafa;
   --cpu-meter: var(--server); --memory-meter: var(--virtual); --gpu-meter: var(--edge); --npu-meter: var(--sensor);
   --success: #13734e; --success-surface: #e2f4e9; --control: #f5f7fb; --control-border: #d5dfec;
