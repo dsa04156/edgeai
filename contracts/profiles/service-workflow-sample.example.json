@@ -1,0 +1,60 @@
+{
+  "apiVersion": "edgeai/v1",
+  "image": "ghcr.io/dsa04156/edgeai-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "command": [
+    "python3",
+    "/opt/edgeai/examples/workflow_sample.py"
+  ],
+  "args": [
+    "--finalize"
+  ],
+  "resources": {
+    "requests": {
+      "cpu": "100m",
+      "memory": "64Mi"
+    },
+    "limits": {
+      "cpu": "1",
+      "memory": "256Mi"
+    }
+  },
+  "platform": {
+    "os": "linux",
+    "architectures": [
+      "amd64",
+      "arm64"
+    ]
+  },
+  "inputs": {},
+  "outputs": {
+    "result": {
+      "mediaType": "application/json",
+      "maxBytes": 1048576
+    }
+  },
+  "timeoutSeconds": 86400,
+  "qos": "Burstable",
+  "recovery": {
+    "mode": "CHECKPOINT"
+  },
+  "stream": {
+    "command": [
+      "python3",
+      "/opt/edgeai/examples/workflow_sample.py"
+    ],
+    "args": [],
+    "inputs": {
+      "input": {
+        "mediaType": "application/json",
+        "maxPayloadBytes": 4096
+      }
+    },
+    "outputs": {},
+    "stepTimeoutSeconds": 60,
+    "limits": {
+      "maxFrames": 128,
+      "maxBufferBytes": 16777216,
+      "maxStateBytes": 262144
+    }
+  }
+}

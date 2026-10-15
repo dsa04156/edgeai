@@ -17,11 +17,13 @@ import static io.edgeai.app.support.WorkflowInput.JSON;
 @ConditionalOnProperty(name="edgeai.runtime.enabled",havingValue="true")
 @RequestMapping(value="/internal/v1/attempts/{attemptId}",consumes="application/json",produces="application/json")
 public class RunnerController {
+    private final io.edgeai.app.service.WorkflowDataInputService dataInputs;
     private final RunnerApiService service;
     private final RuntimeTelemetryService telemetry;
     private final ObjectProvider<StreamBindingService> streams;
     private final StreamCheckpointService checkpoints;
-    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry,ObjectProvider<StreamBindingService> streams,StreamCheckpointService checkpoints){this.service=service;this.telemetry=telemetry;this.streams=streams;this.checkpoints=checkpoints;}
+    public RunnerController(RunnerApiService service,RuntimeTelemetryService telemetry,ObjectProvider<StreamBindingService> streams,StreamCheckpointService checkpoints,io.edgeai.app.service.WorkflowDataInputService dataInputs){this.dataInputs=dataInputs;this.service=service;this.telemetry=telemetry;this.streams=streams;this.checkpoints=checkpoints;}
+    @PostMapping("/streams/input") public ResponseEntity<String> input(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,dataInputs.input(principal,body));}
     @PostMapping("/streams/checkpoints/uploads") public ResponseEntity<String> checkpointUpload(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){return response(200,checkpoints.upload(principal,body));}
     @PostMapping("/streams/checkpoints/commit") public ResponseEntity<String> checkpointCommit(@AuthenticationPrincipal RunnerPrincipal principal,@RequestBody String body){
         var value=checkpoints.commit(principal,body);return response(value.created()?201:200,Map.of("checkpoint",StreamCheckpointService.receipt(value.value())));

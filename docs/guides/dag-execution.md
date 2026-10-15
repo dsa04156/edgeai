@@ -5,6 +5,8 @@ SERVICE 프로필의 서비스 구성 링크에서도 이 편집기로 진입합
 
 ## 준비 사항
 
+별도 실행용 Spring 인스턴스로 연결할 때 Dashboard의 서버 설정 `EDGEAI_WORKFLOW_API_BASE_URL`을 지정할 수 있습니다. Workflow/Run/Task/Operation/SERVICE와 입력 목록만 해당 고정 origin으로 전달하고 기존 센서·가상디바이스 관리 API는 유지합니다. 별도 인스턴스의 세션 cookie 이름은 `EDGEAI_WORKFLOW_SESSION`으로 설정하며 Dashboard는 워크플로용 CSRF/세션을 분리합니다. 이 설정이 없으면 기존 단일 API를 그대로 사용합니다. 두 인스턴스는 같은 control DB를 사용하고 원본 수집은 기존 인스턴스 한 곳에서만 실행합니다.
+
 API와 Dashboard의 워크플로 기능을 활성화하고 필요한 SERVICE 프로필을 발행합니다.
 실제 작업을 실행하려면 Runtime·Runner·Kubernetes·고정 버전 결과 저장소를 준비해야 합니다.
 고급 STREAM·Remote 실행은 각각 별도 설정과 [지원 조건](../reference/support.md)을 확인합니다.
@@ -17,6 +19,20 @@ API와 Dashboard의 워크플로 기능을 활성화하고 필요한 SERVICE 프
 
 JSON 편집 파일은 `edgeai.workflow-editor/v1` 형식으로 DAG와 캔버스 좌표를 보존합니다.
 파일을 불러올 때 기존 구성을 교체할지 확인합니다. 서버에는 DAG 계약을 발행합니다.
+
+## 실시간 입력 선택
+
+`WORKFLOW_DATA` 데이터 입력 모듈을 선택하면 **입력 종류 → 입력 데이터**에서 센서 값 또는 가상디바이스 계산 결과를 고릅니다. 입력을 바꿔도 뒤의 처리 작업·연결선은 유지합니다. 변경은 새 DAG 버전과 새 실행에 적용하며 이미 실행 중인 원본은 바꾸지 않습니다.
+
+현재 운영 예제는 **실시간 데이터 입력 전환**(`live-input-switch`)입니다. 버전을 선택해 **이 버전으로 편집하기**를 누르고, **편집할 작업**에서 `input`을 선택해 원본을 바꿉니다. 처리 작업 `process`와 연결은 유지한 채 새 버전을 발행하고 실행합니다. `/workflows?workflow=<워크플로 UUID>` 주소로 목록 페이지를 넘기지 않고 해당 워크플로를 바로 열 수 있습니다.
+
+센서는 NanoMQ에서 수집·저장한 검증 원본을 사용합니다. 가상디바이스는 eKuiper의 현재 유효 계산 결과를 사용하므로 결과 이력 저장 정책이 `NONE`이어도 입력으로 사용할 수 있습니다. 가상디바이스를 먼저 시작하고 유효 결과가 들어온 뒤 실행합니다.
+
+같은 실행에서 최신 유효값을1초마다 읽고 중복 `sampleId`를 제거합니다. 중간 모든 관측의 전량 전달을 보장하는 구독·재생 API는 아닙니다. 센서 UID/설정/원본 세대 또는 가상디바이스 revision/실행 세대가 바뀌면 원본을 조용히 교체하지 않고 해당 실행을 차단합니다. 만료되거나 아직 없는 측정은 기다립니다.
+
+**정상 종료**는 새 입력을 끝내고 마지막 DATA·END의 처리 ACK, 서버 확정 체크포인트와 공동 FINALIZE를 기다린 뒤 결과 파일을 저장합니다. 실행 취소와 다릅니다. 실행의 최종 상태·검증된 Result를 확인합니다. SERVICE의 실행 시간 한도는최대24시간이며 무기한 실행을 의미하지 않습니다.
+
+소스와 예제 처리 프로파일은 [데이터 입력](../../contracts/profiles/service-workflow-input.example.json)과 [연속 표본 집계](../../contracts/profiles/service-workflow-sample.example.json)를 참고합니다. 예제 처리기는 표본 수·마지막 값과 숫자 값의 평균/최솟값/최댓값을 집계하고 정상 종료 후 버전 관리 결과 저장소에 저장합니다. 이미지의0 digest는 실제 준비한 native 이미지 digest로 바꿉니다.
 
 ## 2. 워크플로 생성과 버전 발행
 

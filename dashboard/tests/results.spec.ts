@@ -11,7 +11,7 @@ test("result view distinguishes pending, verified metadata and unavailable stora
     const run = { id: runId, workflowVersionId: runId, state: "RUNNING", mode: "AUTO", parameters: {}, retry: { maxAttempts: 3, backoffSeconds: 5, maxElapsedSeconds: 600, retryOn: ["RUNTIME_LOST"] }, createdAt: now, updatedAt: now };
     const task = { id: taskId, runId, key: "analyze", state: phase === "verified" ? "SUCCEEDED" : phase === "retry" ? "RETRY_WAIT" : "RUNNING", createdAt: now, updatedAt: now };
     let body: unknown;
-    if (path === "csrf") body = { token: "ui-fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "ui-fixture" };
     else if (path === "workflows" || path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflow-runs") body = { items: [run], nextOffset: null };
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };

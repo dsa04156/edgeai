@@ -22,9 +22,11 @@ export function monitoredNodes(state: NodeMetricsState, inventory: ExecutionNode
     const physical = liveNodes.find(node => node.name === name);
     const matches = current.filter(node => node.name === item.nodeName);
     const node = matches.length === 1 ? matches[0] : undefined;
-    const devices = nodeAccelerators(item, state);
+    const devices = nodeAccelerators(item, state, physical?.allocatable ?? node?.allocatable ?? {});
+    const measurements = item.measurements.filter(metric => !/^(GPU|NPU)_/.test(metric.key)
+      || devices.some(device => device.measurements.includes(metric)));
     const kinds = ["GPU", "NPU"].filter(kind => devices.some(device => device.kind === kind));
     const status = physical?.status ?? (item.readiness ? (isCurrent(item.readiness, state) ? item.readiness.status : "UNKNOWN") : node?.status || "UNKNOWN");
-    return { name: item.nodeName, node: physical ?? node, kinds, status, devices, kind: physical?.kind ?? "UNKNOWN" };
+    return { name: item.nodeName, node: physical ?? node, kinds, status, devices, measurements, kind: physical?.kind ?? "UNKNOWN" };
   });
 }

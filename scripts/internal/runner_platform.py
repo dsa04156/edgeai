@@ -11,6 +11,7 @@ from image_identity import digest,manifest,platforms,SINGLE,INDEX
 
 REPOSITORY='ghcr.io/dsa04156/edgeai-runner'
 ARCHITECTURES={'amd64':'x86_64','arm64':'aarch64'}
+EXPECTED_TESTS={'runner-container':96,'stream-mqtt':116}
 RUNNER_INPUTS=['runner/', 'scripts/test/test-runner.sh', 'scripts/test/test-stream.sh',
     'scripts/collect-evidence.sh', 'scripts/lib.sh']
 
@@ -73,7 +74,7 @@ def test_results(directory):
         counts=re.findall(r'Ran (\d+) tests in [\d.]+s',log)
         if len(counts)!=1 or re.search(r'\bskipped\b',log,re.I):raise ValueError('Native Runner tests must execute without skips')
         found[name]=int(counts[0])
-    if found!={'runner-container':95,'stream-mqtt':112}:raise ValueError('Required native Runner test cases were not all verified')
+    if found!=EXPECTED_TESTS:raise ValueError('Required native Runner test cases were not all verified')
     return found
 
 
@@ -107,7 +108,7 @@ def selected(records,source):
         if (row.get('formatVersion')!=1 or row.get('scope')!='native-runner-platform' or
                 row.get('sourceRevision')!=source or architecture not in ARCHITECTURES or key!='linux/'+architecture or
                 row.get('hostMachine')!=ARCHITECTURES[architecture] or row.get('containerMachine')!=ARCHITECTURES[architecture] or
-                row.get('tests')!={'runner-container':95,'stream-mqtt':112} or key in result):
+                row.get('tests')!=EXPECTED_TESTS or key in result):
             raise ValueError('Native Runner provenance differs from the selected source or platforms')
         digest(row.get('imageConfigDigest'));result[key]=digest(row.get('publishedDigest'))
     if set(result)!={'linux/amd64','linux/arm64'} or len(set(result.values()))!=2:

@@ -93,7 +93,7 @@ export function ProfileRegistry({ workflows = false }: { workflows?: boolean }) 
   function connect() {
     void run(async () => {
       const authorization = "dashboard";
-      const token = await (await api("csrf", authorization)).json();
+      const token = await (await api("workflow-csrf", authorization)).json();
       await load(0, "", authorization);
       setProfileChoices(await registryItems<Profile>("profiles/SERVICE", path => api(path, authorization), readProfilePage));
       setNodes((await (await api("nodes?limit=100", authorization)).json()).items);

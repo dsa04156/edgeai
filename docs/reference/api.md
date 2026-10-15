@@ -70,10 +70,12 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **72개**입니다.
+계약에 정의된 operation은 **74개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
+| `GET` | `/api/v1/workflow-data-sources` | `listWorkflowDataSources` |
+| `POST` | `/api/v1/workflow-runs/{runId}/drain` | `drainWorkflowInput` |
 | `GET` | `/api/devices` | `listManagedDevices` |
 | `POST` | `/api/devices` | `createManagedDevice` |
 | `GET` | `/api/devices/{id}` | `getManagedDevice` |

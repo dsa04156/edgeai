@@ -9,8 +9,9 @@ test("execution measurements show units, missing values, expiry and new attempt 
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
     const run = { id: runId, workflowVersionId: runId, mode: "AUTO", state: "RUNNING", parameters: {}, createdAt: now, updatedAt: now };
     const task = { id: taskId, runId, key: "analyze", state: "RUNNING", createdAt: now, updatedAt: now };
+    if (path.endsWith("/placements")) return route.fulfill({ json: [] });
     let body: unknown;
-    if (path === "csrf") body = { token: "fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "fixture" };
     else if (path === "workflows" || path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflow-runs") body = { items: [run], nextOffset: null };
     else if (path === `workflow-runs/${runId}`) body = { run, tasks: [task] };
@@ -22,11 +23,7 @@ test("execution measurements show units, missing values, expiry and new attempt 
     else return route.fulfill({ status: 404, json: {} });
     await route.fulfill({ status: 200, json: body });
   });
-  await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture");
-  await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
-  await page.getByRole("button", { name: runId, exact: true }).click();
+  await page.goto(`/runs?run=${runId}`);
   await page.getByRole("button", { name: "analyze", exact: true }).click();
   const region = page.getByRole("region", { name: "실행 측정", exact: true });
   await expect(region).toContainText("40.0% · 설정된 CPU 제한 기준");

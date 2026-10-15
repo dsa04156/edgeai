@@ -26,8 +26,9 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
       if (++calls === 1) return route.fulfill({ status: 503, json: { message: "전환 저장소 복구 후 동일 요청을 재전송하세요." } });
       phase = "draining"; return route.fulfill({ status: 202, json: { ...operation, state: "DRAINING" } });
     }
+    if (path.endsWith("/placements")) return route.fulfill({ json: [] });
     let body: unknown;
-    if (path === "csrf") body = { token: "ui-fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "ui-fixture" };
     else if (path === "workflows" || path === "profiles/SERVICE") body = { items: [], nextOffset: null };
     else if (path === "nodes") body = { items: [{ id: nodeId, name: "target-node", status: "READY", architecture: "amd64" }], nextOffset: null };
     else if (path === "workflow-runs") body = { items: [run], nextOffset: null };
@@ -40,12 +41,9 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
     else return route.fulfill({ status: 404, json: { message: "Unknown fixture path" } });
     await route.fulfill({ status: 200, json: body });
   });
-  await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture");
-  await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
-  await page.getByRole("button", { name: runId, exact: true }).click();
+  await page.goto(`/runs?run=${runId}`);
   await page.getByRole("button", { name: "analyze", exact: true }).click();
+  await page.getByText("고급 설정 · 실행 위치 전환", { exact: true }).click();
   const region = page.getByRole("region", { name: "실행 위치 전환", exact: true });
   await region.getByRole("button", { name: "실행 위치 전환", exact: true }).click();
   await region.getByRole("combobox", { name: "전환 대상 종류", exact: true }).selectOption(destination);
@@ -55,6 +53,8 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
   await region.getByRole("button", { name: "전환 요청", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "동일 요청을 재전송" })).toBeVisible();
   await region.getByRole("button", { name: "전환 요청", exact: true }).click();
+  await page.getByRole("button", { name: "analyze", exact: true }).click();
+  await page.getByText("고급 설정 · 실행 위치 전환", { exact: true }).click();
   await expect(region).toContainText("이전 실행 종료 중");
   if (stream) {
     await region.getByText("함께 전환하는 스트리밍 작업 2개", { exact: true }).click();
@@ -69,10 +69,14 @@ for (const [destination, stream] of [["NODE", false], ["REMOTE", false], ["NODE"
   await expect(region.getByRole("button", { name: "실행 위치 전환", exact: true })).toHaveCount(0);
   phase = "starting";
   await page.getByRole("button", { name: "결과 새로고침", exact: true }).click();
+  await page.getByRole("button", { name: "analyze", exact: true }).click();
+  await page.getByText("고급 설정 · 실행 위치 전환", { exact: true }).click();
   await expect(region).toContainText("새 실행 확인 중");
   await expect(page.getByRole("region", { name: "선택한 실행", exact: true })).toContainText("Attempt #2 · epoch 2 · 배치 중");
   phase = "transferred";
   await page.getByRole("button", { name: "결과 새로고침", exact: true }).click();
+  await page.getByRole("button", { name: "analyze", exact: true }).click();
+  await page.getByText("고급 설정 · 실행 위치 전환", { exact: true }).click();
   await expect(region).toContainText("전환 성공 · 새 실행 시작됨");
   if (stream) {
     const group = region.locator("details").filter({ hasText: "함께 전환하는 스트리밍 작업 2개" });

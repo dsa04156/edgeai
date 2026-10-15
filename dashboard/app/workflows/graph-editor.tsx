@@ -5,6 +5,7 @@ import { useState, useMemo, useRef, useEffect, memo } from "react";
 import { parse, stringify } from "lossless-json";
 import { ReactFlow, Background, Controls, Handle, Position, type Node, type NodeProps, MiniMap, MarkerType, type ReactFlowInstance, type Connection } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { WorkflowSourceFields } from "./workflow-source-fields";
 import type { components } from "../../lib/api-schema";
 import { profilePorts as ports, connectTasks, readWorkflowDocument, arrangeWorkflow, type GraphPositions } from "../../lib/workflow-graph";
 
@@ -62,6 +63,7 @@ export function GraphEditor({ profiles, value, onApply, disabled }: {
         inputs: ports(profile, "inputs"), outputs: ports(profile, "outputs"), category: category(profile) } };
   });
   const current = dag?.tasks.find(task => task.key === selected);
+  const inputSource = (profiles.find(profile => profile.id === current?.serviceProfileVersionId)?.spec as { stream?: { source?: string } } | undefined)?.stream?.source === "WORKFLOW_DATA";
   function commit(next: Dag) { onApply(stringify(next, null, 2) || ""); setError(""); }
   function connect(connection: Connection) {
     if (!dag) return;
@@ -147,18 +149,20 @@ export function GraphEditor({ profiles, value, onApply, disabled }: {
       <aside className="workflow-inspector" aria-label="선택 작업 설정"><h3>작업 설정</h3>
         <label>편집할 작업<select value={selected || ""} onChange={e => setSelected(e.target.value)}><option value="">작업 선택</option>{nodes.map(n => <option key={n.id}>{n.id}</option>)}</select></label>
         {!current && <p className="empty">캔버스에서 작업을 선택하면 설정을 편집할 수 있습니다.</p>}
-    {current && <fieldset className="publish-fields" disabled={disabled} key={current.key}><legend>{current.key} · ServiceTask</legend>
+    {current && <fieldset className="publish-fields" disabled={disabled} key={current.key}><legend>{current.key} · {inputSource ? "데이터 입력" : "ServiceTask"}</legend>
       <label>작업 키<input defaultValue={current.key} maxLength={100} onBlur={e => {
         const key = e.target.value.trim(); if (key === current.key || !dag) return;
         if (!/^[a-z][a-z0-9]*([._-][a-z0-9]+)*$/.test(key) || dag.tasks.some(t => t.key === key)) { setError("중복되지 않는 영문 소문자 작업 키를 입력하세요."); e.target.value = current.key; return; }
         setPositions(previous => ({ ...previous, [key]: previous[current.key] || nodes.find(n => n.id === current.key)!.position }));
         commit({ tasks: dag.tasks.map(t => t.key === current.key ? { ...t, key } : t), dependencies: dag.dependencies.map(edge => ({ ...edge, fromTask: edge.fromTask === current.key ? key : edge.fromTask, toTask: edge.toTask === current.key ? key : edge.toTask })) }); setSelected(key);
       }} /></label>
-      <label>작업 매개변수 JSON<textarea rows={3} defaultValue={stringify(current.parameters, null, 2) || "{}"} onBlur={e => {
+      {inputSource ? <WorkflowSourceFields key={current.key} value={current.parameters.dataSource} onChange={dataSource => {
+        if (dag) commit({ ...dag, tasks: dag.tasks.map(task => task.key === current.key ? { ...task, parameters: { ...task.parameters, dataSource } } : task) });
+      }} /> : <label>작업 매개변수 JSON<textarea rows={3} defaultValue={stringify(current.parameters, null, 2) || "{}"} onBlur={e => {
         try { const parameters = parse(e.target.value); if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) throw new Error();
           if (dag) commit({ ...dag, tasks: dag.tasks.map(t => t.key === current.key ? { ...t, parameters: parameters as Record<string, unknown> } : t) });
         } catch { setError("작업 매개변수는 JSON 객체여야 합니다. 수정한 값이 반영되지 않았습니다."); }
-      }} /></label>
+      }} /></label>}
       <button type="button" onClick={() => remove(current.key)}>선택 작업 삭제</button>
     </fieldset>}
       </aside>

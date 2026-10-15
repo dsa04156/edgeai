@@ -5,7 +5,10 @@ import java.util.Map;
 
 /** Persistent computation; the parent SERVICE command materializes final files from its sealed state. */
 public record StreamExecutionSpec(List<String> command, List<String> args, Map<String, Port> inputs,
-        Map<String, Port> outputs, int stepTimeoutSeconds, Limits limits) {
+        Map<String, Port> outputs, int stepTimeoutSeconds, Limits limits, String source) {
+    public StreamExecutionSpec(List<String> command,List<String> args,Map<String,Port> inputs,Map<String,Port> outputs,int stepTimeoutSeconds,Limits limits) {
+        this(command,args,inputs,outputs,stepTimeoutSeconds,limits,null);
+    }
     public StreamExecutionSpec {
         command = ServiceExecutionSpec.arguments(command, 32);
         args = ServiceExecutionSpec.arguments(args, 128);
@@ -13,7 +16,12 @@ public record StreamExecutionSpec(List<String> command, List<String> args, Map<S
             throw new IllegalArgumentException("Stream command arguments must not be empty");
         if (command.isEmpty() || command.getFirst().isBlank()) throw new IllegalArgumentException("Stream command required");
         inputs = Map.copyOf(inputs); outputs = Map.copyOf(outputs);
-        if (inputs.isEmpty() || inputs.size() > 16 || outputs.size() > 16)
+        if (source != null && (!source.equals("WORKFLOW_DATA") || !inputs.isEmpty()
+                || !command.equals(List.of("edgeai-workflow-input")) || !args.isEmpty()
+                || !outputs.keySet().equals(java.util.Set.of("sample"))
+                || !outputs.get("sample").mediaType().equals("application/json") || outputs.get("sample").maxPayloadBytes()!=4096))
+            throw new IllegalArgumentException("Invalid workflow data source contract");
+        if (source == null && inputs.isEmpty() || inputs.size() > 16 || outputs.size() > 16)
             throw new IllegalArgumentException("Stream requires 1..16 inputs and 0..16 outputs");
         inputs.keySet().forEach(RuntimeNames::port); outputs.keySet().forEach(RuntimeNames::port);
         if (stepTimeoutSeconds < 1 || stepTimeoutSeconds > 3600 || limits == null)

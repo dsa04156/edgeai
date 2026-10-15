@@ -30,10 +30,14 @@ test("clicking a sensor opens its stored original graph in a bounded dialog and 
   await expect(trigger).toBeVisible(); await trigger.click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
+  const plot = dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true });
+  await expect(plot).toBeVisible();
+  const records = dialog.getByRole("table", { name: "센서 원본 이력", exact: true });
+  await expect(records).toBeVisible();
+  expect((await records.boundingBox())!.y).toBeGreaterThan((await plot.boundingBox())!.y + (await plot.boundingBox())!.height);
   await dialog.getByText("센서·수집 정보", { exact: true }).click();
-  await expect(dialog.getByText(/InfluxDB에 저장된 센서 원본/)).toBeVisible();
-  await expect(dialog.getByText(/이전 Mapper의 기록/)).toBeVisible();
+  await expect(dialog.getByText(device.uid, { exact: true })).toBeVisible();
+  await expect(records.getByRole("cell", { name: "미검증", exact: true })).toHaveCount(2);
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe("hidden");
   await page.screenshot({ path: info.outputPath("sensor-graph-modal.png"), fullPage: true });
   const box = await dialog.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0);
@@ -53,7 +57,6 @@ test("a truncated original string remains available in full from its history cel
   await page.goto("/devices?view=sensors");
   await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByText("원본 기록 표 · 1개", { exact: true }).click();
   const cell = dialog.getByRole("cell", { name: value, exact: true });
   await expect(cell).toBeVisible();
   await expect(cell).toHaveAttribute("title", value);
@@ -80,14 +83,19 @@ test("clicking a virtual device opens its saved output graph and switches output
   const dialog = page.getByRole("dialog", { name: "환경 요약 · 가상디바이스 그래프", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("img", { name: "average 결과 그래프, 2개 기록", exact: true })).toBeVisible();
+  const records = dialog.getByRole("table", { name: "가상디바이스 결과 이력", exact: true });
+  await expect(records).toBeVisible();
+  const plot = (await dialog.getByRole("img").boundingBox())!;
+  expect((await records.boundingBox())!.y).toBeGreaterThan(plot.y + plot.height);
+  await dialog.getByText("누락 · 1개", { exact: true }).click();
   await expect(dialog.getByText(/기록 저장 중단 ·/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "계산 시작", exact: true })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "maximum 그래프", exact: true }).click();
+  await dialog.getByLabel("출력 항목", { exact: true }).selectOption("maximum");
   await expect(dialog.getByRole("img", { name: "maximum 결과 그래프, 2개 기록", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await page.screenshot({ path: info.outputPath("virtual-device-graph-modal.png"), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+  await dialog.getByRole("button", { name: "환경 요약 · 가상디바이스 그래프 닫기", exact: true }).click();
   await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
   await page.getByRole("button", { name: "환경 요약 설정", exact: true }).click();
   await expect(page.getByRole("heading", { name: "현재 원본 연결", exact: true })).toBeVisible();
@@ -146,12 +154,11 @@ test("sensor history periods, pagination, store failures and empty records stay 
   await dialog.getByRole("button", { name: "이전 기록", exact: true }).click();
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 1개", exact: true })).toBeVisible();
   expect(queries.at(-1)!.get("cursor")).toBe("cursor-a"); expect(queries.at(-1)!.get("from")).toBe(period.get("from")); expect(queries.at(-1)!.get("to")).toBe(period.get("to"));
-  await dialog.getByText("원본 기록 표 · 2개", { exact: true }).click();
   await expect(dialog.getByRole("table").getByRole("row")).toHaveCount(3);
   fail = true; await dialog.getByRole("button", { name: "그래프 조회", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("InfluxDB 저장소"); await expect(dialog.getByRole("img")).toHaveCount(0);
   fail = false; empty = true; await dialog.getByRole("button", { name: "그래프 조회", exact: true }).click();
-  await expect(dialog.getByText("이 기간에 저장된 센서 원본이 없습니다.", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("조회한 데이터가 없습니다.", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("alert")).toHaveCount(0);
 });
 
@@ -167,7 +174,7 @@ test("a recreated sensor name keeps the open graph on its original UID", async (
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   replaced = true; await page.clock.runFor(5100);
-  await expect(dialog.getByText(/현재 등록에서 이 센서 UID를 찾지 못했습니다/)).toBeVisible();
+  await expect(dialog.getByText("현재 등록 없음 · 저장된 원본 조회", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await trigger.click();
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 1개", exact: true })).toBeVisible();
@@ -184,7 +191,6 @@ test("automatic sensor history refresh retains the open record table and recover
   await page.goto("/devices?view=sensors"); await page.getByRole("button", { name: "temperature-sensor temperature 그래프", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "temperature · 센서 그래프", exact: true });
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
-  await dialog.getByText("원본 기록 표 · 2개", { exact: true }).click();
   failed = true; await page.clock.runFor(5100);
   await expect(dialog.getByRole("alert")).toContainText("일시 저장소 오류");
   await expect(dialog.getByRole("img", { name: "temperature 기간 전체 그래프, 원본 2개", exact: true })).toBeVisible();
