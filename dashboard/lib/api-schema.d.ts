@@ -80,6 +80,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/devices/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * RTSP 카메라의 최신 디코딩된 JPEG 미리보기
+         * @description 익명 RTSP, 최대640px, 오디오 없음. 오래된 프레임이나 변경된 Device UID는 반환하지 않습니다.
+         */
+        get: operations["getCameraPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices/{id}/properties": {
         parameters: {
             query?: never;
@@ -1355,10 +1375,10 @@ export interface components {
              */
             kind: "physical" | "virtual";
             /** @enum {string} */
-            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat";
+            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat" | "rtsp";
             /** @description Required for network protocols; omitted for local hardware. */
             host?: string;
-            /** @description Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080. */
+            /** @description Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080, RTSP 554. */
             port?: number;
             targetNode: string;
             /** @default 1000 */
@@ -1382,7 +1402,7 @@ export interface components {
                  * @enum {string}
                  */
                 securityMode?: "None";
-                /** @description OPC-UA endpoint path or Virtual runtime JSON path (default /properties). */
+                /** @description OPC-UA endpoint, Virtual JSON, or anonymous RTSP stream path. RTSP requires an absolute path without credentials, query or fragment (default /). */
                 path?: string;
                 /** @description MQTT input message freshness limit. */
                 staleMs?: number;
@@ -3220,6 +3240,58 @@ export interface operations {
         responses: {
             /** @description KubeEdge device control result */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCameraPreview: {
+        parameters: {
+            query: {
+                uid: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cache-Control no-store. 최대4MiB JPEG. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description RTSP 카메라가 아니거나 UID가 잘못되었습니다. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 카메라가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 카메라 UID가 변경되었습니다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 최신 영상 프레임 또는 Mapper가 준비되지 않았습니다. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

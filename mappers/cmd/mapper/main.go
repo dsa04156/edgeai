@@ -36,6 +36,18 @@ func main() {
 	var ready atomic.Bool
 	var health dmi.RecoveryHealth
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /devices/{id}/preview", func(w http.ResponseWriter, r *http.Request) {
+		frame, at, err := panel.Preview(r.Context(), r.PathValue("id"), r.URL.Query().Get("configurationSha256"))
+		if err != nil {
+			http.Error(w, "fresh camera frame unavailable", 503)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-EdgeAI-Frame-Time", at.UTC().Format(time.RFC3339Nano))
+		_, _ = w.Write(frame)
+	})
 	mux.HandleFunc("GET /capabilities", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

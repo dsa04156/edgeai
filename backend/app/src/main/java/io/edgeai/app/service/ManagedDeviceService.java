@@ -17,13 +17,13 @@ import static io.edgeai.app.support.DeviceProfileCompiler.*;
 @Service
 public class ManagedDeviceService {
     private final ObjectProvider<DeviceResourceGateway> gateways;
-    private final String ns,broker,armImage,amdImage,sensehatImage;
+    private final String ns,broker,armImage,amdImage,sensehatImage,rtspImage;
     private final Clock clock;
     private final VirtualDeviceRepository vds;
     private final io.edgeai.domain.repository.DeviceRepository devices;
     public ManagedDeviceService(ObjectProvider<DeviceResourceGateway> gateways,Clock clock,
         @Value("${edgeai.devices.namespace:edgeai-devices}") String ns,@Value("${edgeai.devices.data-broker:tcp://127.0.0.1:1883}") String broker,
-        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,VirtualDeviceRepository vds,io.edgeai.domain.repository.DeviceRepository devices){this.devices=devices;this.vds=vds;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;}
+        @Value("${edgeai.devices.mapper-arm64:}") String armImage,@Value("${edgeai.devices.mapper-amd64:}") String amdImage,@Value("${edgeai.devices.mapper-sensehat-arm64:}") String sensehatImage,@Value("${edgeai.devices.mapper-rtsp:}") String rtspImage,VirtualDeviceRepository vds,io.edgeai.domain.repository.DeviceRepository devices){this.devices=devices;this.vds=vds;this.gateways=gateways;this.clock=clock;this.ns=ns;this.broker=broker;this.armImage=armImage;this.amdImage=amdImage;this.sensehatImage=sensehatImage;this.rtspImage=rtspImage;}
     private String path(String resource){return "/apis/"+API+"/namespaces/"+ns+"/"+resource;}
     private String core(String resource){return "/api/v1/namespaces/"+ns+"/"+resource;}
     private String deployments(){return "/apis/apps/v1/namespaces/"+ns+"/deployments";}
@@ -50,6 +50,7 @@ public class ManagedDeviceService {
         var labels=map(map(nodeResource.get("metadata")).get("labels"));String arch=Objects.toString(labels.get("kubernetes.io/arch"));
         String image=arch.equals("arm64")?armImage:arch.equals("amd64")?amdImage:"";
         if(protocol.equals("sensehat")){if(!arch.equals("arm64"))throw error(400,"UNSUPPORTED_HARDWARE_NODE","Sense HAT은 ARM64 Raspberry Pi 노드에서 지원합니다.");image=sensehatImage;}
+        if(protocol.equals("rtsp")){if(!Set.of("arm64","amd64").contains(arch))throw error(400,"UNSUPPORTED_HARDWARE_NODE","RTSP Mapper는 ARM64 또는 AMD64 노드에서 지원합니다.");image=rtspImage;}
         if(image.isBlank())throw error(503,"MAPPER_IMAGE_NOT_CONFIGURED","대상 아키텍처의 Mapper 이미지가 설정되지 않았습니다.");
         String key=MapperDeployment.nameFor(node,protocol);
         ensure(core("configmaps"),key,MapperDeployment.config(node,ns,protocol));ensure(deployments(),key,MapperDeployment.deployment(node,ns,image,protocol));
@@ -252,7 +253,7 @@ public class ManagedDeviceService {
         }
         return result;
     }
-    public Map<String,Object> protocols(){return Map.of("items",List.of("modbus-tcp","opc-ua","mqtt","virtual","serial-json","sensehat").stream().map(protocol->DeviceProtocolCatalog.entry(protocol,protocol.equals("sensehat")?!sensehatImage.isBlank():!armImage.isBlank() || !amdImage.isBlank())).toList());}
+    public Map<String,Object> protocols(){return Map.of("items",List.of("modbus-tcp","opc-ua","mqtt","virtual","serial-json","sensehat","rtsp").stream().map(protocol->DeviceProtocolCatalog.entry(protocol,protocol.equals("rtsp")?!rtspImage.isBlank():protocol.equals("sensehat")?!sensehatImage.isBlank():!armImage.isBlank() || !amdImage.isBlank())).toList());}
     public Map<String,Object> profiles(){var root=request("GET",core("configmaps")+"?labelSelector=edgeai.io%2Fdevice-profile%3Dtrue",null,200);var items=new ArrayList<Object>();for(var item:(List<?>)root.getOrDefault("items",List.of()))items.add(JSON.decode((String)map(map(item).get("data")).get("profile.json")));return Map.of("items",items);}
     public Map<String,Object> createProfile(String body){
         var input=map(JSON.parse(body,65536));fields(input,Set.of("name","protocol","properties"),Set.of("name","protocol","properties"));String key=name(input.get("name"));
@@ -271,6 +272,25 @@ public class ManagedDeviceService {
             var request=HttpRequest.newBuilder(URI.create("http://"+address+":"+mapperPort(protocol)+"/connections/test")).timeout(Duration.ofSeconds(6)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(JSON.canonical(input))).build();
             var response=client.send(request,HttpResponse.BodyHandlers.ofString());if(response.statusCode()!=200&&response.statusCode()!=422)throw error(503,"MAPPER_UNAVAILABLE","Mapper 연결 확인을 완료할 수 없습니다.");return map(JSON.parse(response.body(),16384));
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw error(503,"MAPPER_UNAVAILABLE","연결 확인이 중단되었습니다.");}catch(ControlPlaneException e){throw e;}catch(Exception e){throw error(503,"MAPPER_UNAVAILABLE","대상 Edge Mapper에 연결할 수 없습니다. 준비 상태를 확인하세요.");}
+    }
+    public byte[] preview(String id,UUID uid){
+        var resource=request("GET",path("devices")+"/"+name(id),null,200);owned(resource);
+        var metadata=map(resource.get("metadata"));if(!uid.toString().equals(metadata.get("uid")))throw error(409,"DEVICE_IDENTITY_CHANGED","카메라가 변경됐습니다. 다시 선택하세요.");
+        var spec=map(resource.get("spec"));if(!"edgeai-rtsp".equals(map(spec.get("protocol")).get("protocolName")))throw error(400,"NOT_A_CAMERA","RTSP 카메라만 미리볼 수 있습니다.");
+        var profile=JSON.decode(Objects.toString(map(metadata.get("annotations")).get("edgeai.io/device-profile")));
+        var target=node(Objects.toString(spec.get("nodeName")));String address=null;
+        for(var item:(List<?>)map(target.get("status")).get("addresses")){var a=map(item);if("InternalIP".equals(a.get("type")))address=Objects.toString(a.get("address"));}
+        if(address==null)throw error(503,"MAPPER_UNAVAILABLE","노드 주소를 확인할 수 없습니다.");
+        try(var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()){
+            var uri=new URI("http",null,address,mapperPort("rtsp"),"/devices/"+id+"/preview","configurationSha256="+configuration(profile),null);
+            var pending=client.sendAsync(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(7)).GET().build(),info->new CameraFrameBody());
+            try {
+                var response=pending.get(7,java.util.concurrent.TimeUnit.SECONDS);
+                if(response.statusCode()!=200||!response.headers().firstValue("Content-Type").orElse("").equals("image/jpeg"))throw error(503,"CAMERA_FRAME_UNAVAILABLE","새 카메라 영상을 받지 못했습니다.");
+                byte[] frame=response.body();int n=frame.length;
+                if(n<4||(frame[0]&255)!=255||(frame[1]&255)!=216||(frame[n-2]&255)!=255||(frame[n-1]&255)!=217)throw error(503,"CAMERA_FRAME_UNAVAILABLE","카메라 영상 형식을 확인할 수 없습니다.");return frame;
+            } finally {pending.cancel(true);}
+        }catch(InterruptedException e){Thread.currentThread().interrupt();throw error(503,"CAMERA_FRAME_UNAVAILABLE","영상 조회가 중단됐습니다.");}catch(ControlPlaneException e){throw e;}catch(Exception e){throw error(503,"CAMERA_FRAME_UNAVAILABLE","카메라 영상을 조회할 수 없습니다.");}
     }
     public Map<String,Object> workflowDevice(Object input){
         var ref=map(input);fields(ref,Set.of("id","outputs"),Set.of("id","outputs"));

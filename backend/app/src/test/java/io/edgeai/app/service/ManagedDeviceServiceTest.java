@@ -26,10 +26,33 @@ class ManagedDeviceServiceTest {
         assertThrows(IllegalArgumentException.class,()->service().create(body));
         verifyNoInteractions(gateway);
     }
+    @Test void cameraPreviewChecksIdentityAndForwardsOnlyTheSavedConfiguration() throws Exception {
+        var compiled=DeviceProfileCompiler.compile(Map.of("name","camera","targetNode","edge-a","protocol","rtsp","host","192.0.2.10","protocolConfig",Map.of("path","/live"),"properties",List.of(Map.of("name","connected","dataType","bool","jsonPath","connected"))),"edgeai-devices","tcp://127.0.0.1:1883");
+        var camera=new TreeMap<>(compiled.deviceResource());var metadata=new TreeMap<>(DeviceProfileCompiler.map(camera.get("metadata")));
+        var uid=UUID.randomUUID();metadata.put("uid",uid.toString());camera.put("metadata",metadata);read(path("devices","camera"),camera);
+        read("/api/v1/nodes/edge-a",Map.of("metadata",Map.of("labels",Map.of("node-role.kubernetes.io/edge","")),"status",Map.of("addresses",List.of(Map.of("type","InternalIP","address","127.0.0.2")))));
+        var image=new java.awt.image.BufferedImage(8,8,java.awt.image.BufferedImage.TYPE_INT_RGB);var output=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"jpeg",output);byte[] frame=output.toByteArray();
+        var count=new java.util.concurrent.atomic.AtomicInteger();var mime=new java.util.concurrent.atomic.AtomicReference<>("image/jpeg");
+        var payload=new java.util.concurrent.atomic.AtomicReference<>(frame);
+        var server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.2",7783),0);
+        server.createContext("/devices/camera/preview",exchange->{
+            count.incrementAndGet();assertEquals("configurationSha256="+DeviceProfileCompiler.configuration(compiled.profile()),exchange.getRequestURI().getRawQuery());
+            exchange.getResponseHeaders().add("Content-Type",mime.get());byte[] bytes=payload.get();exchange.sendResponseHeaders(200,bytes.length);
+            try(var body=exchange.getResponseBody()){body.write(bytes);}catch(java.io.IOException ignored){}
+        });server.start();
+        try {
+            assertEquals(409,assertThrows(ControlPlaneException.class,()->service().preview("camera",UUID.randomUUID())).status());assertEquals(0,count.get());
+            assertArrayEquals(frame,service().preview("camera",uid));
+            mime.set("text/html");assertEquals(503,assertThrows(ControlPlaneException.class,()->service().preview("camera",uid)).status());
+            mime.set("image/jpeg");payload.set(new byte[(4<<20)+1]);assertEquals(503,assertThrows(ControlPlaneException.class,()->service().preview("camera",uid)).status());
+            metadata.put("labels",Map.of("app.kubernetes.io/part-of","other"));camera.put("metadata",metadata);read(path("devices","camera"),camera);
+            int before=count.get();assertEquals(409,assertThrows(ControlPlaneException.class,()->service().preview("camera",uid)).status());assertEquals(before,count.get());
+        } finally {server.stop(0);}
+    }
     final Instant now=Instant.parse("2026-10-07T04:30:00Z");
     final DeviceResourceGateway gateway=mock(DeviceResourceGateway.class);
     @SuppressWarnings("unchecked") final ObjectProvider<DeviceResourceGateway> provider=mock(ObjectProvider.class);
-    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","",mock(io.edgeai.domain.repository.VirtualDeviceRepository.class),mock(io.edgeai.domain.repository.DeviceRepository.class));}
+    ManagedDeviceService service(){when(provider.getIfAvailable()).thenReturn(gateway);return new ManagedDeviceService(provider,Clock.fixed(now,ZoneOffset.UTC),"edgeai-devices","tcp://127.0.0.1:1883","registry/mapper@sha256:"+"a".repeat(64),"","","",mock(io.edgeai.domain.repository.VirtualDeviceRepository.class),mock(io.edgeai.domain.repository.DeviceRepository.class));}
     void read(String path,Object data){when(gateway.request("GET",path,null)).thenReturn(new DeviceResourceGateway.Reply(200,DeviceProfileCompiler.JSON.canonical(data)));}
     String path(String kind,String id){return "/apis/devices.kubeedge.io/v1beta1/namespaces/edgeai-devices/"+kind+"/"+id;}
     void device(boolean ready,String state,Instant heartbeat){

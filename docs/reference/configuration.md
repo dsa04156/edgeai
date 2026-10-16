@@ -31,6 +31,7 @@ IDE·직접 Java 실행·컨테이너는 각 실행 환경에 같은 값을 전�
 | `EDGEAI_DEVICE_DATA_BROKER` | Mapper의 MQTT 출력 주소, 현재 기본 `tcp://127.0.0.1:1883`; 노드에서 접근해야 함 |
 | `EDGEAI_MAPPER_ARM64` / `EDGEAI_MAPPER_AMD64` | 대상 노드 아키텍처별 Mapper `image@sha256:...` |
 | `EDGEAI_MAPPER_SENSEHAT_ARM64` | ARM64 Sense HAT v1의 Python/RTIMULib 포함 Mapper digest |
+| `EDGEAI_MAPPER_RTSP` | FFmpeg 포함 AMD64/ARM64 RTSP Mapper의 멀티 플랫폼 digest; 기본 비활성 |
 
 개발 시작 스크립트는 미지정 인프라 설정에 대해 현재 Kubernetes context를 프로세스에 고정합니다.
 직접 앱 실행에는 이 탐색이 없습니다. [인프라 연결](../guides/infrastructure-inventory.md)을 확인합니다.

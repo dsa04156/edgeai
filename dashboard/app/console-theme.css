@@ -523,3 +523,9 @@ table .resource-identity .version-link { min-width: 0; }
   .resource-icon { border: 1px solid CanvasText; }
   .resource-icon::before { background: CanvasText; forced-color-adjust: none; }
 }
+
+.camera-preview { display:grid;gap:12px;min-width:0; }
+.camera-preview-frame { display:grid;place-items:center;min-height:240px;background:var(--control);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden; }
+.camera-preview-frame img { display:block;max-width:100%;width:auto;max-height:60dvh;object-fit:contain; }
+.camera-preview > p { margin:0;font-size:12px; }
+@media(max-width:700px){.camera-preview-frame{min-height:180px;}.camera-preview .toolbar{flex-wrap:wrap;}}

@@ -28,9 +28,12 @@ type Device struct {
 }
 
 type managed struct {
-	value  Device
-	cancel context.CancelFunc
-	done   chan struct{}
+	value   Device
+	cancel  context.CancelFunc
+	preview interface {
+		Preview(context.Context) ([]byte, time.Time, error)
+	}
+	done chan struct{}
 }
 
 type Panel struct {
@@ -139,6 +142,13 @@ func (p *Panel) collect(ctx context.Context, m *managed) {
 		return
 	}
 	defer client.Close()
+	if preview, ok := client.(interface {
+		Preview(context.Context) ([]byte, time.Time, error)
+	}); ok {
+		p.mu.Lock()
+		m.preview = preview
+		p.mu.Unlock()
+	}
 	inst := m.value.Instance
 	type item struct {
 		name, typ string
@@ -419,6 +429,32 @@ func (p *Panel) state(m *managed, state string, last int64, err string) {
 		m.value.LastSeen = last
 	}
 }
+func (p *Panel) Preview(ctx context.Context, name, configuration string) ([]byte, time.Time, error) {
+	p.mu.RLock()
+	var preview interface {
+		Preview(context.Context) ([]byte, time.Time, error)
+	}
+	for _, m := range p.devices {
+		if m.value.Instance.Name != name {
+			continue
+		}
+		for _, property := range m.value.Instance.Properties {
+			var visitor struct {
+				ConfigData driver.Property `json:"configData"`
+			}
+			if json.Unmarshal(property.Visitors, &visitor) == nil && configuration != "" && visitor.ConfigData.ConfigurationSha256 == configuration {
+				preview = m.preview
+				break
+			}
+		}
+	}
+	p.mu.RUnlock()
+	if preview == nil {
+		return nil, time.Time{}, fmt.Errorf("camera preview configuration unavailable")
+	}
+	return preview.Preview(ctx)
+}
+
 func (p *Panel) GetDevice(id string) (interface{}, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

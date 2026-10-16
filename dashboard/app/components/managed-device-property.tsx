@@ -7,7 +7,7 @@ type Device = components["schemas"]["ManagedDevice"];
 type Profile = components["schemas"]["ManagedDeviceProfile"];
 type Protocol = components["schemas"]["ManagedDeviceInput"]["protocol"];
 
-export const newProperty = (protocol: Protocol = "modbus-tcp"): Property => ({ name: "", dataType: protocol === "serial-json" ? "int32" : "float32", scale: 1, offset: 0, unit: "", ...(protocol === "modbus-tcp" ? { register: 40001, function: "holding", byteOrder: "ABCD" } : protocol === "opc-ua" ? { nodeId: "ns=1;s=temperature" } : protocol === "mqtt" ? { topic: "", jsonPath: "temperature" } : protocol === "serial-json" ? { sensor: "temperature", jsonPath: "raw" } : { jsonPath: protocol === "sensehat" ? "temp_humidity" : "temperature" }) });
+export const newProperty = (protocol: Protocol = "modbus-tcp"): Property => protocol === "rtsp" ? {name:"connected",dataType:"bool",jsonPath:"connected",scale:1,offset:0,unit:""} : ({ name: "", dataType: protocol === "serial-json" ? "int32" : "float32", scale: 1, offset: 0, unit: "", ...(protocol === "modbus-tcp" ? { register: 40001, function: "holding", byteOrder: "ABCD" } : protocol === "opc-ua" ? { nodeId: "ns=1;s=temperature" } : protocol === "mqtt" ? { topic: "", jsonPath: "temperature" } : protocol === "serial-json" ? { sensor: "temperature", jsonPath: "raw" } : { jsonPath: protocol === "sensehat" ? "temp_humidity" : "temperature" }) });
 
 export function PropertyFields({ protocol, value: p, onChange, index = 0, nameReadOnly = false }: { protocol: Protocol; value: Property; onChange: (field: keyof Property, value: string | number) => void; index?: number; nameReadOnly?: boolean }) {
   return <div className="form-row">

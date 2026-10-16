@@ -123,6 +123,25 @@ paths:
       responses:
         "204":
           description: KubeEdge device control result
+  /api/devices/{id}/preview:
+    get:
+      operationId: getCameraPreview
+      tags: [디바이스 실행 계층]
+      summary: RTSP 카메라의 최신 디코딩된 JPEG 미리보기
+      description: 익명 RTSP, 최대640px, 오디오 없음. 오래된 프레임이나 변경된 Device UID는 반환하지 않습니다.
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9.-]*$', maxLength: 63}}
+      - {name: uid, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Cache-Control no-store. 최대4MiB JPEG.
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        '400': {description: RTSP 카메라가 아니거나 UID가 잘못되었습니다.}
+        '404': {description: 카메라가 없습니다.}
+        '409': {description: 카메라 UID가 변경되었습니다.}
+        '503': {description: 최신 영상 프레임 또는 Mapper가 준비되지 않았습니다.}
   /api/devices/{id}/properties:
     parameters:
     - in: path
@@ -2569,6 +2588,7 @@ components:
           - virtual
           - serial-json
           - sensehat
+          - rtsp
         host:
           type: string
           maxLength: 253
@@ -2577,7 +2597,7 @@ components:
           type: integer
           minimum: 1
           maximum: 65535
-          description: 'Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080.'
+          description: 'Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080, RTSP 554.'
         targetNode:
           type: string
           maxLength: 63
@@ -2625,7 +2645,7 @@ components:
             path:
               type: string
               maxLength: 512
-              description: OPC-UA endpoint path or Virtual runtime JSON path (default /properties).
+              description: OPC-UA endpoint, Virtual JSON, or anonymous RTSP stream path. RTSP requires an absolute path without credentials, query or fragment (default /).
             staleMs:
               type: integer
               minimum: 100

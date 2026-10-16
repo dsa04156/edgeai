@@ -11,6 +11,7 @@ public class ManagedDeviceController {
     public ManagedDeviceController(ManagedDeviceService service){this.service=service;}
     @PostMapping("/api/devices") public ResponseEntity<Map<String,Object>> create(@RequestBody String body){return ResponseEntity.status(201).body(service.create(body));}
     @GetMapping("/api/devices") public Map<String,Object> list(){return service.list();}
+    @GetMapping(value="/api/devices/{id}/preview",produces="image/jpeg") public ResponseEntity<byte[]> preview(@PathVariable String id,@RequestParam java.util.UUID uid){return ResponseEntity.ok().header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").body(service.preview(id,uid));}
     @GetMapping("/api/devices/{id}") public Map<String,Object> get(@PathVariable String id){return service.get(id);}
     @PutMapping("/api/devices/{id}") public Map<String,Object> update(@PathVariable String id,@RequestBody String body){return service.update(id,body);}
     @DeleteMapping("/api/devices/{id}") public ResponseEntity<Void> delete(@PathVariable String id){service.delete(id);return ResponseEntity.noContent().build();}

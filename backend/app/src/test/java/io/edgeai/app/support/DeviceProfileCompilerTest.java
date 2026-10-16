@@ -7,6 +7,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import static io.edgeai.app.support.DeviceProfileCompiler.*;
 
 class DeviceProfileCompilerTest {
+    @Test void rtspCameraUsesActualFrameFreshnessAndDedicatedProtocol(){
+        var input=new TreeMap<String,Object>(Map.of("name","camera-01","protocol","rtsp","host","192.0.2.10","targetNode","edge-a","protocolConfig",Map.of("path","/live"),"properties",List.of(Map.of("name","connected","jsonPath","connected","dataType","bool"))));
+        var compiled=compile(input,"edgeai-devices","tcp://127.0.0.1:1883");
+        assertEquals(554,compiled.profile().get("port"));
+        assertEquals(5000,map(compiled.profile().get("protocolConfig")).get("timeoutMs"));
+        assertEquals("edgeai-rtsp",map(map(compiled.deviceResource().get("spec")).get("protocol")).get("protocolName"));
+        assertEquals(7783,mapperPort("rtsp"));
+        for(String path:List.of("rtsp://user:pass@camera/live","//other/live","/live?token=secret","/../private")){
+            input.put("protocolConfig",Map.of("path",path));assertThrows(IllegalArgumentException.class,()->compile(input,"edgeai-devices","tcp://127.0.0.1:1883"));
+        }
+    }
     @Test void measurementDeviceContainsOnlyItsMeasurementAndRetainsPhysicalSource(){
         var compiled=compile(local("serial-json"),"edgeai-devices","tcp://127.0.0.1:1883");
         assertEquals("arduino-001",compiled.profile().get("sourceName"));

@@ -19,18 +19,19 @@ public final class DeviceProfileCompiler {
         if(local&&(input.containsKey("host")||input.containsKey("port")))throw new IllegalArgumentException("Local hardware uses devicePath, not host/port");
         String host=local?"":WorkflowInput.text(input.get("host"),253);
         if(!local&&!host.matches("[a-zA-Z0-9][a-zA-Z0-9._-]*"))throw new IllegalArgumentException("Host must be an IP address or hostname");
-        int defaultPort=switch(protocol){case "modbus-tcp"->502;case "opc-ua"->4840;case "mqtt"->1883;default->8080;};
+        int defaultPort=switch(protocol){case "modbus-tcp"->502;case "opc-ua"->4840;case "mqtt"->1883;case "rtsp"->554;default->8080;};
         int port=integer(input.getOrDefault("port",defaultPort),1,65535),cycle=integer(input.getOrDefault("collectionInterval",1000),100,60000);
         var config=map(input.getOrDefault("protocolConfig",Map.of()));
         var allowed=new HashSet<String>(Set.of("timeoutMs"));
-        switch(protocol){case "modbus-tcp"->allowed.add("unitId");case "opc-ua"->{allowed.add("path");allowed.add("securityMode");}case "mqtt"->allowed.add("staleMs");case "virtual"->allowed.add("path");case "serial-json"->{allowed.addAll(Set.of("devicePath","deviceId","baudRate"));}case "sensehat"->allowed.addAll(Set.of("devicePath","deviceId"));default->throw new IllegalArgumentException("Protocol Mapper is not installed");}
+        switch(protocol){case "modbus-tcp"->allowed.add("unitId");case "opc-ua"->{allowed.add("path");allowed.add("securityMode");}case "mqtt"->allowed.add("staleMs");case "virtual","rtsp"->allowed.add("path");case "serial-json"->{allowed.addAll(Set.of("devicePath","deviceId","baudRate"));}case "sensehat"->allowed.addAll(Set.of("devicePath","deviceId"));default->throw new IllegalArgumentException("Protocol Mapper is not installed");}
         fields(config,allowed,Set.of());
-        var normalizedConfig=new TreeMap<String,Object>();normalizedConfig.put("timeoutMs",integer(config.getOrDefault("timeoutMs",1000),100,5000));
+        var normalizedConfig=new TreeMap<String,Object>();normalizedConfig.put("timeoutMs",integer(config.getOrDefault("timeoutMs",protocol.equals("rtsp")?5000:1000),100,5000));
         switch(protocol){
             case "modbus-tcp"->normalizedConfig.put("unitId",integer(config.getOrDefault("unitId",1),1,247));
             case "opc-ua"->{if(!Objects.toString(config.getOrDefault("securityMode","None")).equals("None"))throw new IllegalArgumentException("Only anonymous OPC-UA SecurityMode None is supported");normalizedConfig.put("securityMode","None");normalizedConfig.put("path",endpointPath(config.getOrDefault("path",""),false));}
             case "mqtt"->normalizedConfig.put("staleMs",integer(config.getOrDefault("staleMs",Math.min(60000,Math.max(5000,cycle*3))),100,60000));
             case "virtual"->normalizedConfig.put("path",endpointPath(config.getOrDefault("path","/properties"),true));
+            case "rtsp"->{String path=endpointPath(config.getOrDefault("path","/"),true);if(path.startsWith("//"))throw new IllegalArgumentException("Absolute local RTSP stream path required");normalizedConfig.put("path",path);}
             case "serial-json","sensehat"->{
                 String devicePath=Objects.toString(config.get("devicePath"),"");
                 if(protocol.equals("serial-json")?!devicePath.matches("/dev/edgeai/[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}"):!devicePath.equals("/dev/i2c-1"))throw new IllegalArgumentException("Invalid hardware device path");
@@ -84,7 +85,10 @@ public final class DeviceProfileCompiler {
             String type=Objects.toString(p.get("dataType"));modelType(type);
             String unit=Objects.toString(p.getOrDefault("unit",""));if(unit.length()>64)throw new IllegalArgumentException("Unit exceeds limit");
             var normalized=new TreeMap<String,Object>(Map.of("name",key,"dataType",type,"unit",unit));
-            if(protocol.equals("modbus-tcp")){
+            if(protocol.equals("rtsp")){
+                if(list.size()!=1||!key.equals("connected")||!type.equals("bool")||!Objects.equals(p.get("jsonPath"),"connected")||!unit.isEmpty()||!(p.getOrDefault("scale",1) instanceof Number scale)||scale.doubleValue()!=1||!(p.getOrDefault("offset",0) instanceof Number offset)||offset.doubleValue()!=0)throw new IllegalArgumentException("RTSP exposes only the connected boolean property");
+                normalized.put("jsonPath","connected");
+            }else if(protocol.equals("modbus-tcp")){
             if(type.equals("string"))throw new IllegalArgumentException("Modbus string decoding is not supported");
             String fn=Objects.toString(p.getOrDefault("function","holding"));if(!Set.of("holding","input","coil").contains(fn))throw new IllegalArgumentException("Invalid Modbus function");
             if(fn.equals("coil")&&!type.equals("bool"))throw new IllegalArgumentException("Coil requires bool");
@@ -113,8 +117,8 @@ public final class DeviceProfileCompiler {
         }
         result.sort(Comparator.comparing(p->(String)p.get("name")));return result;
     }
-    public static String mapperProtocol(String protocol){if(!Set.of("modbus-tcp","opc-ua","mqtt","virtual","serial-json","sensehat").contains(protocol))throw new IllegalArgumentException("Protocol Mapper is not installed");return "edgeai-"+protocol;}
-    public static int mapperPort(String protocol){return switch(protocol){case "modbus-tcp"->7777;case "opc-ua"->7778;case "mqtt"->7779;case "virtual"->7780;case "serial-json"->7781;case "sensehat"->7782;default->throw new IllegalArgumentException("Protocol Mapper is not installed");};}
+    public static String mapperProtocol(String protocol){if(!Set.of("modbus-tcp","opc-ua","mqtt","virtual","serial-json","sensehat","rtsp").contains(protocol))throw new IllegalArgumentException("Protocol Mapper is not installed");return "edgeai-"+protocol;}
+    public static int mapperPort(String protocol){return switch(protocol){case "modbus-tcp"->7777;case "opc-ua"->7778;case "mqtt"->7779;case "virtual"->7780;case "serial-json"->7781;case "sensehat"->7782;case "rtsp"->7783;default->throw new IllegalArgumentException("Protocol Mapper is not installed");};}
     private static String endpointPath(Object value,boolean required){String s=Objects.toString(value);if(s.length()>512||(required&&s.isEmpty())||(!s.isEmpty()&&!s.matches("/[a-zA-Z0-9_./-]*"))||s.contains(".."))throw new IllegalArgumentException("Absolute endpoint path required");return s;}
     private static String modelType(String type){return switch(type){case "float32"->"FLOAT";case "float64"->"DOUBLE";case "int16","uint16","int32","uint32"->"INT";case "bool"->"BOOLEAN";case "string"->"STRING";default->throw new IllegalArgumentException("Unsupported property data type");};}
     public static String name(Object value){String s=WorkflowInput.text(value,63);if(!s.matches("[a-z0-9]([a-z0-9.-]*[a-z0-9])?"))throw new IllegalArgumentException("DNS device/node name required");return s;}
