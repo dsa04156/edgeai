@@ -60,7 +60,7 @@ Host `10.77.0.5`, Port `1502`, Unit ID `1`, 대상 노드 `etri-dev0002-raspi5`,
 
 **새 장치 등록 → 프로토콜 rtsp**에서 카메라 주소와 대상 Edge Node를 입력합니다.
 `rtsp://192.168.0.30:554/live`처럼 인증 없는 주소를 사용하며 계정·비밀번호·query·fragment는 받지 않습니다.
-주소 경로는 `/`, 영문·숫자·`/._~-`만 허용합니다. 카메라 인증정보 저장과 RTSPS는 지원하지 않습니다.
+주소 경로는 `/`, 영문·숫자·`/._-`만 허용합니다. 카메라 인증정보 저장과 RTSPS는 지원하지 않습니다.
 연결 테스트는 TCP 접속이나 SDP 응답만으로 성공하지 않고 FFmpeg가 실제 영상 프레임을 디코딩해야 성공합니다.
 
 등록 후 목록의 **카메라 이름**을 누르면 영상 모달이 열립니다. 최대640픽셀·4MiB JPEG를
@@ -68,7 +68,7 @@ Host `10.77.0.5`, Port `1502`, Unit ID `1`, 대상 노드 `etri-dev0002-raspi5`,
 숨겨진 탭에서는 조회를 멈추고 모달을 닫으면 진행 중인 요청을 취소합니다.
 이는 무음 미리보기이며 녹화·고화질 연속 재생·AI 추론은 포함하지 않습니다.
 원본 영상은 MQTT/Twin으로 보내지 않으며 수집되는 property는 `connected`뿐입니다.
-미리보기 API는 `GET /api/devices/{id}/preview?uid=<Device UID>`이며 저장된 설정 hash와 UID를 확인합니다.
+미리보기 API는 `GET /api/devices/{id}/preview?uid=<Device UID>`이며 저장된 설정 hash·수집 세대와 UID를 확인합니다.
 
 RTSP Mapper는 기존 scratch 이미지와 별도입니다. 저장소 루트에서 운영 환경에 맞는 registry로
 `docker buildx build --platform linux/amd64,linux/arm64 -f mappers/rtsp.Dockerfile -t <registry>/mapper-rtsp:<version> --push .`

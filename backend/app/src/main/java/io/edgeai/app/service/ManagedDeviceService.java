@@ -277,12 +277,15 @@ public class ManagedDeviceService {
         var resource=request("GET",path("devices")+"/"+name(id),null,200);owned(resource);
         var metadata=map(resource.get("metadata"));if(!uid.toString().equals(metadata.get("uid")))throw error(409,"DEVICE_IDENTITY_CHANGED","카메라가 변경됐습니다. 다시 선택하세요.");
         var spec=map(resource.get("spec"));if(!"edgeai-rtsp".equals(map(spec.get("protocol")).get("protocolName")))throw error(400,"NOT_A_CAMERA","RTSP 카메라만 미리볼 수 있습니다.");
-        var profile=JSON.decode(Objects.toString(map(metadata.get("annotations")).get("edgeai.io/device-profile")));
+        var annotations=map(metadata.get("annotations"));
+        var profile=JSON.decode(Objects.toString(annotations.get("edgeai.io/device-profile")));
+        String generation=Objects.toString(annotations.get(ObservationIdentity.ANNOTATION),"");
+        try{UUID.fromString(generation);}catch(IllegalArgumentException e){throw error(503,"CAMERA_IDENTITY_UNAVAILABLE","카메라 수집 설정을 확인하세요.");}
         var target=node(Objects.toString(spec.get("nodeName")));String address=null;
         for(var item:(List<?>)map(target.get("status")).get("addresses")){var a=map(item);if("InternalIP".equals(a.get("type")))address=Objects.toString(a.get("address"));}
         if(address==null)throw error(503,"MAPPER_UNAVAILABLE","노드 주소를 확인할 수 없습니다.");
         try(var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()){
-            var uri=new URI("http",null,address,mapperPort("rtsp"),"/devices/"+id+"/preview","configurationSha256="+configuration(profile),null);
+            var uri=new URI("http",null,address,mapperPort("rtsp"),"/devices/"+id+"/preview","configurationSha256="+configuration(profile)+"&sourceGeneration="+generation,null);
             var pending=client.sendAsync(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(7)).GET().build(),info->new CameraFrameBody());
             try {
                 var response=pending.get(7,java.util.concurrent.TimeUnit.SECONDS);

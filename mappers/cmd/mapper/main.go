@@ -37,7 +37,7 @@ func main() {
 	var health dmi.RecoveryHealth
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /devices/{id}/preview", func(w http.ResponseWriter, r *http.Request) {
-		frame, at, err := panel.Preview(r.Context(), r.PathValue("id"), r.URL.Query().Get("configurationSha256"))
+		frame, at, err := panel.Preview(r.Context(), r.PathValue("id"), r.URL.Query().Get("configurationSha256"), r.URL.Query().Get("sourceGeneration"))
 		if err != nil {
 			http.Error(w, "fresh camera frame unavailable", 503)
 			return

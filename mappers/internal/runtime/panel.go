@@ -429,7 +429,7 @@ func (p *Panel) state(m *managed, state string, last int64, err string) {
 		m.value.LastSeen = last
 	}
 }
-func (p *Panel) Preview(ctx context.Context, name, configuration string) ([]byte, time.Time, error) {
+func (p *Panel) Preview(ctx context.Context, name, configuration, generation string) ([]byte, time.Time, error) {
 	p.mu.RLock()
 	var preview interface {
 		Preview(context.Context) ([]byte, time.Time, error)
@@ -442,7 +442,7 @@ func (p *Panel) Preview(ctx context.Context, name, configuration string) ([]byte
 			var visitor struct {
 				ConfigData driver.Property `json:"configData"`
 			}
-			if json.Unmarshal(property.Visitors, &visitor) == nil && configuration != "" && visitor.ConfigData.ConfigurationSha256 == configuration {
+			if json.Unmarshal(property.Visitors, &visitor) == nil && configuration != "" && generation != "" && visitor.ConfigData.ConfigurationSha256 == configuration && visitor.ConfigData.SourceGeneration == generation {
 				preview = m.preview
 				break
 			}
