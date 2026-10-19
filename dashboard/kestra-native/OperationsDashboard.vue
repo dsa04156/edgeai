@@ -15,6 +15,7 @@
       >새로고침</KsButton
     >
   </section>
+  <NativeLoading :busy="busy" />
   <div v-if="errors.length" class="operations-errors">
     <KsAlert
       type="warning"
@@ -57,6 +58,7 @@ import type {
 } from "kestra-original/components/dashboard/types";
 import type { Overview } from "./overview";
 import NodeResources from "./NodeResources.vue";
+import NativeLoading from "./NativeLoading.vue";
 
 const store = useDashboardStore();
 const dashboard = computed(() => store.activeDashboard);

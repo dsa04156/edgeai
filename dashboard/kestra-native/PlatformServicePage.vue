@@ -16,6 +16,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error" :notice="notice" />
     <p class="native-note">
       {{
@@ -333,6 +334,7 @@ import {
 } from "./platform-model";
 import CanvasBoard from "./CanvasBoard.vue";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 useRouteContext(computed(() => ({ title: "DDS 배포 편집기" })));
 const { busy, error, notice, act } = useAction();

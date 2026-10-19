@@ -7,6 +7,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error || pollError" :notice="notice" />
     <NativeRecords
       title="최근 실행"
@@ -422,6 +423,7 @@ import {
   type Schema,
 } from "./native-api";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import ResultContent from "./ResultContent.vue";

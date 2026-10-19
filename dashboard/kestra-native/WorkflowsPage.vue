@@ -12,6 +12,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error" :notice="notice" />
     <NativeRecords
       title="워크플로"
@@ -72,6 +73,7 @@
       <NativeRecords
         title="발행된 DAG 버전"
         :rows="workflow.versions"
+        :busy="busy"
         :columns="[
           { key: 'version', label: '버전' },
           { key: 'createdAt', label: '발행일' },
@@ -151,6 +153,7 @@ import {
 } from "./native-api";
 import { readWorkflowDocument } from "../lib/workflow-graph";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import WorkflowEditor from "./WorkflowEditor.vue";
 import RunRequestForm from "./RunRequestForm.vue";

@@ -9,6 +9,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error" :notice="notice" />
     <div class="native-toolbar">
       <KsInput
@@ -193,6 +194,7 @@ import {
 } from "./native-api";
 import { nextProfileVersion } from "../lib/profile-version";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import ProfileSpec from "./ProfileSpec.vue";

@@ -8,6 +8,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error" :notice="notice" />
     <div class="native-toolbar">
       <p class="native-note">센서 원본 → 중앙 계산 → 결과 저장 → 항목별 조회</p>
@@ -202,6 +203,7 @@ import {
 } from "./native-api";
 import NativeRecords from "./NativeRecords.vue";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import ContinuousForm from "./ContinuousForm.vue";
 import VDRuntimePanel from "./VDRuntimePanel.vue";

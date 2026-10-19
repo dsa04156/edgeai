@@ -1,5 +1,7 @@
 ## 2026-10-16 Kestra 원본 앱 기준의 전체 이행
 
+- 데이터 첫 조회·사용자 새로고침은 Kestra vKsLoading 스피너와 “데이터를 불러오는 중…” 상태 영역을 표시한다. 조회 완료·실패 시 끝내고 빈 목록·오류와 구분한다. 백그라운드 자동 갱신은 화면을 가리지 않는다.
+
 - 사용자가 전체 Kestra 웹을 기준으로 EdgeAI 기능을 끼워 맞추도록 정정했다. 기존 React 본문을 유지한 부분 교체는 최종 방향이 아니다. 이후 사용자가 중간 확인 없이 전체 기능을 추가하도록 지시했다. 기존 EdgeAI의 장치·VD·모듈·워크플로·실행·감사·DDS 배포를 원본 Vue 화면으로 이행한다.
 - `dashboard/kestra-native/`는 Kestra v2.0.6 원본 `main.ts`·App·라우터·레이아웃을 실행한 상태에서 home과 `edgeai/devices`, `virtual-devices`, `data-store`, `profiles`, `workflows`, `runs`, `audit`, `platform-service` 경로를 연결한다. 원본 Header·Sections·KPI·Pie·KsDataTable과 색상·간격·타이포를 그대로 사용한다. 기존 CE 콘솔13080은 이번 단계에서 교체하지 않는다.
 - 상단4개 KPI는 AI 서버·엣지 장치·센서·등록된 VD다. 바로 아래 전체 폭 자원 표, 하단 원본4/8폭의 노드 준비 상태·최근20개 실행을 넣는다. 현재 관측에 기간 필터·가짜 시계열을 붙이지 않는다. 등록 VD 수는 Runtime Ready와 구별한다.

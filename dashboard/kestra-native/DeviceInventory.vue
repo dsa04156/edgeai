@@ -10,6 +10,7 @@
     >
   </TopNavBar>
   <section class="device-inventory" aria-label="장치 관리 목록">
+    <NativeLoading :busy="busy" />
     <KsAlert
       v-if="error || sourceErrors.length"
       type="warning"
@@ -414,6 +415,7 @@ import useRouteContext from "kestra-original/composables/useRouteContext";
 import type { Overview } from "./overview";
 import type { components } from "./live-api-schema";
 import CameraPreview from "./CameraPreview.vue";
+import NativeLoading from "./NativeLoading.vue";
 import DeviceRegistration from "./DeviceRegistration.vue";
 import AcceleratorCell from "./AcceleratorCell.vue";
 import UsageMeter from "./UsageMeter.vue";

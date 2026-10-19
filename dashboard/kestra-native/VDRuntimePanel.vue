@@ -2,10 +2,12 @@
   <section class="native-panel native-detail">
     <div class="native-toolbar">
       <h2>연속 계산</h2>
-      <KsButton :disabled="busy" @click="refresh">상태 새로고침</KsButton>
+      <KsButton :disabled="busy || loading" @click="refresh()"
+        >상태 새로고침</KsButton
+      >
     </div>
     <NativeFeedback :error="error" :notice="notice" />
-    <p v-if="!execution && !error" role="status">실행 상태 조회 중…</p>
+    <NativeLoading :busy="loading" label="계산 데이터를 불러오는 중…" />
     <template v-if="execution?.continuous">
       <KsTag
         :type="
@@ -58,8 +60,10 @@
     <details @toggle="versionsToggled">
       <summary>계산 설정 버전 이력</summary>
       <NativeFeedback :error="versionsError" />
+      <NativeLoading :busy="versionsBusy" label="설정 버전을 불러오는 중…" />
       <NativeRecords
         title="계산 설정 버전"
+        :busy="versionsBusy"
         :rows="versions.map((v) => ({ ...v, id: String(v.revision) }))"
         :columns="[
           { key: 'revision', label: 'revision' },
@@ -144,7 +148,7 @@
         :interval="outputs?.intervalSeconds || 1"
         :label="`${selectedOutput} 결과 이력`"
       />
-      <p v-if="historyBusy" role="status">기록 조회 중…</p>
+      <NativeLoading :busy="historyBusy" label="기록을 불러오는 중…" />
       <p v-if="history?.truncated" class="native-note">
         표시 한도에 도달했습니다. 조회 기간을 줄여 확인하세요.
       </p>
@@ -201,6 +205,7 @@ import {
   type Schema,
 } from "./native-api";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import HistoryChart from "./HistoryChart.vue";
@@ -210,6 +215,7 @@ const execution = ref<Schema["VDExecution"] | null>(null),
   error = ref(""),
   notice = ref(""),
   busy = ref(false),
+  loading = ref(false),
   commandError = ref(""),
   confirmOpen = ref(false),
   draft = ref<{
@@ -225,8 +231,11 @@ const enabled = computed(() => execution.value?.continuous?.enabled),
 const versions = ref<Schema["ProcessingVersionPage"]["items"]>([]),
   versionsOffset = ref(0),
   versionsNext = ref<number | null>(null),
+  versionsBusy = ref(false),
   versionsError = ref("");
 async function loadVersions(offset = 0) {
+  if (versionsBusy.value) return;
+  versionsBusy.value = true;
   versionsError.value = "";
   try {
     const page = await get<Schema["ProcessingVersionPage"]>(
@@ -238,13 +247,16 @@ async function loadVersions(offset = 0) {
   } catch (cause) {
     versionsError.value =
       cause instanceof Error ? cause.message : "버전 조회 실패";
+  } finally {
+    versionsBusy.value = false;
   }
 }
 function versionsToggled(event: Event) {
   if ((event.target as HTMLDetailsElement).open) void loadVersions();
 }
-async function refresh() {
+async function refresh(showLoading = true) {
   const request = ++generation;
+  if (showLoading) loading.value = true;
   try {
     const value = await get<Schema["VDExecution"]>(
       `virtual-devices/${props.vd.id}/execution`,
@@ -260,6 +272,8 @@ async function refresh() {
     if (request === generation)
       error.value =
         cause instanceof Error ? cause.message : "실행 상태 조회 실패";
+  } finally {
+    if (request === generation) loading.value = false;
   }
 }
 function prepare(action: "provision" | "drain") {
@@ -330,8 +344,8 @@ async function chart(output: string) {
     if (request === historyGeneration) historyBusy.value = false;
   }
 }
-onMounted(refresh);
+onMounted(() => refresh());
 usePoll(async () => {
-  if (!busy.value) await refresh();
+  if (!busy.value && !loading.value) await refresh(false);
 }, 3000);
 </script>

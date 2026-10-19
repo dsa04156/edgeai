@@ -7,6 +7,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy" />
     <NativeFeedback :error="error" />
     <p class="native-note">
       변경 요청과 접근 거절을 접수 시각순으로 표시합니다. 관리 API의 응답
@@ -102,6 +103,7 @@ import TopNavBar from "kestra-original/components/layout/TopNavBar.vue";
 import useRouteContext from "kestra-original/composables/useRouteContext";
 import { get, pretty, time, useAction, type Schema } from "./native-api";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 useRouteContext(computed(() => ({ title: "감사 기록" })));
 const { busy, error, act } = useAction();

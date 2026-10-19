@@ -7,6 +7,7 @@
     ></TopNavBar
   >
   <main class="native-page">
+    <NativeLoading :busy="busy || historyBusy" />
     <NativeFeedback :error="error" />
     <template v-if="catalog">
       <p class="native-note">
@@ -78,6 +79,7 @@
       </template>
       <NativeRecords
         title="센서 원본 기록"
+        :busy="busy || historyBusy"
         :rows="records.map((r, i) => ({ ...r, id: String(i) }))"
         :columns="[
           { key: 'observedAt', label: '측정 시각', width: 250 },
@@ -119,6 +121,7 @@ import TopNavBar from "kestra-original/components/layout/TopNavBar.vue";
 import useRouteContext from "kestra-original/composables/useRouteContext";
 import { get, pretty, time, useAction, type Schema } from "./native-api";
 import NativeFeedback from "./NativeFeedback.vue";
+import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 useRouteContext(computed(() => ({ title: "데이터 저장소" })));
 const route = useRoute(),
