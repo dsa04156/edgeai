@@ -9,6 +9,17 @@
   <main class="native-page">
     <NativeLoading :busy="busy" />
     <NativeFeedback :error="error || pollError" :notice="notice" />
+    <LiveRecordsToolbar
+      v-model="liveEnabled"
+      :intervalSeconds="3"
+      :offset="offset"
+      :updatedAt="listUpdatedAt"
+      :disabled="busy || commandBusy"
+      @latest="act(() => load(0))"
+    />
+    <p v-if="offset > 0" class="native-note">
+      이전 페이지의 목록은 고정합니다. 선택한 상세는 자동 갱신 설정을 따릅니다.
+    </p>
     <NativeRecords
       title="최근 실행"
       :rows="items"
@@ -60,7 +71,12 @@
         >
       </div>
       <p class="native-note">
-        {{ detail.run.id }} · Run·Task·Placement·결과를 3초마다 조회합니다.
+        {{ detail.run.id }} ·
+        {{
+          liveEnabled
+            ? "Run·Task·Placement·결과를 3초마다 조회합니다."
+            : "자동 갱신을 일시정지했습니다."
+        }}
       </p>
       <p class="native-note">
         {{
@@ -427,6 +443,7 @@ import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import ResultContent from "./ResultContent.vue";
+import LiveRecordsToolbar from "./LiveRecordsToolbar.vue";
 const route = useRoute(),
   router = useRouter();
 useRouteContext(computed(() => ({ title: "실행 · 작업 · 결과" })));
@@ -440,6 +457,8 @@ const items = ref<Schema["WorkflowRun"][]>([]),
   placements = ref<Schema["Placement"][]>([]),
   nodes = ref<Schema["ExecutionNode"][]>([]),
   pollError = ref(""),
+  liveEnabled = ref(true),
+  listUpdatedAt = ref(""),
   runJson = ref(""),
   streams = ref<Schema["StreamRoutePage"] | null>(null),
   streamOffset = ref(0);
@@ -454,13 +473,19 @@ const tone = (state: string) =>
         : "info";
 const taskName = (id: string) =>
   detail.value?.tasks.find((t) => t.id === id)?.key || id;
+let listGeneration = 0,
+  refreshGeneration = 0,
+  polling = false;
 async function load(value = offset.value) {
+  const generation = ++listGeneration;
   const page = await get<Schema["RunPage"]>(
     `workflow-runs?limit=20&offset=${value}`,
   );
+  if (generation !== listGeneration) return;
   items.value = page.items;
   offset.value = value;
   nextOffset.value = page.nextOffset;
+  listUpdatedAt.value = new Date().toISOString();
 }
 async function readRun(id: string) {
   const text = await (await request(`workflow-runs/${id}`)).text();
@@ -512,9 +537,16 @@ async function loadStreams(value: number) {
   );
   streamOffset.value = value;
 }
-async function refresh() {
-  const selectedTaskGeneration = taskGeneration;
-  await load();
+async function refresh(quiet = false) {
+  const requestGeneration = ++refreshGeneration,
+    selectedTaskGeneration = taskGeneration,
+    selection = selectionGeneration;
+  if (!quiet || offset.value === 0) await load();
+  if (
+    requestGeneration !== refreshGeneration ||
+    selection !== selectionGeneration
+  )
+    return;
   if (detail.value) {
     const id = detail.value.run.id,
       taskId = task.value?.task.id;
@@ -522,7 +554,12 @@ async function refresh() {
       readRun(id),
       get<Schema["Placement"][]>(`workflow-runs/${id}/placements`),
     ]);
-    if (detail.value?.run.id !== id) return;
+    if (
+      requestGeneration !== refreshGeneration ||
+      selection !== selectionGeneration ||
+      detail.value?.run.id !== id
+    )
+      return;
     detail.value = run.detail;
     runJson.value = run.json;
     placements.value = where;
@@ -644,14 +681,23 @@ onMounted(() => {
   });
 });
 usePoll(async () => {
-  if (!busy.value && !commandBusy.value && detail.value) {
+  if (
+    liveEnabled.value &&
+    !busy.value &&
+    !commandBusy.value &&
+    !polling &&
+    !document.hidden
+  ) {
+    polling = true;
     try {
-      await refresh();
+      await refresh(true);
       pollError.value = "";
     } catch (cause) {
       pollError.value =
         (cause instanceof Error ? cause.message : "최신 상태 조회 실패") +
         " · 마지막 조회 결과입니다.";
+    } finally {
+      polling = false;
     }
   }
 }, 3000);
