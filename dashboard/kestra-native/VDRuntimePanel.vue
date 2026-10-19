@@ -141,12 +141,20 @@
         ><KsButton :disabled="historyBusy" @click="chart(selectedOutput)"
           >그래프 조회</KsButton
         >
+        <KsCheckbox v-model="liveHistory">기록 자동 갱신 · 5초</KsCheckbox>
+        <span class="native-note">{{
+          historyAt ? `${time(historyAt)} 조회` : "기록 조회 대기"
+        }}</span>
       </div>
       <NativeFeedback :error="historyError" /><HistoryChart
         v-if="history"
         :history="history"
         :interval="outputs?.intervalSeconds || 1"
         :label="`${selectedOutput} 결과 이력`"
+        :scope="`${vd.id}/${selectedOutput}/${hours}`"
+        :unit="
+          outputs?.items.find((item) => item.outputId === selectedOutput)?.unit
+        "
       />
       <NativeLoading :busy="historyBusy" label="기록을 불러오는 중…" />
       <p v-if="history?.truncated" class="native-note">
@@ -193,8 +201,14 @@
   >
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { KsButton, KsTag, KsSelect, KsOption } from "@kestra-io/design-system";
+import { computed, onMounted, ref, watch } from "vue";
+import {
+  KsButton,
+  KsTag,
+  KsSelect,
+  KsOption,
+  KsCheckbox,
+} from "@kestra-io/design-system";
 import {
   get,
   write,
@@ -304,15 +318,27 @@ async function submit() {
 }
 const selectedOutput = ref(""),
   hours = ref(1),
+  liveHistory = ref(true),
+  historyAt = ref(""),
+  liveHistoryBusy = ref(false),
   history = ref<Schema["ContinuousHistory"] | null>(null),
   historyBusy = ref(false),
   historyError = ref("");
 let historyGeneration = 0;
-async function chart(output: string) {
+let historyScope = "";
+async function chart(output: string, quiet = false) {
+  const scope = `${output}/${hours.value}`;
+  if (scope !== historyScope) {
+    history.value = null;
+    historyAt.value = "";
+    historyScope = scope;
+  }
   selectedOutput.value = output;
-  historyBusy.value = true;
-  historyError.value = "";
-  history.value = null;
+  if (quiet) liveHistoryBusy.value = true;
+  else {
+    historyBusy.value = true;
+    historyError.value = "";
+  }
   const request = ++historyGeneration;
   try {
     const period = Math.min(
@@ -335,15 +361,34 @@ async function chart(output: string) {
     const value = await get<Schema["ContinuousHistory"]>(
       `virtual-devices/${props.vd.id}/outputs/${encodeURIComponent(output)}/history?${query}`,
     );
-    if (request === historyGeneration) history.value = value;
+    if (request === historyGeneration) {
+      history.value = value;
+      historyError.value = "";
+      historyAt.value = new Date().toISOString();
+    }
   } catch (cause) {
     if (request === historyGeneration)
       historyError.value =
-        cause instanceof Error ? cause.message : "기록 조회 실패";
+        (quiet ? "자동 갱신 실패 · 마지막 조회 기록을 표시합니다. " : "") +
+        (cause instanceof Error ? cause.message : "기록 조회 실패");
   } finally {
+    if (quiet) liveHistoryBusy.value = false;
     if (request === historyGeneration) historyBusy.value = false;
   }
 }
+watch(hours, () => {
+  if (selectedOutput.value) void chart(selectedOutput.value);
+});
+usePoll(async () => {
+  if (
+    liveHistory.value &&
+    selectedOutput.value &&
+    !historyBusy.value &&
+    !liveHistoryBusy.value &&
+    !document.hidden
+  )
+    await chart(selectedOutput.value, true);
+}, 5000);
 onMounted(() => refresh());
 usePoll(async () => {
   if (!busy.value && !loading.value) await refresh(false);

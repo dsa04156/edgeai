@@ -7,6 +7,29 @@
     class="native-form"
   >
     <NativeFeedback :error="localError || error" />
+    <KsFormItem v-if="!expanded" label="조합 종류">
+      <KsSelect
+        v-model="presetId"
+        :disabled="disabled || !enabled"
+        aria-label="조합 종류"
+        @change="selectPreset"
+      >
+        <KsOption value="" label="단일 센서" />
+        <KsOption
+          v-for="item in continuousPresets"
+          :key="item.id"
+          :value="item.id"
+          :label="item.label"
+        />
+      </KsSelect>
+    </KsFormItem>
+    <p v-if="preset" class="native-note">
+      {{ preset.label }} · {{ preset.expression }} · 결과 단위:
+      {{ configuration.outputs[0].unit || "센서 선택 필요" }}
+    </p>
+    <p v-if="preset && !presetValid" class="native-note">
+      각 역할에 맞는 같은 단위의 서로 다른 숫자 센서를 선택하세요.
+    </p>
     <p v-if="!enabled" class="native-note">
       연속 처리 기능을 현재 사용할 수 없습니다. 목록을 새로고침해 상태를
       확인하세요.
@@ -21,22 +44,35 @@
       class="native-panel"
     >
       <div class="native-grid">
-        <KsFormItem :label="`입력 ${index + 1} 센서`"
+        <KsFormItem
+          :label="
+            preset
+              ? `${preset.slots[index].label} 센서`
+              : `입력 ${index + 1} 센서`
+          "
           ><KsSelect
             :disabled="disabled || !enabled"
             v-model="source.deviceId"
             filterable
+            :aria-label="
+              preset
+                ? `${preset.slots[index].label} 센서`
+                : `입력 ${index + 1} 센서`
+            "
             @change="selectSource(index)"
             ><KsOption
-              v-for="input in inputs"
+              v-for="input in sourceChoices(index)"
               :key="`${input.deviceId}/${input.property}`"
               :value="input.deviceId"
-              :label="`${input.property} · ${input.deviceId} · ${input.targetNode}`" /><KsOption
+              :label="`${input.property}${input.unit ? ` (${input.unit})` : ''} · ${input.deviceId} · ${input.targetNode}`" /><KsOption
               v-if="
                 source.deviceId &&
-                !inputs.some((d) => d.deviceId === source.deviceId)
+                !sourceChoices(index).some(
+                  (d) => d.deviceId === source.deviceId,
+                )
               "
               :value="source.deviceId"
+              disabled
               :label="`${source.deviceId} · 연결 확인 필요`" /></KsSelect
         ></KsFormItem>
         <KsFormItem v-if="expanded" :label="`입력 ${index + 1} 별칭`"
@@ -84,12 +120,15 @@
             ><KsOption
               v-for="(label, value) in operations"
               :disabled="
-                windowOperation(String(value)) &&
-                booleanExpression(output.expression)
+                (preset && ['threshold', 'filter'].includes(String(value))) ||
+                (windowOperation(String(value)) &&
+                  booleanExpression(output.expression))
               "
               :key="value"
               :value="value"
-              :label="label" /></KsSelect
+              :label="
+                preset && value === 'scalar' ? '조합값 그대로' : label
+              " /></KsSelect
         ></KsFormItem>
         <KsFormItem v-if="windowOperation(output.operation)" label="표본 수"
           ><KsInput
@@ -201,7 +240,7 @@
       {{ configuration.retentionDays }}일 보관
     </p>
     <KsButton
-      :disabled="disabled || !enabled"
+      :disabled="disabled || !enabled || !presetValid"
       type="primary"
       nativeType="submit"
       >{{ initial ? "연속 처리 설정 저장" : "연속 처리 장치 등록" }}</KsButton
@@ -234,14 +273,14 @@
             max="30"
         /></KsFormItem>
       </div>
-      <KsButton :disabled="disabled" @click="expanded = !expanded">{{
+      <KsButton :disabled="disabled" @click="toggleExpanded">{{
         expanded ? "간편 설정으로 보기" : "여러 센서·출력·계산식 전체 설정"
       }}</KsButton>
     </details>
   </KsForm>
 </template>
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   KsForm,
   KsFormItem,
@@ -253,6 +292,12 @@ import {
 } from "@kestra-io/design-system";
 import { requestKey, type Schema } from "./native-api";
 import NativeFeedback from "./NativeFeedback.vue";
+import {
+  continuousPresets,
+  presetChoices,
+  presetReady,
+  presetUnit,
+} from "../app/virtual-devices/continuous-presets";
 const props = defineProps<{
   inputs: Schema["ContinuousSensor"][];
   enabled: boolean;
@@ -267,6 +312,10 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ save: [value: Schema["ContinuousCreate"]] }>();
 const localError = ref("");
+const presetId = ref("");
+const preset = computed(() =>
+  continuousPresets.find((p) => p.id === presetId.value),
+);
 const key = ref("vd-" + requestKey()),
   displayName = ref(props.initial?.displayName || ""),
   expanded = ref(!!props.initial);
@@ -285,6 +334,63 @@ const configuration = ref<Schema["ContinuousConfiguration"]>(
           { name: "value", expression: "a", operation: "scalar", unit: "" },
         ],
       },
+);
+const presetValid = computed(
+  () => !preset.value || presetReady(preset.value, props.inputs, sources.value),
+);
+function sourceChoices(index: number) {
+  return preset.value
+    ? presetChoices(preset.value, index, props.inputs, sources.value)
+    : props.inputs;
+}
+function selectPreset(value: string) {
+  const previousName = continuousPresets.find(
+    (p) => p.label === displayName.value,
+  )?.label;
+  const selected = continuousPresets.find((p) => p.id === value);
+  if (!displayName.value || previousName)
+    displayName.value = selected?.label || "";
+  sources.value = Array.from(
+    { length: selected?.slots.length || 1 },
+    (_, i) => ({
+      sourceKey: String.fromCharCode(97 + i),
+      deviceId: "",
+      properties: [],
+      maxAgeSeconds: 30,
+    }),
+  );
+  const output = configuration.value.outputs[0];
+  configuration.value.outputs = [
+    {
+      name: output.name,
+      operation: "scalar",
+      expression: selected?.expression || "a",
+      unit: "",
+    },
+  ];
+  if (configuration.value.resultStorage?.mode === "SELECTED")
+    configuration.value.resultStorage.outputs =
+      configuration.value.resultStorage.outputs.filter(
+        (o) => o.name === output.name,
+      );
+  localError.value = "";
+}
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) presetId.value = "";
+}
+watch(
+  [preset, () => props.inputs, sources],
+  () => {
+    if (!preset.value) return;
+    configuration.value.outputs[0].expression = preset.value.expression;
+    configuration.value.outputs[0].unit = presetUnit(
+      preset.value,
+      props.inputs,
+      sources.value,
+    );
+  },
+  { deep: true },
 );
 const storedOutputs = computed(() =>
   configuration.value.resultStorage?.mode === "SELECTED"
@@ -369,7 +475,7 @@ function selectSource(index: number) {
   const source = sources.value[index],
     sensor = props.inputs.find((d) => d.deviceId === source.deviceId);
   source.properties = sensor ? [sensor.property] : [];
-  if (index === 0 && !expanded.value) {
+  if (index === 0 && !expanded.value && !preset.value) {
     configuration.value.outputs[0].unit = sensor?.unit || "";
     configuration.value.outputs[0].expression =
       configuration.value.outputs[0].operation === "threshold" ? "a > 0" : "a";
@@ -379,7 +485,8 @@ function operationChanged(index: number) {
   const row = configuration.value.outputs[index];
   if (windowOperation(row.operation)) row.sampleCount = row.sampleCount || 5;
   else delete row.sampleCount;
-  if (!expanded.value)
+  if (preset.value) row.expression = preset.value.expression;
+  else if (!expanded.value)
     row.expression = row.operation === "threshold" ? "a > 0" : "a";
   if (row.operation === "filter") row.condition = row.condition || "a > 0";
   else if (!row.condition) delete row.condition;
@@ -407,6 +514,11 @@ function addOutput() {
 function submit() {
   if (props.disabled || !props.enabled) return;
   localError.value = "";
+  if (!presetValid.value) {
+    localError.value =
+      "조합에 맞는 같은 단위의 서로 다른 센서를 모두 선택하세요.";
+    return;
+  }
   if (
     configuration.value.resultStorage?.mode === "SELECTED" &&
     !configuration.value.resultStorage.outputs.length
