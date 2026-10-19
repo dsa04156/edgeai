@@ -63,9 +63,20 @@
       </div></KsForm
     ></KsDrawer
   >
+  <ConfirmAction
+    v-model="importOpen"
+    title="워크플로 파일 불러오기"
+    :subject="pendingImport?.name"
+    :description="`현재 편집 중인 흐름과 코드를 파일의 작업 ${pendingImport?.taskCount || 0}개로 교체합니다. 저장한 브라우저 초안과 발행된 버전은 유지됩니다.`"
+    confirmLabel="파일로 교체"
+    :busy="disabled"
+    :error="error"
+    @confirm="replaceFromFile"
+  />
 </template>
 <script setup lang="ts">
 import { computed, defineComponent, h, markRaw, ref, watch } from "vue";
+import { RouterLink, useRoute } from "vue-router";
 import {
   KsButton,
   KsDrawer,
@@ -91,6 +102,8 @@ import { objectJson, pretty, time, type Schema } from "./native-api";
 import WorkflowSourceFields from "./WorkflowSourceFields.vue";
 import CanvasBoard from "./CanvasBoard.vue";
 import NativeFeedback from "./NativeFeedback.vue";
+import ConfirmAction from "./ConfirmAction.vue";
+const route = useRoute();
 const librarySearch = ref("");
 const props = defineProps<{
   modelValue: string;
@@ -141,6 +154,17 @@ const dag = ref<WorkflowDag>({ tasks: [], dependencies: [] }),
   draft = ref(props.modelValue),
   error = ref(""),
   selected = ref("");
+const pendingImport = ref<{
+  text: string;
+  name: string;
+  taskCount: number;
+} | null>(null);
+const importOpen = computed({
+  get: () => !!pendingImport.value,
+  set: (open) => {
+    if (!open) pendingImport.value = null;
+  },
+});
 function editorDocument() {
   return pretty({
     format: "edgeai.workflow-editor/v1",
@@ -398,13 +422,52 @@ function download() {
 async function file(event: Event) {
   const input = event.target as HTMLInputElement,
     selected = input.files?.[0];
-  if (!selected) return;
-  if (selected.size > 1000000) {
-    error.value = "워크플로 파일은 1MB 이하로 입력하세요.";
-    return;
+  if (!selected || props.disabled) return;
+  try {
+    if (selected.size > 1000000)
+      throw new Error("워크플로 파일은 1MB 이하로 입력하세요.");
+    const text = await selected.text();
+    if (props.disabled) return;
+    const imported = readWorkflowDocument(text, props.profiles);
+    pendingImport.value = {
+      text,
+      name: selected.name,
+      taskCount: imported.dag.tasks.length,
+    };
+    error.value = "";
+    if (!dag.value.tasks.length && draft.value === pretty(dag.value))
+      replaceFromFile();
+  } catch (cause) {
+    error.value =
+      cause instanceof Error
+        ? cause.message
+        : "워크플로 파일을 읽지 못했습니다.";
+  } finally {
+    input.value = "";
   }
-  apply(await selected.text());
-  input.value = "";
+}
+function replaceFromFile() {
+  if (!pendingImport.value || props.disabled) return;
+  try {
+    const imported = readWorkflowDocument(
+      pendingImport.value.text,
+      props.profiles,
+    );
+    dag.value = imported.dag;
+    positions.value = {
+      ...arrangeWorkflow(imported.dag),
+      ...imported.positions,
+    };
+    draft.value = pretty(imported.dag);
+    selected.value = "";
+    taskOpen.value = false;
+    error.value = "";
+    pendingImport.value = null;
+    emit("update:modelValue", draft.value);
+  } catch (cause) {
+    error.value =
+      cause instanceof Error ? cause.message : "워크플로 파일을 확인하세요.";
+  }
 }
 const visibleProfiles = computed(() =>
   props.profiles.filter((p) =>
@@ -412,6 +475,18 @@ const visibleProfiles = computed(() =>
       .toLowerCase()
       .includes(librarySearch.value.toLowerCase()),
   ),
+);
+const profileGroups = computed(() =>
+  ["데이터 입력", "처리 모듈", "결과 출력"]
+    .map((label, index) => ({
+      label,
+      profiles: visibleProfiles.value.filter((profile) => {
+        const inputs = profilePorts(profile, "inputs").length,
+          outputs = profilePorts(profile, "outputs").length;
+        return (inputs === 0 ? 0 : outputs === 0 ? 2 : 1) === index;
+      }),
+    }))
+    .filter((group) => group.profiles.length),
 );
 const topology = markRaw(
   defineComponent({
@@ -427,21 +502,52 @@ const topology = markRaw(
             placeholder: "모듈 이름 검색",
             "aria-label": "모듈 이름 검색",
           }),
-          ...visibleProfiles.value.map((profile) =>
+          ...profileGroups.value.map((group) =>
             h(
-              KsButton,
-              {
-                disabled: props.disabled,
-                draggable: true,
-                onDragstart: (e: DragEvent) =>
-                  e.dataTransfer?.setData(
-                    "application/edgeai-profile",
-                    profile.id,
-                  ),
-                onClick: () => add(profile.id),
-              },
-              () => `${profile.key} · ${profile.version}`,
+              "section",
+              { class: "native-module-group", "aria-label": group.label },
+              [
+                h("h4", group.label),
+                ...group.profiles.map((profile) =>
+                  h("div", { key: profile.id }, [
+                    h(
+                      KsButton,
+                      {
+                        disabled: props.disabled,
+                        draggable: true,
+                        onDragstart: (e: DragEvent) =>
+                          e.dataTransfer?.setData(
+                            "application/edgeai-profile",
+                            profile.id,
+                          ),
+                        onClick: () => add(profile.id),
+                      },
+                      () => `${profile.key} · ${profile.version}`,
+                    ),
+                    h(
+                      "small",
+                      { class: "native-note" },
+                      `입력 ${profilePorts(profile, "inputs").length} / 출력 ${profilePorts(profile, "outputs").length}`,
+                    ),
+                  ]),
+                ),
+              ],
             ),
+          ),
+          !props.profiles.length
+            ? h("p", { class: "native-note" }, "등록된 실행 모듈이 없습니다.")
+            : !visibleProfiles.value.length
+              ? h("p", { class: "native-note" }, "검색 결과가 없습니다.")
+              : null,
+          h(
+            RouterLink,
+            {
+              to: {
+                name: "edgeai/profiles",
+                params: { tenant: route.params.tenant },
+              },
+            },
+            () => "실행 모듈 등록",
           ),
           h("label", { class: "native-note" }, [
             "파일 불러오기",
@@ -521,13 +627,13 @@ const code = markRaw(
 const elements: EditorElement[] = [
   {
     uid: "topology",
-    button: { icon: GraphIcon, label: "그래프" },
+    button: { icon: markRaw(GraphIcon), label: "그래프" },
     component: topology,
     deserialize: (uid) => (uid === "topology" ? elements[0] : undefined),
   },
   {
     uid: "code",
-    button: { icon: CodeIcon, label: "코드" },
+    button: { icon: markRaw(CodeIcon), label: "코드" },
     component: code,
     deserialize: (uid) => (uid === "code" ? elements[1] : undefined),
   },
@@ -562,6 +668,20 @@ const elements: EditorElement[] = [
   flex: 1;
   min-width: 0;
   overflow: auto;
+}
+.native-module-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ks-spacing-3);
+  width: 100%;
+  min-width: 0;
+}
+.native-module-group h4 {
+  margin: 0;
+  font-size: var(--ks-font-size-sm);
+}
+.native-module-group small {
+  display: block;
 }
 .native-code-panel {
   padding: var(--ks-spacing-4);
