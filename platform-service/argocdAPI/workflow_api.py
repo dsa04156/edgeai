@@ -259,7 +259,7 @@ class ArgoCDService:
         raise HTTPException(502, "Argo CD authentication failed")
 
     def checked_app(self, name, repo_url):
-        response = self.request("GET", f"/applications/{name}")
+        response = self.request("GET", f"/applications/{name}", params={"project": setting("PLATFORM_ARGOCD_PROJECT", "default")})
         if response.status_code == 404:
             return None
         app = response.json()
@@ -290,7 +290,7 @@ class ArgoCDService:
         return public_status(response.json())
 
     def delete_app(self, name):
-        response = self.request("DELETE", f"/applications/{name}", params={"cascade": "true"})
+        response = self.request("DELETE", f"/applications/{name}", params={"cascade": "true", "project": setting("PLATFORM_ARGOCD_PROJECT", "default")}, json={})
         if response.status_code not in (200, 204, 404):
             raise HTTPException(502, "Argo CD deletion failed")
         return {"status": "absent" if response.status_code == 404 else "deletion_requested"}
@@ -310,15 +310,17 @@ class BuildxService:
         if not (context / "Dockerfile").is_file():
             raise HTTPException(503, "Configured build context has no Dockerfile")
         repository = required("PLATFORM_IMAGE_REPOSITORY")
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./:_-]+", repository) or "@" in repository:
-            raise HTTPException(503, "Invalid configured image repository")
+        push_repository = setting("PLATFORM_IMAGE_PUSH_REPOSITORY", repository)
+        for value in (repository, push_repository):
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./:_-]+", value) or "@" in value:
+                raise HTTPException(503, "Invalid configured image repository")
         platforms = setting("PLATFORM_BUILD_PLATFORMS", "linux/arm64").split(",")
         if not platforms or any(p not in ("linux/amd64", "linux/arm64") for p in platforms):
             raise HTTPException(503, "Invalid configured build platforms")
         directory = workspace() / "builds" / str(uuid4())
         directory.mkdir(parents=True, mode=0o700)
         metadata = directory / "metadata.json"
-        command = ["docker", "buildx", "build", "--platform", ",".join(platforms), "--tag", f"{repository}:{tag}",
+        command = ["docker", "buildx", "build", "--platform", ",".join(platforms), "--tag", f"{push_repository}:{tag}",
                    "--file", str(context / "Dockerfile"), "--metadata-file", str(metadata), "--push"]
         if setting("PLATFORM_BUILDX_BUILDER"):
             command += ["--builder", setting("PLATFORM_BUILDX_BUILDER")]

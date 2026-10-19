@@ -20,3 +20,7 @@ deploy/compose/secrets/
 
 # Local verification records, screenshots and temporary reviews
 /output/
+
+# Local browser verification artifacts
+/.playwright-cli/
+/.playwright-mcp/

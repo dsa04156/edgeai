@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InfluxDataStoreIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired io.edgeai.app.service.SensorArchiveCollector collector;
+    @Autowired io.edgeai.domain.repository.SensorTelemetryRepository archive;
     @MockitoBean DeviceResourceGateway gateway;
     static final JsonDocuments json=new JsonDocuments();
     final UUID uid=UUID.randomUUID();
@@ -84,6 +85,25 @@ class InfluxDataStoreIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
         }
     }
+    @Test void booleanChartHidesReconciledLegacyWithoutChangingFalseOrTrue() throws Exception {
+        Instant at=Instant.now().minusSeconds(30).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        var base=new TreeMap<String,Object>(Map.of("deviceUid",uid.toString(),"deviceId","archive-sensor","namespace","edgeai-devices","property","temperature","unit","","type","bool","configurationSha256","sha256:boolean-test"));
+        for(int index=0;index<2;index++) {
+            Instant time=at.plusMillis(index);var legacy=new TreeMap<String,Object>(base);
+            legacy.putAll(Map.of("observedAt",time.toString(),"quality","UNVERIFIED","value",index!=0));
+            archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(legacy)));
+            var qualified=new TreeMap<String,Object>(legacy);
+            qualified.putAll(Map.of("quality","QUALIFIED","sourceGeneration",generation.toString(),"sessionId","abc","sequence",index+1));
+            archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(qualified)));
+            // A legacy retry must not resurrect the reconciled point.
+            archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(legacy)));
+        }
+        mvc.perform(get(history())).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2));
+        mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items[0].value").value(false)).andExpect(jsonPath("$.items[1].value").value(true));
+        mvc.perform(get("/api/v1/data-store")).andExpect(status().isOk());
+    }
     @Test void slowArchiveWritesDoNotSerializeIndependentMeasurements() throws Exception {
         var complete=new java.util.concurrent.CountDownLatch(40);
         var received=java.util.concurrent.ConcurrentHashMap.<String>newKeySet();
@@ -111,8 +131,18 @@ class InfluxDataStoreIntegrationTest {
             publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at,23.5,1));Thread.sleep(400);awaitRows(1);
             mvc.perform(get(history())).andExpect(jsonPath("$.items[0].quality").value("QUALIFIED"));
             publish(publisher,"edgeai/devices/archive-sensor/temperature",legacy);Thread.sleep(400);awaitRows(1);
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.totalObservations").value(1));
+            // A distinct qualified sequence at the same timestamp/value remains a distinct observation.
+            publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at,23.5,2));awaitRows(2);
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2));
             // Qualified publishing may stop while the original route continues; do not suppress that original.
-            publish(publisher,"edgeai/devices/archive-sensor/temperature",legacy.replace(Long.toString(at),Long.toString(at+1)));awaitRows(2);
+            publish(publisher,"edgeai/devices/archive-sensor/temperature",legacy.replace(Long.toString(at),Long.toString(at+1)));awaitRows(3);
+            // A genuinely different original at a previously reconciled timestamp remains visible.
+            publish(publisher,"edgeai/devices/archive-sensor/temperature",legacy.replace("23.5","24.5"));awaitRows(4);
+            mvc.perform(get("/api/v1/data-store/sensors/"+uid+"/temperature/chart"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(4));
             publisher.disconnect();
         }
     }

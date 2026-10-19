@@ -1,0 +1,344 @@
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { test } from "node:test";
+import { createDeviceRegistrationMiddleware } from "../kestra-native/device-registration.ts";
+
+const id = "00000000-0000-4000-8000-000000000001";
+async function fixture(action) {
+  const calls = [];
+  const backend = createServer(async (req, res) => {
+    let body = "";
+    for await (const part of req) body += part;
+    calls.push({
+      path: req.url,
+      method: req.method,
+      body,
+      headers: req.headers,
+    });
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("X-EdgeAI-Audit-ID", id);
+    if (req.url.includes("conflict")) {
+      res.statusCode = 409;
+      return res.end('{"message":"revision conflict"}');
+    }
+    if (req.method === "DELETE") {
+      res.statusCode = 204;
+      return res.end();
+    }
+    res.end(body || '{"items":[],"nextOffset":null}');
+  });
+  await new Promise((resolve) => backend.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${backend.address().port}`;
+  const middleware = createDeviceRegistrationMiddleware({ baseUrl });
+  const preview = createServer((req, res) =>
+    middleware(req, res, () => {
+      res.statusCode = 404;
+      res.end();
+    }),
+  );
+  await new Promise((resolve) => preview.listen(0, "127.0.0.1", resolve));
+  try {
+    await action(`http://127.0.0.1:${preview.address().port}`, calls);
+  } finally {
+    await Promise.all([
+      new Promise((resolve) => preview.close(resolve)),
+      new Promise((resolve) => backend.close(resolve)),
+    ]);
+  }
+}
+
+test("native console connects profile, VD, workflow, task, result and audit read paths with pagination", async () => {
+  await fixture(async (url, calls) => {
+    const paths = [
+      "profiles/SERVICE",
+      "profiles/SERVICE/example/versions/1.0.0",
+      "data-store",
+      "workflow-data-sources",
+      "workflow-csrf",
+      `data-store/sensors/${id}/temperature/history`,
+      `data-store/sensors/${id}/temperature/chart`,
+      `virtual-devices/${id}/processing-versions`,
+      "nodes",
+      `nodes/${id}`,
+      "virtual-devices",
+      "virtual-devices/continuous-catalog",
+      `virtual-devices/${id}`,
+      `virtual-devices/${id}/execution`,
+      `virtual-devices/${id}/outputs`,
+      `virtual-devices/${id}/outputs/value/history`,
+      "workflows",
+      `workflows/${id}`,
+      "workflow-runs",
+      `workflow-runs/${id}`,
+      `workflow-runs/${id}/placements`,
+      `workflow-runs/${id}/streams`,
+      `tasks/${id}`,
+      `tasks/${id}/results`,
+      `tasks/${id}/results/output/content`,
+      `operations/${id}`,
+      "audit-requests",
+      `audit-requests/${id}`,
+    ];
+    for (const path of paths) {
+      const response = await fetch(
+        `${url}/api/control-plane/${path}?limit=20&offset=40`,
+      );
+      assert.equal(response.status, 200, path);
+      assert.equal(response.headers.get("x-edgeai-audit-id"), id);
+    }
+    assert.equal(calls.length, paths.length);
+    assert.ok(calls.every((call) => call.path.endsWith("?limit=20&offset=40")));
+  });
+});
+
+test("native console forwards revisions, stable idempotency keys and exact JSON numeric literals", async () => {
+  await fixture(async (url, calls) => {
+    const paths = [
+      ["POST", "profiles/SERVICE"],
+      ["POST", "virtual-devices/continuous"],
+      ["PATCH", `virtual-devices/${id}/continuous`],
+      ...["provision", "drain"].map((action) => [
+        "POST",
+        `virtual-devices/${id}/${action}`,
+      ]),
+      ["POST", "workflows"],
+      ["POST", `workflows/${id}/versions`],
+      ["POST", "workflow-runs"],
+      ["POST", `workflow-runs/${id}/cancel`],
+      ["POST", `workflow-runs/${id}/drain`],
+      ["POST", `tasks/${id}/cancel`],
+      ["POST", `tasks/${id}/offload`],
+      ["POST", "managed-devices/sensor-a/properties"],
+      ["POST", "device-profiles"],
+      ["POST", "device-connections/test"],
+    ];
+    const body = '{"revision":7,"parameters":{"exact":9007199254740993}}';
+    for (const [method, path] of paths) {
+      const response = await fetch(`${url}/api/control-plane/${path}`, {
+        method,
+        headers: {
+          Origin: url,
+          "Content-Type": "application/json",
+          "Idempotency-Key": id,
+          "X-CSRF-TOKEN": "csrf",
+          Cookie: "other=discard; EDGEAI_SESSION=session",
+        },
+        body,
+      });
+      assert.equal(response.status, 200, path);
+      assert.equal(await response.text(), body);
+    }
+    for (const call of calls) {
+      assert.equal(call.body, body);
+      assert.equal(call.headers["idempotency-key"], id);
+      assert.equal(call.headers["x-csrf-token"], "csrf");
+      assert.equal(call.headers.cookie, "EDGEAI_SESSION=session");
+    }
+  });
+});
+
+test("native delete paths retain empty responses and backend conflicts", async () => {
+  await fixture(async (url, calls) => {
+    for (const path of [
+      `profiles/SERVICE/test/versions/1.0.0`,
+      `virtual-devices/${id}`,
+      "managed-devices/sensor-a",
+      "managed-devices/sensor-a/properties/value",
+    ]) {
+      const response = await fetch(`${url}/api/control-plane/${path}`, {
+        method: "DELETE",
+      });
+      assert.equal(response.status, 204, path);
+      assert.equal(await response.text(), "");
+    }
+    const response = await fetch(
+      `${url}/api/control-plane/profiles/SERVICE/conflict/versions/1.0.0`,
+      { method: "DELETE" },
+    );
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { message: "revision conflict" });
+    assert.equal(calls.length, 5);
+  });
+});
+
+test("DDS build/deploy/status/delete use existing platform BFF and preserve DELETE bodies", async () => {
+  await fixture(async (url, calls) => {
+    for (const path of ["config", "workflow/status/flow-project"])
+      assert.equal(
+        (await fetch(`${url}/api/platform-service/${path}`)).status,
+        200,
+      );
+    for (const [method, path] of [
+      ["POST", "workflow/build-image"],
+      ["POST", "workflow/save-and-push"],
+      ["DELETE", "workflow/delete"],
+    ]) {
+      const body = JSON.stringify({
+        content: "kind: Deployment\n# " + "x".repeat(70000),
+        repo_path: "flow-project/deployment.yaml",
+      });
+      const response = await fetch(`${url}/api/platform-service/${path}`, {
+        method,
+        headers: { Origin: url, "Content-Type": "application/json" },
+        body,
+      });
+      assert.equal(response.status, method === "DELETE" ? 204 : 200);
+      assert.equal(calls.at(-1).body, body);
+    }
+    assert.equal(
+      (
+        await fetch(`${url}/api/platform-service/workflow/save-and-push`, {
+          method: "POST",
+          headers: {
+            Origin: "https://evil.example",
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(calls.length, 5);
+  });
+});
+
+test("unregistered console paths and wrong methods cannot tunnel arbitrary API writes", async () => {
+  await fixture(async (url, calls) => {
+    for (const [path, method] of [
+      ["control-plane/profiles/DEVICE", "POST"],
+      ["control-plane/tasks/not-a-uuid/offload", "POST"],
+      ["platform-service/workflow/save-and-push", "GET"],
+      ["platform-service/workflow/status/../delete", "POST"],
+      [`control-plane/tasks/${id}`, "DELETE"],
+    ]) {
+      const response = await fetch(`${url}/api/${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        ...(method === "GET" ? {} : { body: "{}" }),
+      });
+      assert.ok(
+        [404, 405].includes(response.status),
+        `${method} ${path}: ${response.status}`,
+      );
+    }
+    assert.deepEqual(calls, []);
+  });
+});
+
+test("management and workflow services keep independent sessions, CSRF and upstream paths", async () => {
+  const calls = [];
+  const upstream = (label) =>
+    createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      calls.push({
+        label,
+        path: req.url,
+        cookie: req.headers.cookie,
+        csrf: req.headers["x-csrf-token"],
+        body,
+      });
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/api/v1/csrf")
+        res.setHeader(
+          "Set-Cookie",
+          `EDGEAI_${label === "workflow" ? "WORKFLOW_" : ""}SESSION=new-session; Path=/; HttpOnly; SameSite=Lax`,
+        );
+      res.end('{"token":"csrf","items":[]}');
+    });
+  const management = upstream("management"),
+    workflow = upstream("workflow");
+  const listen = async (server) => {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const managementUrl = await listen(management),
+    workflowUrl = await listen(workflow);
+  const middleware = createDeviceRegistrationMiddleware({
+    baseUrl: managementUrl,
+    managementUrl,
+    workflowUrl,
+  });
+  const preview = createServer((req, res) =>
+    middleware(req, res, () => {
+      res.statusCode = 404;
+      res.end();
+    }),
+  );
+  const url = await listen(preview);
+  try {
+    const headers = {
+      Cookie:
+        "EDGEAI_SESSION=management-session; EDGEAI_WORKFLOW_SESSION=workflow-session; other=discard",
+      Origin: url,
+      "X-CSRF-TOKEN": "workflow-token",
+      "Content-Type": "application/json",
+    };
+    const csrf = await fetch(`${url}/api/control-plane/workflow-csrf`, {
+      headers,
+    });
+    assert.equal(csrf.status, 200);
+    assert.match(csrf.headers.get("set-cookie"), /EDGEAI_WORKFLOW_SESSION=/);
+    await fetch(`${url}/api/control-plane/workflow-runs`, {
+      method: "POST",
+      headers,
+      body: '{"workflowId":"test"}',
+    });
+    await fetch(
+      `${url}/api/control-plane/managed-devices/camera-a/preview?uid=${id}`,
+      { headers },
+    );
+    await fetch(`${url}/api/control-plane/data-store`, { headers });
+    assert.deepEqual(
+      calls.map(({ label, path, cookie }) => ({ label, path, cookie })),
+      [
+        {
+          label: "workflow",
+          path: "/api/v1/csrf",
+          cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session",
+        },
+        {
+          label: "workflow",
+          path: "/api/v1/workflow-runs",
+          cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session",
+        },
+        {
+          label: "management",
+          path: `/api/devices/camera-a/preview?uid=${id}`,
+          cookie: "EDGEAI_SESSION=management-session",
+        },
+        {
+          label: "management",
+          path: "/api/v1/data-store",
+          cookie: "EDGEAI_SESSION=management-session",
+        },
+      ],
+    );
+    assert.equal(calls[1].csrf, "workflow-token");
+    for (const path of [
+      "profiles/VD",
+      "virtual-devices/processing-catalog",
+      `virtual-devices/${id}/registration`,
+    ]) {
+      assert.equal(
+        (await fetch(`${url}/api/control-plane/${path}`)).status,
+        404,
+      );
+    }
+    assert.equal(
+      (
+        await fetch(
+          `${url}/api/control-plane/managed-devices/camera-a/preview?uid=wrong`,
+          { headers },
+        )
+      ).status,
+      400,
+    );
+  } finally {
+    await Promise.all(
+      [preview, management, workflow].map(
+        (server) => new Promise((resolve) => server.close(resolve)),
+      ),
+    );
+  }
+});

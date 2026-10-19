@@ -30,7 +30,18 @@ public class SensorArchiveCollector implements AutoCloseable {
     private volatile String status="DISABLED";
     private final AtomicLong stored=new AtomicLong(),invalid=new AtomicLong();
     private final AtomicLong waiting=new AtomicLong();
-    private final Object[] measurementLocks=java.util.stream.IntStream.range(0,64).mapToObj(n->new Object()).toArray();
+    // Broker retries can use new packet IDs after a durable ACK. Cache only completed
+    // deliveries, with a fixed memory bound; failures and restarts always retry storage.
+    private final Map<String,Boolean> completed=Collections.synchronizedMap(new LinkedHashMap<String,Boolean>(256,0.75f,true){
+        @Override protected boolean removeEldestEntry(Map.Entry<String,Boolean> eldest){return size()>4096;}
+    });
+    // Only active/waiting deliveries own entries, bounded by subscriber admission.
+    // Hash stripes made unrelated high-rate measurements delay each other's sources.
+    private final ConcurrentHashMap<String,MeasurementLock> measurementLocks=new ConcurrentHashMap<>();
+    private static final class MeasurementLock {
+        final java.util.concurrent.locks.ReentrantLock lock=new java.util.concurrent.locks.ReentrantLock(true);
+        int users;
+    }
     public SensorArchiveCollector(ManagedDeviceService devices,SensorTelemetryRepository telemetry,Clock clock,SensorObservationSubscriber subscriber,
         @Value("${edgeai.data-store.raw.enabled:false}") boolean enabled,@Value("${edgeai.data-store.raw.broker-node-overrides:{}}") String overrides,
         @Value("${edgeai.data-store.raw.interval-ms:5000}") long intervalMs,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection) {
@@ -58,13 +69,24 @@ public class SensorArchiveCollector implements AutoCloseable {
         var route=routes.get(delivery.broker()+"|"+delivery.topic());if(route==null||delivery.retained())return;
         SensorTelemetryRepository.Observation observation;
         try{observation=decode(route,delivery.payload());}catch(RuntimeException e){invalid.incrementAndGet();return;}
+        String identity=WorkflowInput.JSON.digest("edgeai-archive-delivery-v1",Map.of("route",route,"payload",new String(delivery.payload(),StandardCharsets.UTF_8)));
         boolean pending=false;
         try {
             while(!closed) {
                 try{
                     // Original and qualified topics for one measurement must reconcile serially.
-                    int stripe=Math.floorMod(Objects.hash(observation.deviceUid(),observation.property()),measurementLocks.length);
-                    synchronized(measurementLocks[stripe]){telemetry.append(observation);}
+                    String measurement=observation.deviceUid()+"/"+observation.property();
+                    var entry=measurementLocks.compute(measurement,(key,current)->{
+                        var value=current==null?new MeasurementLock():current;value.users++;return value;
+                    });
+                    try {
+                        entry.lock.lockInterruptibly();
+                        try{
+                            if(!completed.containsKey(identity)){telemetry.append(observation);completed.put(identity,true);}
+                        }finally{entry.lock.unlock();}
+                    }finally{
+                        measurementLocks.compute(measurement,(key,current)->--current.users==0?null:current);
+                    }
                     stored.incrementAndGet();return;
                 }
                 catch(RuntimeException e){if(!pending){waiting.incrementAndGet();pending=true;}Thread.sleep(500);}
