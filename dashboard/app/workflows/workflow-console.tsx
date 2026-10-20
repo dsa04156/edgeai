@@ -108,7 +108,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
   function connect() {
     void action(async () => {
       const authorization = "dashboard";
-      const token = await (await api("csrf", undefined, authorization)).json();
+      const token = await (await api("workflow-csrf", undefined, authorization)).json();
       await Promise.all([loadWorkflows(0, authorization), loadRuns(0, authorization)]);
       const [serviceItems, nodeItems] = await Promise.all([
         registryItems<Schema["ProfileVersion"]>("profiles/SERVICE", path => api(path, undefined, authorization)),
@@ -116,6 +116,7 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       ]);
       setProfiles(serviceItems); setNodes(nodeItems);
       const query = new URLSearchParams(window.location.search);
+      if (query.get("workflow")) await showWorkflow(query.get("workflow")!);
       if (query.get("run")) await showRun(query.get("run")!);
       if (query.get("service")) setDag(JSON.stringify({ tasks: [{ key: "service", serviceProfileVersionId: query.get("service"), parameters: {} }], dependencies: [] }));
       setAuth(authorization); setCsrf(token.token);
@@ -233,6 +234,12 @@ export function WorkflowConsole({ view = "builder" }: { view?: "builder" | "runs
       </section>}
       {pollError && <p className="error" role="alert">{pollError}</p>}
       {run && <section className="panel" aria-labelledby="run-detail-title"><div className="toolbar"><h2 id="run-detail-title">선택한 실행</h2><span className="stage">{stateNames[run.run.state]}</span></div><p className="digest mono">Run ID {run.run.id}</p>
+        {!!run.run.parameters.workflowSourceBindings && !terminal.has(run.run.state) && <div className="toolbar">
+          <button disabled={busy || !["PENDING", "RUNNING"].includes(run.run.state)} onClick={() => void action(async () => {
+            await post(`workflow-runs/${run.run.id}/drain`, {});
+            setNotice("정상 종료를 요청했습니다. 마지막 처리 결과를 저장하는 중입니다.");
+          })}>정상 종료</button><span className="hint">입력을 끝내고 마지막 데이터까지 처리한 뒤 결과를 저장합니다.</span>
+        </div>}
         <p className="hint">Run · Task · Placement · 결과를 3초마다 갱신합니다.</p>
         <PlacementTable placements={placements} nodes={nodes} onSelect={id => void action(() => showTask(id))} />
         <p className="hint">{run.run.retry && run.run.retry.maxAttempts > 1 ? `작업별 최대 ${run.run.retry.maxAttempts}회 · 실패 후 ${run.run.retry.backoffSeconds}초 대기 · 최초 시도부터 ${run.run.retry.maxElapsedSeconds}초 동안 재시도 가능` : "자동 재시도 없음 · 작업별 최초 1회"}</p>

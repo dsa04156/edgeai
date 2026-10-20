@@ -22,13 +22,34 @@ const state: NodeMetricsState = {
     ] }] },
 };
 
+test("only Kubernetes exposed accelerators appear even when hidden GPUs have fresh telemetry", () => {
+  const hardware = [
+    { device: "pci:0000:00:02.0", kind: "GPU" as const, vendor: "Intel", model: "Intel GPU" },
+    { device: "pci:0000:02:00.0", kind: "GPU" as const, vendor: "NVIDIA", model: "NVIDIA GPU" },
+    { device: "pci:0000:00:0b.0", kind: "NPU" as const, vendor: "Intel", model: "Intel NPU" },
+  ].map(item => ({ ...item, observedAt: new Date(now).toISOString(), fresh: true }));
+  const item = { nodeName: "real-node", accelerators: hardware, measurements: hardware.map(h => ({
+    key: h.kind === "GPU" ? "GPU_USAGE" as const : "NPU_USAGE" as const, device: h.device,
+    value: 0, unit: "PERCENT" as const, observedAt: new Date(now).toISOString(), fresh: true,
+  })) };
+  assert.deepEqual(nodeAccelerators(item, state, { "nvidia.com/gpu": "1", "npu.intel.com/accel": "1" }).map(d => d.label), ["NVIDIA GPU", "Intel NPU"]);
+  assert.deepEqual(nodeAccelerators(item, state, { "nvidia.com/gpu": "0" }), []);
+  assert.deepEqual(nodeAccelerators(item, state, {}), []);
+  const twoGpus = { ...item, accelerators: [...hardware, { ...hardware[1], device: "pci:0000:03:00.0" }] };
+  assert.deepEqual(nodeAccelerators(twoGpus, state, { "nvidia.com/gpu": "1" }), []);
+  assert.deepEqual(nodeAccelerators(twoGpus, state, { "nvidia.com/gpu.shared": "4" }), []);
+  assert.equal(nodeAccelerators(item, state, { "nvidia.com/gpu.shared": "2" }).length, 1);
+  assert.equal(nodeAccelerators(item, state, { "nvidia.com/gpu": "1000m" }).length, 1);
+  assert.equal(nodeAccelerators(item, state, { "nvidia.com/gpu": "1k" }).length, 1);
+});
+
 test("live metric node is visible with empty inventory or a removed historical record", () => {
   for (const records of [[], [node]]) {
     const rows = monitoredNodes(state, records);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].name, "real-node");
     assert.equal(rows[0].node, undefined);
-    assert.deepEqual(rows[0].kinds, ["GPU"]);
+    assert.deepEqual(rows[0].kinds, []);
   }
 });
 test("unrelated test records do not become monitored nodes", () => {
@@ -72,10 +93,13 @@ test("fresh hardware without utilization appears in NPU filter without inventing
     observedAt: new Date(now).toISOString(), fresh: true };
   const item = { nodeName: "real-node", measurements: [], accelerators: [hardware] };
   const live = { ...state, snapshot: { ...state.snapshot!, items: [item] } };
-  assert.deepEqual(monitoredNodes(live)[0].kinds, ["NPU"]);
+  const topology: InfrastructureSnapshot = { nodesStatus: "AVAILABLE", sensorsStatus: "AVAILABLE", fetchedAt: new Date(now).toISOString(), sensors: [],
+    nodes: [{ name: "real-node", kind: "EDGE_DEVICE", architecture: "arm64", operatingSystem: "linux", status: "READY", allocatable: { "hailo.ai/h8": "1" } }] };
+  assert.deepEqual(monitoredNodes(live, [], topology)[0].kinds, ["NPU"]);
   assert.equal(nodeAccelerators(item, live)[0].label, "Hailo-8");
-  const html = renderToStaticMarkup(createElement(MonitoredNodes, { state: live }));
+  const html = renderToStaticMarkup(createElement(MonitoredNodes, { state: live, infrastructure: topology }));
   assert.match(html, /Hailo-8/);
+  assert.match(html, /사용률 별도 계측 필요/);
   assert.doesNotMatch(html, /0\.0|pci:0001/);
   assert.deepEqual(nodeAccelerators(item, { ...live, now: now + 91000 }), []);
 });
@@ -84,10 +108,14 @@ test("GPU UUIDs and PCI identities never appear in node table, details, or toolt
   const ids = ["GPU-322e2753-8411-28a6-ab7b-bb03d5ba0dac", "GPU-abcdef12-1234", "0000:00:0b.0"];
   const item = { nodeName: "real-node", measurements: ids.map((device, i) => ({
     ...state.snapshot!.items[0].measurements[0], device, key: i === 2 ? "NPU_USAGE" as const : "GPU_USAGE" as const,
-  })) };
+  })), accelerators: ids.map((device, i) => ({ device, kind: i === 2 ? "NPU" as const : "GPU" as const,
+    vendor: i === 2 ? "Intel" : "NVIDIA", model: i === 2 ? "NPU" : "GPU", observedAt: new Date(now).toISOString(), fresh: true })) };
   const live = { ...state, snapshot: { ...state.snapshot!, items: [item] } };
-  for (const html of [renderToStaticMarkup(createElement(MonitoredNodes, { state: live })),
-    renderToStaticMarkup(createElement(NodeUsage, { node, state: live, detailed: true }))]) {
+  const allocatable = { "nvidia.com/gpu": "2", "npu.intel.com/accel": "1" };
+  const topology: InfrastructureSnapshot = { nodesStatus: "AVAILABLE", sensorsStatus: "AVAILABLE", fetchedAt: new Date(now).toISOString(), sensors: [],
+    nodes: [{ name: "real-node", kind: "EDGE_AI_SERVER", architecture: "amd64", operatingSystem: "linux", status: "READY", allocatable }] };
+  for (const html of [renderToStaticMarkup(createElement(MonitoredNodes, { state: live, infrastructure: topology })),
+    renderToStaticMarkup(createElement(NodeUsage, { node: { ...node, allocatable }, state: live, detailed: true }))]) {
     for (const id of ids) assert.ok(!html.includes(id));
     assert.match(html, /GPU 1/); assert.match(html, /GPU 2/); assert.match(html, /NPU/);
   }

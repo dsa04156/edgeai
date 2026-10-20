@@ -10,6 +10,8 @@ public final class ManagementAuditRoutes {
     private ManagementAuditRoutes() {}
     public record Route(String method,String template,String operation) {}
     public static final List<Route> ROUTES=List.of(
+        new Route("GET","/api/v1/workflow-data-sources","listWorkflowDataSources"),
+        new Route("POST","/api/v1/workflow-runs/{runId}/drain","drainWorkflowInput"),
         new Route("GET","/api/v1/data-store","getDataStore"),
         new Route("GET","/api/v1/data-store/sensors/{uid}/{property}/history","getSensorOriginalHistory"),
         new Route("GET","/api/v1/data-store/sensors/{uid}/{property}/chart","getSensorPeriodChart"),

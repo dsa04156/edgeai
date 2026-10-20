@@ -43,6 +43,16 @@ public class WorkflowService {
         for(var task:dag.tasks()) {
             var profile=profiles.find(task.serviceProfileVersionId()).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","참조할 SERVICE Profile 버전이 없습니다."));
             if(profile.identity().kind()!=ProfileIdentity.Kind.SERVICE) throw new IllegalArgumentException("SERVICE Profile required");
+            var parameters=io.edgeai.app.support.DeviceProfileCompiler.map(JSON.decode(task.parametersJson()));
+            if(parameters.containsKey(WorkflowDataInputService.BINDINGS))throw new IllegalArgumentException("Workflow source bindings are server-owned");
+            var specification=io.edgeai.app.support.DeviceProfileCompiler.map(JSON.decode(profile.specJson()));
+            if(specification.get("stream") instanceof Map<?,?> stream && "WORKFLOW_DATA".equals(stream.get("source"))) {
+                io.edgeai.app.support.ServiceExecutionInput.parseSpec(profile.specJson());
+                io.edgeai.app.support.WorkflowSourceInput.parse(parameters.get("dataSource"));
+                if(dag.dependencies().stream().anyMatch(e->e.toTask().equals(task.key()))
+                        || dag.dependencies().stream().noneMatch(e->e.fromTask().equals(task.key()) && e.mode()==Dag.Mode.STREAM))
+                    throw new IllegalArgumentException("Workflow data source must connect to a downstream STREAM task");
+            }
         }
         return new Creation<>(repository.publish(id,version,dag,canonical,digest),true);
     }

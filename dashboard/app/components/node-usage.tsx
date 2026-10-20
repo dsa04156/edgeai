@@ -36,9 +36,10 @@ export function NodeUsage({ node, state, detailed = false }: {
   detailed?: boolean;
 }) {
   const item = state.snapshot?.items.find(item => item.nodeName === node.name);
-  const measurements = item?.measurements ?? [];
+  const devices = nodeAccelerators(item, state, node.allocatable ?? {});
+  const measurements = (item?.measurements ?? []).filter(metric => !/^(GPU|NPU)_/.test(metric.key)
+    || devices.some(device => device.measurements.includes(metric)));
   const host = (key: NodeMetric["key"]) => measurements.find(metric => metric.key === key);
-  const devices = nodeAccelerators(item, state);
   const hardware = accelerators(node);
   const missingKinds = ["GPU", "NPU"].filter(kind => !devices.some(device => device.kind === kind)
     && hardware.some(([key]) => kind === "GPU" ? key.includes("gpu") : /npu|hailo/.test(key)));
@@ -52,6 +53,7 @@ export function NodeUsage({ node, state, detailed = false }: {
       const utilization = values.find(m => m.key.endsWith("_USAGE"));
       return <div key={device.id} className="accelerator-usage">
         <MetricBar label={device.label} metric={utilization} state={state} />
+        {device.utilizationNote && <small className="muted">{device.utilizationNote}</small>}
         {detailed && <div className="usage-details">{values.filter(m => m.unit !== "PERCENT").map(m => <span key={m.key}>
           {m.key.endsWith("_MEMORY_USED") ? "메모리 사용 " : m.key.endsWith("_MEMORY_TOTAL") ? "메모리 총량 " : m.unit === "CELSIUS" ? "온도 " : "전력 "}
           <strong>{isCurrent(m, state) ? format(m) : "—"}</strong>

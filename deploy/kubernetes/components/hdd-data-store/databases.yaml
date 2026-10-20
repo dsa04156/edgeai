@@ -188,6 +188,8 @@ spec:
       containers:
       - name: influxdb
         image: public.ecr.aws/docker/library/influxdb@sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797
+        # TSI orphan-index cleanup uses relative paths; keep its CWD on writable scratch.
+        workingDir: /tmp
         ports:
         - name: influxdb
           containerPort: 8086

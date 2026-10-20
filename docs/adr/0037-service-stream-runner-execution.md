@@ -5,6 +5,10 @@
 후속 [ADR0038](0038-stream-execution-completion.md)에서 내부 서버 배정·완료 허가를
 구현·검증했다. 아래는 ADR0037 작성 당시 결정과 시험 경계이며 공개 실행은 계속 비활성이다.
 
+## 후속 확장 — 명시적 워크플로 데이터 입력
+
+2026-10-14의 후속 확장은 일반 계산 SERVICE의 필수 입력·`edgeai.stream-workload/v1` 계약을 유지하고, `stream.source=WORKFLOW_DATA` + 고정 native command `edgeai-workflow-input`에 한해서 입력0개를 허용한다. 출력은 JSON `sample` 한 포트/4096bytes이다. 별도 Task source owner가 인증된 scoped reader, EXTERNAL journal/checkpoint, 기존 lease/END/ACK/FINALIZE를 사용한다. DeviceSource의 LOCAL 인계나 DEVICE_SESSION actor는 변경하지 않는다. 사용법과 최신 구현 범위는 [DAG 가이드](../guides/dag-execution.md)와 [PROGRESS](../../PROGRESS.md)를 따른다.
+
 ## 결정
 
 SERVICE의 선택적 `stream`에 지속 계산 command/args, 필수 입력 포트, 출력 포트,

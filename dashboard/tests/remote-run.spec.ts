@@ -16,8 +16,9 @@ test("Remote selection sends a provider key and displays the pinned synthetic bi
       if (posts === 1) return route.fulfill({ status: 503, json: { message: "Remote 연결을 확인한 뒤 같은 요청을 재전송하세요." } });
       return route.fulfill({ status: 201, json: run });
     }
+    if (path.endsWith("/placements")) return route.fulfill({ json: [] });
     let body: unknown;
-    if (path === "csrf") body = { token: "fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "fixture" };
     else if (path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflows") body = { items: [{ id: workflowId, key: "remote-fixture", displayName: "원격 실행 시험", createdAt: now }], nextOffset: null };
     else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "remote-fixture", displayName: "원격 실행 시험" }, versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag: { tasks: [], dependencies: [] }, createdAt: now }], nextOffset: null };
@@ -29,10 +30,9 @@ test("Remote selection sends a provider key and displays the pinned synthetic bi
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto("/workflows");
-  await page.getByLabel("사용자 이름", { exact: true }).fill("fixture"); await page.getByLabel("비밀번호", { exact: true }).fill("fixture");
-  await page.getByRole("button", { name: "연결", exact: true }).click();
   await page.getByRole("button", { name: "원격 실행 시험 remote-fixture", exact: true }).click();
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
+  await page.getByText("고급 설정 · 재시도 및 위치 전환", { exact: true }).click();
   await page.getByLabel("자동 노드 전환 사용", { exact: true }).check();
   await page.getByRole("combobox", { name: "실행 위치 정책", exact: true }).selectOption("REMOTE");
   await expect(page.getByLabel("자동 노드 전환 사용", { exact: true })).toHaveCount(0);

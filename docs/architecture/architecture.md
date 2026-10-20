@@ -57,7 +57,7 @@ flowchart TB
 
 연속 VD는 내부 v3 설정과 원본 연결 revision을 보존하며 VD마다 SERVICE·supervisor·Pod를 만들지 않습니다. 입력 프로토콜은 Mapper가 처리하고 중앙 Agent/eKuiper는 공통 관측 계약을 소비합니다. 엔진의 세대·lease·결과 신원과 저장 누락을 추적합니다.
 
-Mapper의 원본 MQTT 데이터는 원본 collector가 InfluxDB에 저장하며 UID·항목별 이력 API로 조회합니다. 연속 계산 결과의 최신값·보관 이력과 센서 원본은 별도 측정 계열이며 결과 저장 정책·대기열과 원본 수집의 보장 범위도 구분합니다. 일반 DAG 센서 입력은 Run 접수 때 최신값을 고정하고 자동 STREAM 연결로 해석하지 않습니다.
+Mapper의 원본 MQTT 데이터는 원본 collector가 InfluxDB에 저장하며 UID·항목별 이력 API로 조회합니다. 연속 계산 결과의 최신값·보관 이력과 센서 원본은 별도 측정 계열이며 결과 저장 정책·대기열과 원본 수집의 보장 범위도 구분합니다. 기존 `device` BATCH 입력은 Run 접수 때 최신값을 고정합니다. 명시적 `WORKFLOW_DATA` 입력 SERVICE는 검증된 센서 원본 archive 또는 연속 VD의 current VALID output을1초마다 읽고 Task→Task STREAM으로 전달합니다. 소스 cursor·상태와 emission은 같은 EXTERNAL journal commit에 확정하며 기존 체크포인트·복원·공동 종료 장벽을 재사용합니다. CRD 이름을 UUID DeviceSession으로 바꾸지 않으며 sensor NanoMQ와 Task STREAM broker의 역할을 구분합니다. 중간 모든 관측의 전달은 보장하지 않습니다.
 
 SERVICE·Workflow 버전은 불변이고 재시도·전환은 같은 Task의 새 Attempt입니다. Runner 파일 결과는 고정 객체 버전과 실제 내용 검증 뒤 확정합니다. Spring DAG와 DDS 배포는 별도 경로이며 Git 저장 성공을 Run/Result 완료로 바꾸지 않습니다.
 

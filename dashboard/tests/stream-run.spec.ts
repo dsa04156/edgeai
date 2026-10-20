@@ -31,7 +31,7 @@ test("stream retry submission preserves policy and request identity and displays
       return route.fulfill({ status: 200, json: { items: [value], nextOffset: next ? null : 20 } });
     }
     let body: unknown;
-    if (path === "csrf") body = { token: "fixture" };
+    if ((path === "csrf" || path === "workflow-csrf")) body = { token: "fixture" };
     else if (path === "profiles/SERVICE" || path === "nodes") body = { items: [], nextOffset: null };
     else if (path === "workflows") body = { items: [{ id: workflowId, key: "stream-fixture", displayName: "스트림 실행 시험", createdAt: now }], nextOffset: null };
     else if (path === `workflows/${workflowId}`) body = { workflow: { id: workflowId, key: "stream-fixture", displayName: "스트림 실행 시험" }, versions: [{ id: versionId, workflowId, version: "1.0.0", digest: "fixture", dag: { tasks: [], dependencies: [] }, createdAt: now }], nextOffset: null };

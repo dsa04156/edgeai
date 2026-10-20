@@ -7,6 +7,54 @@ info:
 servers:
 - url: /
 paths:
+  /internal/v1/attempts/{attemptId}/streams/input:
+    post:
+      operationId: readWorkflowInput
+      summary: 현재 입력 작업에 고정된 원본의 최신 유효 측정 읽기
+      description: WORKFLOW_DATA 작업만 자신의 Run에 고정된 원본을 읽는다. 요청에는 원본 식별자를 받지 않는다. SDK는 1초 간격으로 최신값을 읽고 sampleId 중복을 제거한다. 중간 모든 관측의 전량 전달을 보장하지 않는다. UID·설정·가상 실행 generation 변경은409다. 수집 지연·만료는 WAITING, 정상 종료 요청은 END이며 HTTP 읽기는 lease를 연장하지 않는다.
+      security:
+      - runnerClaim: []
+        podIdentity: []
+      parameters:
+      - {name: attemptId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StreamExecutionRequest'}
+      responses:
+        '200':
+          description: Cache-Control no-store. DATA payload은4096bytes 이하이다.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [state]
+                  properties:
+                    state: {type: string, enum: [WAITING, END]}
+                - type: object
+                  additionalProperties: false
+                  required: [state, sampleId, sample]
+                  properties:
+                    state: {type: string, const: DATA}
+                    sampleId: {type: string, pattern: '^[a-f0-9]{64}$'}
+                    sample:
+                      type: object
+                      additionalProperties: false
+                      required: [value, unit, type, observedAt, quality, source]
+                      properties:
+                        value: {type: [number, boolean]}
+                        unit: {type: string}
+                        type: {type: string}
+                        observedAt: {type: string, format: date-time}
+                        quality: {type: string, const: VALID}
+                        source: {type: object, description: 서버가 고정한 typed source 신원이며 주소·자격 증명을 포함하지 않는다.}
+        '400': {description: 잘못된 입력}
+        '401': {description: 현재 Attempt와 Pod 인증 실패}
+        '409': {description: 입력 작업이 아니거나 고정 원본 또는 실행 권한 변경}
+        '503': {description: 제어 계층 일시 장애}
   /internal/v1/attempts/{attemptId}/streams/execution:
     post:
       operationId: assignStreamExecution

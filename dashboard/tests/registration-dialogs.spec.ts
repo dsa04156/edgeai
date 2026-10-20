@@ -4,7 +4,7 @@ async function catalog(page: Page) {
   await page.route("**/api/health", route => route.fulfill({ json: { status: "UP" } }));
   await page.route("**/api/control-plane/**", route => {
     const path = new URL(route.request().url()).pathname.replace("/api/control-plane/", "");
-    if (path === "csrf") return route.fulfill({ json: { token: "fixture" } });
+    if ((path === "csrf" || path === "workflow-csrf")) return route.fulfill({ json: { token: "fixture" } });
     if (path === "infrastructure") return route.fulfill({ json: { fetchedAt: new Date().toISOString(), nodesStatus: "AVAILABLE", sensors: [], nodes: [{ name: "edge-a", kind: "EDGE_DEVICE" }] } });
     if (path === "virtual-devices/continuous-catalog") return route.fulfill({ json: { enabled: true, inputs: [{ deviceId: "temperature", deviceUid: "sensor-1", deviceModel: "temperature-model", namespace: "edgeai-devices", property: "temperature", type: "float64", unit: "°C", targetNode: "edge-a" }] } });
     return route.fulfill({ json: { items: [], nextOffset: null } });
@@ -19,7 +19,7 @@ test("virtual registration opens one modal without moving the page and restores 
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "가상디바이스 등록", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("센서", { exact: true })).toBeFocused();
+  await expect(dialog.getByLabel("조합 종류", { exact: true })).toBeFocused();
   await dialog.getByLabel("센서", { exact: true }).selectOption("temperature");
   await dialog.getByLabel("장치 이름", { exact: true }).fill("온도 평균");
   await page.keyboard.press("Shift+Tab");

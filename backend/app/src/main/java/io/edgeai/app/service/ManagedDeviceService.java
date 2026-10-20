@@ -170,6 +170,14 @@ public class ManagedDeviceService {
         }
         return result;
     }
+    /** Metadata-only identity for a Workflow source; never triggers a sensor collection. */
+    public Map<String,Object> workflowObservation(String id) {
+        var device=request("GET",path("devices")+"/"+name(id),null,200);owned(device);
+        String target=(String)map(device.get("spec")).get("nodeName");
+        var node=request("GET","/api/v1/nodes/"+name(target),null,200);
+        try{return ObservationRoute.resolve(device,node,Map.of());}
+        catch(IllegalArgumentException e){throw error(409,"WORKFLOW_SOURCE_UNAVAILABLE","센서의 검증된 원본 연결을 사용할 수 없습니다.");}
+    }
     /** Called only by an authenticated, CSRF-protected registration/update transaction. */
     public List<Map<String,Object>> archiveCatalog(Map<String,Object> overrides) {
         var result=new ArrayList<Map<String,Object>>();var nodes=new HashMap<String,Map<String,Object>>();

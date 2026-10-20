@@ -29,7 +29,7 @@ test("task placements preserve failed input, show NODE and REMOTE waiting target
     }
     let body: unknown;
     if (path === "platform") body = { capabilities: ["workflows", "runs", "tasks", "results"] };
-    else if (path === "csrf") body = { token: "fixture" };
+    else if ((path === "csrf" || path === "workflow-csrf")) body = { token: "fixture" };
     else if (path === "profiles/SERVICE") body = { items: [], nextOffset: null };
     else if (path === "nodes") body = { items: [nodeA, nodeB].map((id, i) => ({ id, name: `edge-${i ? "b" : "a"}`, architecture: "amd64", status: "READY" })), nextOffset: null };
     else if (path === "workflows") body = { items: [workflow], nextOffset: null };

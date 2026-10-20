@@ -45,6 +45,29 @@ def execution_digest(command, parameters, input_ports, output_ports, step_timeou
         'outputs':{p:list(r) for p,r in sorted(output_ports.items())},'stepTimeout':step_timeout})).hexdigest()
 
 
+def pin_execution(journal, execution_sha256, create, validate=require):
+    """Persist and verify the same private execution pin for every Task owner."""
+    digest = execution_sha256.encode('ascii')
+    pin = journal.directory / 'processor.sha256'
+    if create:
+        validate(journal.checkpoint().revision == 0)
+        fd = os.open(pin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as file:
+            file.write(digest);file.flush();os.fsync(file.fileno())
+        parent = os.open(journal.directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    fd = os.open(pin, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        validate(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600)
+        validate(os.read(fd, 65) == digest)
+    finally:
+        os.close(fd)
+
+
 class Processor:
     def __init__(self, link, command, directory, input_ports, output_ports, parameters=None,
                  *, step_timeout=60, create=False, cancel=None):
@@ -92,25 +115,7 @@ class Processor:
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700)
         checkpoint = self.journal.checkpoint()
         self.execution_sha256 = execution_digest(self.command,self.parameters,self.inputs,self.outputs,step_timeout)
-        digest = self.execution_sha256.encode('ascii')
-        pin = self.journal.directory / 'processor.sha256'
-        if create:
-            require(checkpoint.revision == 0)
-            fd = os.open(pin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(fd, 'wb') as file:
-                file.write(digest);file.flush();os.fsync(file.fileno())
-            parent = os.open(self.journal.directory, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(parent)
-            finally:
-                os.close(parent)
-        fd = os.open(pin, os.O_RDONLY | os.O_NOFOLLOW)
-        try:
-            info = os.fstat(fd)
-            require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600)
-            require(os.read(fd, 65) == digest)
-        finally:
-            os.close(fd)
+        pin_execution(self.journal, self.execution_sha256, create)
         self._complete = checkpoint.ended_inputs == frozenset(self.journal.inputs)
         self._link_guard = self.journal.authority_guard
         require(self._link_guard is not None)

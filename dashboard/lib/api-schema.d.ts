@@ -4,6 +4,48 @@
  */
 
 export interface paths {
+    "/api/v1/workflow-data-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 실시간 워크플로 입력 선택 목록
+         * @description 센서의 검증된 원본과 가상디바이스의 현재 계산 출력을 구분한다. 브로커 주소·자격 증명은 반환하지 않는다.
+         */
+        get: operations["listWorkflowDataSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs/{runId}/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 실시간 입력을 종료하고 마지막 처리 결과 저장
+         * @description 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
+         */
+        post: operations["drainWorkflowInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices": {
         parameters: {
             query?: never;
@@ -1247,6 +1289,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        WorkflowSourceSelection: {
+            /** @constant */
+            kind: "SENSOR";
+            deviceId: string;
+            property: string;
+        } | {
+            /** @constant */
+            kind: "CONTINUOUS_VD";
+            /** Format: uuid */
+            vdId: string;
+            outputId: string;
+        };
+        WorkflowDataSources: {
+            /** Format: date-time */
+            asOf: string;
+            /** @constant */
+            samplingIntervalSeconds: 1;
+            truncated: boolean;
+            items: {
+                selection: components["schemas"]["WorkflowSourceSelection"];
+                label: string;
+                unit: string;
+                /** @description 아직 현재 계산 결과가 없는 출력은 빈 문자열이다. */
+                type: string;
+                /** @description 센서의 검증 연결 또는 가상디바이스의 현재 유효 결과가 확인됨. */
+                available: boolean;
+            }[];
+        };
         ManagedDeviceProperty: {
             name: string;
             /** @description Holding 40001/input 30001/coil 1 maps to wire address 0. */
@@ -1711,6 +1781,10 @@ export interface components {
             operatingSystem: string;
             /** @enum {string} */
             status: "READY" | "NOT_READY" | "UNKNOWN";
+            /** @description 현재 Kubernetes Node status.allocatable. GPU·NPU 표시는 양수인 가속기 리소스만 포함합니다. */
+            allocatable?: {
+                [key: string]: string;
+            };
         };
         ClusterSensor: {
             name: string;
@@ -2948,6 +3022,99 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listWorkflowDataSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 선택 목록. Cache-Control no-store. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDataSources"];
+                };
+            };
+            /** @description 원본 목록 조회를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    drainWorkflowInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description 정상 종료 요청을 저장했습니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        runId: string;
+                        /** @constant */
+                        state: "DRAINING";
+                    };
+                };
+            };
+            /** @description 잘못된 본문 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 실행이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 데이터 입력이 없거나 이미 완료·취소 중인 실행입니다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 저장소 일시 장애 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listManagedDevices: {
         parameters: {
             query?: never;

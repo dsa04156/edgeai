@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-export function RegistrationDialog({ open, title, busy = false, closeLabel = "취소", onClose, children }: {
-  open: boolean; title: string; busy?: boolean; closeLabel?: string; onClose: () => void; children: ReactNode;
+export function RegistrationDialog({ open, title, subtitle, variant = "default", busy = false, closeLabel = "취소", onClose, children }: {
+  open: boolean; title: string; subtitle?: string; variant?: "default" | "graph"; busy?: boolean; closeLabel?: string; onClose: () => void; children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -26,11 +26,11 @@ export function RegistrationDialog({ open, title, busy = false, closeLabel = "�
           (document.activeElement === document.body || dialog.contains(document.activeElement))) previous.focus({ preventScroll: true });
     };
   }, [open]);
-  return <dialog ref={ref} className="registration-dialog" aria-labelledby={titleId}
+  return <dialog ref={ref} className={`registration-dialog${variant === "graph" ? " graph-dialog" : ""}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
     onClose={event => { if (!event.currentTarget.open && open) onClose(); }}>
-    <header className="registration-dialog-header"><h2 id={titleId} tabIndex={-1}>{title}</h2><button type="button" disabled={busy} onClick={onClose} aria-label={`${title} 닫기`}>닫기</button></header>
+    <header className="registration-dialog-header"><div className="registration-dialog-title"><h2 id={titleId} tabIndex={-1}>{title}</h2>{subtitle && <p title={subtitle}>{subtitle}</p>}</div><button type="button" disabled={busy} onClick={onClose} aria-label={`${title} 닫기`}>{variant === "graph" ? <span aria-hidden="true">×</span> : "닫기"}</button></header>
     <div className="registration-dialog-body">{children}</div>
-    <footer className="registration-dialog-footer"><button type="button" disabled={busy} onClick={onClose}>{closeLabel}</button></footer>
+    {variant !== "graph" && <footer className="registration-dialog-footer"><button type="button" disabled={busy} onClick={onClose}>{closeLabel}</button></footer>}
   </dialog>;
 }
