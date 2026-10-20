@@ -1,6 +1,6 @@
 import type { components } from "../../lib/api-schema";
 import { ContinuousQuickCalculation } from "./continuous-quick-fields";
-import { presetChoices, presetUnit, type ContinuousPreset } from "./continuous-presets";
+import { presetChoices, presetUnit, type ContinuousPreset } from "../../lib/continuous-presets";
 
 type Schema = components["schemas"];
 export function ContinuousPresetFields({ preset, inputs, sources, output, selectSensor, changeOutput }: {

@@ -4,7 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { components } from "../../lib/api-schema";
 import { ContinuousQuickFields } from "./continuous-quick-fields";
 import { ContinuousPresetFields } from "./continuous-preset-fields";
-import { continuousPresets, presetReady, presetUnit } from "./continuous-presets";
+import { continuousPresets, presetReady, presetUnit } from "../../lib/continuous-presets";
 
 type Schema = components["schemas"];
 type Source = Schema["VirtualDeviceSources"][number];

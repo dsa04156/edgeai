@@ -19,7 +19,7 @@ async function withServers(action) {
     for await (const chunk of req) body += chunk;
     calls.push({method: req.method, path: req.url, headers: req.headers, body});
     res.setHeader("Content-Type", "application/json");
-    if (req.url === "/api/control-plane/csrf") {
+    if (req.url === "/api/v1/csrf") {
       res.setHeader("Set-Cookie", "EDGEAI_SESSION=fixture-session; Path=/; HttpOnly; SameSite=Lax");
       return res.end(JSON.stringify({token: "fixture-token"}));
     }
@@ -29,8 +29,8 @@ async function withServers(action) {
     if (body && JSON.parse(body).name === "conflict") {
       res.statusCode = 409;return res.end(JSON.stringify({message: "같은 이름의 장치가 등록되어 있습니다."}));
     }
-    if (req.url === "/api/control-plane/managed-devices/sensor-a") return res.end(JSON.stringify(device));
-    if (req.method === "PUT" && req.url === "/api/control-plane/managed-devices/sensor-a/properties/temperature") {
+    if (req.url === "/api/devices/sensor-a") return res.end(JSON.stringify(device));
+    if (req.method === "PUT" && req.url === "/api/devices/sensor-a/properties/temperature") {
       device.profile.properties[0] = JSON.parse(body);
       return res.end(JSON.stringify(device));
     }
@@ -38,13 +38,13 @@ async function withServers(action) {
     res.end(JSON.stringify(req.method === "POST" ? {id: JSON.parse(body).name, state: "OFFLINE"} : {items: []}));
   });
   const baseUrl = await listen(backend);
-  const middleware = createDeviceRegistrationMiddleware({baseUrl});
+  const middleware = createDeviceRegistrationMiddleware({managementUrl: baseUrl});
   const preview = createServer((req, res) => middleware(req, res, () => {res.statusCode = 404;res.end();}));
   const url = await listen(preview);
   try {await action(url, calls, baseUrl);} finally {await Promise.all([new Promise(resolve => preview.close(resolve)), new Promise(resolve => backend.close(resolve))]);}
 }
 
-test("native sensor registration preserves the existing BFF session and CSRF contract", async () => {
+test("native sensor registration preserves the management API session and CSRF contract", async () => {
   await withServers(async (url, calls, baseUrl) => {
     const csrf = await fetch(`${url}/api/control-plane/csrf`);
     assert.equal(csrf.status, 200);

@@ -1,6 +1,8 @@
 # EdgeAI Kubernetes 배포
 
 `base`는 API·Dashboard·PostgreSQL·MinIO, `overlays/dev`는 namespace·Ingress·이미지 digest를 정의한다.
+Dashboard(`edgeai-dashboard`)는 Kestra v2.0.6 원본 Vue 콘솔이며 관리 API를 직접 호출한다. 기존 Next.js 대시보드는
+배포하지 않는다. Ingress의 `/api/v1/main`은 콘솔 셸 API, 나머지 `/api/v1`은 API로 보낸다.
 ArgoCD는 `overlays/dev`를 감시한다. 초기 연결·검증·롤백은 [CI/CD 문서](../../docs/operations/cicd.md)를 따른다.
 
 ```bash

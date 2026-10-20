@@ -8,7 +8,8 @@ fi
 restart_mode="${1:-none}"
 [[ "$restart_mode" == none || "$restart_mode" == compose || "$restart_mode" == local ]] || blocked 'Usage: test-health-stack.sh [compose|local]'
 backend/gradlew -p backend :app:bootJar --console=plain
-[[ -f dashboard/.next/BUILD_ID ]] || blocked 'Build Dashboard before this test.'
+# The UI under test is the console release (scripts/ops/build-kestra-console.sh), as in the dashboard image.
+[[ -f "${EDGEAI_CONSOLE_RELEASE:-}/dist/edgeai-shell.json" ]] || blocked 'Set EDGEAI_CONSOLE_RELEASE to a built console release.'
 python3 - <<'PY'
 import socket,os
 for key in ['EDGEAI_API_PORT','EDGEAI_DASHBOARD_PORT']:
@@ -20,7 +21,9 @@ PY
 mkdir -p .tools
 java -jar backend/app/build/libs/edgeai-control-plane.jar > .tools/api-smoke.log 2>&1 &
 api_pid=$!
-node dashboard/scripts/start.mjs > .tools/ui-smoke.log 2>&1 &
+EDGEAI_CONSOLE_HOST=127.0.0.1 EDGEAI_CONSOLE_PORT="$EDGEAI_DASHBOARD_PORT" \
+  EDGEAI_API_BASE_URL="http://127.0.0.1:$EDGEAI_API_PORT" EDGEAI_WORKFLOW_API_BASE_URL='' \
+  bash scripts/ops/start-kestra-console.sh "$EDGEAI_CONSOLE_RELEASE" > .tools/ui-smoke.log 2>&1 &
 ui_pid=$!
 db_stopped=false
 restore_db() {

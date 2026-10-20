@@ -24,17 +24,17 @@ function fixtures(path) {
   return undefined;
 }
 
-async function withServers(action, override = () => undefined) {
+async function withServers(action, override = () => undefined, origins = {}) {
   const calls = [];
   const backend = createServer((req, res) => {
     calls.push([req.method, req.url]);
-    const path = req.url.replace("/api/control-plane/", "");
+    const path = req.url.replace("/api/v1/", "");
     const response = override(path) ?? {status: 200, body: fixtures(path)};
     res.writeHead(response.body === undefined ? 404 : response.status, {"Content-Type": "application/json"});
     res.end(JSON.stringify(response.body ?? {}));
   });
   const baseUrl = await listen(backend);
-  const middleware = createOverviewMiddleware({baseUrl});
+  const middleware = createOverviewMiddleware({managementUrl: baseUrl, ...origins});
   const preview = createServer((req, res) => middleware(req, res, () => {res.writeHead(404);res.end();}));
   const url = await listen(preview);
   try {await action(url, calls);} finally {await Promise.all([new Promise(resolve => preview.close(resolve)), new Promise(resolve => backend.close(resolve))]);}
@@ -244,4 +244,22 @@ test("device inventory keeps current node metadata and sensor states in the obse
     assert.equal(data.inventory.metricsAvailable, true);
   }, path => path === "infrastructure" ? {status: 200, body: {...fixtures(path), nodes: [{name: "edge-a", kind: "EDGE_DEVICE", status: "READY", architecture: "arm64", operatingSystem: "linux", allocatable: {cpu: "4"}}],
     sensors: [{name: "temperature", nodeName: "edge-a", model: "model-a", serviceName: "KubeEdge Mapper", adminState: "UNLOCKED", operatingState: "OFFLINE", properties: ["temperature"]}]}} : undefined);
+});
+
+test("overview reads runs from the separate workflow API when one is configured", async () => {
+  const seen = [];
+  const workflow = createServer((req, res) => {
+    seen.push(req.url);
+    res.writeHead(200, {"Content-Type": "application/json"});
+    res.end(JSON.stringify(fixtures(req.url.replace("/api/v1/", ""))));
+  });
+  const workflowUrl = await listen(workflow);
+  try {
+    await withServers(async (url, calls) => {
+      const data = await (await fetch(`${url}/api/edgeai/overview`)).json();
+      assert.equal(data.runs.length, 1);
+      assert.deepEqual(seen, ["/api/v1/workflow-runs?limit=20&offset=0"]);
+      assert.equal(calls.some(([, path]) => path.includes("workflow-runs")), false);
+    }, undefined, {workflowUrl});
+  } finally {await new Promise(resolve => workflow.close(resolve));}
 });

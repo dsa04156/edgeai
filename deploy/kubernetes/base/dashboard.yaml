@@ -45,9 +45,10 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
+          # Kestra console server: static bundle plus API bridges, no build cache or local writes.
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {cpu: '1', memory: 512Mi}
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: '1', memory: 384Mi}
           startupProbe:
             httpGet: {path: /api/live, port: http}
             periodSeconds: 2
@@ -59,8 +60,3 @@ spec:
             httpGet: {path: /api/health, port: http}
             periodSeconds: 5
             timeoutSeconds: 3
-          volumeMounts:
-            - {name: cache, mountPath: /app/dashboard/.next/cache}
-      volumes:
-        - name: cache
-          emptyDir: {}

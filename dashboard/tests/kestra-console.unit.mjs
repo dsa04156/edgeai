@@ -29,7 +29,11 @@ async function fixture(action) {
   });
   await new Promise((resolve) => backend.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://127.0.0.1:${backend.address().port}`;
-  const middleware = createDeviceRegistrationMiddleware({ baseUrl });
+  const middleware = createDeviceRegistrationMiddleware({
+    managementUrl: baseUrl,
+    platformUrl: baseUrl,
+    platformToken: "platform-secret",
+  });
   const preview = createServer((req, res) =>
     middleware(req, res, () => {
       res.statusCode = 404;
@@ -161,7 +165,7 @@ test("native delete paths retain empty responses and backend conflicts", async (
   });
 });
 
-test("DDS build/deploy/status/delete use existing platform BFF and preserve DELETE bodies", async () => {
+test("DDS build/deploy/status/delete call Platform-Service with the server token and preserve DELETE bodies", async () => {
   await fixture(async (url, calls) => {
     for (const path of ["config", "workflow/status/flow-project"])
       assert.equal(
@@ -184,6 +188,9 @@ test("DDS build/deploy/status/delete use existing platform BFF and preserve DELE
       });
       assert.equal(response.status, method === "DELETE" ? 204 : 200);
       assert.equal(calls.at(-1).body, body);
+      assert.equal(calls.at(-1).path, `/${path}`);
+      assert.equal(calls.at(-1).headers["x-platform-token"], "platform-secret");
+      assert.equal(calls.at(-1).headers.cookie, undefined);
     }
     assert.equal(
       (
@@ -255,7 +262,6 @@ test("management and workflow services keep independent sessions, CSRF and upstr
   const managementUrl = await listen(management),
     workflowUrl = await listen(workflow);
   const middleware = createDeviceRegistrationMiddleware({
-    baseUrl: managementUrl,
     managementUrl,
     workflowUrl,
   });
@@ -340,5 +346,72 @@ test("management and workflow services keep independent sessions, CSRF and upstr
         (server) => new Promise((resolve) => server.close(resolve)),
       ),
     );
+  }
+});
+
+test("DDS without a configured token fails closed before any upstream call", async () => {
+  let called = false;
+  const backend = createServer((req, res) => {
+    called = true;
+    res.end("{}");
+  });
+  await new Promise((resolve) => backend.listen(0, "127.0.0.1", resolve));
+  const managementUrl = `http://127.0.0.1:${backend.address().port}`;
+  const middleware = createDeviceRegistrationMiddleware({
+    managementUrl,
+    platformUrl: managementUrl,
+  });
+  const preview = createServer((req, res) =>
+    middleware(req, res, () => {
+      res.statusCode = 404;
+      res.end();
+    }),
+  );
+  await new Promise((resolve) => preview.listen(0, "127.0.0.1", resolve));
+  try {
+    const url = `http://127.0.0.1:${preview.address().port}`;
+    assert.equal((await fetch(`${url}/api/platform-service/config`)).status, 503);
+    assert.equal(called, false);
+  } finally {
+    await Promise.all([
+      new Promise((resolve) => preview.close(resolve)),
+      new Promise((resolve) => backend.close(resolve)),
+    ]);
+  }
+});
+
+test("without a separate workflow API, workflow paths use the management API session", async () => {
+  const calls = [];
+  const backend = createServer((req, res) => {
+    calls.push({ path: req.url, cookie: req.headers.cookie });
+    res.setHeader("Content-Type", "application/json");
+    res.end('{"items":[],"nextOffset":null}');
+  });
+  await new Promise((resolve) => backend.listen(0, "127.0.0.1", resolve));
+  const managementUrl = `http://127.0.0.1:${backend.address().port}`;
+  const middleware = createDeviceRegistrationMiddleware({ managementUrl });
+  const preview = createServer((req, res) =>
+    middleware(req, res, () => {
+      res.statusCode = 404;
+      res.end();
+    }),
+  );
+  await new Promise((resolve) => preview.listen(0, "127.0.0.1", resolve));
+  try {
+    const url = `http://127.0.0.1:${preview.address().port}`;
+    const response = await fetch(`${url}/api/control-plane/workflow-runs`, {
+      headers: {
+        Cookie: "EDGEAI_SESSION=management; EDGEAI_WORKFLOW_SESSION=stale",
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [
+      { path: "/api/v1/workflow-runs", cookie: "EDGEAI_SESSION=management" },
+    ]);
+  } finally {
+    await Promise.all([
+      new Promise((resolve) => preview.close(resolve)),
+      new Promise((resolve) => backend.close(resolve)),
+    ]);
   }
 });

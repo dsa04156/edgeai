@@ -37,7 +37,7 @@ if expected=='DOWN':
         status,body=get(api+'/api/v1/'+resource,{'Authorization':'Basic '+credentials})
         assert status==503 and body['code']=='AUDIT_STORE_UNAVAILABLE'
     print('PASS: Audit list/detail return a sanitized 503 during a real database outage')
-    print('PASS: PostgreSQL outage → Spring readiness 503/DOWN → Next.js health 503/DOWN')
+    print('PASS: PostgreSQL outage → Spring readiness 503/DOWN → console health 503/DOWN')
     raise SystemExit(0)
 assert get(api+'/actuator/health/readiness')==(200,{'status':'UP'})
 assert get(ui+'/api/health')==(200,{'status':'UP'})
@@ -46,5 +46,5 @@ _,body=get(api+'/api/v1/platform',{'Authorization':'Basic '+credentials})
 assert body=={'name':'edgeai','version':'0.1.0','milestone':'M4','capabilities':['profiles','devices','nodes','workflows','runs','tasks','results']}
 status,audits=get(api+'/api/v1/audit-requests?limit=1',{'Authorization':'Basic '+credentials})
 assert status==200 and isinstance(audits['items'],list)
-print('PASS: PostgreSQL → Spring readiness → Next.js health; authenticated metadata; anonymous 401')
+print('PASS: PostgreSQL → Spring readiness → console health; authenticated metadata; anonymous 401')
 PY

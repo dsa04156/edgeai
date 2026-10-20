@@ -82,8 +82,9 @@ status, body = request(url + "/" + payload["key"] + "/versions/1.0.0", authentic
 assert status == 200 and json.loads(body)["id"] == version["id"]
 print("PASS: deployed UI/assets, API service connection, Swagger, authentication, CSRF, Profile 201/200/409/read")
 
-assert request(ui + "/devices")[0] == 200
-devices_url = ui + "/api/control-plane/devices"
+assert request(ui + "/ui/main/devices")[0] == 200
+# The console never proxies the retired Device registry; check the API contract directly.
+devices_url = api + "/api/v1/devices"
 status, body = request(devices_url)
 assert status == 200 and isinstance(json.loads(body)["items"], list)
 device_input = {"key": "deploy-device-" + uuid.uuid4().hex, "displayName": "Deployment synthetic probe",
@@ -104,20 +105,18 @@ if args.through == "device":
 status, body = request(api + "/api/v1/platform", authenticated=True)
 assert status == 200
 if "workflows" not in json.loads(body)["capabilities"]:
-    assert request(ui + "/workflows")[0] == 404
-    for page in ("/", "/profiles", "/devices", "/audit"):
-        status, html = request(ui + page)
-        assert status == 200 and b'href="/workflows"' not in html
     for path in ("workflows", "workflow-runs"):
         for origin in (api + "/api/v1/", ui + "/api/control-plane/"):
             assert request(origin + path, authenticated=True)[0] == 404
             assert request(origin + path, "POST", {}, authenticated=True, csrf=csrf, idempotency=str(uuid.uuid4()))[0] == 404
     status, contract = request(api + "/openapi.yaml", authenticated=True)
     assert status == 200 and b"/api/v1/workflows" not in contract and b"/api/v1/workflow-runs" not in contract
-    print("PASS: deferred workflow UI, direct URL, public API, proxy and Swagger endpoints are unavailable; other management pages remain available")
+    for page in ("/ui/main/profiles", "/ui/main/devices", "/ui/main/audit"):
+        assert request(ui + page)[0] == 200
+    print("PASS: deferred workflow public API, console proxy and Swagger endpoints are unavailable; other console pages remain available")
     raise SystemExit(0)
 
-assert request(ui + "/workflows")[0] == 200
+assert request(ui + "/ui/main/workflows")[0] == 200
 workflow_url = ui + "/api/control-plane/workflows"
 runs_url = ui + "/api/control-plane/workflow-runs"
 assert request(workflow_url)[0] == 200

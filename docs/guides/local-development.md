@@ -58,8 +58,9 @@ make dashboard
 
 ## Kestra 원본 Vue 운영 콘솔
 
-기존 Dashboard13080을 BFF로 실행한 상태에서 다음 명령은 별도13083에 Kestra v2.0.6 원본 Vue 앱을
-실행합니다. 운영 현황·장치·가상 장치·실행 모듈·워크플로·실행 결과·감사·DDS 배포를 기존 서버 API에 연결합니다.
+다음 명령은 13083에 Kestra v2.0.6 원본 Vue 앱을 개발 모드로 실행합니다. 운영 현황·장치·가상 장치·실행 모듈·
+워크플로·실행 결과·감사·DDS 배포를 관리 API18080·워크플로 API18082·Platform-Service18081에 직접 연결합니다.
+기존 Next.js Dashboard13080은 필요하지 않습니다. Kubernetes에서는 이 콘솔이 `edgeai-dashboard` 이미지로 배포됩니다.
 
 ```bash
 bash scripts/dev/dev-kestra-native.sh
@@ -70,7 +71,7 @@ bash scripts/dev/dev-kestra-native.sh
 브라우저 주소는 `http://127.0.0.1:13083/ui/main/dashboards/default`이며 기존 웹·backend 프로세스를 교체하지 않습니다.
 
 `dashboard/kestra-native/overview.yaml`은 원본 KPI·차트·표 배치를 정의하고, `overview.ts`는
-기존13080 BFF의 인프라·node-metrics·가상 장치 전체 페이지·최근 실행20건을 조회합니다.
+관리 API의 인프라·node-metrics·가상 장치 전체 페이지와 워크플로 API의 최근 실행20건을 조회합니다.
 센서 수는 KubeEdge 등록 목록, VD 수는 REGISTERED 목록이며 실제 실행 준비와 별도입니다.
 현재 관측만 표시하며 별도 이력 API가 없는 CPU 그래프를 시계열처럼 만들지 않습니다.
 조회 실패·만료된 값은0과 구분해 표시하고, 새로고침 버튼으로 차트와 조회 시각을 함께 갱신합니다.
@@ -96,7 +97,9 @@ Kubernetes에 노출된 가속기와 최신 종류·벤더·장착 정보를 결
 `device-registration.ts`는 관리 API18080과 워크플로 API18082를 서버에서 정한 origin으로 연결합니다.
 EDGEAI_API_BASE_URL·EDGEAI_WORKFLOW_API_BASE_URL로 변경할 수 있습니다. 관리 EDGEAI_SESSION과
 워크플로 EDGEAI_WORKFLOW_SESSION·각 CSRF·Idempotency-Key·감사 ID와 lossless JSON을 보존합니다.
-DDS는13080 BFF를 통해 서버 전용 자격 증명을 사용합니다. 일반 JSON64KiB,
+DDS는 콘솔 서버가 `EDGEAI_PLATFORM_SERVICE_URL`·`EDGEAI_PLATFORM_SERVICE_TOKEN`으로 직접 호출하며,
+토큰이 없으면 503으로 거절합니다. 워크플로 API를 따로 두지 않는 배포는 `EDGEAI_WORKFLOW_API_BASE_URL=`(빈 값)로
+워크플로 요청과 세션을 관리 API에 보냅니다. 일반 JSON64KiB,
 DDS 배포 정의1MB 제한과 기존 서버의 오류·참조 제한·revision 검사를 유지합니다.
 센서의 해당 측정 항목 수정·추가·삭제, 연결 시험과 규격 저장을 지원하며 노드는 자동 관측합니다.
 
@@ -107,13 +110,21 @@ DDS 배포 정의1MB 제한과 기존 서버의 오류·참조 제한·revision 
 감사 ID 조회와 DDS YAML·Buildx·Gitea·Argo CD 작업을 제공합니다. DDS 작업은 연결된
 Platform-Service가 필요하며 오류·비활성 상태에서는 실제 준비나 성공을 추정하지 않습니다.
 운영 API 계약은 ad3f239의 생성된 `live-api-schema.d.ts`를 사용합니다. 폐기한 public VD 템플릿·Runner VD 실행은 재도입하지 않습니다.
-문서는 사이드바의 별도 링크로 기존13080 `/docs`를 엽니다. 기본 웹13080 전환은 자동으로 하지 않습니다.
+사이드바의 문서 링크는 Git 저장소의 `docs/`를 엽니다. 기존 13080 `/docs` 사이트는 콘솔 배포에 포함하지 않습니다.
+
+운영 빌드는 정적 bundle과 node 내장 모듈만 쓰는 `server.mjs`를 묶은 release 폴더를 만듭니다.
+같은 middleware로 `/ui/`를 제공하며 `/api/live`·`/api/health`(관리 API readiness)를 응답합니다.
+
+```bash
+bash scripts/ops/build-kestra-console.sh output/kestra-native/release-$(date +%Y%m%d%H%M)
+EDGEAI_CONSOLE_PORT=13083 bash scripts/ops/start-kestra-console.sh output/kestra-native/release-YYYYMMDDHHMM
+```
 
 검증은 저장소 루트에서 API 경계 테스트와 기존 typecheck/lint를 실행하며, 원본 앱용 Vue 검사는
 준비된 UI 워크스페이스의 compiler를 사용합니다.
 
 ```bash
-node --experimental-strip-types --test dashboard/tests/kestra-overview.unit.mjs dashboard/tests/kestra-device-registration.unit.mjs dashboard/tests/kestra-console.unit.mjs
+node --experimental-strip-types --test dashboard/tests/kestra-*.unit.mjs
 cd output/kestra-native/upstream/ui
 npx --yes --package=node@24 --package=npm@11.16.0 -- npm exec -- vue-tsc --project ../../../../dashboard/kestra-native/tsconfig.json --noEmit
 ```

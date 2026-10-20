@@ -10,6 +10,10 @@ spec:
     - host: edgeai.192.168.0.56.sslip.io
       http: &routes
         paths:
+          # Kestra console shell API (configs, dashboard definitions, chart previews); not the EdgeAI API.
+          - path: /api/v1/main
+            pathType: Prefix
+            backend: {service: {name: edgeai-dashboard, port: {number: 13080}}}
           - path: /api/v1
             pathType: Prefix
             backend: {service: {name: edgeai-api, port: {number: 18080}}}

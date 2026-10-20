@@ -1,4 +1,4 @@
-import type { components } from "../../lib/api-schema";
+import type { components } from "./api-schema";
 
 type Schema = components["schemas"];
 type Sensor = Schema["ContinuousSensor"];

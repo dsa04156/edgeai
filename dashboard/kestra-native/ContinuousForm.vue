@@ -297,7 +297,7 @@ import {
   presetChoices,
   presetReady,
   presetUnit,
-} from "../app/virtual-devices/continuous-presets";
+} from "../lib/continuous-presets";
 const props = defineProps<{
   inputs: Schema["ContinuousSensor"][];
   enabled: boolean;

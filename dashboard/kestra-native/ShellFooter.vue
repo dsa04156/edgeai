@@ -13,12 +13,8 @@ const misc = useMiscStore();
 function cycleTheme() {
   switchTheme(misc, misc.theme === "light" ? "dark" : "light");
 }
-const docs = new URL(window.location.href);
-docs.port = "13080";
-docs.pathname = "/docs";
-docs.search = "";
-docs.hash = "";
-const docsUrl = docs.href;
+// The former Next.js /docs site is retired with the console; the source documents stay in Git.
+const docsUrl = "https://github.com/dsa04156/edgeai/tree/main/docs";
 </script>
 <style scoped>
 .native-shell-footer {

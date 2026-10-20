@@ -222,11 +222,20 @@ function acceleratorObservations(
   return result;
 }
 
-async function loadOverview(baseUrl: string): Promise<Overview> {
+type ApiOrigins = { managementUrl: string; workflowUrl?: string };
+
+async function loadOverview({
+  managementUrl,
+  workflowUrl,
+}: ApiOrigins): Promise<Overview> {
   const deadline = AbortSignal.timeout(10000);
   async function read<T>(path: string): Promise<T> {
+    // Same split as the former BFF: runs live on the workflow API when it is separate.
+    const origin = path.startsWith("workflow-runs")
+      ? (workflowUrl ?? managementUrl)
+      : managementUrl;
     const response = await fetch(
-      new URL(`/api/control-plane/${path}`, baseUrl),
+      new URL(`/api/v1/${path}`, origin),
       {
         cache: "no-store",
         signal: AbortSignal.any([deadline, AbortSignal.timeout(6500)]),
@@ -469,8 +478,11 @@ function chartResult(
     : null;
 }
 
-/** Read-only bridge from the native dashboard chart protocol to the existing EdgeAI BFF. */
-export function createOverviewMiddleware({ baseUrl }: { baseUrl: string }) {
+/** Read-only bridge from the native dashboard chart protocol to the EdgeAI APIs. */
+export function createOverviewMiddleware(origins: ApiOrigins) {
+  for (const value of [origins.managementUrl, origins.workflowUrl])
+    if (value && new URL(value).origin !== value.replace(/\/$/, ""))
+      throw new Error("API 주소는 경로 없는 origin이어야 합니다.");
   // Lazy charts must read the same observation (including errors) as their toolbar.
   const snapshots = new Map<string, Overview>();
   return (
@@ -495,7 +507,7 @@ export function createOverviewMiddleware({ baseUrl }: { baseUrl: string }) {
       if (url.pathname === "/api/edgeai/overview") {
         if (request.method !== "GET")
           return send(405, { message: "운영 현황은 조회만 지원합니다." });
-        const value = await loadOverview(baseUrl);
+        const value = await loadOverview(origins);
         snapshots.set(value.snapshotId, value);
         if (snapshots.size > 64)
           snapshots.delete(snapshots.keys().next().value!);

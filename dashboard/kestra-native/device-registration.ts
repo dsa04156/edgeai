@@ -1,17 +1,21 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-// Trusted server origins own management/workflow sessions; DDS uses the existing BFF.
+// Trusted server origins own management/workflow sessions; DDS gets the server-only token here.
 // The browser cannot choose an upstream or access server credentials.
 export function createDeviceRegistrationMiddleware({
-  baseUrl,
   managementUrl,
   workflowUrl,
+  platformUrl = "http://127.0.0.1:18081",
+  platformToken,
+  workflowsEnabled = true,
 }: {
-  baseUrl: string;
-  managementUrl?: string;
+  managementUrl: string;
   workflowUrl?: string;
+  platformUrl?: string;
+  platformToken?: string;
+  workflowsEnabled?: boolean;
 }) {
-  for (const value of [baseUrl, managementUrl, workflowUrl]) {
+  for (const value of [managementUrl, workflowUrl, platformUrl]) {
     if (!value) continue;
     const origin = new URL(value);
     if (
@@ -159,31 +163,43 @@ export function createDeviceRegistrationMiddleware({
       /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
         target,
       );
-    const directUrl = !platform
-      ? workflow
-        ? workflowUrl
-        : managementUrl
-      : undefined;
-    const apiOrigin = directUrl ?? baseUrl;
-    const upstreamPath = directUrl
-      ? target === "workflow-csrf"
+    if (
+      !workflowsEnabled &&
+      (platform || /^(workflows|workflow-runs|workflow-data-sources)(\/|$)/.test(target))
+    )
+      return send(404, "지원하지 않는 경로입니다.");
+    if (platform && !platformToken)
+      return send(
+        503,
+        "Platform-Service 연결 설정이 없습니다. 설정을 읽도록 콘솔을 재실행하세요.",
+      );
+    // Without a separate workflow API the management API serves workflows, as the former BFF did.
+    const apiOrigin = platform
+      ? new URL(platformUrl).origin
+      : workflow
+        ? new URL(workflowUrl ?? managementUrl).origin
+        : new URL(managementUrl).origin;
+    const upstreamPath = platform
+      ? "/" + platformTarget
+      : target === "workflow-csrf"
         ? "/api/v1/csrf"
         : target.startsWith("managed-devices")
           ? "/api/" + target.replace(/^managed-devices/, "devices")
           : /^(device-profiles|protocols|device-connections)(\/|$)/.test(target)
             ? "/api/" + target
-            : "/api/v1/" + target
-      : url.pathname;
+            : "/api/v1/" + target;
+    // A single management API issues one session for both, like the former BFF without a workflow URL.
     const cookieName =
-      directUrl && workflow ? "EDGEAI_WORKFLOW_SESSION=" : "EDGEAI_SESSION=";
+      workflow && workflowUrl ? "EDGEAI_WORKFLOW_SESSION=" : "EDGEAI_SESSION=";
     const headers = new Headers();
+    if (platform) headers.set("X-Platform-Token", platformToken!);
     const session = request.headers.cookie
       ?.split(";")
       .map((value) => value.trim())
       .find((value) => value.startsWith(cookieName));
-    if (session) headers.set("Cookie", session);
+    if (session && !platform) headers.set("Cookie", session);
     // The browser origin was checked above; forward only to the trusted server origin.
-    headers.set("Origin", new URL(apiOrigin).origin);
+    headers.set("Origin", apiOrigin);
     const csrf = request.headers["x-csrf-token"];
     if (typeof csrf === "string") headers.set("X-CSRF-TOKEN", csrf);
     const idempotency = request.headers["idempotency-key"];

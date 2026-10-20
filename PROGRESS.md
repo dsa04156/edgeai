@@ -1,5 +1,13 @@
 # 현재 상태
 
+## 2026-10-20 Kubernetes 콘솔 교체 준비
+
+- 사용자 결정에 따라 Kubernetes의 `edgeai-dashboard` 이미지를 Next.js에서 Kestra v2.0.6 원본 Vue 콘솔로 교체한다. 콘솔은 클러스터 `edgeai-api`에 연결하며 이미지·Deployment·Service 이름과 CI digest/GitOps 경로는 유지한다.
+- 콘솔 서버(`dashboard/kestra-native/server.mjs`)가 Vite dev middleware와 같은 체인으로 `/ui/` 정적 bundle을 제공한다. 운영 현황은 관리·워크플로 API를 직접 조회하고 DDS는 서버 토큰으로 Platform-Service를 직접 호출해 13080 BFF 의존을 제거했다. `/api/live`·`/api/health`, SW 미등록, 문서 링크(Git `docs/`)를 정리했다.
+- Ingress에 `/api/v1/main`(콘솔 셸 API)을 추가했다. Vite config는 upstream이 고정한 vite 8.1.4를 직접 읽는다(기존 dev 서버는 남아 있던 vite 7.3.1을 우연히 사용). 공용 `continuous-presets.ts`는 `dashboard/lib/`로 옮겼다.
+- 검증: 콘솔 단위 33개·원본 Vue 타입 검사 통과. Dockerfile 빌드 단계를 빈 폴더에서 재현(새 Kestra clone·pnpm filter·npm ci·vite build)하고 node22 런타임으로 실행해 9개 메뉴를 Chromium에서 확인했다(호스트 API 읽기 전용, DDS는 토큰 미설정 503). 로컬 Docker 권한이 없어 이미지 자체는 CI `images`의 실제 DB smoke로 검증한다.
+- 미완료: Argo CD sync는 10/19부터 repo-server가 엣지 노드(raspi5)에 배치돼 redis 연결 실패 중이다. 실제 Application의 dashboard replicas=0 override·Ingress ignoreDifferences도 해제해야 한다. 클러스터 API(10/14 이미지)는 센서 UNAVAILABLE로 보고하며 원인 미확정이다. Next.js 소스·로컬 dev/e2e 도구 정리는 후속이다.
+
 ## 2026-10-20 기술문서 Markdown 정리
 
 - TM6건과 TDP2건을 Markdown으로 정리했다. Word·쪽수 안내, 빈 행정 기입란, 페이지 나눔, 반복 설명을 제거하고 한국어 문장을 다듬었다.
