@@ -152,39 +152,13 @@
           ></template
         ></NativeRecords
       >
-      <details>
-        <summary>STREAM 경로</summary>
-        <KsButton :disabled="busy" @click="act(() => loadStreams(0))"
-          >경로 조회·새로고침</KsButton
-        ><NativeRecords
-          v-if="streams"
-          title="스트림 경로"
-          :rows="streams.items"
-          :columns="[
-            { key: 'source', label: '원본 / 출력', width: 240 },
-            { key: 'target', label: '소비 작업 / 포트', width: 240 },
-            { key: 'generation', label: '세대 상태', width: 220 },
-            { key: 'maxPayloadBytes', label: '메시지 한도(B)' },
-          ]"
-          :offset="streamOffset"
-          :nextOffset="streams.nextOffset"
-          @page="(value) => act(() => loadStreams(value))"
-          ><template #source="{ row }"
-            >{{ taskName(row.sourceTaskId) || row.sourceDeviceId }} ·
-            {{ row.sourcePort }}</template
-          ><template #target="{ row }"
-            >{{ taskName(row.consumerTaskId) }} ·
-            {{ row.consumerPort }}</template
-          ><template #generation="{ row }"
-            >{{ row.generation?.state || "작업 배정 대기" }} ·
-            {{ row.generation?.number ?? "—" }}
-            <details>
-              <summary>경로 상세</summary>
-              <pre class="native-json">{{ pretty(row) }}</pre>
-            </details></template
-          ></NativeRecords
-        >
-      </details>
+      <StreamRoutesPanel
+        :key="detail.run.id"
+        :runId="detail.run.id"
+        :tasks="detail.tasks"
+        :live="liveEnabled"
+        :disabled="busy || commandBusy"
+      />
       <section v-if="task">
         <h2>작업 상세 · {{ task.task.key }}</h2>
         <NativeRecords
@@ -278,13 +252,11 @@
           @click="prepareOffload"
           >실행 위치 전환</KsButton
         >
-        <details v-for="operation in task.offloads || []" :key="operation.id">
-          <summary>
-            {{ operation.state }} · {{ operation.trigger || "MANUAL" }} ·
-            {{ operation.failureReason }}
-          </summary>
-          <pre class="native-json">{{ pretty(operation) }}</pre>
-        </details>
+        <OffloadHistory
+          :operations="task.offloads || []"
+          :tasks="detail.tasks"
+          :nodes="nodes"
+        />
         <section v-if="results">
           <h3>검증된 결과</h3>
           <p v-if="!results.items.length" class="native-note">
@@ -444,6 +416,8 @@ import NativeRecords from "./NativeRecords.vue";
 import ConfirmAction from "./ConfirmAction.vue";
 import ResultContent from "./ResultContent.vue";
 import LiveRecordsToolbar from "./LiveRecordsToolbar.vue";
+import StreamRoutesPanel from "./StreamRoutesPanel.vue";
+import OffloadHistory from "./OffloadHistory.vue";
 const route = useRoute(),
   router = useRouter();
 useRouteContext(computed(() => ({ title: "실행 · 작업 · 결과" })));
@@ -459,9 +433,7 @@ const items = ref<Schema["WorkflowRun"][]>([]),
   pollError = ref(""),
   liveEnabled = ref(true),
   listUpdatedAt = ref(""),
-  runJson = ref(""),
-  streams = ref<Schema["StreamRoutePage"] | null>(null),
-  streamOffset = ref(0);
+  runJson = ref("");
 const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"]);
 const tone = (state: string) =>
   state === "SUCCEEDED"
@@ -471,8 +443,6 @@ const tone = (state: string) =>
       : state === "CANCELLED"
         ? "warning"
         : "info";
-const taskName = (id: string) =>
-  detail.value?.tasks.find((t) => t.id === id)?.key || id;
 let listGeneration = 0,
   refreshGeneration = 0,
   polling = false;
@@ -509,7 +479,6 @@ async function show(id: string) {
   placements.value = where;
   task.value = null;
   results.value = null;
-  streams.value = null;
   pollError.value = "";
   await router.replace({ query: { run: id } });
 }
@@ -529,13 +498,6 @@ async function showTask(id: string) {
     return;
   task.value = value;
   results.value = result;
-}
-async function loadStreams(value: number) {
-  if (!detail.value) return;
-  streams.value = await get<Schema["StreamRoutePage"]>(
-    `workflow-runs/${detail.value.run.id}/streams?limit=20&offset=${value}`,
-  );
-  streamOffset.value = value;
 }
 async function refresh(quiet = false) {
   const requestGeneration = ++refreshGeneration,
