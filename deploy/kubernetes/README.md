@@ -75,7 +75,7 @@ kubectl --context <대상-context> apply -f deploy/kubernetes/bootstrap/hdd-stor
 비밀번호·토큰은 Git 밖에서 `edgeai-postgres-hdd/password`, `edgeai-influxdb-api/token`,
 `edgeai-influxdb-admin/token` Secret으로 준비한다. API에는 bucket read/write 토큰만 마운트한다.
 관리 토큰은 InfluxDB 백업 Job에서만 사용한다. DB는 ClusterIP로만 연결하고 NetworkPolicy는
-edgeai-api·전용 백업/복원 Pod와 현재 웹 API 호스트(192.168.0.56)만 허용한다.
+edgeai-api·전용 백업/복원 Pod와 현재 웹 API 호스트(10.254.192.47)만 허용한다.
 호스트 API는 해당 Service의 ClusterIP를 사용한다. Service를 재생성하면 IP와 호스트 설정을
 함께 갱신한다. 현재 웹 API가 유일한 원본 수집기이고 클러스터 API의 RAW_HISTORY_ENABLED는
 false다. 현재 웹의 실행 설정에 맞춰 클러스터 API의 RUNTIME_ENABLED도 false로 유지해

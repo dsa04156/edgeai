@@ -21,6 +21,7 @@ public final class ManagementAuditRoutes {
         new Route("GET","/api/devices/{id}","getManagedDevice"),
         new Route("PUT","/api/devices/{id}","updateManagedDevice"),
         new Route("DELETE","/api/devices/{id}","deleteManagedDevice"),
+        new Route("GET","/api/devices/{id}/preview","getCameraPreview"),
         new Route("POST","/api/devices/{id}/properties","addManagedDeviceProperty"),
         new Route("PUT","/api/devices/{id}/properties/{property}","updateManagedDeviceProperty"),
         new Route("DELETE","/api/devices/{id}/properties/{property}","deleteManagedDeviceProperty"),

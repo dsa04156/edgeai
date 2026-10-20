@@ -6,6 +6,8 @@
 - 콘솔 서버(`dashboard/kestra-native/server.mjs`)가 Vite dev middleware와 같은 체인으로 `/ui/` 정적 bundle을 제공한다. 운영 현황은 관리·워크플로 API를 직접 조회하고 DDS는 서버 토큰으로 Platform-Service를 직접 호출해 13080 BFF 의존을 제거했다. `/api/live`·`/api/health`, SW 미등록, 문서 링크(Git `docs/`)를 정리했다.
 - Ingress에 `/api/v1/main`(콘솔 셸 API)을 추가했다. Vite config는 upstream이 고정한 vite 8.1.4를 직접 읽는다(기존 dev 서버는 남아 있던 vite 7.3.1을 우연히 사용). 공용 `continuous-presets.ts`는 `dashboard/lib/`로 옮겼다.
 - 검증: 콘솔 단위 33개·원본 Vue 타입 검사 통과. Dockerfile 빌드 단계를 빈 폴더에서 재현(새 Kestra clone·pnpm filter·npm ci·vite build)하고 node22 런타임으로 실행해 9개 메뉴를 Chromium에서 확인했다(호스트 API 읽기 전용, DDS는 토큰 미설정 503). 로컬 Docker 권한이 없어 이미지 자체는 CI `images`의 실제 DB smoke로 검증한다.
+- 서버 IP 변경 반영: 응답하지 않는 이전 주소 192.168.0.56을 현재 10.254.192.47로 바꿨다(registry 5000·Gitea 5200·Ingress 호스트·NetworkPolicy·Mapper 기본 이미지·DDS 설정·문서). registry 내용은 새 주소에서 같은 digest로 확인했다. 날짜별 과거 기록(`docs/evidence/`, `design-qa.md`, 이 파일의 이전 항목)은 당시 주소를 유지한다. 노드 containerd/docker의 registry 설정과 Traefik `externalIPs`는 저장소 밖이라 별도 반영이 필요하다.
+- CI scaffold의 기존 실패(RTSP 미리보기 `getCameraPreview` 감사 route 누락)를 고쳤다. 백엔드 테스트 191개 통과.
 - 미완료: Argo CD sync는 10/19부터 repo-server가 엣지 노드(raspi5)에 배치돼 redis 연결 실패 중이다. 실제 Application의 dashboard replicas=0 override·Ingress ignoreDifferences도 해제해야 한다. 클러스터 API(10/14 이미지)는 센서 UNAVAILABLE로 보고하며 원인 미확정이다. Next.js 소스·로컬 dev/e2e 도구 정리는 후속이다.
 
 ## 2026-10-20 기술문서 Markdown 정리

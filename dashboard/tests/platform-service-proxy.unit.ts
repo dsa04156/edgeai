@@ -12,7 +12,7 @@ test("Platform-Service proxy preserves original methods, bodies and server-only 
     const calls: { url: string; init?: RequestInit }[] = [];
     globalThis.fetch = async (url, init) => { calls.push({url: String(url), init}); return Response.json({status:"fixture"}); };
     const context = (path: string) => ({params:Promise.resolve({path:path.split("/")})});
-    const make = (path: string, method: string, origin = "http://192.168.0.56:13080", body = "{}") => new NextRequest(`http://192.168.0.56:13080/api/platform-service/${path}`, {method, headers:{origin,"Content-Type":"application/json"}, ...(method!=="GET"?{body}:{})});
+    const make = (path: string, method: string, origin = "http://10.254.192.47:13080", body = "{}") => new NextRequest(`http://10.254.192.47:13080/api/platform-service/${path}`, {method, headers:{origin,"Content-Type":"application/json"}, ...(method!=="GET"?{body}:{})});
     for (const [path, method, handler] of [["config","GET",GET],["workflow/build-image","POST",POST],["workflow/save-and-push","POST",POST],["workflow/delete","DELETE",DELETE]] as const) {
       const response = await handler(make(path,method),context(path));
       assert.equal(response.status,200);

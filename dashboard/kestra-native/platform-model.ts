@@ -1,7 +1,7 @@
 import yaml from "js-yaml";
 import type { CanvasEdge, CanvasNode } from "./CanvasBoard.vue";
 
-export const unifiedImage = "192.168.0.56:5000/fastdds-unified:v1.0";
+export const unifiedImage = "10.254.192.47:5000/fastdds-unified:v1.0";
 export const templates: Record<string, string> = {
   discovery: "Discovery Server",
   sensor_pub: "Sensor Pub",

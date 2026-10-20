@@ -354,7 +354,7 @@ const connection = ref<Connection | null>(null),
 const draft = reactive<DeploymentDraft>({
   name: "flow-project",
   profile: "dds_discovery",
-  discoveryIp: "192.168.0.56",
+  discoveryIp: "10.254.192.47",
   nodes: [],
   edges: [],
 });

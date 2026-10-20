@@ -42,7 +42,7 @@ Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQT
 
 [실행 구조·환경·데이터 경로](../../deploy/kubeedge/README.md)
 
-기존 웹 `http://192.168.0.56:13080/devices`의 **센서** 탭에서 등록된 측정 항목을 각각 한 행으로 확인합니다. 기본 저장 규격은 Arduino 6개와 Sense HAT 11개이며 실제 등록 목록은 항목 추가·삭제 결과를 따릅니다. 값은 실제 센서에서 읽고, 최신 상태는 DeviceTwin/DMI, 매 수집 데이터는 해당 노드의 MQTT broker로 전달합니다. Twin 갱신 간격은 DMI 예산과 항목 수에 따라 달라집니다. 동일 값이면 KubeEdge가 값을 다시 갱신하지 않을 수 있으며 수집 지속 여부는 DMI heartbeat와 별도 MQTT 수신으로 검증합니다.
+기존 웹 `http://10.254.192.47:13080/devices`의 **센서** 탭에서 등록된 측정 항목을 각각 한 행으로 확인합니다. 기본 저장 규격은 Arduino 6개와 Sense HAT 11개이며 실제 등록 목록은 항목 추가·삭제 결과를 따릅니다. 값은 실제 센서에서 읽고, 최신 상태는 DeviceTwin/DMI, 매 수집 데이터는 해당 노드의 MQTT broker로 전달합니다. Twin 갱신 간격은 DMI 예산과 항목 수에 따라 달라집니다. 동일 값이면 KubeEdge가 값을 다시 갱신하지 않을 수 있으며 수집 지속 여부는 DMI heartbeat와 별도 MQTT 수신으로 검증합니다.
 
 ## Modbus 모의 장치로 등록 연습
 

@@ -34,7 +34,7 @@
         "containers": [
           {
             "name": "fixture",
-            "image": "192.168.0.56:5000/edgeai/protocol-fixture@sha256:422ff95381a72fe965927cc6f2ff299b8fbd22f3353ad70024271f116a147b3a",
+            "image": "10.254.192.47:5000/edgeai/protocol-fixture@sha256:422ff95381a72fe965927cc6f2ff299b8fbd22f3353ad70024271f116a147b3a",
             "ports": [
               {
                 "containerPort": 4841

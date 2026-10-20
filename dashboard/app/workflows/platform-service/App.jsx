@@ -21,7 +21,7 @@ import NodeModal from './NodeModal';
 let id = 0;
 const getId = () => `node_${id++}`;
 
-const UNIFIED_IMAGE = "192.168.0.56:5000/fastdds-unified:v1.0";
+const UNIFIED_IMAGE = "10.254.192.47:5000/fastdds-unified:v1.0";
 
 // 이름 정규화 (소문자, 특수문자 -> 하이픈)
 const sanitizeName = (str) => {
@@ -99,7 +99,7 @@ const App = () => {
   };
 
   // Discovery IP 입력 상태 (기본값 설정)
-  const [discoveryIp, setDiscoveryIp] = useState('192.168.0.56');
+  const [discoveryIp, setDiscoveryIp] = useState('10.254.192.47');
 
   // --- 노드 추가 헬퍼 함수들 ---
   const addPipeline = (type) => {
