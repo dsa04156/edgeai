@@ -18,6 +18,24 @@ patches:
           spec:
             nodeSelector:
               kubernetes.io/hostname: etri-ser0001-cg0msb
+  # Users reach the console at the server address 10.254.192.47:13080 (formerly the host Next.js process).
+  # A hostPort cannot be shared during a rolling update, so the old Pod stops first.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: edgeai-dashboard
+      spec:
+        strategy:
+          type: Recreate
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: etri-ser0001-cg0msb
+            containers:
+              - name: dashboard
+                ports:
+                  - {name: http, containerPort: 13080, hostPort: 13080}
 images:
   - name: ghcr.io/dsa04156/edgeai-api
     digest: sha256:3c34d9d8455443af4438163b9b5a1a782a152a9f663c20e98141dc4c5c26a362
