@@ -47,7 +47,14 @@
   </figure>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
 import { KsButton } from "@kestra-io/design-system";
 import {
   init,
@@ -61,10 +68,12 @@ import {
   maxSpan,
   MIN_SPAN,
   sameRange,
+  type TimeRange,
 } from "../lib/history-viewport";
 const formatTime = (value: number) => new Date(value).toLocaleString("ko-KR");
-// With `viewport`, the parent owns the visible window (data.from/to is then the whole navigable domain) and
-// receives every user pan/zoom through `update:viewport`; without it the chart keeps its own range as before.
+// With `viewport`, the parent owns the visible window (data.from/to is then the whole navigable domain). A pan/zoom moves
+// the chart at once and is reported as `explore-start` when it begins and one `update:viewport` with the final window
+// once it has been quiet for GESTURE_SETTLE_MS; without `viewport` the chart keeps its own range as before.
 const props = defineProps<{
   data: HistoryChartData;
   scope: string;
@@ -73,12 +82,19 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   "update:viewport": [range: { from: number; to: number }];
+  "explore-start": [];
 }>();
+const GESTURE_SETTLE_MS = 300;
 const element = ref<HTMLElement>(),
   range = ref<{ from: number; to: number } | null>(null);
 const explore = computed(() => !!props.viewport);
 const bounds = computed(() => ({ from: props.data.from, to: props.data.to }));
-const visible = computed(() => props.viewport || range.value || bounds.value);
+// The window of a gesture not yet reported to the parent; it takes precedence over the parent's (older) viewport.
+const pending = shallowRef<TimeRange | null>(null);
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+const visible = computed(
+  () => pending.value || props.viewport || range.value || bounds.value,
+);
 const empty = computed(() =>
   explore.value
     ? !props.loading &&
@@ -88,9 +104,30 @@ const empty = computed(() =>
     : !props.data.points.length,
 );
 let chart: ECharts | undefined, observer: ResizeObserver | undefined;
+function preview(view: TimeRange) {
+  if (!pending.value) emit("explore-start");
+  pending.value = shown = view;
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    const view = pending.value;
+    settleTimer = undefined;
+    pending.value = null;
+    if (view) emit("update:viewport", view);
+  }, GESTURE_SETTLE_MS);
+}
+function dropPending() {
+  clearTimeout(settleTimer);
+  settleTimer = undefined;
+  pending.value = null;
+}
 function applyRange(from: number, to: number) {
   if (explore.value) {
-    emit("update:viewport", clampViewport({ from, to }, bounds.value));
+    const view = clampViewport({ from, to }, bounds.value);
+    chart?.dispatchAction(
+      { type: "dataZoom", startValue: view.from, endValue: view.to },
+      { silent: true },
+    );
+    preview(view);
     return;
   }
   const width = Math.min(to - from, props.data.to - props.data.from);
@@ -131,9 +168,9 @@ function reset() {
 function render() {
   if (!chart) return;
   if (props.viewport) {
-    shown = props.viewport;
+    shown = pending.value || props.viewport;
     updateChart(chart, props.data, {
-      ...props.viewport,
+      ...shown,
       minSpan: MIN_SPAN,
       maxSpan: maxSpan(bounds.value),
     });
@@ -144,12 +181,15 @@ function render() {
   else reset();
 }
 watch(() => props.data, render);
-// A pan/zoom echoed back from the parent is already on screen; only parent-driven moves are dispatched, without re-sending series data.
+// A pan/zoom echoed back from the parent is already on screen; only parent-driven moves are dispatched, without re-sending
+// series data. Such a move (live follow, quick range) replaces a gesture still waiting to be reported.
 let shown: { from: number; to: number } | undefined;
 watch(
   () => props.viewport,
-  (view) => {
-    if (!chart || !view || sameRange(view, shown)) return;
+  (view, previous) => {
+    if (!chart || !view || sameRange(view, previous) || sameRange(view, shown))
+      return;
+    dropPending();
     shown = view;
     chart.dispatchAction(
       { type: "dataZoom", startValue: view.from, endValue: view.to },
@@ -160,6 +200,7 @@ watch(
 watch(
   () => props.scope,
   () => {
+    dropPending();
     range.value = null;
     render();
   },
@@ -188,8 +229,7 @@ onMounted(() => {
         state.endValue ?? props.data.from + (width * state.end) / 100,
       );
     if (explore.value) {
-      shown = { from, to };
-      emit("update:viewport", shown);
+      preview({ from, to });
       return;
     }
     if (state.start <= 0 && state.end >= 100) {
@@ -202,7 +242,10 @@ onMounted(() => {
   observer.observe(element.value);
   render();
 });
+// The window on screen, including a gesture not yet reported, e.g. for a live return that keeps the displayed width.
+defineExpose({ displayed: () => visible.value });
 onBeforeUnmount(() => {
+  dropPending();
   observer?.disconnect();
   chart?.dispose();
 });

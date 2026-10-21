@@ -264,17 +264,27 @@ export function useSensorHistory(options: SensorHistoryOptions) {
   }
   // A settled pan/zoom fetches only when the viewport leaves the loaded window (or needs finer originals);
   // otherwise a request still running for an abandoned viewport is dropped. The table follows unless paged.
-  const settle = debounce(() => {
+  function sync() {
     if (needsFetch(loaded.value, viewport.value, bounds.value, budget()))
       void loadChart();
     else if (chartBusy.value) cancelChart();
     if (!olderRecords.value && !sameRange(recordPeriod.value, viewport.value))
       void loadRecords("reset");
-  }, options.settleMs ?? 300);
+  }
+  const settle = debounce(sync, options.settleMs ?? 300);
+  /** A pan/zoom gesture started: stop following at once, so that no live reply moves the chart while the gesture runs. */
+  function pause() {
+    settle.cancel();
+    if (!follow.value) return;
+    follow.value = false;
+    cancelChart();
+  }
+  /** The chart reports a viewport only once its gesture has settled, so the data is synchronized without a second delay. */
   function explore(range: TimeRange) {
+    settle.cancel();
     follow.value = false;
     viewport.value = clampViewport(range, bounds.value);
-    settle();
+    sync();
   }
   function startFollowing(width: number) {
     settle.cancel();
@@ -319,6 +329,7 @@ export function useSensorHistory(options: SensorHistoryOptions) {
     loadAll,
     loadChart,
     loadRecords,
+    pause,
     explore,
     startFollowing,
     resize,

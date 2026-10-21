@@ -1,5 +1,12 @@
 # 현재 상태
 
+## 2026-10-21 센서 그래프 드래그·휠 조작을 그래프 안에서 처리·콘솔 재배포
+
+- `InteractiveHistoryChart.vue`: 드래그·휠·툴바 확대/이동은 그래프에서 바로 움직이고, 마지막 입력 후 300ms 조용하면 한 번만 `update:viewport`를 보낸다. 조작 시작은 `explore-start`로 알려 `sensor-history.ts`의 `pause()`가 실시간 추적과 진행 중인 그래프 요청을 멈춘다. 실시간 버튼은 그래프가 실제로 보여 주는 폭(아직 보고되지 않은 확대 포함)을 유지한다(리뷰 P2 수정). 바로 보기 구간 선택이 진행 중 조작보다 우선한다.
+- 측정(같은 fixture, 1×CPU): 드래그60회/휠20단계 동안 데이터 저장소 페이지 렌더 60/20 → **0/0**. 입력 응답 p50 약33ms는 **그대로**(ECharts 다시 그리기·CDP 비용). 프레임률 개선은 주장하지 않는다. 단위 30/30, typecheck·eslint·build 통과, 새 회귀 `live-width.mjs`는 수정 전 실패(1800s→3600s)·수정 후 통과. 독립 리뷰 2회차 PASS.
+- 배포(이미지만 교체): 콘솔 `sha256:aeba37db…` → `sha256:f020d06195e1cb7ed36bbfd732724ebceebc9d51e7378d67c9ea97845c487f14`. API `2be0be06…` 그대로, strategy(Recreate)·env·volume·port 배포 전후 같음, Ready 1/1. dev overlay digest를 live와 맞췄다.
+- 실제13080(GET 전용, 1회): `/ui/main/data-store` 200, 드래그·휠 중 페이지 렌더 0/0, 조작 중 데이터 요청 0, 드래그 입력 응답 p50 33.9ms·휠 33.2ms, long task 0, 50ms 넘는 프레임 0, 확대/휠 직후 실시간 폭 유지(1800s/1352s), JS 오류 0. 근거: `output/verification/chart-gesture-local/`(review-input.md, deployed/). 한계: 측정1회·실제 저사양 단말 미측정, 전체 수용 시험은 다시 돌리지 않았다.
+
 ## 2026-10-21 센서 그래프 드래그·휠 입력 지연 수정·콘솔 재배포
 
 - 데이터 저장소 표의 `recordRows`를 computed로, `recordColumns`를 상수로 바꿔 그래프 조작 때 1000행 표를 다시 그리지 않게 했다(`DataStorePage.vue`만 변경). 기존 브라우저 수용·typecheck·build 통과. 독립 리뷰는 Guard에 막혀 **수행·통과하지 않았고**, 사용자 지시("배포하세요")로 배포했다.

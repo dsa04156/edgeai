@@ -59,10 +59,12 @@
       <NativeFeedback :error="chartError" />
       <template v-if="selected">
         <InteractiveHistoryChart
+          ref="historyChart"
           :data="chartData"
           :scope="selectedKey"
           :viewport="viewport"
           :loading="chartBusy"
+          @explore-start="pause"
           @update:viewport="explore"
         />
         <p v-if="chart" class="native-note">
@@ -185,6 +187,7 @@ const {
   lastUpdated,
   loadAll,
   loadRecords,
+  pause,
   explore,
   startFollowing,
   resize,
@@ -243,12 +246,17 @@ async function load(preferRoute = false) {
 const pickRange = (span: string | number | boolean | undefined) => {
   if (typeof span === "number") startFollowing(span);
 };
-const goLive = () => startFollowing(viewport.value.to - viewport.value.from);
+// A zoom still settling in the chart is not yet in `viewport`; live return keeps the width on screen.
+const historyChart = ref<InstanceType<typeof InteractiveHistoryChart>>();
+function goLive() {
+  const view = historyChart.value?.displayed() ?? viewport.value;
+  startFollowing(view.to - view.from);
+}
 function changeSensor() {
   clear();
   if (selected.value) void loadAll();
 }
-// Every pan/zoom step re-renders this page; stable table props keep up to 2,000 rows from re-rendering with it.
+// Gestures, live polls and settled viewports re-render this page; stable table props keep up to 2,000 rows from re-rendering with it.
 const recordRows = computed(() =>
   records.value.map((r, i) => ({ ...r, id: String(i) })),
 );

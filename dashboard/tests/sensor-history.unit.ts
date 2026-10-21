@@ -128,3 +128,29 @@ test("clearing for a sensor change aborts both requests and drops their late rep
   assert.equal(h.history.chartBusy.value || h.history.recordsBusy.value, false);
   assert.equal(h.history.chartError.value + h.history.recordsError.value, "");
 });
+
+test("a settled viewport from the chart is synchronized at once, without a second debounce", async () => {
+  const h = await loadedAtA();
+  h.history.explore(viewB);
+  assert.equal(h.pending("chart").length, 1, "chart request starts synchronously");
+  assert.deepEqual(period(h.pending("history")[0]), viewB, "table follows the settled viewport");
+  assert.equal(h.history.follow.value, false);
+});
+
+test("a gesture start stops following and drops the in-flight live reply, so the chart cannot move back", async () => {
+  const h = await loadedAtA();
+  const followed = { ...h.history.viewport.value };
+  const poll = h.history.loadAll(true);
+  const [live] = h.pending("chart");
+  h.history.pause();
+  assert.equal(h.history.follow.value, false);
+  assert.equal(live.signal.aborted, true);
+  assert.equal(h.history.chartBusy.value, false);
+  chartReply(live, 99);
+  historyReply(h.pending("history")[0]);
+  await poll;
+  assert.deepEqual(visible(h.history).map(item => item.value), [10], "the aborted live reply is not applied");
+  assert.deepEqual(h.history.viewport.value, followed);
+  h.history.explore(viewA);
+  assert.equal(h.pending("chart").length, 0, "the settled viewport is still covered by the loaded window");
+});
