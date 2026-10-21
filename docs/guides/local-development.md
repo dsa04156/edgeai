@@ -48,8 +48,8 @@ make dashboard
 
 | 확인 대상 | 기본 주소 | 기대 결과 |
 |---|---|---|
-| Dashboard | http://127.0.0.1:13080 | 운영 현황 화면 |
-| 프로젝트 문서 | http://127.0.0.1:13080/docs | 문서 홈 |
+| 콘솔(개발 서버) | http://127.0.0.1:13083/ui/main/dashboards/default | 운영 현황 화면 |
+| 프로젝트 문서 | 저장소 `docs/` (콘솔 사이드바의 문서 링크) | 문서 원본 |
 | Swagger | http://127.0.0.1:18080/swagger-ui.html | 관리 API 설명 |
 | API readiness | http://127.0.0.1:18080/actuator/health/readiness | DB 연결 포함 상태 |
 
@@ -60,7 +60,7 @@ make dashboard
 
 다음 명령은 13083에 Kestra v2.0.6 원본 Vue 앱을 개발 모드로 실행합니다. 운영 현황·장치·가상 장치·실행 모듈·
 워크플로·실행 결과·감사·DDS 배포를 관리 API18080·워크플로 API18082·Platform-Service18081에 직접 연결합니다.
-기존 Next.js Dashboard13080은 필요하지 않습니다. Kubernetes에서는 이 콘솔이 `edgeai-dashboard` 이미지로 배포됩니다.
+기존 Next.js Dashboard 소스는 제거했으며 콘솔은 이 앱뿐입니다. Kubernetes에서는 이 콘솔이 `edgeai-dashboard` 이미지로 배포됩니다.
 
 ```bash
 bash scripts/dev/dev-kestra-native.sh
@@ -115,18 +115,24 @@ Platform-Service가 필요하며 오류·비활성 상태에서는 실제 준비
 운영 빌드는 정적 bundle과 node 내장 모듈만 쓰는 `server.mjs`를 묶은 release 폴더를 만듭니다.
 같은 middleware로 `/ui/`를 제공하며 `/api/live`·`/api/health`(관리 API readiness)를 응답합니다.
 
+`corepack pnpm build`은 `output/kestra-native/release-<시각>`을 만들고 `output/kestra-native/current`가 이를 가리키게 합니다.
+`corepack pnpm --filter @edgeai/dashboard start`는 인자가 없으면 `current`를 13080에서 실행합니다.
+release 폴더 인자와 `EDGEAI_CONSOLE_PORT`로 대상과 포트를 바꿀 수 있습니다. 실행 중인 다른 13080 프로세스가 있으면 포트를 바꾸세요.
+
 ```bash
-bash scripts/ops/build-kestra-console.sh output/kestra-native/release-$(date +%Y%m%d%H%M)
-EDGEAI_CONSOLE_PORT=13083 bash scripts/ops/start-kestra-console.sh output/kestra-native/release-YYYYMMDDHHMM
+corepack pnpm build
+corepack pnpm --filter @edgeai/dashboard start
+EDGEAI_CONSOLE_PORT=13090 bash scripts/ops/start-kestra-console.sh output/kestra-native/release-YYYYMMDDHHMMSS
 ```
 
-검증은 저장소 루트에서 API 경계 테스트와 기존 typecheck/lint를 실행하며, 원본 앱용 Vue 검사는
-준비된 UI 워크스페이스의 compiler를 사용합니다.
+검증은 저장소 루트에서 실행합니다. 단위 시험은 임시 로컬 upstream만 사용하며, lint·typecheck는
+준비된 Kestra UI 워크스페이스의 ESLint Vue 규칙과 `vue-tsc`로 `dashboard/kestra-native`를 검사합니다.
+`bash scripts/test/test-ui.sh`는 이 세 검사와 임시 release 빌드를 함께 실행합니다.
 
 ```bash
-node --experimental-strip-types --test dashboard/tests/kestra-*.unit.mjs
-cd output/kestra-native/upstream/ui
-npx --yes --package=node@24 --package=npm@11.16.0 -- npm exec -- vue-tsc --project ../../../../dashboard/kestra-native/tsconfig.json --noEmit
+corepack pnpm test:ui
+corepack pnpm lint
+corepack pnpm typecheck
 ```
 
 Kestra 연동 운영 확인(2026-10-16): 관리 API는 ad3f239, 워크플로 API는 별도18082를 사용합니다.

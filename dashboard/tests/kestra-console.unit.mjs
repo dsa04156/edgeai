@@ -205,6 +205,27 @@ test("DDS build/deploy/status/delete call Platform-Service with the server token
       ).status,
       403,
     );
+    // The server token only accompanies browser writes that prove the console origin.
+    assert.equal(
+      (
+        await fetch(`${url}/api/platform-service/workflow/save-and-push`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await fetch(`${url}/api/platform-service/workflow/save-and-push`, {
+          method: "POST",
+          headers: { Origin: url, "Content-Type": "application/json" },
+          body: JSON.stringify({ content: "x".repeat(1_100_001) }),
+        })
+      ).status,
+      413,
+    );
     assert.equal(calls.length, 5);
   });
 });

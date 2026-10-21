@@ -6,8 +6,8 @@
       ></template
     ></TopNavBar
   >
-  <main class="native-page">
-    <NativeLoading :busy="busy || historyBusy" />
+  <main ref="page" class="native-page">
+    <NativeLoading :busy="busy || (chartBusy && !chart)" />
     <NativeFeedback :error="error" />
     <template v-if="catalog">
       <p class="native-note">
@@ -18,65 +18,79 @@
         {{ catalog.collector.rejectedDeliveries }}회
       </p>
       <p v-if="catalog.truncated">일부 센서만 표시됩니다.</p>
+      <p v-if="!catalog.sensors.length" class="native-note">
+        저장된 센서 원본이 없습니다.
+      </p>
       <div class="native-toolbar">
         <KsSelect
           v-model="selectedKey"
           filterable
           aria-label="저장 원본 선택"
-          @change="query()"
+          class="data-store-sensor"
+          @change="changeSensor()"
           ><KsOption
             v-for="sensor in catalog.sensors"
             :key="sensorKey(sensor)"
             :value="sensorKey(sensor)"
             :label="`${sensor.deviceId} · ${sensor.property} · ${sensor.quality}`" /></KsSelect
-        ><KsSelect v-model="hours" aria-label="원본 조회 기간" @change="query()"
-          ><KsOption
-            v-for="hour in [1, 6, 24, 168, 720].filter(
-              (h) => h <= catalog!.rawRetentionDays * 24,
-            )"
-            :key="hour"
-            :value="hour"
-            :label="`${hour}시간`" /></KsSelect
-        ><KsButton :disabled="historyBusy || !selected" @click="query()"
-          >기록 조회</KsButton
+        ><KsSegmented
+          :modelValue="activeRange"
+          :options="ranges"
+          aria-label="최근 구간 바로 보기"
+          @update:model-value="pickRange"
+        /><KsButton
+          :type="follow ? 'primary' : undefined"
+          :aria-pressed="follow"
+          :disabled="!selected"
+          @click="goLive"
+          >실시간</KsButton
         >
       </div>
-      <div class="native-toolbar">
-        <KsCheckbox v-model="liveEnabled">기록 자동 갱신 · 5초</KsCheckbox>
-        <span class="native-note" role="status"
-          >{{ liveEnabled ? "자동 갱신 사용" : "자동 갱신 일시정지" }} ·
-          {{
-            lastUpdated ? `${time(lastUpdated)} 조회` : "첫 기록 조회 대기"
-          }}</span
-        >
-      </div>
-      <p v-if="olderRecords" class="native-note">
-        이전 기록을 보는 동안 표는 고정하고 그래프만 갱신합니다.
-        <KsButton :disabled="historyBusy" @click="query()"
-          >최신 기록 보기</KsButton
-        >
+      <p class="native-note" role="status">
+        {{
+          follow
+            ? "실시간 · 5초마다 최신 구간 갱신"
+            : "탐색 중 · 자동 갱신 멈춤"
+        }}
+        ·
+        {{ lastUpdated ? `${time(lastUpdated)} 조회` : "첫 기록 조회 대기" }}
+        <template v-if="chartBusy"> · 그래프 구간 불러오는 중…</template>
       </p>
-      <NativeFeedback :error="historyError" />
-      <p v-if="historyBusy" role="status">원본 기록 조회 중…</p>
-      <template v-if="chart">
-        <p class="native-note">
-          {{ time(chart.from) }} → {{ time(chart.to) }} · 전체
+      <NativeFeedback :error="chartError" />
+      <template v-if="selected">
+        <InteractiveHistoryChart
+          :data="chartData"
+          :scope="selectedKey"
+          :viewport="viewport"
+          :loading="chartBusy"
+          @update:viewport="explore"
+        />
+        <p v-if="chart" class="native-note">
+          불러온 구간 {{ time(chart.from) }} → {{ time(chart.to) }} · 전체
           {{ chart.totalObservations }}개 중 {{ chart.items.length }}개 표시 ·
           {{
             chart.displayMode === "ORIGINALS"
               ? "원본 측정값"
               : "시간 구간별 처음·최소·최대·마지막 원본 선택"
           }}
-          · 수집 시각 기준
+          · 수집 시각 기준 · 평소 측정 간격보다 크게 빈 구간은 선을 잇지
+          않습니다.
         </p>
-        <InteractiveHistoryChart
-          :data="chartData"
-          :scope="`${selectedKey}/${hours}`"
-        />
       </template>
+      <p v-if="olderRecords" class="native-note">
+        이전 기록을 보는 동안 표는 고정하고 그래프만 갱신합니다.
+        <KsButton :disabled="recordsBusy" @click="loadRecords('reset')"
+          >현재 구간 기록 보기</KsButton
+        >
+      </p>
+      <NativeFeedback :error="recordsError" />
+      <p v-if="recordPeriod" class="native-note">
+        표 {{ time(new Date(recordPeriod.from)) }} →
+        {{ time(new Date(recordPeriod.to)) }} · 최신순
+      </p>
       <NativeRecords
         title="센서 원본 기록"
-        :busy="busy || historyBusy"
+        :busy="busy || recordsBusy"
         :rows="records.map((r, i) => ({ ...r, id: String(i) }))"
         :columns="[
           { key: 'observedAt', label: '측정 시각', width: 250 },
@@ -99,31 +113,32 @@
       </NativeRecords>
       <KsButton
         v-if="nextCursor && records.length < 2000"
-        :disabled="historyBusy"
-        @click="query('more')"
+        :disabled="recordsBusy"
+        @click="loadRecords('more')"
         >원본 더보기</KsButton
       >
       <p v-if="nextCursor && records.length >= 2000">
-        최근 원본 2,000개 표시 한도입니다. 기간을 줄여 조회하세요. 그래프는 선택
-        기간 전체를 표시합니다.
+        최근 원본 2,000개 표시 한도입니다. 그래프를 확대해 구간을 줄이세요.
+        그래프는 표시 구간 전체를 표시합니다.
       </p>
     </template>
   </main>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
   KsButton,
   KsSelect,
   KsOption,
-  KsCheckbox,
+  KsSegmented,
 } from "@kestra-io/design-system";
 import TopNavBar from "kestra-original/components/layout/TopNavBar.vue";
 import useRouteContext from "kestra-original/composables/useRouteContext";
 import {
   get,
   pretty,
+  request,
   time,
   useAction,
   usePoll,
@@ -133,22 +148,19 @@ import NativeFeedback from "./NativeFeedback.vue";
 import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import InteractiveHistoryChart from "./InteractiveHistoryChart.vue";
+import { useSensorHistory } from "./sensor-history";
 import type { HistoryChartData } from "../lib/history-echarts";
+import {
+  historyBounds,
+  markGaps,
+  pointBudget,
+  quickRanges,
+} from "../lib/history-viewport";
 useRouteContext(computed(() => ({ title: "데이터 저장소" })));
 const route = useRoute(),
   { busy, error, act } = useAction();
 const catalog = ref<Schema["DataStoreCatalog"] | null>(null),
-  selectedKey = ref(""),
-  hours = ref(1),
-  historyBusy = ref(false),
-  liveBusy = ref(false),
-  liveEnabled = ref(true),
-  olderRecords = ref(false),
-  lastUpdated = ref(""),
-  historyError = ref(""),
-  records = ref<Schema["SensorOriginalHistory"]["items"]>([]),
-  chart = ref<Schema["SensorPeriodChart"] | null>(null),
-  nextCursor = ref<string | undefined>();
+  selectedKey = ref("");
 const sensorKey = (sensor: { deviceUid: string; property: string }) =>
   `${sensor.deviceUid}/${sensor.property}`;
 const selected = computed(() =>
@@ -156,14 +168,59 @@ const selected = computed(() =>
     (sensor) => sensorKey(sensor) === selectedKey.value,
   ),
 );
+const retentionDays = () => catalog.value?.rawRetentionDays || 1;
+// The chart spans the page width, so the page is measured before the first chart request.
+const page = ref<HTMLElement>(),
+  pageWidth = ref(0),
+  budget = computed(() => pointBudget(pageWidth.value));
+let resizeObserver: ResizeObserver | undefined;
+const {
+  follow,
+  viewport,
+  bounds,
+  chart,
+  chartBusy,
+  chartError,
+  records,
+  recordsBusy,
+  recordsError,
+  recordPeriod,
+  nextCursor,
+  olderRecords,
+  lastUpdated,
+  loadAll,
+  loadRecords,
+  explore,
+  startFollowing,
+  resize,
+  clear,
+} = useSensorHistory({
+  sensor: () => selected.value,
+  retentionDays,
+  budget: () => budget.value,
+  read: async (path, signal) =>
+    (
+      await request(path, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(25000)]),
+      })
+    ).json(),
+});
+const ranges = computed(() =>
+  quickRanges(historyBounds(Date.now(), retentionDays())).map((range) => ({
+    value: range.span,
+    label: range.label,
+  })),
+);
+const activeRange = computed(() =>
+  follow.value ? viewport.value.to - viewport.value.from : undefined,
+);
 let catalogGeneration = 0;
-let generation = 0,
-  period = { from: "", to: "" };
 async function load(preferRoute = false) {
   const current = ++catalogGeneration;
   const value = await get<Schema["DataStoreCatalog"]>("data-store");
   if (current !== catalogGeneration) return;
   catalog.value = value;
+  const previous = selectedKey.value;
   if (preferRoute && typeof route.query.device === "string") {
     const target = value.sensors.find(
       (sensor) =>
@@ -172,13 +229,7 @@ async function load(preferRoute = false) {
     );
     selectedKey.value = target ? sensorKey(target) : "";
     if (!target) {
-      ++generation;
-      historyBusy.value = false;
-      historyError.value = "";
-      lastUpdated.value = "";
-      records.value = [];
-      chart.value = null;
-      nextCursor.value = undefined;
+      clear();
       throw new Error("지정한 센서 원본을 현재 저장소에서 찾지 못했습니다.");
     }
   }
@@ -191,118 +242,56 @@ async function load(preferRoute = false) {
       ) || catalog.value.sensors[0];
     selectedKey.value = sensor ? sensorKey(sensor) : "";
   }
-  if (selected.value) await query();
+  if (selectedKey.value !== previous || !selected.value) clear();
+  if (selected.value) await loadAll();
 }
-function recentPeriod() {
-  const to = new Date();
+const pickRange = (span: string | number | boolean | undefined) => {
+  if (typeof span === "number") startFollowing(span);
+};
+const goLive = () => startFollowing(viewport.value.to - viewport.value.from);
+function changeSensor() {
+  clear();
+  if (selected.value) void loadAll();
+}
+const chartData = computed<HistoryChartData>(() => {
+  const unit = records.value[0]?.unit || selected.value?.unit;
   return {
-    from: new Date(
-      to.getTime() -
-        Math.min(hours.value, (catalog.value?.rawRetentionDays || 1) * 24) *
-          3600000,
-    ).toISOString(),
-    to: to.toISOString(),
-  };
-}
-async function query(mode: "reset" | "more" | "live" = "reset") {
-  const sensor = selected.value;
-  if (
-    !sensor ||
-    (mode === "more" && (!nextCursor.value || records.value.length >= 2000))
-  )
-    return;
-  const request = ++generation;
-  if (mode === "live") liveBusy.value = true;
-  else {
-    historyBusy.value = true;
-    historyError.value = "";
-  }
-  if (mode === "reset") {
-    period = recentPeriod();
-    lastUpdated.value = "";
-    olderRecords.value = false;
-    records.value = [];
-    chart.value = null;
-    nextCursor.value = undefined;
-  }
-  const requestPeriod = mode === "live" ? recentPeriod() : { ...period };
-  const readRows = mode !== "live" || !olderRecords.value;
-  const params = new URLSearchParams({
-    ...requestPeriod,
-    limit: String(
-      mode === "more" ? Math.min(1000, 2000 - records.value.length) : 1000,
+    name: `${selected.value?.property || "센서"} 원본 측정값 그래프`,
+    from: bounds.value.from,
+    to: bounds.value.to,
+    connected: true,
+    showSymbol: false,
+    points: markGaps(
+      (chart.value?.items || []).map((p) => ({
+        at: Date.parse(p.observedAt),
+        value: Number(p.value),
+        boolean: typeof p.value === "boolean",
+        unit,
+      })),
+      (chart.value?.selection?.windowSeconds || 0) * 1000,
     ),
-    order: "desc",
-    ...(mode === "more" && nextCursor.value
-      ? { cursor: nextCursor.value }
-      : {}),
-  });
-  const base = `data-store/sensors/${sensor.deviceUid}/${encodeURIComponent(sensor.property)}`;
-  try {
-    const [history, plot, latestCatalog] = await Promise.all([
-      readRows
-        ? get<Schema["SensorOriginalHistory"]>(`${base}/history?${params}`)
-        : Promise.resolve(null),
-      mode === "more"
-        ? Promise.resolve(chart.value)
-        : get<Schema["SensorPeriodChart"]>(
-            `${base}/chart?${new URLSearchParams(requestPeriod)}`,
-          ),
-      mode === "live"
-        ? get<Schema["DataStoreCatalog"]>("data-store")
-        : Promise.resolve(null),
-    ]);
-    if (request !== generation) return;
-    if (catalog.value && latestCatalog)
-      catalog.value = {
-        ...catalog.value,
-        status: latestCatalog.status,
-        collector: latestCatalog.collector,
-      };
-    if (history) {
-      records.value =
-        mode === "more" ? [...records.value, ...history.items] : history.items;
-      nextCursor.value = history.nextCursor;
-      if (mode === "more") olderRecords.value = true;
-      else period = requestPeriod;
-    }
-    chart.value = plot;
-    historyError.value = "";
-    lastUpdated.value = new Date().toISOString();
-  } catch (cause) {
-    if (request === generation)
-      historyError.value =
-        (mode === "live"
-          ? "자동 갱신 실패 · 마지막 조회 기록을 표시합니다. "
-          : "") + (cause instanceof Error ? cause.message : "원본 조회 실패");
-  } finally {
-    if (mode === "live") liveBusy.value = false;
-    if (request === generation) historyBusy.value = false;
-  }
-}
-const chartData = computed<HistoryChartData>(() => ({
-  name: `${selected.value?.property || "센서"} 원본 측정값 그래프`,
-  from: Date.parse(chart.value?.from || period.from),
-  to: Date.parse(chart.value?.to || period.to),
-  connected: true,
-  showSymbol: false,
-  points: (chart.value?.items || []).map((p) => ({
-    at: Date.parse(p.observedAt),
-    value: Number(p.value),
-    boolean: typeof p.value === "boolean",
-    unit: records.value[0]?.unit,
-  })),
-}));
+  };
+});
 usePoll(async () => {
   if (
-    liveEnabled.value &&
-    selected.value &&
-    !busy.value &&
-    !historyBusy.value &&
-    !liveBusy.value &&
-    !document.hidden
+    !follow.value ||
+    !selected.value ||
+    busy.value ||
+    chartBusy.value ||
+    recordsBusy.value ||
+    document.hidden
   )
-    await query("live");
+    return;
+  const [latestCatalog] = await Promise.all([
+    get<Schema["DataStoreCatalog"]>("data-store").catch(() => null),
+    loadAll(true),
+  ]);
+  if (catalog.value && latestCatalog)
+    catalog.value = {
+      ...catalog.value,
+      status: latestCatalog.status,
+      collector: latestCatalog.collector,
+    };
 }, 5000);
 watch(
   () => [route.query.device, route.query.property],
@@ -310,10 +299,27 @@ watch(
     void act(() => load(true));
   },
 );
-onMounted(() => act(() => load(true)));
+watch(budget, () => {
+  if (selected.value) resize();
+});
+onMounted(() => {
+  pageWidth.value = page.value?.clientWidth ?? 0;
+  resizeObserver = new ResizeObserver(() => {
+    pageWidth.value = page.value?.clientWidth ?? 0;
+  });
+  if (page.value) resizeObserver.observe(page.value);
+  void act(() => load(true));
+});
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  clear();
+});
 </script>
 <style scoped>
 small {
   display: block;
+}
+.data-store-sensor {
+  width: min(100%, 420px);
 }
 </style>

@@ -2,11 +2,19 @@
 # Build a self-contained console release: static bundle plus the node-only server modules.
 set -euo pipefail
 EDGEAI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-if [[ $# != 1 ]]; then
-  echo "사용법: $0 RELEASE_DIR" >&2
+if [[ $# -gt 1 ]]; then
+  echo "사용법: $0 [RELEASE_DIR]" >&2
   exit 2
 fi
-RELEASE_DIR="$1"
+# Without a directory, build a timestamped release and point output/kestra-native/current at it
+# so start-kestra-console.sh can run it without arguments.
+CURRENT_LINK=""
+if [[ $# == 0 ]]; then
+  CURRENT_LINK="$EDGEAI_ROOT/output/kestra-native/current"
+  set -- "$EDGEAI_ROOT/output/kestra-native/release-$(date +%Y%m%d%H%M%S)"
+fi
+# Resolve now: the build later runs from the (possibly symlinked) upstream checkout.
+RELEASE_DIR="$(realpath -m -- "$1")"
 if [ -e "$RELEASE_DIR" ]; then
   echo "이미 존재하는 release는 덮어쓰지 않습니다: $RELEASE_DIR" >&2
   exit 1
@@ -29,4 +37,7 @@ fi
 mkdir -p "$(dirname "$RELEASE_DIR")"
 mv "$STAGE" "$RELEASE_DIR"
 trap - EXIT
+if [[ -n "$CURRENT_LINK" ]]; then
+  ln -sfn "$(basename "$RELEASE_DIR")" "$CURRENT_LINK"
+fi
 echo "release: $RELEASE_DIR ($(head -1 "$RELEASE_DIR/REVISION"))"

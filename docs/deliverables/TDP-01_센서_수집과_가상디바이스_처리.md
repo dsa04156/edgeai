@@ -27,7 +27,7 @@
 | `deploy/kubeedge` | RBAC·장치 예제·배포 설정 | 실제 주소·장치 정보 |
 | `backend/app` | 센서·VD 관리와 저장 전달 | 설정·활성화 조건 |
 | `backend/adapters` | KubeEdge·InfluxDB·PostgreSQL 연동 | 연결·권한 |
-| `dashboard/kestra-native` | 센서·VD 관리 화면 | BFF·API 연결 |
+| `dashboard/kestra-native` | 센서·VD 관리 화면 | 콘솔 서버(`server.mjs`)·API 연결 |
 
 공통 모델과 migration을 함께 사용하므로 기준 저장소 전체를 준비한다. KubeEdge, NanoMQ, eKuiper, PostgreSQL, InfluxDB는 기존 소프트웨어를 사용하며 원본 라이선스와 고지를 유지한다.
 
@@ -61,7 +61,7 @@ R01~R03은 관련 TM의 요구사항 식별자다. AT01은 이 자료의 인수 
 
 ## 실행 환경과 설정
 
-관리 API는 JDK 21과 PostgreSQL, 기존 BFF는 Node 22·pnpm 10.34.6을 사용한다. Kestra native UI는 Node 24·npm 11로 별도 실행한다. Mapper는 `mappers/go.mod`의 Go 버전과 대상 노드 아키텍처를 따른다. [2][3]
+관리 API는 JDK 21과 PostgreSQL, 콘솔 release 서버는 Node 22, Kestra UI 빌드·개발 서버는 Node 24·npm 11, 작업 공간 의존성은 pnpm 10.34.6을 사용한다. 기존 Next.js BFF 소스는 2026-10-21 제거했다. Mapper는 `mappers/go.mod`의 Go 버전과 대상 노드 아키텍처를 따른다. [2][3]
 
 기존 시험에 사용한 버전은 eKuiper 2.4.2 full, InfluxDB OSS 2.9.1이며, 센서 노드의 NanoMQ는 0.25.6이었다.
 
@@ -91,7 +91,7 @@ make data-store-start
 
 `make up`의 개발 MQTT는 실제 노드 NanoMQ와 별개다. Docker 없이 `make db-start`를 사용할 수도 있지만 이 명령은 PostgreSQL만 준비한다. 로컬 InfluxDB는 기본 18086을 사용하며 생성한 연결 정보와 토큰 파일을 API 설정에 연결한다.
 
-관리 API와 BFF는 각각 별도 터미널에서 `make backend`, `make dashboard`로 실행한다. native UI는 `bash scripts/dev/dev-kestra-native.sh`로 실행한다.
+관리 API와 콘솔은 각각 별도 터미널에서 `make backend`, `make dashboard`(Kestra native UI 13083, `bash scripts/dev/dev-kestra-native.sh`와 같음)로 실행한다.
 
 ### 센서와 연속 계산
 

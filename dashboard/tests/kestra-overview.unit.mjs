@@ -11,8 +11,8 @@ async function listen(server) {
 const metric = (key, value, fresh = true) => ({key, value, fresh, device: "", unit: "PERCENT", observedAt: new Date().toISOString()});
 function fixtures(path) {
   if (path === "infrastructure") return {nodesStatus: "AVAILABLE", sensorsStatus: "AVAILABLE", fetchedAt: new Date().toISOString(), nodes: [
-    {name: "server-a", kind: "EDGE_AI_SERVER", status: "READY"}, {name: "server-b", kind: "EDGE_AI_SERVER", status: "NOT_READY"},
-    {name: "edge-a", kind: "EDGE_DEVICE", status: "READY"}, {name: "unclassified", kind: "UNKNOWN", status: "UNKNOWN"},
+    {name: "server-a", kind: "EDGE_AI_SERVER", status: "READY", allocatable: {}}, {name: "server-b", kind: "EDGE_AI_SERVER", status: "NOT_READY", allocatable: {}},
+    {name: "edge-a", kind: "EDGE_DEVICE", status: "READY", allocatable: {}}, {name: "unclassified", kind: "UNKNOWN", status: "UNKNOWN", allocatable: {}},
   ], sensors: [{name: "sensor-a"}, {name: "sensor-b"}]};
   if (path === "node-metrics") return {status: "AVAILABLE", fetchedAt: new Date().toISOString(), maxAgeSeconds: 90, items: [
     {nodeName: "server-a", measurements: [metric("CPU_USAGE", 12.5), metric("MEMORY_USAGE", 34)]},
@@ -262,4 +262,78 @@ test("overview reads runs from the separate workflow API when one is configured"
       assert.equal(calls.some(([, path]) => path.includes("workflow-runs")), false);
     }, undefined, {workflowUrl});
   } finally {await new Promise(resolve => workflow.close(resolve));}
+});
+
+// Shapes recorded from the live API on 2026-10-21 (output/verification/gpu-npu-diagnosis), with current timestamps.
+function liveShaped(allocatable) {
+  const observedAt = new Date().toISOString();
+  const node = (name, kind) => ({name, kind, architecture: "arm64", operatingSystem: "linux", status: "READY", ...(allocatable ? {allocatable: allocatable[name] ?? {}} : {})});
+  const hardware = (device, kind, vendor, model) => ({device, kind, vendor, model, fresh: true, observedAt});
+  const measured = (device, key, value, unit) => ({device, key, value, unit, fresh: true, observedAt});
+  return {
+    infrastructure: {nodesStatus: "AVAILABLE", sensorsStatus: "AVAILABLE", fetchedAt: observedAt, sensors: [], nodes: [
+      node("etri-dev0002-raspi5", "EDGE_DEVICE"), node("etri-dev0003-raspi5", "EDGE_DEVICE"), node("etri-dev0009-jetorn", "EDGE_DEVICE"),
+      node("etri-ser0001-cg0msb", "EDGE_AI_SERVER"), node("etri-ser0002-cgnmsb", "EDGE_AI_SERVER"), node("etri-ser0004-cgnms0", "EDGE_AI_SERVER"),
+    ]},
+    "node-metrics": {status: "AVAILABLE", fetchedAt: observedAt, maxAgeSeconds: 90, unmappedSeries: 0, items: [
+      {nodeName: "etri-dev0002-raspi5", accelerators: [hardware("platform:1002000000.v3d", "GPU", "brcm", "Broadcom 2712 V3D GPU"), hardware("pci:0001:01:00.0", "NPU", "Hailo", "Hailo-8")], measurements: []},
+      {nodeName: "etri-dev0003-raspi5", accelerators: [hardware("platform:1002000000.v3d", "GPU", "brcm", "Broadcom 2712 V3D GPU")], measurements: []},
+      {nodeName: "etri-dev0009-jetorn", accelerators: [], measurements: []},
+      {nodeName: "etri-ser0001-cg0msb", accelerators: [hardware("pci:0000:01:00.0", "GPU", "NVIDIA", "NVIDIA GPU [10de:2d04]")], measurements: [
+        measured("pci:0000:01:00.0", "GPU_USAGE", 0, "PERCENT"), measured("pci:0000:01:00.0", "GPU_MEMORY_USED", 0, "BYTES"),
+        measured("pci:0000:01:00.0", "GPU_MEMORY_TOTAL", 16 * 1024 ** 3, "BYTES"), measured("pci:0000:01:00.0", "GPU_POWER", 7.5, "WATTS")]},
+      {nodeName: "etri-ser0002-cgnmsb", accelerators: [hardware("pci:0000:00:02.0", "GPU", "Intel", "Intel GPU [8086:7d67]"),
+        hardware("pci:0000:02:00.0", "GPU", "NVIDIA", "NVIDIA GPU [10de:2c02]"), hardware("pci:0000:00:0b.0", "NPU", "Intel", "Intel NPU [8086:ad1d]")], measurements: [
+        measured("pci:0000:02:00.0", "GPU_USAGE", 12, "PERCENT"), measured("pci:0000:00:0b.0", "NPU_USAGE", 0, "PERCENT")]},
+      {nodeName: "etri-ser0004-cgnms0", accelerators: [hardware("pci:0000:00:02.0", "GPU", "Intel", "Intel GPU [8086:a7a0]"), hardware("pci:0000:01:00.0", "NPU", "Mobilint", "ARIES")], measurements: [
+        measured("pci:0000:01:00.0", "NPU_USAGE", 3, "PERCENT")]},
+    ]},
+  };
+}
+
+test("an infrastructure response without allocatable is an explicit contract gap, not an empty accelerator list", async () => {
+  const live = liveShaped(undefined);
+  await withServers(async url => {
+    const data = await (await fetch(`${url}/api/edgeai/overview`)).json();
+    assert.equal(data.gpus, null);
+    assert.equal(data.npus, null);
+    assert.equal(data.errors.includes("GPU·NPU 할당 정보 확인 불가"), true);
+    // Node classification and physical utilisation remain available from their own sources.
+    assert.equal(data.resources.servers, 3);
+    assert.equal(data.inventory.metricsAvailable, true);
+  }, path => live[path] ? {status: 200, body: live[path]} : undefined);
+});
+
+test("live-shaped allocatable exposes fresh observed hardware and keeps measured zero", async () => {
+  const live = liveShaped({
+    "etri-dev0002-raspi5": {"hailo.ai/h8": "1", cpu: "4"},
+    "etri-dev0009-jetorn": {"nvidia.com/gpu.shared": "2"},
+    "etri-ser0001-cg0msb": {"nvidia.com/gpu": "1"},
+    "etri-ser0002-cgnmsb": {"nvidia.com/gpu": "1", "npu.intel.com/accel": "1"},
+    "etri-ser0004-cgnms0": {"mobilint.com/npu": "1"},
+  });
+  await withServers(async url => {
+    const data = await (await fetch(`${url}/api/edgeai/overview`)).json();
+    // API data: allocatable devices only (Broadcom V3D and Intel iGPUs are not schedulable resources).
+    assert.deepEqual(data.gpus.map(gpu => [gpu.node, gpu.vendor, gpu.model, gpu.verified, gpu.usagePercent]), [
+      ["etri-dev0009-jetorn", "nvidia", "GPU 장착 정보 확인 불가", false, null],
+      ["etri-ser0001-cg0msb", "nvidia", "NVIDIA GPU", true, 0],
+      ["etri-ser0002-cgnmsb", "nvidia", "NVIDIA GPU", true, 12],
+    ]);
+    // A PCI-ID-only inventory model is flagged as unnamed; an unverified slot carries its own message.
+    assert.deepEqual(data.gpus.map(gpu => gpu.modelNote), [null, "모델명 미수집", "모델명 미수집"]);
+    assert.equal(data.npus.find(npu => npu.model === "ARIES").modelNote, null);
+    assert.equal(data.gpus[1].memoryUsedBytes, 0);
+    assert.equal(data.gpus[1].memoryTotalBytes, 16 * 1024 ** 3);
+    assert.equal(data.gpus[1].powerWatts, 7.5);
+    // The operating table hides Intel NPUs in its component; the API keeps the truthful observation.
+    assert.deepEqual(data.npus.map(npu => [npu.node, npu.vendor, npu.model, npu.usagePercent, npu.utilizationNote]), [
+      ["etri-dev0002-raspi5", "hailo", "Hailo-8", null, "사용률 별도 계측 필요"],
+      ["etri-ser0002-cgnmsb", "intel", "Intel NPU", 0, null],
+      ["etri-ser0004-cgnms0", "mobilint", "ARIES", 3, null],
+    ]);
+    assert.equal(data.errors.includes("GPU·NPU 할당 정보 확인 불가"), false);
+    assert.equal(data.errors.includes("일부 GPU 장착 정보 확인 불가"), true);
+    assert.equal(data.errors.includes("일부 NPU 장착 정보 확인 불가"), false);
+  }, path => live[path] ? {status: 200, body: live[path]} : undefined);
 });

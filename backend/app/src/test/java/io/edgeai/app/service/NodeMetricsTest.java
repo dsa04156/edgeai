@@ -201,6 +201,27 @@ class NodeMetricsTest {
         assertEquals(2, node.accelerators().size());
         assertEquals("pci:0000:02:00.0", node.measurements().getFirst().device());
     }
+    @Test void dcgmModelNameReplacesPciIdOnlyForFreshUnambiguousPciMatch() {
+        java.util.function.BiFunction<String, Integer, NodeMetricsSource.Accelerator> gpu = (name, age) -> {
+            rows.clear(); node("node-a");
+            hardware("pci:0000:02:00.0", "GPU", "NVIDIA", "NVIDIA GPU [10de:2c02]", 15, 1);
+            var labels = new HashMap<>(Map.of("node", "node-a", "job", "dcgm-exporter", "instance", "dcgm:9400", "UUID", "GPU-123", "pci_bus_id", "00000000:02:00.0"));
+            if (name != null) labels.put("modelName", name);
+            up(target("dcgm-exporter", "dcgm:9400"), 1); measurement("dcgm_temp", labels, 30, age);
+            return decode().items().getFirst().accelerators().getFirst();
+        };
+        assertEquals("NVIDIA GeForce RTX 5080", gpu.apply("NVIDIA GeForce RTX 5080", 15).model());
+        assertEquals("NVIDIA GPU [10de:2c02]", gpu.apply(null, 15).model());
+        assertEquals("NVIDIA GPU [10de:2c02]", gpu.apply("NVIDIA GeForce RTX 5080", 91).model());
+        gpu.apply("NVIDIA GeForce RTX 5080", 15);
+        measurement("dcgm_usage", Map.of("node", "node-a", "job", "dcgm-exporter", "instance", "dcgm:9400", "UUID", "GPU-123", "pci_bus_id", "00000000:02:00.0", "modelName", "Other GPU"), 1, 15);
+        assertEquals("NVIDIA GPU [10de:2c02]", decode().items().getFirst().accelerators().getFirst().model());
+        rows.clear(); node("node-a");
+        hardware("pci:0000:02:00.0", "GPU", "NVIDIA", "NVIDIA GPU [10de:2c02]", 15, 1);
+        up(target("dcgm-exporter", "dcgm:9400"), 1);
+        measurement("dcgm_temp", Map.of("node", "node-a", "job", "dcgm-exporter", "instance", "dcgm:9400", "UUID", "GPU-123", "modelName", "NVIDIA GeForce RTX 5080"), 30, 15);
+        assertEquals("NVIDIA GPU [10de:2c02]", decode().items().getFirst().accelerators().getFirst().model());
+    }
     @Test void vendorFallbackRequiresUniqueHardwareAndUniqueMeasuredDevice() {
         node("node-a"); hardware("pci:0000:01:00.0", "NPU", "Mobilint", "ARIES", 15, 1);
         measurement("mobilint_usage", Map.of("node", "node-a", "device", "aries0"), 0, 15);

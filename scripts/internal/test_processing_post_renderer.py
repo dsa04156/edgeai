@@ -44,4 +44,9 @@ assert invoke(manifest, "latest").returncode != 0
 foreign = copy.deepcopy(original)
 next(doc for doc in foreign if doc["kind"] == "StatefulSet")["metadata"]["namespace"] = "foreign"
 assert invoke(yaml.safe_dump_all(foreign)).returncode != 0
-print("PASS: pinned Helm renderer preserves storage, isolates management, rejects foreign ownership and mutable images")
+assert "hostAliases" not in pod
+aliased = copy.deepcopy(original)
+next(doc for doc in aliased if doc["kind"] == "StatefulSet")["spec"]["template"]["spec"]["hostAliases"] = [
+    {"ip": "10.77.0.1", "hostnames": ["edgeai-api.edgeai.svc"]}]
+assert invoke(yaml.safe_dump_all(aliased)).returncode != 0
+print("PASS: pinned Helm renderer preserves storage, isolates management, rejects foreign ownership, mutable images and API host aliases")

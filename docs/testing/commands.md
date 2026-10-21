@@ -10,8 +10,9 @@
 | `make test` | 기본 단위 테스트 |
 | `bash scripts/test/test-contract.sh` | 생성 타입·OpenAPI·controller 계약 |
 | `bash scripts/test/test-docs.sh` | 문서 링크·목차·주요 목록·API 참고 동기화 |
-| `corepack pnpm --filter @edgeai/dashboard lint` | 화면 코드 정적 검사 |
-| `corepack pnpm --filter @edgeai/dashboard build` | 타입·production build·문서 패키징 |
+| `corepack pnpm --filter @edgeai/dashboard lint` | 콘솔 Vue·TypeScript 정적 검사 |
+| `corepack pnpm --filter @edgeai/dashboard typecheck` | 콘솔 `vue-tsc` 타입 검사 |
+| `corepack pnpm --filter @edgeai/dashboard build` | 콘솔 release 패키징(Vite bundle·`server.mjs`)만 수행, 타입 검사·문서 패키징 없음. 전체는 `test-ui.sh` |
 | `bash scripts/test/test-platform-service.sh` | 모의 외부 API 기반 DDS 배포 연동 |
 | `bash scripts/test/test-mapper.sh unit` | Go 1.24.2 toolchain의 프로토콜·DMI·동시성 race 시험 |
 
@@ -24,10 +25,10 @@
 | `bash scripts/test/test-registry-deletion.sh` | 별도 DB 생성·제거, 미사용 등록 삭제 검사 |
 | `bash scripts/test/test-infra.sh` | Compose PostgreSQL·MQTT |
 | `bash scripts/test/test-storage.sh` | MinIO; 시험 bucket 생성·정리 |
-| `bash scripts/test/test-profiles-stack.sh local` | 실제 DB/API·브라우저; 별도 프로세스·장애 주입 |
-| `bash scripts/test/test-ui.sh` | 화면 빌드·브라우저 검증; 서버 실행 여부 확인 |
+| `bash scripts/test/test-profiles-stack.sh local` | 실제 DB/API·브라우저, `EDGEAI_CONSOLE_RELEASE`의 콘솔 release; 별도 프로세스·장애 주입 |
+| `bash scripts/test/test-ui.sh` | 콘솔 단위 시험(임시 로컬 upstream)·Vue lint·typecheck·임시 release 빌드; Kestra UI 소스 준비 필요 |
 
-브라우저가 필요한 환경은 `corepack pnpm --filter @edgeai/dashboard exec playwright install chromium`으로 준비합니다.
+`test-profiles-stack.sh`의 Swagger 브라우저 시험은 `corepack pnpm --filter @edgeai/dashboard exec playwright install chromium`으로 준비합니다.
 이미 실행 중인 사용자 서버를 검사할 때 서버 시작·종료가 포함된 전체 wrapper를 무조건 실행하지 않습니다.
 
 Mapper 검사는 `test-mapper.sh unit`으로 실행합니다. 실행 중인 장치의 연결 상태와 최신값은

@@ -1,5 +1,54 @@
 # 현재 상태
 
+## 2026-10-21 센서 그래프 점 예산·실시간 꼬리 조회·API/콘솔 재배포
+
+- 사용자 승인(점이 많아 화면이 느림)에 따라 chart API가 화면 폭 기반 점 예산 `points`(200–2000, 기본1000, 범위 밖 400)를 받는다. 예산에 맞는 가장 좁은 UTC 정렬 시간 구간(1초–1일, 앞뒤 부분 구간 포함)별 처음·최소·최대·마지막 원본을 원래 시각 그대로 반환하고, 예산 안이면 원본 그대로 준다. 기존 원본10만 개 기준과 전 구간 pivot count+전체 읽기를 없앴다. 응답에 `pointBudget`, 실제 원본 수 `totalObservations`, 구간별 count를 담는다. 숨긴 legacy 원본은 계속 제외한다. 저장 원본은 바뀌지 않는다.
+- 콘솔: 실시간 추적은 처음 한 번만 전체 화면 구간을 읽고, 이후5초 조회는 `마지막 끝−30초`를 구간 시작으로 내린 꼬리만 같은 구간 크기로 읽어 그 구간들을 교체한다. 예산·구간·센서 변경, 10분 이상 공백, 5분마다 전체 재조회한다. 표도 최신 행−30초 이후만 읽어 그 구간을 교체하며 `원본 더보기` 커서·2000행 제한은 유지했다. 그래프 모양·드래그·휠·십자선·레이아웃은 그대로다.
+- 시험: 대시보드 단위68/68(신규 꼬리 병합14), 백엔드 격리 단위(예산4·메타데이터3·reconciliation1), 비공유 InfluxDB 2.9.1 41만 행 fixture6/6(브루트포스 처음·최소·최대·마지막 일치, legacy pivot 공유 수정 전 코드; 수정은 실제 저장소 결과 동일성으로 확인), vue-tsc·eslint·release build. 독립 리뷰1차 P2 2건 수정 후2차 통과.
+- 배포(이미지만 교체): API `edgeai-api@sha256:2be0be065c34798da35e22bc655477bd2cb94334c2bcf0eb3dc1b2c972141798`, 콘솔 `edgeai-dashboard@sha256:cf9da6202017bf6d29110d4d9149c0dfad169a9a6a1eb1ef8ef4761a60d476c5`. 처음 배포한 API `fc414b2c…`는 legacy pivot을 yield마다 반복해 실제 저장소 10.5일 구간이 Influx 요청 제한5초를 넘어 503이었다. API만 `a5bc0cb1…`로 되돌리고, pivot을 한 번만 평가해 공유하도록 고쳤다(실제 legacy 결과 동일 확인, 10.5일 legacy 5.1초→1.7초). Deployment env·volume·port·strategy는 배포 전후 같고, VD 47 RUNNING·25 입력 대기와 원본 수집은 유지됐다. dev overlay digest를 live와 맞췄다.
+- 실제13080(같은 센서·고정 구간 to=09:00Z): 1시간 3,600점·248KB → 1,114점·78KB, 1일 82,455점·5.67MB·1.3초 → 1,082점·76KB·0.3초, 7일 6.3초 → 1.6초, 30일 7.0초 → 1.8초. 1일 추적 중5초 조회는 36시간 전체(114KB·2.3초) → 약6초 꼬리(0.8KB). 브라우저 드래그·휠·십자선·실시간·7일·크기 변경·1440/1024/390 가로 넘침 없음, JS/API 오류0. 근거: `output/verification/sensor-chart-performance/README.md`.
+- 한계: 측정 이후30초보다 늦게 저장된 원본은 다음 전체 재조회(최대5분)에 반영된다. 화면 이동 중 비어 있는 구간은 여유를 둔 구간 전체를 다시 읽는다. legacy 비중이 큰 긴 구간은 pivot 때문에 여전히 1.6–1.9초다. Git commit/push는 하지 않았다.
+
+## 2026-10-21 데이터 저장소 센서 그래프 탐색 방식 변경·콘솔 재배포
+
+- 사용자 선택(선 그래프 유지 + 드래그 이동·휠 확대/축소·십자선·실시간 복귀)에 따라 데이터 저장소의 고정 기간 선택(1/6/24/168/720시간)과 기록 조회 버튼·자동 갱신 체크박스를 없앴다. 기본은 최근1시간 실시간 추적(5초 갱신)이고, 1시간·6시간·1일·7일·30일 바로가기(원본 보관 기간 이내)와 `실시간` 버튼을 둔다.
+- 그래프 축은 원본 보관 기간 전체이며 사용자가 이동·확대하면 탐색 모드로 바뀌어 자동 갱신을 멈추고 화면 구간을 그대로 둔다. 멈춘 구간(300ms 이후)이 불러온 범위를 벗어나거나, 선택 표본 구간을 충분히 확대하면 기존 chart GET(최대31일)으로 화면 구간±반폭만 다시 조회한다. 이전 요청은 취소하고, 현재 화면을 이미 덮은 데이터는 늦게 도착한 다른 구간 응답으로 바꾸지 않는다. 그래프·표 오류는 각각 표시하고 각자의 성공만 해당 오류를 지운다. 평소 측정 간격의10배(선택 표본은 구간의3배)를 넘는 빈 곳은 선을 잇지 않는다. 표는 멈춘 화면 구간의 최신순 원본이며 `원본 더보기` 고정 동작은 유지했다. 백엔드·API 계약 변경은 없다. VD 이력 그래프는 기존 슬라이더·버튼 동작을 유지하고 십자선만 추가됐다.
+- 시험: 대시보드 단위54/54(신규 viewport7·상태 조합7, 지연 응답·순서·취소 회귀 포함), typecheck·lint·release build 통과. 독립 리뷰1차 P2 2건(되돌아간 구간의 늦은 응답, 그래프 성공이 표 오류를 지움)을 고쳤고2차 통과.
+- 사용자 승인 배포: 콘솔만 `10.254.192.47:5000/edgeai-dashboard@sha256:d20cbe57d99df11b2859d96ba35e3bd002cf6e49aa5d9d64dc3c8750c396bfcd`로 이미지 교체했다(node-runtime base, `edgeai-kube-arm64-rootless`). API는 `edgeai-api@sha256:a5bc0cb1063e30d73e7c3fd5d4a52fe2cdf9eb3ef1ff3589b33e203d191a4c01` 그대로이며 두 Deployment의 env·volume·port는 배포 전후 같다. dev overlay digest를 live와 맞췄다. Git commit/push는 하지 않았다.
+- 실제13080 확인(읽기 전용): 처음1시간보다3.2시간 이전 원본 조회, 탐색 구간11초 동안 고정·추가 데이터 요청0, 휠 확대, 밀리초 시각·값·단위 십자선, 실시간 복귀 지연0.9초·약5초 갱신, 1440/1024/390 가로 넘침 없음(표는 내부 스크롤), JS/API 오류0. 센서 전환 경합과 표 오류 분리는 로컬 fixture에서 확인했다. 근거: `output/verification/sensor-chart/README.md`.
+- 한계: 탐색 중에는 새 원본을 자동으로 붙이지 않는다(`실시간`으로 복귀). 빈 구간 판단은 측정 간격 기반 추정이다. 실시간 추적 중 긴 기간(7일·30일)은5초마다 전체 구간을 다시 조회한다.
+
+## 2026-10-21 API 연동 결함 수정·클러스터 API/콘솔 재배포
+
+- 원인: 클러스터 API 이미지(10/14)가 RTSP·`workflow-data-sources`·preview/drain 이전 버전이었다. 그래서 장치 목록이 400을 반환하고 센서가 UNAVAILABLE로 표시됐다. 이 이미지는 빈 legacy 이력 표식을 읽지 못해 이력 조회가 503이었다. 백엔드가 계약의 `allocatable`을 내보내지 않아 GPU/NPU 목록도 비어 있었다. 소스에서 `allocatable`을 노출하고, 값이 없으면 null과 오류를 표시하도록 고쳤다(백엔드 65·콘솔 40 테스트 통과, Spec/Standards 리뷰 지적0건).
+- 사용자 승인으로 직접 rollout했다. API는 `10.254.192.47:5000/edgeai-api@sha256:fd5e5bf3…`(검토한 bootJar `ba65b094…`, 고정 JRE base의 amd64 사본)이고, 콘솔은 `edgeai-dashboard@sha256:70916c78…`이다. API에는 이미지만 교체했다. Flyway 60개는 검증만 했고 migration은 없었다. 콘솔에는 Platform-Service URL·토큰 secretRef를 연결했다. dev overlay에 digest와 env를 고정했고 push는 하지 않았다.
+- 원본 수집: 호스트 API가 10/21 06:05Z 재부팅으로 멈춘 뒤, 다른 쓰기 주체가 없음을 확인하고 클러스터 API를 유일한 수집기로 켰다. 새 원본이 1초 간격으로 중복 없이 저장되는 것을 확인했다. 06:05–07:11Z 구간은 비어 있으며 복구할 수 없다.
+- 연속 VD: eKuiper hostAlias가 사라진 호스트 주소 `10.77.0.1`을 가리켜 10/19부터 72개 VD가 ENGINE_LEASE_EXPIRED 상태였다. 다음과 같이 클러스터 API로 다시 연결했다.
+  - 기존 공유 credential을 edgeai namespace Secret으로 복사했다.
+  - Agent가 신뢰하는 CA를 API 18443 인증서의 stream CA로 바꿨다.
+  - hostAlias를 제거하고 Pod를 재생성했다(PVC 유지).
+  - 결과: RUNNING 47, WAITING_INPUT 25(모두 Arduino 입력), 새 결과 저장을 확인했다. 저장된 desiredRunning 의도를 따랐으며 새 등록이나 상태 변경은 하지 않았다. eKuiper 쪽 변경은 Helm 값 밖에 있다.
+- 검증 결과:
+  - infrastructure: 200, sensors AVAILABLE, 12개 노드 모두 allocatable 제공.
+  - devices: 200, RTSP 포함.
+  - workflow-data-sources: 200.
+  - 이력: 과거·최근 구간 모두 200.
+  - GPU/NPU: 6개/5개 표시. 실제 0%는 0%로 표시하고, 정보가 없는 장치는 확인 불가로 표시한다.
+  - DDS 설정: 200.
+  - Chromium 메뉴 14개: 400/503·JS 오류 0건. Arduino·RTSP는 OFFLINE으로 표시된다.
+- 재적용 보강: 다음 `helm upgrade`가 hostAlias(10.77.0.1)나 잘못된 CA를 되살리지 않도록 다음을 반영했다(live 변경 없음).
+  - eKuiper post-renderer가 `edgeai-api.*` hostAlias가 있으면 렌더링을 거부한다. 시험: 실제 release manifest로 통과하고, 이전 renderer는 실패한다.
+  - 캐시된 chart로 `helm template`을 실행해 렌더 결과를 live와 대조했다. 차이는 eKuiper resources·Service 포트뿐이다. CA 지문이 일치함도 확인했다.
+  - 절차는 `docs/guides/vd-processing.md`에 정리했다.
+  - `edgeai-workflow-api`의 Endpoint는 멈춘 호스트를 가리키지만 runtime이 꺼져 있어 쓰이지 않는다. 한계로 기록했다.
+- 남은 일: Jetson·Arduino 실장비 복구, Jetson GPU exporter 간헐 누락, eKuiper Helm revision과 live의 차이(upgrade 미실행), 24시간 soak와 실제 모델 추론 수용. 근거: `output/verification/api-repair/deployment.md`.
+
+## 2026-10-21 기존 Next.js 콘솔 소스 제거
+
+- 사용자 결정에 따라 `dashboard/app`(Next.js 화면·BFF route), Next 전용 `lib`·설정·`/docs` 사이트 packaging·Playwright 화면 시험과 next/react 계열 의존성을 저장소에서 제거했다. `dev`·`build`·`start`·`lint`·`typecheck`·`test`와 CI·`make dashboard`는 Kestra 원본 Vue 콘솔(`dashboard/kestra-native`)만 대상으로 한다. 콘솔이 쓰는 `dashboard/lib` 공용 모듈과 생성 계약 타입은 유지했다.
+- 기존 BFF의 DDS 쓰기 Origin 필수 조건을 콘솔 서버에도 적용했다(Origin 없는 DDS 쓰기 403). 기존 BFF가 전달하던 구형 `devices`·`sensors/*`·`profiles/DEVICE` 경로는 콘솔이 호출하지 않아 지원하지 않는다.
+- 2026-10-21 사용자 승인으로 Kestra 콘솔을 Kubernetes `edgeai-dashboard`에 직접 배포했다. `10.254.192.47:13080`에서 native 화면·health 200, Pod 1/1, Chromium 렌더 및 JS 오류 0건을 확인했다. API·DB는 변경하지 않았다. 센서 목록 확인 불가 경고는 남아 있다. Argo CD Application은 현재 없으며 Git push/자동 동기화 배포가 아니다. 이미지 digest는 dev overlay에 고정했다. 근거: `output/verification/deploy-kestra-13080/`.
+
 ## 2026-10-20 Kubernetes 콘솔 교체 준비
 
 - 사용자 결정에 따라 Kubernetes의 `edgeai-dashboard` 이미지를 Next.js에서 Kestra v2.0.6 원본 Vue 콘솔로 교체한다. 콘솔은 클러스터 `edgeai-api`에 연결하며 이미지·Deployment·Service 이름과 CI digest/GitOps 경로는 유지한다.

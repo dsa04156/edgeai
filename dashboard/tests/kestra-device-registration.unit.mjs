@@ -98,6 +98,25 @@ test("property edit failures retain backend errors and cannot bypass same-origin
   });
 });
 
+test("single property addition and deletion forward only the exact managed route, session and CSRF", async () => {
+  await withServers(async (url, calls) => {
+    const headers = {Origin: url, Cookie: "EDGEAI_SESSION=fixture-session; ignored=secret", "X-CSRF-TOKEN": "fixture-token"};
+    const collection = `${url}/api/control-plane/managed-devices/sensor-a/properties`;
+    const property = {name: "humidity", dataType: "int32", sensor: "humidity", jsonPath: "raw", scale: 1, offset: 0, unit: "raw"};
+    assert.equal((await fetch(collection, {method: "POST", headers: {...headers, "Content-Type": "application/json"}, body: JSON.stringify(property)})).status, 201);
+    assert.equal((await fetch(`${collection}/temperature`, {method: "DELETE", headers})).status, 200);
+    assert.deepEqual(calls.map(call => [call.method, call.path, call.headers.cookie, call.headers["x-csrf-token"]]), [
+      ["POST", "/api/devices/sensor-a/properties", "EDGEAI_SESSION=fixture-session", "fixture-token"],
+      ["DELETE", "/api/devices/sensor-a/properties/temperature", "EDGEAI_SESSION=fixture-session", "fixture-token"],
+    ]);
+    assert.deepEqual(JSON.parse(calls[0].body), property);
+    for (const [path, method, expected] of [["properties", "DELETE", 405], ["properties", "GET", 405], ["properties/temperature/extra", "DELETE", 404]])
+      assert.equal((await fetch(`${url}/api/control-plane/managed-devices/sensor-a/${path}`, {method, headers})).status, expected, `${method} ${path}`);
+    assert.equal((await fetch(`${collection}/temperature`, {method: "DELETE", headers: {...headers, Origin: "https://another.example"}})).status, 403);
+    assert.equal(calls.length, 2);
+  });
+});
+
 test("cross-origin registration and unrelated writes never reach the existing server", async () => {
   await withServers(async (url, calls) => {
     const headers = {Origin: "https://another.example", "Content-Type": "application/json"};

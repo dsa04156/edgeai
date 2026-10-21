@@ -129,6 +129,40 @@ upstream Helm chart1.4.0을 기존 `my-ekuiper` release/`ekuiper` namespace와 �
 post-renderer 적용 후 REST·CLI·입력·callback은 loopback이고 agent health10083만 Service에 노출됩니다.
 flag가false인 준비 단계는 readiness를 얻지 못하므로 Helm `--wait`로 활성화 완료를 주장하지 않습니다.
 
+#### 현재 dev 클러스터 재적용 (2026-10-21 기준)
+
+현재 dev 배포는 위 component의 별도 processing TLS·history DB를 쓰지 않는다.
+- Agent는 클러스터 DNS로 `edgeai-api.edgeai.svc:18443`에 연결한다. 이 포트는 API의 기존 stream 인증서(`edgeai-stream-ca-v1` 서명)로 응답한다.
+- 이력 저장은 Influx를 쓴다.
+- Secret 두 개는 같은 기존 credential을 쓴다. `ekuiper/edgeai-processing-agent`의 `credential`·`ca.crt`(stream CA 공개 인증서)와, 이를 복사한 `edgeai/edgeai-processing-agent`의 `credential`이다.
+- `prepare-processing-material.sh`가 새로 만드는 CA·credential로 이 Secret을 덮어쓰지 않는다. 덮어쓰면 Agent가 API 인증서를 거부하고 VD가 ENGINE_LEASE_EXPIRED로 멈춘다.
+- Helm release(revision 2)에는 Agent가 없다. 2026-10-20 `kubectl patch`로 붙였고 그때 넣은 hostAlias(`10.77.0.1`, 멈춘 호스트 API)는 10/21에 제거했다. post-renderer는 `edgeai-api.*` hostAlias가 있으면 렌더링을 거부한다.
+
+읽기 전용 확인(저장소 루트, 명시적 context). Secret 값은 출력하지 않는다.
+
+```bash
+ctx=kubernetes-admin@kubernetes
+agent=10.254.192.47:5000/edgeai/processing-agent@sha256:a7d6d4bb71616780d682837b6e4cb5f6083aa39a9224ed59bcf00399f70cdca0
+helm --kube-context "$ctx" -n ekuiper get values my-ekuiper -o yaml > /tmp/ekuiper-values.yaml
+EDGEAI_PROCESSING_AGENT_IMAGE="$agent" helm template my-ekuiper ~/.cache/helm/repository/ekuiper-1.4.0.tgz \
+  -n ekuiper -f /tmp/ekuiper-values.yaml --post-renderer scripts/ops/processing-post-renderer.sh > /tmp/ekuiper-render.yaml
+grep -c hostAliases /tmp/ekuiper-render.yaml   # 0이어야 한다
+# Agent가 신뢰하는 CA와 API 인증서의 서명 CA가 같아야 한다.
+kubectl --context "$ctx" -n edgeai get configmap edgeai-runtime-ca-v1 -o jsonpath='{.data.ca\.crt}' | openssl x509 -noout -fingerprint -sha256
+kubectl --context "$ctx" -n ekuiper get secret edgeai-processing-agent -o jsonpath='{.data.ca\.crt}' | base64 -d | openssl x509 -noout -fingerprint -sha256
+```
+
+적용은 위 두 확인이 맞을 때만 한다.
+- 명령: 위 블록의 `ctx`·`agent` 값을 그대로 사용한다. 이미지 환경 변수가 없으면 post-renderer가 거부한다.
+
+```bash
+EDGEAI_PROCESSING_AGENT_IMAGE="$agent" helm --kube-context "$ctx" upgrade my-ekuiper \
+  ~/.cache/helm/repository/ekuiper-1.4.0.tgz -n ekuiper --reuse-values \
+  --post-renderer scripts/ops/processing-post-renderer.sh
+```
+- 2026-10-21 렌더와 live의 실제 차이: eKuiper 컨테이너 resources(요청 1CPU/2Gi, 상한 4CPU/4Gi) 추가와 Service 포트(9081/20498 → 10083) 변경이다. Pod가 재생성되고 PVC는 유지된다.
+- 적용 후 확인: Pod 2/2, 엔진 lease 갱신, VD 실행 상태(RUNNING/WAITING_INPUT), 새 결과 저장.
+
 활성화는 실제 qualified source, 전용 history와 소유/보안 검증 뒤 backend의
 `EDGEAI_CONTINUOUS_ENABLED=true`로 진행합니다. 되돌릴 때는 먼저 기존flag를false로 바꾸고
 15초 lease 만료 뒤 agent가 `edgeai_vd_<VD UUID>_<generation>_<output>` 소유 규칙만 제거한 것을 확인합니다.

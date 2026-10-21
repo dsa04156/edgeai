@@ -22,6 +22,7 @@ type Accelerator = {
   temperatureC: number | null;
   powerWatts: number | null;
   utilizationNote: string | null;
+  modelNote: string | null;
 };
 export type Overview = {
   snapshotId: string;
@@ -83,8 +84,7 @@ function quantityCount(value: string) {
   return Number.isSafeInteger(count) && count > 0 ? count : 0;
 }
 
-// Same exposure/identity boundary as lib/node-accelerators.ts: allocatable slots
-// are not physical devices, and measurements alone cannot identify hardware.
+// Allocatable slots are not physical devices, and measurements alone cannot identify hardware.
 function acceleratorObservations(
   kind: "GPU" | "NPU",
   nodes: Schema["InfrastructureNode"][] | null,
@@ -149,6 +149,7 @@ function acceleratorObservations(
       temperatureC: null,
       powerWatts: null,
       utilizationNote: null,
+      modelNote: null,
     };
     if (!exposed.length) {
       result.push({
@@ -205,6 +206,10 @@ function acceleratorObservations(
         memoryTotalBytes: total !== null && total > 0 ? total : null,
         temperatureC: value(`${kind}_TEMPERATURE`, "CELSIUS"),
         powerWatts: value(`${kind}_POWER`, "WATTS"),
+        // Inventory falls back to "<vendor> GPU [vendor:device]" when no exporter names the product.
+        modelNote: /\[[0-9a-f]{4}:[0-9a-f]{4}\]/i.test(accelerator.model)
+          ? "모델명 미수집"
+          : null,
         utilizationNote:
           kind === "NPU" &&
           ((accelerator.vendor.toLowerCase() === "hailo" &&
@@ -299,8 +304,14 @@ async function loadOverview({
       ? runs.value.items
       : null;
   if (!runItems) errors.push("최근 실행 확인 불가");
-  const gpus = acceleratorObservations("GPU", nodes, metricData, now);
-  const npus = acceleratorObservations("NPU", nodes, metricData, now);
+  // Exposure comes from Node allocatable; a response without it cannot tell "no accelerator" from "unknown".
+  const exposure =
+    nodes?.every((n) => n.allocatable && typeof n.allocatable === "object")
+      ? nodes
+      : null;
+  if (nodes && !exposure) errors.push("GPU·NPU 할당 정보 확인 불가");
+  const gpus = acceleratorObservations("GPU", exposure, metricData, now);
+  const npus = acceleratorObservations("NPU", exposure, metricData, now);
   if (gpus?.some((gpu) => !gpu.verified))
     errors.push("일부 GPU 장착 정보 확인 불가");
   if (npus?.some((npu) => !npu.verified))

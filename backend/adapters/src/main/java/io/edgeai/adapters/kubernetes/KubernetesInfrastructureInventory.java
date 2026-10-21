@@ -79,7 +79,12 @@ public final class KubernetesInfrastructureInventory implements InfrastructureSo
             String ready = "UNKNOWN";
             for (var condition : status.path("conditions")) if (condition.path("type").asText().equals("Ready"))
                 ready = switch (condition.path("status").asText()) { case "True" -> "READY"; case "False" -> "NOT_READY"; default -> "UNKNOWN"; };
-            result.add(new Node(name, kind, status.path("nodeInfo").path("architecture").asText(), status.path("nodeInfo").path("operatingSystem").asText(), ready));
+            var allocatable = new TreeMap<String, String>();
+            for (var entry : status.path("allocatable").properties()) {
+                if (!entry.getValue().isString()) throw new IllegalStateException("Invalid node allocatable");
+                allocatable.put(entry.getKey(), entry.getValue().asText());
+            }
+            result.add(new Node(name, kind, status.path("nodeInfo").path("architecture").asText(), status.path("nodeInfo").path("operatingSystem").asText(), ready, allocatable));
         }
         return result.stream().sorted(Comparator.comparing(Node::name)).toList();
     }

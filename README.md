@@ -1,7 +1,7 @@
 # EdgeAI
 
 엣지 AI 서버·엣지 디바이스·측정 센서를 관리하고 연속 가상 센서와 서비스 실행을 구성하는 플랫폼입니다.
-Kestra 원본 Vue 콘솔, Spring Boot, Next.js BFF와 PostgreSQL을 기반으로 Kubernetes·Prometheus·KubeEdge Mapper와 연결합니다.
+Kestra 원본 Vue 콘솔, Spring Boot와 PostgreSQL을 기반으로 Kubernetes·Prometheus·KubeEdge Mapper와 연결합니다.
 
 ## 시작하기
 
@@ -13,11 +13,12 @@ Kestra 원본 Vue 콘솔, Spring Boot, Next.js BFF와 PostgreSQL을 기반으로
 
 Kestra 원본 콘솔은 `bash scripts/dev/dev-kestra-native.sh`로 실행하며
 `http://127.0.0.1:13083/ui/main/dashboards/default`에서 사용합니다. Kestra 서버·DB 설치 없이
-기존 EdgeAI API를 연결합니다. 아래 기본 웹13080은 BFF·문서와 기존 화면을 제공하며 자동 교체하지 않습니다.
+기존 EdgeAI API를 연결합니다. 운영 release는 같은 콘솔을 `server.mjs`로 13080에서 제공합니다.
 실행 조건·메뉴별 기능은 [로컬 빠른 시작](docs/guides/local-development.md#kestra-원본-vue-운영-콘솔)에 있습니다.
+기존 Next.js 화면·BFF·`/docs` 사이트 소스는 저장소에서 제거했습니다. 이미 실행 중인 호스트 13080 프로세스의
+교체·중지는 배포 작업에서 별도로 수행하며 소스 제거만으로 완료되지 않습니다. 문서는 저장소 `docs/`에서 읽습니다.
 
-로컬 기본 화면은 `http://127.0.0.1:13080`, 문서는 `/docs`, Swagger는
-`http://127.0.0.1:18080/swagger-ui.html`입니다.
+Swagger는 `http://127.0.0.1:18080/swagger-ui.html`입니다.
 
 ```bash
 make setup

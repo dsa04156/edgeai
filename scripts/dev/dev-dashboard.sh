@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/../lib.sh"
 load_env
-pnpm_cmd --filter @edgeai/dashboard exec next dev --hostname 127.0.0.1 --port "$EDGEAI_DASHBOARD_PORT"
+# The console is the Kestra-native UI (Vite dev server on 13083); releases serve 13080 via server.mjs.
+exec bash scripts/dev/dev-kestra-native.sh

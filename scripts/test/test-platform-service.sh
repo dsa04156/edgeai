@@ -8,5 +8,5 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 pnpm_cmd exec openapi-typescript contracts/openapi/platform-service-api.json -o "$tmp"
 cmp dashboard/lib/platform-service-schema.d.ts "$tmp" || { printf 'Platform-Service types differ. Run corepack pnpm contract:generate\n' >&2; exit 1; }
-pnpm_cmd --filter @edgeai/dashboard exec tsc tests/platform-service-proxy.unit.ts --outDir ../.tools/platform-proxy-tests --module commonjs --moduleResolution node --target ES2022 --esModuleInterop --skipLibCheck --strict
-NODE_PATH="$EDGEAI_ROOT/dashboard/node_modules" node --test .tools/platform-proxy-tests/tests/platform-service-proxy.unit.js
+# The console proxy routes for this API are covered by the native console boundary tests.
+node --experimental-strip-types --disable-warning=ExperimentalWarning --test dashboard/tests/kestra-console.unit.mjs

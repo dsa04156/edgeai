@@ -6,5 +6,5 @@ engine_home="${PROCESSING_TEST_EKUIPER_HOME:-$EDGEAI_ROOT/.tools/ekuiper-test-2.
 [[ -x "${MAPPER_TEST_MOSQUITTO:-$EDGEAI_ROOT/.tools/mosquitto/usr/sbin/mosquitto}" ]] || blocked 'Real Mosquitto test broker required.'
 export PROCESSING_TEST_EKUIPER_HOME="$engine_home"
 (cd mappers && GOTOOLCHAIN=go1.24.2 go test -race ./internal/processing ./cmd/processing-agent)
-pnpm_cmd --filter @edgeai/dashboard exec tsc tests/continuous-proxy.unit.ts --outDir ../.tools/continuous-proxy-tests --module commonjs --moduleResolution node --target ES2022 --esModuleInterop --skipLibCheck --strict
-NODE_PATH="$EDGEAI_ROOT/dashboard/node_modules" node --test .tools/continuous-proxy-tests/tests/continuous-proxy.unit.js
+# The console proxy routes for this API are covered by the native console boundary tests.
+node --experimental-strip-types --disable-warning=ExperimentalWarning --test dashboard/tests/kestra-console.unit.mjs

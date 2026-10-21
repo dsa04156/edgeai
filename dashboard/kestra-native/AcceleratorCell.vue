@@ -1,45 +1,26 @@
 <template>
   <span v-if="!devices?.length">—</span>
-  <details
+  <div
     v-for="device in devices"
     :key="`${device.kind}:${device.slot}`"
     class="accelerator-cell"
   >
-    <summary>
-      <span>{{ device.kind }} · {{ device.model }}</span
-      ><UsageMeter
-        :value="device.usagePercent"
-        :label="`${device.node} ${device.kind} ${device.model}`"
-      />
-    </summary>
-    <p v-if="device.utilizationNote">{{ device.utilizationNote }}</p>
-    <dl>
-      <div>
-        <dt>메모리 사용/총량</dt>
-        <dd>{{ memory(device) }}</dd>
-      </div>
-      <div>
-        <dt>온도</dt>
-        <dd>
-          {{
-            device.temperatureC === null
-              ? "—"
-              : `${device.temperatureC.toFixed(1)} °C`
-          }}
-        </dd>
-      </div>
-      <div>
-        <dt>전력</dt>
-        <dd>
-          {{
-            device.powerWatts === null
-              ? "—"
-              : `${device.powerWatts.toFixed(1)} W`
-          }}
-        </dd>
-      </div>
-    </dl>
-  </details>
+    <p class="identity">
+      <span class="kind">{{ device.kind }}</span>
+      <strong>{{ device.model }}</strong>
+      <span v-if="device.modelNote" class="kind">{{ device.modelNote }}</span>
+    </p>
+    <UsageMeter
+      :value="device.usagePercent"
+      :label="`${device.node} ${device.kind} ${device.model}`"
+    />
+    <p v-if="details(device).length" class="details">
+      <span v-for="detail in details(device)" :key="detail">{{ detail }}</span>
+    </p>
+    <p v-if="device.utilizationNote" class="details">
+      {{ device.utilizationNote }}
+    </p>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -49,50 +30,61 @@ type Accelerator = NonNullable<Overview["gpus"]>[number] & {
   kind: "GPU" | "NPU";
 };
 defineProps<{ devices: Accelerator[] | null }>();
-function memory(device: Accelerator) {
+// Unmeasured values are omitted; a measured 0 is still shown.
+function details(device: Accelerator) {
   const gib = (value: number | null) =>
     value === null ? "—" : (value / 1024 ** 3).toFixed(2);
-  return device.memoryUsedBytes === null && device.memoryTotalBytes === null
-    ? "—"
-    : `${gib(device.memoryUsedBytes)} / ${gib(device.memoryTotalBytes)} GiB`;
+  return [
+    device.memoryUsedBytes === null && device.memoryTotalBytes === null
+      ? null
+      : `메모리 ${gib(device.memoryUsedBytes)} / ${gib(device.memoryTotalBytes)} GiB`,
+    device.temperatureC === null
+      ? null
+      : `${device.temperatureC.toFixed(1)} °C`,
+    device.powerWatts === null ? null : `${device.powerWatts.toFixed(1)} W`,
+  ].filter((detail): detail is string => detail !== null);
 }
 </script>
 
 <style scoped lang="scss">
 .accelerator-cell {
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--ks-spacing-2) 0;
   font-variant-numeric: tabular-nums;
   white-space: normal;
 }
-summary {
-  cursor: pointer;
-  min-height: 44px;
-  padding: var(--ks-spacing-2) 0;
-  align-content: center;
+.accelerator-cell + .accelerator-cell {
+  border-top: 1px solid var(--ks-border-default);
 }
-summary > span:first-child {
-  font-size: var(--ks-font-size-xs);
-  color: var(--ks-text-secondary);
-}
-summary:focus-visible {
-  outline: 2px solid var(--ks-chart-running);
-  outline-offset: 2px;
-}
-p,
-dl {
-  margin: 0 0 var(--ks-spacing-2);
-  color: var(--ks-text-secondary);
-  font-size: var(--ks-font-size-xs);
-}
-dl div {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--ks-spacing-2);
-}
-dt {
-  font-weight: var(--ks-font-weight-regular);
-}
-dd {
+p {
   margin: 0;
+}
+.identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ks-spacing-2);
+  margin-bottom: var(--ks-spacing-1);
+  min-width: 0;
+}
+.kind {
+  flex: none;
+  font-size: var(--ks-font-size-xs);
+  color: var(--ks-text-secondary);
+}
+strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--ks-font-weight-bold);
   color: var(--ks-text-primary);
+}
+.details {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--ks-spacing-3);
+  margin-top: var(--ks-spacing-1);
+  color: var(--ks-text-secondary);
+  font-size: var(--ks-font-size-xs);
 }
 </style>

@@ -1,13 +1,20 @@
 <template>
   <figure class="native-history">
     <div class="native-toolbar" aria-label="그래프 구간 탐색">
-      <KsButton @click="zoom(0.5)" :disabled="!data.points.length"
+      <KsButton @click="zoom(0.5)" :disabled="!data.points.length && !explore"
         >확대</KsButton
       >
-      <KsButton @click="zoom(2)" :disabled="!range">축소</KsButton>
-      <KsButton @click="shift(-0.5)" :disabled="!range">이전 구간</KsButton>
-      <KsButton @click="shift(0.5)" :disabled="!range">다음 구간</KsButton>
-      <KsButton @click="reset" :disabled="!range">전체 구간</KsButton>
+      <KsButton @click="zoom(2)" :disabled="!range && !explore">축소</KsButton>
+      <KsButton @click="shift(-0.5)" :disabled="!range && !explore"
+        >이전 구간</KsButton
+      >
+      <KsButton @click="shift(0.5)" :disabled="!range && !explore"
+        >다음 구간</KsButton
+      >
+      <KsButton v-if="!explore" @click="reset" :disabled="!range"
+        >전체 구간</KsButton
+      >
+      <slot name="actions" />
     </div>
     <p class="native-note" aria-label="그래프 표시 구간">
       {{ formatTime(visible.from) }} → {{ formatTime(visible.to) }}
@@ -19,11 +26,23 @@
       :aria-label="data.name"
     />
     <figcaption class="native-note">
-      슬라이더·휠로 구간을 조절할 수 있습니다.
-      {{ range ? "선택한 시각 구간을 유지합니다." : "전체 구간을 표시합니다." }}
+      <template v-if="explore"
+        >드래그로 이동 · 휠로 확대/축소 · 그래프를 가리키면 시각과 값을
+        표시합니다.</template
+      >
+      <template v-else>
+        슬라이더·휠로 구간을 조절할 수 있습니다.
+        {{
+          range ? "선택한 시각 구간을 유지합니다." : "전체 구간을 표시합니다."
+        }}
+      </template>
     </figcaption>
-    <p v-if="!data.points.length" class="native-note">
-      선택한 기간에 표시할 기록이 없습니다.
+    <p v-if="empty" class="native-note">
+      {{
+        explore
+          ? "표시 구간에 기록이 없습니다."
+          : "선택한 기간에 표시할 기록이 없습니다."
+      }}
     </p>
   </figure>
 </template>
@@ -37,15 +56,43 @@ import {
   type ECharts,
   type HistoryChartData,
 } from "../lib/history-echarts";
+import {
+  clampViewport,
+  maxSpan,
+  MIN_SPAN,
+  sameRange,
+} from "../lib/history-viewport";
 const formatTime = (value: number) => new Date(value).toLocaleString("ko-KR");
-const props = defineProps<{ data: HistoryChartData; scope: string }>();
+// With `viewport`, the parent owns the visible window (data.from/to is then the whole navigable domain) and
+// receives every user pan/zoom through `update:viewport`; without it the chart keeps its own range as before.
+const props = defineProps<{
+  data: HistoryChartData;
+  scope: string;
+  viewport?: { from: number; to: number };
+  loading?: boolean;
+}>();
+const emit = defineEmits<{
+  "update:viewport": [range: { from: number; to: number }];
+}>();
 const element = ref<HTMLElement>(),
   range = ref<{ from: number; to: number } | null>(null);
-const visible = computed(
-  () => range.value || { from: props.data.from, to: props.data.to },
+const explore = computed(() => !!props.viewport);
+const bounds = computed(() => ({ from: props.data.from, to: props.data.to }));
+const visible = computed(() => props.viewport || range.value || bounds.value);
+const empty = computed(() =>
+  explore.value
+    ? !props.loading &&
+      !props.data.points.some(
+        (p) => p.at >= visible.value.from && p.at <= visible.value.to,
+      )
+    : !props.data.points.length,
 );
 let chart: ECharts | undefined, observer: ResizeObserver | undefined;
 function applyRange(from: number, to: number) {
+  if (explore.value) {
+    emit("update:viewport", clampViewport({ from, to }, bounds.value));
+    return;
+  }
   const width = Math.min(to - from, props.data.to - props.data.from);
   const start = Math.max(
     props.data.from,
@@ -83,11 +130,33 @@ function reset() {
 }
 function render() {
   if (!chart) return;
+  if (props.viewport) {
+    shown = props.viewport;
+    updateChart(chart, props.data, {
+      ...props.viewport,
+      minSpan: MIN_SPAN,
+      maxSpan: maxSpan(bounds.value),
+    });
+    return;
+  }
   updateChart(chart, props.data);
   if (range.value) applyRange(range.value.from, range.value.to);
   else reset();
 }
 watch(() => props.data, render);
+// A pan/zoom echoed back from the parent is already on screen; only parent-driven moves are dispatched, without re-sending series data.
+let shown: { from: number; to: number } | undefined;
+watch(
+  () => props.viewport,
+  (view) => {
+    if (!chart || !view || sameRange(view, shown)) return;
+    shown = view;
+    chart.dispatchAction(
+      { type: "dataZoom", startValue: view.from, endValue: view.to },
+      { silent: true },
+    );
+  },
+);
 watch(
   () => props.scope,
   () => {
@@ -98,7 +167,7 @@ watch(
 onMounted(() => {
   if (!element.value) return;
   chart = init(element.value);
-  configureChart(chart, element.value);
+  configureChart(chart, element.value, explore.value);
   chart.on("datazoom", () => {
     const state = (
       chart?.getOption().dataZoom as
@@ -111,17 +180,23 @@ onMounted(() => {
         | undefined
     )?.[0];
     if (!state) return;
+    const width = props.data.to - props.data.from;
+    const from = Number(
+        state.startValue ?? props.data.from + (width * state.start) / 100,
+      ),
+      to = Number(
+        state.endValue ?? props.data.from + (width * state.end) / 100,
+      );
+    if (explore.value) {
+      shown = { from, to };
+      emit("update:viewport", shown);
+      return;
+    }
     if (state.start <= 0 && state.end >= 100) {
       range.value = null;
       return;
     }
-    const width = props.data.to - props.data.from;
-    range.value = {
-      from: Number(
-        state.startValue ?? props.data.from + (width * state.start) / 100,
-      ),
-      to: Number(state.endValue ?? props.data.from + (width * state.end) / 100),
-    };
+    range.value = { from, to };
   });
   observer = new ResizeObserver(() => chart?.resize());
   observer.observe(element.value);

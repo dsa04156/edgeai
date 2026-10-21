@@ -40,6 +40,11 @@ def render(documents, image):
     pod = template["spec"]
     if pod.get("nodeSelector", {}).get("kubernetes.io/hostname") != "etri-ser0004-cgnms0":
         raise ValueError("Shared engine must remain on the approved ordinary AMD64 worker")
+    # The agent must reach the in-cluster API through cluster DNS; a static alias pinned the
+    # engine to a stopped host API (10.77.0.1) from 2026-10-19 until 2026-10-21.
+    if any(name.startswith("edgeai-api.") for alias in pod.get("hostAliases") or []
+           for name in alias.get("hostnames") or []):
+        raise ValueError("hostAliases must not override the edgeai-api Service address")
     pod.update(serviceAccountName="edgeai-processing", automountServiceAccountToken=False,
                terminationGracePeriodSeconds=30)
     containers = pod["containers"]

@@ -61,8 +61,6 @@ jobs:
   scaffold:
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.full_verification && 20 || 10 }}
-    env:
-      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -77,11 +75,12 @@ jobs:
           cache: pnpm
       - run: bash scripts/dev/bootstrap.sh
       - run: bash scripts/dev/preflight.sh local
-      - name: Run basic unit, API contract and dashboard checks
+      - name: Run basic unit, API contract and console checks
         if: inputs.full_verification != true
         run: |
           bash scripts/collect-evidence.sh unit bash scripts/test/test-unit.sh
           bash scripts/collect-evidence.sh contract bash scripts/test/test-contract.sh
+          pnpm --filter @edgeai/dashboard test
           pnpm --filter @edgeai/dashboard typecheck
           pnpm --filter @edgeai/dashboard lint
       - name: Verify recovery Kubernetes inventory classification and list boundaries
@@ -124,9 +123,11 @@ jobs:
         if: inputs.full_verification == true
       - run: bash scripts/collect-evidence.sh postgres bash scripts/test/test-integration.sh
         if: inputs.full_verification == true
-      - name: Verify PostgreSQL → Spring → Next.js
+      - name: Verify PostgreSQL → Spring → Kestra-native console
         if: inputs.full_verification == true
-        run: bash scripts/collect-evidence.sh health bash scripts/test/test-profiles-stack.sh compose
+        run: |
+          bash scripts/ops/build-kestra-console.sh .tools/console-release
+          EDGEAI_CONSOLE_RELEASE="$PWD/.tools/console-release" bash scripts/collect-evidence.sh health bash scripts/test/test-profiles-stack.sh compose
       - name: Verify load measurement and acceptance classification
         if: inputs.full_verification == true
         run: bash scripts/collect-evidence.sh load-acceptance bash scripts/test/test-load-acceptance.sh

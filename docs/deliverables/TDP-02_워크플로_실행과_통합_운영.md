@@ -64,19 +64,19 @@ ProfileVersion·WorkflowVersion은 실행 정의, Run·Task·Attempt·Runtime은
 
 | 구성 요소 | 로컬 기본 포트 | 역할 |
 |---|---|---|
-| 기존 웹·BFF | 13080 | API 프록시·문서 |
-| Kestra native 콘솔 | 13083 | Vue 운영 화면 |
+| Kestra native 콘솔 release | 13080 | `server.mjs` 정적 bundle·API 연결 |
+| Kestra native 콘솔 개발 | 13083 | Vue 운영 화면 |
 | 관리 API | 18080 | 센서·VD·저장 관리 |
 | 별도 워크플로 API | 18082 | 모듈·DAG·실행 제어 |
 | InfluxDB | 18086 | 원본·VD 결과 이력 |
 
-관리 API는 JDK 21, 기존 BFF는 Node 22·pnpm 10.34.6을 사용한다. Kestra UI는 Node 24·npm 11로 별도 실행한다. Runner 의존성은 Dockerfile과 `requirements-stream.txt`, UI 의존성은 lockfile을 따른다. [2][5]
+관리 API는 JDK 21, 콘솔 release 서버는 Node 22, Kestra UI 빌드·개발 서버는 Node 24·npm 11, 작업 공간 의존성은 pnpm 10.34.6을 사용한다. Runner 의존성은 Dockerfile과 `requirements-stream.txt`, UI 의존성은 lockfile을 따른다. [2][5]
 
 관리·워크플로 API를 분리하면 같은 control DB를 쓰되 원본 수집은 관리 인스턴스 한 곳에서만 실행한다. 세션은 `EDGEAI_SESSION`과 `EDGEAI_WORKFLOW_SESSION`으로 구분하고 각각 CSRF를 사용한다.
 
 | 설정·조건 | 용도 |
 |---|---|
-| `EDGEAI_API_BASE_URL` | BFF가 연결할 관리 API 주소 |
+| `EDGEAI_API_BASE_URL` | 콘솔 서버가 연결할 관리 API 주소 |
 | `EDGEAI_WORKFLOW_API_BASE_URL` | 별도 워크플로 API 주소 |
 | `EDGEAI_RUNTIME_ENABLED` | 실제 작업 실행 활성화 |
 | `EDGEAI_PROMETHEUS_ENABLED`, `EDGEAI_PROMETHEUS_URL` | 메트릭 조회 활성화·대상 주소 |
@@ -101,8 +101,8 @@ make storage
 | 대상 | 명령 |
 |---|---|
 | 관리 API | `make backend` |
-| 기존 BFF | `make dashboard` |
-| native 콘솔 | `bash scripts/dev/dev-kestra-native.sh` |
+| native 콘솔 개발 | `make dashboard` (`bash scripts/dev/dev-kestra-native.sh`) |
+| native 콘솔 release | `bash scripts/ops/build-kestra-console.sh DIR`, `EDGEAI_CONSOLE_PORT=13080 bash scripts/ops/start-kestra-console.sh DIR` |
 
 워크플로 API를 분리할 경우 포트·세션 이름·DB 연결·원본 수집 비활성 설정을 확인해 별도로 실행한다. 기본 명령만으로 18082 인스턴스가 자동 생성되지는 않는다.
 

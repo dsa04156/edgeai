@@ -154,9 +154,11 @@ export function createDeviceRegistrationMiddleware({
       return send(400, "카메라 UID를 확인하세요.");
     const origin = request.headers.origin;
     const expectedOrigin = `${"encrypted" in request.socket && request.socket.encrypted ? "https" : "http"}://${request.headers.host}`;
+    // DDS writes carry the server token, so they also require the browser's Origin (as the former BFF did).
     if (
       request.headers["sec-fetch-site"] === "cross-site" ||
-      (origin && origin !== expectedOrigin)
+      (origin && origin !== expectedOrigin) ||
+      (platformWrite && !origin)
     )
       return send(403, "같은 Dashboard에서 요청하세요.");
     const workflow =
