@@ -1,5 +1,11 @@
 # 현재 상태
 
+## 2026-10-21 센서 그래프 드래그·휠 입력 지연 수정·콘솔 재배포
+
+- 데이터 저장소 표의 `recordRows`를 computed로, `recordColumns`를 상수로 바꿔 그래프 조작 때 1000행 표를 다시 그리지 않게 했다(`DataStorePage.vue`만 변경). 기존 브라우저 수용·typecheck·build 통과. 독립 리뷰는 Guard에 막혀 **수행·통과하지 않았고**, 사용자 지시("배포하세요")로 배포했다.
+- 배포(이미지만 교체): 콘솔 `edgeai-dashboard@sha256:cf9da620…` → `sha256:aeba37dbc9e47dc8b05f21262b61b59972027d18ee519a4ec2c7a7b60d3050f0`. API `2be0be06…` 그대로, strategy(Recreate)·env·volume 배포 전후 같음, rollout Ready 1/1. dev overlay digest를 live와 맞췄다.
+- 실제13080(GET 전용, 1회): `/ui/main/data-store` 200, 드래그 입력 응답 p50 32.9ms·p95 41.5ms(수정 전 약137ms), 휠 p50 34.4ms, long task 0, 50ms 넘는 프레임 0, 조작 중 데이터 요청0, JS 오류0. 근거: `output/verification/chart-interaction/`(review-input.md, deployed/gesture-x1.json). 한계: 측정1회·CPU 제한 없음, 전체 수용 시험은 다시 돌리지 않았다.
+
 ## 2026-10-21 센서 그래프 점 예산·실시간 꼬리 조회·API/콘솔 재배포
 
 - 사용자 승인(점이 많아 화면이 느림)에 따라 chart API가 화면 폭 기반 점 예산 `points`(200–2000, 기본1000, 범위 밖 400)를 받는다. 예산에 맞는 가장 좁은 UTC 정렬 시간 구간(1초–1일, 앞뒤 부분 구간 포함)별 처음·최소·최대·마지막 원본을 원래 시각 그대로 반환하고, 예산 안이면 원본 그대로 준다. 기존 원본10만 개 기준과 전 구간 pivot count+전체 읽기를 없앴다. 응답에 `pointBudget`, 실제 원본 수 `totalObservations`, 구간별 count를 담는다. 숨긴 legacy 원본은 계속 제외한다. 저장 원본은 바뀌지 않는다.

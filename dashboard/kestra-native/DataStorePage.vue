@@ -91,13 +91,8 @@
       <NativeRecords
         title="센서 원본 기록"
         :busy="busy || recordsBusy"
-        :rows="records.map((r, i) => ({ ...r, id: String(i) }))"
-        :columns="[
-          { key: 'observedAt', label: '측정 시각', width: 250 },
-          { key: 'value', label: '원본값' },
-          { key: 'quality', label: '검증 상태' },
-          { key: 'identity', label: '원본 식별', width: 330 },
-        ]"
+        :rows="recordRows"
+        :columns="recordColumns"
       >
         <template #observedAt="{ row }"
           >{{ time(row.observedAt)
@@ -253,6 +248,16 @@ function changeSensor() {
   clear();
   if (selected.value) void loadAll();
 }
+// Every pan/zoom step re-renders this page; stable table props keep up to 2,000 rows from re-rendering with it.
+const recordRows = computed(() =>
+  records.value.map((r, i) => ({ ...r, id: String(i) })),
+);
+const recordColumns = [
+  { key: "observedAt", label: "측정 시각", width: 250 },
+  { key: "value", label: "원본값" },
+  { key: "quality", label: "검증 상태" },
+  { key: "identity", label: "원본 식별", width: 330 },
+];
 const chartData = computed<HistoryChartData>(() => {
   const unit = records.value[0]?.unit || selected.value?.unit;
   return {
