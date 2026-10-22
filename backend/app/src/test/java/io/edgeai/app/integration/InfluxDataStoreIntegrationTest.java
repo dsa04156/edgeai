@@ -97,7 +97,7 @@ class InfluxDataStoreIntegrationTest {
             var qualified=new TreeMap<String,Object>(legacy);
             qualified.putAll(Map.of("quality","QUALIFIED","sourceGeneration",generation.toString(),"sessionId","abc","sequence",index+1));
             var stored=new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(qualified));
-            archive.append(stored);org.junit.jupiter.api.Assertions.assertTrue(archive.hideLegacyDuplicate(stored));
+            archive.append(stored);org.junit.jupiter.api.Assertions.assertEquals(1,archive.hideLegacyDuplicates(List.of(stored)));
             // A legacy retry must not resurrect the reconciled point.
             archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(legacy)));
         }

@@ -46,19 +46,28 @@ class SensorArchiveReconcilerTest {
         reconciler.enqueue(observation("QUALIFIED",1));
         assertEquals(Map.of("pendingReconciliations",64L,"droppedReconciliations",6L),reconciler.state());
     }
-    @Test void storeFailureKeepsTheEntryWithBackoffAndRecoversLater() {
+    @Test void storeFailureKeepsTheBatchWithBackoffAndRecoversLater() {
         for(int sequence=1;sequence<=3;sequence++)reconciler.enqueue(observation("QUALIFIED",sequence));
-        when(telemetry.hideLegacyDuplicate(any())).thenThrow(new IllegalStateException("owned outage"));
+        when(telemetry.hideLegacyDuplicates(anyList())).thenThrow(new IllegalStateException("owned outage"));
         reconciler.drain();
-        // The first failure ends the pass; the store is not asked once per queued entry.
-        verify(telemetry,times(1)).hideLegacyDuplicate(any());
+        verify(telemetry,times(1)).hideLegacyDuplicates(argThat(batch->batch.size()==3));
         assertEquals(3,queue.count());
+        // Backoff keeps the failed batch out of the next pass.
         reconciler.drain();
-        verify(telemetry,times(2)).hideLegacyDuplicate(any());
-        reset(telemetry);when(telemetry.rawRetentionDays()).thenReturn(30);when(telemetry.hideLegacyDuplicate(any())).thenReturn(true,false,true);
+        verify(telemetry,times(1)).hideLegacyDuplicates(anyList());
+        reset(telemetry);when(telemetry.rawRetentionDays()).thenReturn(30);when(telemetry.hideLegacyDuplicates(anyList())).thenReturn(2);
         clock.now=clock.now.plusSeconds(2);
         reconciler.drain();
-        verify(telemetry,times(3)).hideLegacyDuplicate(any());
+        verify(telemetry,times(1)).hideLegacyDuplicates(argThat(batch->batch.size()==3));
+        assertEquals(0,queue.count());
+    }
+    @Test void aLargeBacklogIsDrainedInBoundedBatchesInOnePass() {
+        var many=new SensorArchiveReconciler(telemetry,queue,clock,1000,true,false);
+        for(int sequence=1;sequence<=600;sequence++)many.enqueue(observation("QUALIFIED",sequence));
+        when(telemetry.hideLegacyDuplicates(anyList())).thenReturn(0);
+        many.drain();
+        verify(telemetry,times(2)).hideLegacyDuplicates(argThat(batch->batch.size()==256));
+        verify(telemetry,times(1)).hideLegacyDuplicates(argThat(batch->batch.size()==88));
         assertEquals(0,queue.count());
     }
     @Test void entriesOlderThanRawRetentionExpireWithoutTouchingTheStore() {
@@ -66,6 +75,6 @@ class SensorArchiveReconcilerTest {
         clock.now=clock.now.plusSeconds(31*86400L);
         reconciler.drain();
         assertEquals(0,queue.count());
-        verify(telemetry,never()).hideLegacyDuplicate(any());
+        verify(telemetry,never()).hideLegacyDuplicates(anyList());
     }
 }
