@@ -110,6 +110,7 @@ public class ExecutionService {
         var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,null,JSON.canonical(taskExecutions));
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,definitions,stream?Set.of():dag.roots(),taskRemoteTargets);
+        dataInputs.subscribe(run.id(),parameters);
         if(stream)streams.configure(run,runtimeNamespace,streamInputs,sessions);
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
         return new Creation<>(repository.run(run.id(),false).orElseThrow(),true);

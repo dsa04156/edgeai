@@ -14,11 +14,12 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.stereotype.Service;
 import static io.edgeai.app.support.DeviceProfileCompiler.map;
 
-/** Dedicated subscriber: ACK follows durable write. History failure does not block twins or VD execution. */
+/** Dedicated subscriber: ACK follows durable archive and workflow feed writes. History failure does not block twins or VD execution. */
 @Service
 public class SensorArchiveCollector implements AutoCloseable {
     private final ManagedDeviceService devices;
     private final SensorTelemetryRepository telemetry;
+    private final WorkflowSourceFeedService feeds;
     private final Clock clock;
     private final boolean enabled;
     private final SensorObservationSubscriber subscriber;
@@ -42,13 +43,15 @@ public class SensorArchiveCollector implements AutoCloseable {
         final java.util.concurrent.locks.ReentrantLock lock=new java.util.concurrent.locks.ReentrantLock(true);
         int users;
     }
-    public SensorArchiveCollector(ManagedDeviceService devices,SensorTelemetryRepository telemetry,Clock clock,SensorObservationSubscriber subscriber,
+    public SensorArchiveCollector(ManagedDeviceService devices,SensorTelemetryRepository telemetry,WorkflowSourceFeedService feeds,Clock clock,SensorObservationSubscriber subscriber,
         @Value("${edgeai.data-store.raw.enabled:false}") boolean enabled,@Value("${edgeai.data-store.raw.broker-node-overrides:{}}") String overrides,
         @Value("${edgeai.data-store.raw.interval-ms:5000}") long intervalMs,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection) {
-        this.devices=devices;this.telemetry=telemetry;this.clock=clock;this.enabled=enabled&&!inspection;this.overrides=map(WorkflowInput.JSON.decode(overrides));this.subscriber=subscriber;
+        this.devices=devices;this.telemetry=telemetry;this.feeds=feeds;this.clock=clock;this.enabled=enabled&&!inspection;this.overrides=map(WorkflowInput.JSON.decode(overrides));this.subscriber=subscriber;
         this.intervalMs=intervalMs;if(intervalMs<100||intervalMs>60000)throw new IllegalArgumentException("Invalid archive refresh interval");
     }
     @EventListener(ApplicationReadyEvent.class) public void start(){if(enabled&&telemetry.enabled())scheduler.scheduleWithFixedDelay(this::refresh,0,intervalMs,TimeUnit.MILLISECONDS);}
+    /** Whether qualified observations reach the archive and the ALL_OBSERVATIONS feed at all. */
+    public boolean collecting(){return enabled&&telemetry.enabled();}
     public Map<String,Object> state(){return Map.of("enabled",enabled&&telemetry.enabled(),"status",waiting.get()>0?"STORE_UNAVAILABLE":status,"storedDeliveries",stored.get(),"rejectedDeliveries",invalid.get());}
     public synchronized void refresh() {
         if(closed||!enabled||!telemetry.enabled())return;
@@ -82,7 +85,8 @@ public class SensorArchiveCollector implements AutoCloseable {
                     try {
                         entry.lock.lockInterruptibly();
                         try{
-                            if(!completed.containsKey(identity)){telemetry.append(observation);completed.put(identity,true);}
+                            // ALL_OBSERVATIONS consumers see the observation only after its archive write; both writes are idempotent on retry.
+                            if(!completed.containsKey(identity)){telemetry.append(observation);feeds.acceptSensor(observation);completed.put(identity,true);}
                         }finally{entry.lock.unlock();}
                     }finally{
                         measurementLocks.compute(measurement,(key,current)->--current.users==0?null:current);

@@ -32,7 +32,7 @@ paths:
       tags: [Run]
       security: [{csrfToken: []}]
       summary: 실시간 입력을 종료하고 마지막 처리 결과 저장
-      description: 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
+      description: 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. ALL_OBSERVATIONS 입력은 이 요청 시점에 확정된 feed head를 고정하고 그 위치까지 남은 관측을 모두 전달한 뒤 END를 보낸다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
       requestBody:
         required: true
         content:
@@ -2519,6 +2519,7 @@ components:
           kind: {type: string, const: SENSOR}
           deviceId: {type: string, maxLength: 63, pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'}
           property: {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
+          delivery: {$ref: '#/components/schemas/WorkflowSourceDelivery'}
       - type: object
         additionalProperties: false
         required: [kind, vdId, outputId]
@@ -2526,6 +2527,14 @@ components:
           kind: {type: string, const: CONTINUOUS_VD}
           vdId: {type: string, format: uuid}
           outputId: {type: string, maxLength: 100, pattern: '^[a-z][a-z0-9]*([._-][a-z0-9]+)*$'}
+          delivery: {$ref: '#/components/schemas/WorkflowSourceDelivery'}
+    WorkflowSourceDelivery:
+      type: string
+      enum: [LATEST, ALL_OBSERVATIONS]
+      default: LATEST
+      description: >-
+        LATEST(생략 시)는 1초 간격 최신값만 전달한다. ALL_OBSERVATIONS는 Run 시작 위치 이후 feed에 수락된 모든 관측을 수락 순서로 한 번씩 전달한다.
+        센서는 Mapper 검증(QUALIFIED) 숫자/불리언 측정만 지원하며 문자열 측정은 409 WORKFLOW_SOURCE_UNSUPPORTED다. collector 수신 전 관측, 보관 한도 초과분은 보장하지 않고 WORKFLOW_SOURCE_GAP으로 알린다.
     WorkflowDataSources:
       type: object
       additionalProperties: false

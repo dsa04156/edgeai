@@ -22,6 +22,7 @@ public class ProcessingEngineService {
     private final Clock clock;
     private final ProcessingHistoryRepository history;
     @org.springframework.beans.factory.annotation.Autowired private ProcessingHistoryDelivery delivery;
+    @org.springframework.beans.factory.annotation.Autowired private WorkflowSourceFeedService feeds;
     private final Map<String,Object> overrides;
     private Instant catalogAt=Instant.EPOCH;
     private List<Map<String,Object>> inputs=List.of();
@@ -130,6 +131,7 @@ public class ProcessingEngineService {
         var routes=catalog();var now=clock.instant();var samples=new ArrayList<ProcessingHistoryRepository.Sample>();var seen=new HashSet<String>();int accepted=0;
         var currentExecutions=new HashMap<UUID,ContinuousRepository.Execution>();
         var currentPlans=new HashMap<UUID,Map<String,Object>>();
+        var fresh=new ArrayList<ContinuousRepository.Result>();
         for(var raw:values) {
             var value=object(raw,"vdId","outputId","generation","sequence","evaluationId","evaluationAt","value","sources");
             UUID id=uuid(value.get("vdId")),generation=uuid(value.get("generation"));String output=text(value.get("outputId"),63);long sequence=sequence(value.get("sequence"));
@@ -155,8 +157,10 @@ public class ProcessingEngineService {
             boolean retain=ResultStoragePolicy.stores(map(plan.get("configuration")),output,calculated);
             document.put("storageStatus",retain?"PENDING":"SKIPPED");document.put("profileVersionId",plan.get("profileVersionId"));document.put("vdRevision",plan.get("vdRevision"));
             var result=new ContinuousRepository.Result(id,output,generation,(String)value.get("evaluationId"),sequence,at,JSON.canonical(document));
-            if(executions.accept(result,now)){accepted++;executions.appendLatest(result);if(retain)samples.add(new ProcessingHistoryRepository.Sample(result,((Number)plan.get("retentionDays")).intValue(),rule.type(),rule.unit(),calculated,JSON.canonical(proofs)));}
+            if(executions.accept(result,now)){accepted++;executions.appendLatest(result);fresh.add(result);if(retain)samples.add(new ProcessingHistoryRepository.Sample(result,((Number)plan.get("retentionDays")).intValue(),rule.type(),rule.unit(),calculated,JSON.canonical(proofs)));}
         }
+        // Same transaction as the receipt: an engine retry after rollback re-appends, an accepted duplicate never does.
+        feeds.acceptResults(fresh);
         boolean stored=false;
         delivery.reserve(samples.size());
         for(var sample:samples)delivery.enqueue(sample);
