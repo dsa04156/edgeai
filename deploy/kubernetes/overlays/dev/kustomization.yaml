@@ -4,6 +4,7 @@ namespace: edgeai
 resources:
   - ../../base
   - ingress.yaml
+  - ../../components/gpu-inference
 components:
   - ../../components/stream
   - ../../components/hdd-data-store
@@ -18,10 +19,57 @@ patches:
           spec:
             nodeSelector:
               kubernetes.io/hostname: etri-ser0001-cg0msb
+            containers:
+              - name: api
+                env:
+                  # Sole raw-history writer since the host API stopped (2026-10-21); Recreate keeps one subscriber.
+                  - {name: EDGEAI_RAW_HISTORY_ENABLED, value: 'true'}
+                  # The central eKuiper agent (ns ekuiper) calls this API's 18443; it trusts the stream CA
+                  # and shares the credential copied into Secret edgeai-processing-agent (not stored in Git).
+                  - {name: EDGEAI_CONTINUOUS_ENABLED, value: 'true'}
+                  - {name: EDGEAI_CONTINUOUS_CREDENTIAL_FILE, value: /var/run/processing/credential/credential}
+                  # Image object detection on the GB10 runtime (components/gpu-inference); the identity must match its /health.
+                  - {name: EDGEAI_INFERENCE_ENABLED, value: 'true'}
+                  - {name: EDGEAI_INFERENCE_RUNTIME_URL, value: 'http://edgeai-gpu-inference.edgeai.svc:8080'}
+                  - {name: EDGEAI_INFERENCE_MODEL_ID, value: fasterrcnn-resnet50-fpn-v2-coco-v1}
+                  - {name: EDGEAI_INFERENCE_MODEL_NAME, value: 'Faster R-CNN ResNet-50 FPN v2 (COCO)'}
+                  - {name: EDGEAI_INFERENCE_NODE_NAME, value: etri-ser0003-cg0ms0}
+                  - {name: EDGEAI_INFERENCE_DEVICE_NAME, value: NVIDIA GB10}
+                  - {name: EDGEAI_INFERENCE_PROVIDER, value: pytorch-cuda}
+                volumeMounts:
+                  - {name: processing-credential, mountPath: /var/run/processing/credential, readOnly: true}
+            volumes:
+              - name: processing-credential
+                secret: {secretName: edgeai-processing-agent, defaultMode: 288}
+  # Users reach the console at the server address 10.254.192.47:13080 (formerly the host Next.js process).
+  # A hostPort cannot be shared during a rolling update, so the old Pod stops first.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: edgeai-dashboard
+      spec:
+        strategy:
+          type: Recreate
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: etri-ser0001-cg0msb
+            containers:
+              - name: dashboard
+                env:
+                  - {name: EDGEAI_PLATFORM_SERVICE_URL, value: 'http://10.254.192.47:18081'}
+                  - name: EDGEAI_PLATFORM_SERVICE_TOKEN
+                    valueFrom:
+                      secretKeyRef: {name: edgeai-console-platform, key: token}
+                ports:
+                  - {name: http, containerPort: 13080, hostPort: 13080}
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:d6a015be2b5c00d767581813ec9e1d61df5d30216347016273c3e0fab972ddeb
+    newName: 10.254.192.47:5000/edgeai-api
+    digest: sha256:06613f300f20bdebf29ce386f5284e2aa9a7f88fc9ecfe6c8221c6ba2c4d6dbc
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:53ac73a3d1482489d1143e3e40cb5e7c4b6d6ccc0a5ca2f1050c4d9dd6b7578f
+    newName: 10.254.192.47:5000/edgeai-dashboard
+    digest: sha256:0171da98c3f79ba0ee9de4f86519542142266270d718f79160e13d9c65e38788
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:bf185b24d265ecbd101011f0640e1719d49700d84aad994d41b2b3031bf0eaa9
+    digest: sha256:88d6843bed54094690edd581b4ff7e5bb86c3bba0684bdd893328e234dc75971

@@ -37,7 +37,7 @@ export interface paths {
         put?: never;
         /**
          * 실시간 입력을 종료하고 마지막 처리 결과 저장
-         * @description 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
+         * @description 입력 END, 후속 작업 ACK, 외부 체크포인트와 공동 FINALIZE를 기다린다. ALL_OBSERVATIONS 입력은 이 요청 시점에 확정된 feed head를 고정하고 그 위치까지 남은 관측을 모두 전달한 뒤 END를 보낸다. 요청 성공은 작업 완료를 의미하지 않는다. 반복 요청은 멱등이며 실행 취소와 구분한다.
          */
         post: operations["drainWorkflowInput"];
         delete?: never;
@@ -75,6 +75,26 @@ export interface paths {
         put: operations["updateManagedDevice"];
         post?: never;
         delete: operations["deleteManagedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * RTSP 카메라의 최신 디코딩된 JPEG 미리보기
+         * @description 익명 RTSP, 최대640px, 오디오 없음. 오래된 프레임이나 변경된 Device UID는 반환하지 않습니다.
+         */
+        get: operations["getCameraPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -493,6 +513,46 @@ export interface paths {
         get: operations["getNodeMetrics"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 설정된 이미지 객체 탐지 모델 조회
+         * @description 서버에 고정 설정된 모델만 반환합니다. 미설정 또는 비활성 환경은 빈 목록입니다. available은 런타임 /health가 2초 안에 설정과 같은 모델·노드·장치·provider로 READY를 응답했는지입니다. 워크플로·실행 이력과 무관합니다.
+         */
+        get: operations["listInferenceModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이미지 1장 GPU 객체 탐지
+         * @description 설정된 런타임 1곳에 동기 전달하고 검증한 결과를 반환합니다. 결과와 이미지는 저장하지 않습니다. 서버 대기 시간은 최대 20초이며 자동 재시도와 redirect 추적을 하지 않습니다. 서버당 동시 추론은 1건입니다.
+         */
+        post: operations["predictInference"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1240,7 +1300,7 @@ export interface paths {
         };
         /**
          * 센서 UID별 선택 기간 전체의 그래프 조회
-         * @description 숫자·참/거짓의 실제 측정 시각과 값을 시간순으로 조회합니다. 원본 100000개 이하의 기간은 모두 반환합니다. 이를 초과하는 긴 기간은 구간의 최초·최저·최고·마지막 실제 측정값을 선택해 기간 전체를 표시하며 SELECTED_ORIGINALS로 명시합니다. 평균·보간 값은 만들지 않습니다. 각 측정의 원본 문서·설정 식별 정보는 history API로 조회합니다.
+         * @description 숫자·참/거짓의 실제 측정 시각과 값을 시간순으로 조회합니다. 기간의 원본 수가 points 이하이면 모두 반환합니다(ORIGINALS). 이를 넘으면 UTC epoch 기준으로 정렬된 같은 길이의 시간 구간마다 최초·최저·최고·마지막 실제 원본을 선택해 기간 전체를 표시하며(SELECTED_ORIGINALS), 처음·끝의 일부 구간을 포함해 항목 수는 points를 넘지 않습니다. 평균·보간 값은 만들지 않고 원본 시각을 유지합니다. 숨긴 legacy 원본은 포함하지 않습니다. 각 측정의 원본 문서·설정 식별 정보는 history API로 조회합니다.
          */
         get: operations["getSensorPeriodChart"];
         put?: never;
@@ -1294,13 +1354,21 @@ export interface components {
             kind: "SENSOR";
             deviceId: string;
             property: string;
+            delivery?: components["schemas"]["WorkflowSourceDelivery"];
         } | {
             /** @constant */
             kind: "CONTINUOUS_VD";
             /** Format: uuid */
             vdId: string;
             outputId: string;
+            delivery?: components["schemas"]["WorkflowSourceDelivery"];
         };
+        /**
+         * @description LATEST(생략 시)는 1초 간격 최신값만 전달한다. ALL_OBSERVATIONS는 Run 시작 위치 이후 feed에 수락된 모든 관측을 수락 순서로 한 번씩 전달한다. 센서는 Mapper 검증(QUALIFIED) 숫자/불리언 측정만 지원하며 문자열 측정은 409 WORKFLOW_SOURCE_UNSUPPORTED다. collector 수신 전 관측, 보관 한도 초과분은 보장하지 않고 WORKFLOW_SOURCE_GAP으로 알린다.
+         * @default LATEST
+         * @enum {string}
+         */
+        WorkflowSourceDelivery: "LATEST" | "ALL_OBSERVATIONS";
         WorkflowDataSources: {
             /** Format: date-time */
             asOf: string;
@@ -1355,10 +1423,10 @@ export interface components {
              */
             kind: "physical" | "virtual";
             /** @enum {string} */
-            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat";
+            protocol: "modbus-tcp" | "opc-ua" | "mqtt" | "virtual" | "serial-json" | "sensehat" | "rtsp";
             /** @description Required for network protocols; omitted for local hardware. */
             host?: string;
-            /** @description Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080. */
+            /** @description Protocol defaults: Modbus 502, OPC-UA 4840, MQTT 1883, Virtual 8080, RTSP 554. */
             port?: number;
             targetNode: string;
             /** @default 1000 */
@@ -1382,7 +1450,7 @@ export interface components {
                  * @enum {string}
                  */
                 securityMode?: "None";
-                /** @description OPC-UA endpoint path or Virtual runtime JSON path (default /properties). */
+                /** @description OPC-UA endpoint, Virtual JSON, or anonymous RTSP stream path. RTSP requires an absolute path without credentials, query or fragment (default /). */
                 path?: string;
                 /** @description MQTT input message freshness limit. */
                 staleMs?: number;
@@ -1781,8 +1849,8 @@ export interface components {
             operatingSystem: string;
             /** @enum {string} */
             status: "READY" | "NOT_READY" | "UNKNOWN";
-            /** @description 현재 Kubernetes Node status.allocatable. GPU·NPU 표시는 양수인 가속기 리소스만 포함합니다. */
-            allocatable?: {
+            /** @description 현재 Kubernetes Node status.allocatable(스케줄링 노출 수량, 물리 장치 관측 아님). 값이 없으면 빈 객체입니다. GPU·NPU 표시는 양수인 가속기 리소스만 포함합니다. */
+            allocatable: {
                 [key: string]: string;
             };
         };
@@ -1848,6 +1916,48 @@ export interface components {
             accelerators?: components["schemas"]["NodeAccelerator"][];
             readiness?: components["schemas"]["NodeReadiness"] | null;
             measurements: components["schemas"]["NodeMetric"][];
+        };
+        InferenceModelPage: {
+            items: components["schemas"]["InferenceModel"][];
+        };
+        InferenceModel: {
+            id: string;
+            name: string;
+            /** @description 런타임이 실행되는 Kubernetes 노드 */
+            nodeName: string;
+            /** @description 추론 가속기 이름 */
+            deviceName: string;
+            /** @description 런타임이 설정과 같은 모델로 READY인지 */
+            available: boolean;
+        };
+        InferenceRequest: {
+            modelId: string;
+            /**
+             * Format: byte
+             * @description JPEG 또는 PNG 원본 바이트의 표준 base64(data URI 접두어 없음). 디코딩 후 4 MiB 이하, 가로·세로 각 4096 이하, 전체 16,777,216 픽셀 이하.
+             */
+            imageBase64: string;
+        };
+        InferenceResult: {
+            modelId: string;
+            nodeName: string;
+            deviceName: string;
+            /** @description 런타임 추론 provider(예 pytorch-cuda) */
+            provider: string;
+            imageWidth: number;
+            imageHeight: number;
+            /** @description 런타임이 보고한 추론 시간 */
+            inferenceMs: number;
+            detections: components["schemas"]["InferenceDetection"][];
+        };
+        /** @description 원본 이미지 픽셀 좌표의 상자. x+width·y+height는 이미지 크기를 0.5픽셀 넘지 않습니다. */
+        InferenceDetection: {
+            label: string;
+            score: number;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
         };
         NodeMetricsSnapshot: {
             /** @enum {string} */
@@ -2564,11 +2674,21 @@ export interface components {
             truncated: false;
             /** @enum {string} */
             displayMode: "ORIGINALS" | "SELECTED_ORIGINALS";
+            /** @description 기간(보관 기간 이내)의 표시 가능한 원본 수. 반환 항목 수가 아닙니다. */
             totalObservations: number;
+            /** @description 이 응답에 적용한 항목 상한 */
+            pointBudget: number;
             selection?: {
                 windowSeconds: number;
                 /** @constant */
                 method: "FIRST_MIN_MAX_LAST";
+                /**
+                 * Format: date-time
+                 * @description 첫 구간의 epoch 정렬 시작 시각. from보다 이를 수 있으며 그 경우 첫 구간은 from부터만 셉니다.
+                 */
+                bucketStart: string;
+                /** @description bucketStart부터 windowSeconds 간격 구간마다의 원본 수(기간 안의 부분만). 합은 totalObservations입니다. */
+                counts: number[];
             };
             items: {
                 /**
@@ -3220,6 +3340,58 @@ export interface operations {
         responses: {
             /** @description KubeEdge device control result */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCameraPreview: {
+        parameters: {
+            query: {
+                uid: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cache-Control no-store. 최대4MiB JPEG. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description RTSP 카메라가 아니거나 UID가 잘못되었습니다. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 카메라가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 카메라 UID가 변경되었습니다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 최신 영상 프레임 또는 Mapper가 준비되지 않았습니다. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4343,6 +4515,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeMetricsSnapshot"];
+                };
+            };
+        };
+    };
+    listInferenceModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 설정된 모델과 현재 준비 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceModelPage"];
+                };
+            };
+        };
+    };
+    predictInference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description 검증된 탐지 결과. 상자 좌표는 원본 이미지(EXIF 회전 미적용) 픽셀 기준입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceResult"];
+                };
+            };
+            /** @description INVALID_INFERENCE_REQUEST(JSON·필드·base64·JPEG/PNG·해상도) 또는 INFERENCE_IMAGE_REJECTED(런타임이 이미지 디코딩·형식 거부) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description INFERENCE_MODEL_NOT_FOUND. 설정된 모델이 아닙니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_IMAGE_TOO_LARGE. 이미지가 4 MiB를 넘거나 런타임이 크기·해상도 초과로 거부했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_RUNTIME_INVALID_RESPONSE. 런타임 응답 상태·형식·모델 식별·좌표 검증 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_BUSY(다른 추론 진행 중) 또는 INFERENCE_RUNTIME_UNAVAILABLE(연결 실패·시간 초과) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -6109,6 +6377,10 @@ export interface operations {
             query?: {
                 from?: string;
                 to?: string;
+                /** @description 반환 항목 상한(그래프 폭에 맞춘 값). 범위 밖이면 400이며 자르거나 보정하지 않습니다. */
+                points?: number;
+                /** @description 선택 구간 길이(초). 지정하면 원본 수와 관계없이 이 구간으로 선택하며(SELECTED_ORIGINALS) 이전 응답의 같은 구간을 교체하는 실시간 갱신에 씁니다. 구간 수×4가 points를 넘으면 400입니다. */
+                window?: 1 | 2 | 5 | 10 | 15 | 30 | 60 | 120 | 300 | 600 | 900 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400;
             };
             header?: never;
             path: {

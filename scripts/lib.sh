@@ -2,7 +2,6 @@
 set -euo pipefail
 EDGEAI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$EDGEAI_ROOT"
-export NEXT_TELEMETRY_DISABLED=1
 if [[ -x "$EDGEAI_ROOT/.tools/jdk/bin/javac" && -z "${JAVA_HOME:-}" ]]; then
   export JAVA_HOME="$EDGEAI_ROOT/.tools/jdk"
   export PATH="$JAVA_HOME/bin:$PATH"

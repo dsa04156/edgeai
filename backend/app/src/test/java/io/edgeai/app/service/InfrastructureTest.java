@@ -24,6 +24,20 @@ class InfrastructureTest {
         assertEquals("EDGE_AI_SERVER", nodes.getFirst().kind()); assertEquals("READY", nodes.getFirst().status());
         assertEquals("EDGE_DEVICE", nodes.getLast().kind()); assertEquals("NOT_READY", nodes.getLast().status());
     }
+    @Test void keepsKubernetesAllocatableQuantitiesForAcceleratorExposure() {
+        var nodes = KubernetesInfrastructureInventory.decodeNodes(List.of(
+            json.readTree("""
+              {"metadata":{"name":"server-b","labels":{"environment":"cloud"}},"status":{"allocatable":{"nvidia.com/gpu":"1","npu.intel.com/accel":"1","cpu":"15800m","memory":"64Gi"}}}
+              """), json.readTree("""
+              {"metadata":{"name":"server-a","labels":{"environment":"cloud"}},"status":{}}
+              """)));
+        assertEquals(Map.of(), nodes.getFirst().allocatable());
+        assertEquals(List.of("cpu", "memory", "npu.intel.com/accel", "nvidia.com/gpu"), List.copyOf(nodes.getLast().allocatable().keySet()));
+        assertEquals("1", nodes.getLast().allocatable().get("nvidia.com/gpu"));
+        assertThrows(IllegalStateException.class, () -> KubernetesInfrastructureInventory.decodeNodes(List.of(json.readTree("""
+            {"metadata":{"name":"server-c"},"status":{"allocatable":{"nvidia.com/gpu":1}}}
+            """))));
+    }
     @Test void missingOrContradictoryLabelsRemainUnknown() {
         for (String labels : List.of("{}", "{\"environment\":\"cloud\",\"edge.device/class\":\"raspi\"}")) {
             var node = json.readTree("{\"metadata\":{\"name\":\"etri-ser0001\",\"labels\":" + labels + "}}");
@@ -35,7 +49,7 @@ class InfrastructureTest {
         @SuppressWarnings("unchecked") ObjectProvider<SensorInventorySource> sensors = mock(ObjectProvider.class);
         var source = mock(InfrastructureSource.class); var sensorSource = mock(SensorInventorySource.class);
         when(sources.getIfAvailable()).thenReturn(source); when(sensors.getIfAvailable()).thenReturn(sensorSource);
-        when(source.nodes()).thenReturn(List.of(new InfrastructureSource.Node("server-a", "EDGE_AI_SERVER", "arm64", "linux", "READY")));
+        when(source.nodes()).thenReturn(List.of(new InfrastructureSource.Node("server-a", "EDGE_AI_SERVER", "arm64", "linux", "READY", Map.of())));
         when(sensorSource.sensors()).thenReturn(List.of(new InfrastructureSource.Sensor("sensor-a", "edge-a", "profile", "service", "UNLOCKED", "UP", List.of("temp"))));
         var clock = mock(Clock.class); when(clock.instant()).thenReturn(now);
         var service = new InfrastructureService(sources, sensors, clock);

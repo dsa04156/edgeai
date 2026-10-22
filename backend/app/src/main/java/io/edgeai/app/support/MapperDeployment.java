@@ -37,6 +37,7 @@ public final class MapperDeployment {
             container.put("securityContext",Map.of("privileged",true,"readOnlyRootFilesystem",true));
             container.put("resources",Map.of("requests",Map.of("cpu","25m","memory","64Mi"),"limits",Map.of("cpu","500m","memory","256Mi")));
         }
+        if(protocol.equals("rtsp"))container.put("resources",Map.of("requests",Map.of("cpu","250m","memory","128Mi"),"limits",Map.of("cpu","2","memory","512Mi")));
         container.put("volumeMounts",mounts);
         var pod=Map.of("nodeName",node,"hostNetwork",true,"dnsPolicy","ClusterFirstWithHostNet","automountServiceAccountToken",false,"containers",List.of(container),"volumes",volumes);
         return Map.of("apiVersion","apps/v1","kind","Deployment","metadata",metadata(name,namespace),"spec",Map.of("replicas",1,"strategy",Map.of("type","Recreate"),"selector",Map.of("matchLabels",Map.of("edgeai.io/mapper",name)),"template",Map.of("metadata",Map.of("labels",labels),"spec",pod)));

@@ -3,37 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 --port 13080",
-    "build": "next build && node scripts/package-docs.mjs",
-    "start": "node scripts/start.mjs",
-    "typecheck": "next typegen && tsc --noEmit",
-    "lint": "eslint .",
-    "test:e2e": "playwright test"
+    "dev": "bash ../scripts/dev/dev-kestra-native.sh",
+    "build": "bash ../scripts/ops/build-kestra-console.sh",
+    "start": "bash ../scripts/ops/start-kestra-console.sh",
+    "typecheck": "bash ../scripts/dev/prepare-kestra-native.sh && ../output/kestra-native/upstream/ui/node_modules/.bin/vue-tsc --project kestra-native/tsconfig.json --noEmit",
+    "lint": "bash ../scripts/dev/prepare-kestra-native.sh && ../output/kestra-native/upstream/ui/node_modules/.bin/eslint kestra-native tests lib",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/*.unit.mjs tests/*.unit.ts",
+    "test:integration": "playwright test --config playwright.profiles.config.ts"
   },
   "dependencies": {
-    "@xyflow/react": "^12.12.0",
     "echarts": "6.1.0",
-    "github-slugger": "^2.0.0",
     "js-yaml": "4.3.2",
     "lossless-json": "4.3.1",
-    "mdast-util-to-string": "^4.0.0",
-    "mermaid": "^12.1.0",
-    "next": "16.3.8",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "react-markdown": "^10.1.0",
-    "rehype-slug": "^6.0.0",
-    "remark-gfm": "^4.0.1",
-    "remark-parse": "^11.0.0",
-    "unified": "^11.0.5"
+    "vue": "3.5.30",
+    "vue-material-design-icons": "5.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-next": "16.3.8",
-    "typescript": "^5.9.0"
+    "github-slugger": "^2.0.0",
+    "mdast-util-to-string": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   }
 }

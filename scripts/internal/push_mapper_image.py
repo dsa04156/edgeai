@@ -18,7 +18,7 @@ def main():
     p.add_argument('--binary',required=True)
     p.add_argument('--sensehat-runtime',action='store_true',help='Add the pinned ARM64 Python/RTIMULib SDK base and physical reader; no EdgeX service binary.')
     a=p.parse_args()
-    if a.registry != '192.168.0.56:5000': p.error('only the configured development registry is supported')
+    if a.registry != '10.254.192.47:5000': p.error('only the configured development registry is supported')
     root='http://'+a.registry+'/v2/'+a.repository
     def request(method,url,data=None,content_type=None):
         headers={'Accept':'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'}

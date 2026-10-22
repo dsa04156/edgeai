@@ -22,7 +22,7 @@
                                 <metatrafficUnicastLocatorList>
                                     <locator>
                                         <udpv4>
-                                            <address>192.168.0.56</address>
+                                            <address>10.254.192.47</address>
                                             <port>11811</port>
                                         </udpv4>
                                     </locator>

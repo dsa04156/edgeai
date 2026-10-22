@@ -12,7 +12,7 @@ const { default: remarkGfm } = await import(require.resolve("remark-gfm"));
 const { default: Slugger } = await import(require.resolve("github-slugger"));
 const { toString } = await import(require.resolve("mdast-util-to-string"));
 const yaml = require("js-yaml");
-const navigation = JSON.parse(fs.readFileSync(path.join(root, "dashboard/docs-navigation.json"), "utf8"));
+const navigation = JSON.parse(fs.readFileSync(path.join(root, "scripts/internal/docs-navigation.json"), "utf8"));
 const schema = yaml.load(fs.readFileSync(path.join(root, "contracts/openapi/platform-api.yaml"), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete"]);
 const operations = Object.entries(schema.paths).flatMap(([route, item]) => Object.entries(item)

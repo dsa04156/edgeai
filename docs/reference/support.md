@@ -16,7 +16,6 @@
 | 연속 계산 결과·그래프 | 유효 입력·processing Agent·eKuiper·엔진 lease | 계산 결과별 행과 generation·신선도를 확인; 설치/등록과 실제 실행은 다름 |
 | 연속 결과 보관 이력 | InfluxDB와 활성 계산 엔진 | 계산 결과 보관만 담당; 원본 MQTT 장기 저장과 다르고 저장 누락은 구간으로 표시 |
 | Mapper 장치의 BATCH 입력 | ONLINE 장치와 존재하는 property, 활성 Workflow API | Run 접수 시 최신값 고정; 연속 STREAM 입력으로 자동 연결하지 않음 |
-| 워크플로의 센서·가상디바이스 실시간 입력 | 명시적 `WORKFLOW_DATA` SERVICE·활성 Runtime/STREAM·선택한 센서의 검증된 원본 archive 또는 실행 중인 VD의 유효 결과 | 최신값을 1초마다 읽어 Task→Task STREAM으로 전달; 원본 신원·실행 세대를 고정하며 중간 관측 전량 전달은 보장하지 않음 |
 | DDS 배포 | Platform-Service·Gitea·Argo CD·이미지 | 캔버스 연결선은 실행 의존성이 아님 |
 | Spring DAG 실행 | Runtime·Runner·저장소·클러스터 | 요청 접수와 검증된 Result는 다름 |
 | Remote | 설정된 참조 제공자와 고정 계약 | 실제 외부 업체 API·상태형 복원 수용 별도 |
@@ -35,9 +34,9 @@ Serial JSON은 정해진 프레임 규격을, Sense HAT은 ARM64 Raspberry Pi의
 
 ## 현재 개발 경계
 
-현재 우선순위는 남은 기능 구현과 기능별 검증이며, 이후 장기 운영·부하·종합 복구를 수용합니다.
-센서·가상디바이스 최신값의 워크플로 입력은 구현됐으며, 전량 관측 STREAM·미지원 연결 조합은 남아 있습니다.
-실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
+WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS)은 API·Kestra 콘솔에 통합·배포되었고 Runner 이미지는 게시만 되었습니다. runtime은 꺼져 있어 운영 실행과 실장비 수용은 남아 있습니다([현재 상태](../../PROGRESS.md)).
+독립 GPU 객체 검출(이미지 1장 → COCO 박스, [런타임](../../inference/README.md))은 2026-10-22 운영 콘솔(`/ui/main/inference`)과 API에 배포되어 ser0003 GB10에서 실제 추론을 확인했습니다. 단일 모델·동시 1건이며 정확도·부하 수용은 하지 않았습니다.
+Workflow 실행 경로의 실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
 [개발 단계](../../PLAN.md)와 [현재 상태](../../PROGRESS.md)에서 남은 범위를 확인합니다.
 
 특정 날짜의 장비 수, 시험 개수, CI 성공, 배포 digest는 해당 Git 이력의 검증 기록 조건에만 적용합니다.

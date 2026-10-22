@@ -40,15 +40,25 @@ edgeai:
   devices:
     namespace: ${EDGEAI_DEVICE_NAMESPACE:edgeai-devices}
     data-broker: ${EDGEAI_DEVICE_DATA_BROKER:tcp://127.0.0.1:1883}
-    mapper-arm64: ${EDGEAI_MAPPER_ARM64:192.168.0.56:5000/edgeai/mapper@sha256:5b2fab60153dc33e603687d1ab7ed05c8444fa9b9b774e70a65c25f88fc64737}
-    mapper-amd64: ${EDGEAI_MAPPER_AMD64:192.168.0.56:5000/edgeai/mapper@sha256:e6238ccb39a7f2b548f9c23c69ec22e6eaaa7495ae5710b3fa922ab8d2c25d34}
-    mapper-sensehat-arm64: ${EDGEAI_MAPPER_SENSEHAT_ARM64:192.168.0.56:5000/edgeai/mapper-sensehat@sha256:285a6da420408fffe03c5868362d4081a7d998fc119dda22d9b55395f3fee578}
+    mapper-rtsp: ${EDGEAI_MAPPER_RTSP:}
+    mapper-arm64: ${EDGEAI_MAPPER_ARM64:10.254.192.47:5000/edgeai/mapper@sha256:5b2fab60153dc33e603687d1ab7ed05c8444fa9b9b774e70a65c25f88fc64737}
+    mapper-amd64: ${EDGEAI_MAPPER_AMD64:10.254.192.47:5000/edgeai/mapper@sha256:e6238ccb39a7f2b548f9c23c69ec22e6eaaa7495ae5710b3fa922ab8d2c25d34}
+    mapper-sensehat-arm64: ${EDGEAI_MAPPER_SENSEHAT_ARM64:10.254.192.47:5000/edgeai/mapper-sensehat@sha256:285a6da420408fffe03c5868362d4081a7d998fc119dda22d9b55395f3fee578}
   infrastructure:
     source: ${EDGEAI_INFRASTRUCTURE_SOURCE:disabled}
     context: ${EDGEAI_INFRASTRUCTURE_CONTEXT:}
   prometheus:
     enabled: ${EDGEAI_PROMETHEUS_ENABLED:false}
     url: ${EDGEAI_PROMETHEUS_URL:http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090}
+  inference:
+    enabled: ${EDGEAI_INFERENCE_ENABLED:false}
+    model-id: ${EDGEAI_INFERENCE_MODEL_ID:}
+    model-name: ${EDGEAI_INFERENCE_MODEL_NAME:}
+    node-name: ${EDGEAI_INFERENCE_NODE_NAME:}
+    device-name: ${EDGEAI_INFERENCE_DEVICE_NAME:}
+    provider: ${EDGEAI_INFERENCE_PROVIDER:}
+    runtime-url: ${EDGEAI_INFERENCE_RUNTIME_URL:}
+    timeout: ${EDGEAI_INFERENCE_TIMEOUT:20s}
   workflow:
     enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:

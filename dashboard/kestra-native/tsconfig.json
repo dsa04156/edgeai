@@ -1,0 +1,45 @@
+{
+  "extends": "../../output/kestra-native/upstream/ui/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "rootDir": "../..",
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "override/*": [
+        "../../output/kestra-native/upstream/ui/src/override/*"
+      ],
+      "kestra-original/*": [
+        "../../output/kestra-native/upstream/ui/src/*"
+      ],
+      "vue": [
+        "../../output/kestra-native/upstream/ui/node_modules/vue"
+      ],
+      "vue-router": [
+        "../../output/kestra-native/upstream/ui/node_modules/vue-router"
+      ],
+      "@kestra-io/design-system": [
+        "../../output/kestra-native/upstream/ui/packages/design-system/src"
+      ],
+      "@kestra-io/topology/flow-yaml-utils": [
+        "../../output/kestra-native/upstream/ui/packages/topology/src/utils/flowYamlUtils.ts"
+      ],
+      "js-yaml": [
+        "../../output/kestra-native/upstream/ui/node_modules/@types/js-yaml"
+      ]
+    },
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "*.vue",
+    "*.ts",
+    "../../output/kestra-native/upstream/ui/src/**/*.d.ts",
+    "../../output/kestra-native/upstream/ui/src/utils/global.ts"
+  ]
+}

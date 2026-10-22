@@ -34,7 +34,7 @@
         "containers": [
           {
             "name": "fixture",
-            "image": "192.168.0.56:5000/edgeai/modbus-fixture@sha256:8b805071730d8623f4438ea1c0d36e58ff788fa2da34f90c820ee24b8e974770",
+            "image": "10.254.192.47:5000/edgeai/modbus-fixture@sha256:8b805071730d8623f4438ea1c0d36e58ff788fa2da34f90c820ee24b8e974770",
             "ports": [
               {
                 "containerPort": 1502

@@ -54,11 +54,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("secret", result.text)
         self.assertNotIn(str(self.root), result.text)
 
+    def test_absent_application_is_queried_in_configured_project(self):
+        def request(method, url, **kwargs):
+            self.assertEqual(method, "GET")
+            self.assertEqual(url, "http://argo.test/api/v1/applications/demo")
+            return Response(404 if kwargs.get("params", {}).get("project") == "default" else 403)
+        with patch.object(api.requests, "request", side_effect=request):
+            response = self.client.get("/workflow/status/demo", headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "absent")
+
     def test_original_save_git_create_refresh_sequence(self):
         calls = []
         def request(method, url, **kwargs):
             calls.append((method, url, kwargs))
-            if url == "http://argo.test/api/v1/applications/demo" and not kwargs.get("params"): return Response(404)
+            if url == "http://argo.test/api/v1/applications/demo" and kwargs.get("params") == {"project": "default"}: return Response(404)
             if method == "GET" and "/contents/" in url: return Response(404)
             if method == "POST" and "/contents/" in url:
                 self.assertEqual(base64.b64decode(kwargs["json"]["content"]).decode(), self.manifest)
@@ -143,12 +153,37 @@ class WorkflowTests(unittest.TestCase):
         with api.mutation():
             self.assertEqual(self.client.post("/workflow/build-image", headers=self.headers, json={"tag": "test"}).status_code, 409)
 
+    def test_build_push_alias_keeps_runtime_image_address(self):
+        class Process:
+            def __init__(self, command, **kwargs):
+                self.command = command
+                Path(command[command.index("--metadata-file")+1]).write_text(json.dumps({"containerimage.digest": "sha256:"+"a"*64}))
+                self.assertion = command[command.index("--tag")+1]
+                commands.append(self.assertion)
+            def wait(self, timeout): return 0
+        commands = []
+        with patch.dict(os.environ, {"PLATFORM_IMAGE_PUSH_REPOSITORY": "vpn-registry.test/unified"}), patch.object(api.subprocess, "Popen", Process):
+            response = self.client.post("/workflow/build-image", headers=self.headers, json={"tag": "alias-test"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(commands, ["vpn-registry.test/unified:alias-test"])
+        self.assertEqual(response.json()["image"], "registry.test/unified@sha256:"+"a"*64)
+        self.assertEqual(response.json()["tag"], "registry.test/unified:alias-test")
+
     def test_build_timeout_kills_group(self):
         with patch.object(api.subprocess, "Popen") as process, patch.object(api.os, "killpg") as kill:
             process.return_value.pid = 123
             process.return_value.wait.side_effect = [subprocess.TimeoutExpired("docker", 900), -9]
             r = self.client.post("/workflow/build-image", headers=self.headers, json={"tag": "test"})
             self.assertEqual(r.status_code, 504); kill.assert_called_once()
+
+    def test_delete_uses_json_for_the_argo_grpc_gateway(self):
+        def request(method, url, **kwargs):
+            self.assertEqual(method, "DELETE")
+            self.assertEqual(kwargs.get("params"), {"cascade": "true", "project": "default"})
+            return Response(200 if kwargs.get("json") == {} else 415)
+        with patch.object(api.requests, "request", side_effect=request):
+            response = api.ArgoCDService().delete_app("demo")
+        self.assertEqual(response["status"], "deletion_requested")
 
     def test_delete_retains_original_argo_git_local_order(self):
         path = self.root / "workspace/demo/deployment.yaml"; path.parent.mkdir(parents=True); path.write_text(self.manifest)

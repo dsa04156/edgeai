@@ -27,7 +27,7 @@ KubeEdge 장치 실행 계층은 [Mapper 구성](../deploy/kubeedge/README.md)�
 ## 문서의 기준
 
 API 필드와 오류 코드는 OpenAPI, 기본 설정은 애플리케이션 설정과 `.env.example`,
-DB 제약은 Flyway migration이 기준입니다. [원 설계와 현재 구현](reference/design-alignment.md)을 함께 대조할 수 있습니다. 웹에서 [문서를 검색](guides/web-documentation.md)할 수 있습니다.
+DB 제약은 Flyway migration이 기준입니다. [원 설계와 현재 구현](reference/design-alignment.md)을 함께 대조할 수 있습니다. [문서 읽기와 갱신](guides/web-documentation.md)에서 목록 관리 방식을 확인합니다.
 
 구현 여부와 실제 배포 상태는 다릅니다. 기능 플래그·외부 서비스·장비 지원이 필요한 기능은
 각 안내의 준비 사항을 확인하세요. 최신 개발 범위는 [현재 상태](../PROGRESS.md)와 [개발 단계](../PLAN.md)에 있습니다.

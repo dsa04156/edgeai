@@ -1,12 +1,12 @@
 # 아키텍처
 
-EdgeAI의 Spring 관리 API와 Next.js Dashboard는 센서 수집, 중앙 연속 계산, 일반 SERVICE 실행을 연결합니다. 센서 설정·최신 관측의 원본은 KubeEdge CRD이며, 관리 등록·불변 버전·실행 이력은 PostgreSQL에 저장합니다. 구형 VD supervisor 경로는 종료됐습니다.
+EdgeAI의 Spring 관리 API와 Kestra 원본 Vue 콘솔은 센서 수집, 중앙 연속 계산, 일반 SERVICE 실행을 연결합니다. 센서 설정·최신 관측의 원본은 KubeEdge CRD이며, 관리 등록·불변 버전·실행 이력은 PostgreSQL에 저장합니다. 구형 VD supervisor 경로는 종료됐습니다.
 
 ## 전체 구조
 
 ```mermaid
 flowchart TB
-  UI[Next.js Dashboard / 등록 모달] --> API[Spring 관리 API]
+  UI[Kestra 원본 Vue 콘솔 / 등록 화면] --> API[Spring 관리 API]
   API --> DB[(관리 PostgreSQL)]
   API --> PROM[Prometheus]
   API --> DM[Device Manager]

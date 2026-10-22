@@ -18,6 +18,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers=ManagedDeviceController.class)
 @Import(SecurityConfiguration.class)
 class ManagedDeviceControllerTest {
+    @Test void cameraPreviewReturnsJpegForTheRequestedDeviceIdentity() throws Exception {
+        var uid=UUID.fromString("11111111-1111-4111-8111-111111111111");
+        when(service.preview("camera",uid)).thenReturn(new byte[]{(byte)255,(byte)216,(byte)255,(byte)217});
+        mvc.perform(get("/api/devices/camera/preview").param("uid",uid.toString())).andExpect(status().isOk()).andExpect(content().contentType("image/jpeg")).andExpect(header().string("Cache-Control","no-store"));
+        mvc.perform(get("/api/devices/camera/preview")).andExpect(status().isBadRequest());
+    }
     @Autowired MockMvc mvc;
     @MockitoBean ManagedDeviceService service;
     @Test void newManagementMutationsRequireCsrf() throws Exception {

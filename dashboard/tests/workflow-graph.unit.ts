@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "lossless-json";
-import { arrangeWorkflow, connectTasks, readWorkflowDocument, type WorkflowDag, type WorkflowProfile } from "../lib/workflow-graph";
+import { arrangeWorkflow, connectTasks, readWorkflowDocument, type WorkflowDag, type WorkflowProfile } from "../lib/workflow-graph.ts";
 
 const profiles = [
   { id: "a", key: "sensor", version: "1.0.0", kind: "SERVICE", spec: { inputs: { data: {} }, outputs: { data: {} } } },

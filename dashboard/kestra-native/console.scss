@@ -1,0 +1,112 @@
+.native-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ks-spacing-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ks-spacing-5);
+}
+.native-page h2 {
+  font-size: var(--ks-font-size-lg);
+  margin: 0 0 var(--ks-spacing-4);
+}
+.native-page h3 {
+  font-size: var(--ks-font-size-md);
+  margin: var(--ks-spacing-4) 0;
+}
+.native-panel {
+  background: var(--ks-bg-base);
+  border: 1px solid var(--ks-border-default);
+  border-radius: var(--ks-radius-base);
+  padding: var(--ks-spacing-5);
+}
+.native-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ks-spacing-3);
+}
+.native-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ks-spacing-4);
+}
+.native-grid > *,
+.native-panel > * {
+  min-width: 0;
+}
+.native-note {
+  color: var(--ks-text-secondary);
+  font-size: var(--ks-font-size-xs);
+  line-height: 1.6;
+}
+.native-notice {
+  color: var(--ks-text-primary);
+  background: var(--ks-bg-hover);
+  padding: var(--ks-spacing-3);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.native-json {
+  font-family: monospace;
+  font-size: var(--ks-font-size-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 480px;
+  overflow: auto;
+}
+.native-detail dl > div {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: var(--ks-spacing-3);
+  margin: var(--ks-spacing-3) 0;
+}
+.native-detail dt {
+  color: var(--ks-text-secondary);
+}
+.native-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.native-page .ks-data-table-wrapper {
+  height: auto;
+  flex: 0 0 auto;
+}
+.native-page .ks-data-table-content {
+  height: auto;
+}
+.native-page button,
+.native-detail button,
+.native-dialog button {
+  min-height: 44px;
+}
+.native-dialog .kel-input__wrapper,
+.native-dialog .kel-select__wrapper,
+.native-page .kel-select__wrapper {
+  min-height: 44px;
+}
+.native-dialog h2 {
+  font-size: var(--ks-font-size-md);
+  margin: var(--ks-spacing-5) 0 var(--ks-spacing-4);
+}
+.native-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.native-dialog .kel-form-item__content {
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .native-page {
+    padding: var(--ks-spacing-4);
+  }
+  .native-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .native-detail dl > div {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+}

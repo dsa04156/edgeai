@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **74개**입니다.
+계약에 정의된 operation은 **75개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -81,6 +81,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/devices/{id}` | `getManagedDevice` |
 | `PUT` | `/api/devices/{id}` | `updateManagedDevice` |
 | `DELETE` | `/api/devices/{id}` | `deleteManagedDevice` |
+| `GET` | `/api/devices/{id}/preview` | `getCameraPreview` |
 | `POST` | `/api/devices/{id}/properties` | `addManagedDeviceProperty` |
 | `PUT` | `/api/devices/{id}/properties/{property}` | `updateManagedDeviceProperty` |
 | `DELETE` | `/api/devices/{id}/properties/{property}` | `deleteManagedDeviceProperty` |

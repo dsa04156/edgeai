@@ -7,8 +7,6 @@ toolchain:
   gradle: '9.7.1'
   node: '22.23.2'
   pnpm: '10.34.6'
-  next: '16.3.8'
-  react: '19.3.0'
 dependencies:
   postgres_compose: '17-alpine; manifest digest pinned in Compose'
   postgres_local_verified: '16.15 (Ubuntu 24.04 portable packages)'

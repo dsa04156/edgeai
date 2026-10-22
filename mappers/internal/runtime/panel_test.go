@@ -66,3 +66,22 @@ func TestConcurrentLifecycleAndInvalidConfigurationReportsOfflineOverDMI(t *test
 	default:
 	}
 }
+
+type cameraPreviewFixture struct{}
+
+func (cameraPreviewFixture) Preview(context.Context) ([]byte, time.Time, error) {
+	return []byte("frame"), time.Now(), nil
+}
+func TestPreviewRejectsPreviousRegistrationGeneration(t *testing.T) {
+	p := New("edgeai-devices", "edgeai-rtsp", dmi.Client{})
+	p.devices["camera"] = &managed{value: Device{Instance: common.DeviceInstance{Name: "camera", Properties: []common.DeviceProperty{{Name: "connected", Visitors: []byte(`{"configData":{"configurationSha256":"same-config","sourceGeneration":"current"}}`)}}}}, preview: cameraPreviewFixture{}}
+	if _, _, err := p.Preview(context.Background(), "camera", "same-config", "previous"); err == nil {
+		t.Fatal("previous registration served a frame")
+	}
+	if _, _, err := p.Preview(context.Background(), "camera", "same-config", ""); err == nil {
+		t.Fatal("missing generation served a frame")
+	}
+	if frame, _, err := p.Preview(context.Background(), "camera", "same-config", "current"); err != nil || string(frame) != "frame" {
+		t.Fatalf("current registration missing: %s %v", frame, err)
+	}
+}

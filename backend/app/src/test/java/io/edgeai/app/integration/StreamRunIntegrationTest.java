@@ -179,7 +179,8 @@ class StreamRunIntegrationTest {
             var registration=virtualStore.findByKey(key).orElseThrow();var now=Instant.now();
             virtualStore.bind(new io.edgeai.domain.vd.VDSourceBinding(UUID.randomUUID(),registration.id(),"a",null,null,Device.SourceMode.LIVE,
                 0,null,now,null,"fixture-temperature",UUID.randomUUID(),"temp",List.of("value"),30));
-            var engine=continuousStore.session("central");
+            // Another class may have left an expired engine lease; an expired session rotates to a new engine process.
+            var engine=continuousStore.session("central").filter(s->s.expiresAt().isAfter(now));
             continuousStore.renew("central",engine.map(ContinuousRepository.Session::podUid).orElseGet(UUID::randomUUID),
                 engine.map(ContinuousRepository.Session::sessionId).orElseGet(UUID::randomUUID),engine.map(e->e.sequence()+1).orElse(1L),"sha256:"+"d".repeat(64),now);
             continuousStore.request(registration.id(),UUID.randomUUID(),0,"START",now);

@@ -25,6 +25,31 @@ class MqttObservationSubscriberTest {
     static int acknowledgement(Socket socket)throws IOException {
         var packet=read(socket);assertEquals(0x40,packet.type());return ((packet.body()[0]&255)<<8)|(packet.body()[1]&255);
     }
+    @Test void slowMeasurementBurstCannotStarveAnIndependentDelivery()throws Exception {
+        var blocked=new CountDownLatch(16);var release=new CountDownLatch(1);var independent=new CountDownLatch(1);
+        try(var server=new ServerSocket(0,1,InetAddress.getLoopbackAddress());
+            var subscriber=new MqttObservationSubscriber("fair-test-"+UUID.randomUUID().toString().substring(0,8))) {
+            subscriber.configure(Map.of("tcp://127.0.0.1:"+server.getLocalPort(),Set.of("archive/test")),delivery->{
+                String value=new String(delivery.payload(),StandardCharsets.UTF_8);
+                if(value.equals("independent"))independent.countDown();
+                else {blocked.countDown();release.await();}
+            });
+            server.setSoTimeout(3000);
+            try(var peer=server.accept()) {
+                peer.setSoTimeout(2000);assertEquals(0x10,read(peer).type());
+                peer.getOutputStream().write(new byte[]{0x20,3,0,0,0});
+                var subscribe=read(peer);assertEquals(0x82,subscribe.type());
+                peer.getOutputStream().write(new byte[]{(byte)0x90,4,subscribe.body()[0],subscribe.body()[1],0,1});
+                for(int id=1;id<=16;id++)publish(peer,id,"slow",false);
+                assertTrue(blocked.await(2,TimeUnit.SECONDS));
+                publish(peer,17,"independent",false);
+                assertTrue(independent.await(1,TimeUnit.SECONDS),"One backed-up measurement must not occupy every durable delivery worker");
+                peer.setSoTimeout(100);assertThrows(SocketTimeoutException.class,()->read(peer));
+                release.countDown();peer.setSoTimeout(2000);
+                for(int id=1;id<=17;id++)assertEquals(id,acknowledgement(peer));
+            }finally{release.countDown();}
+        }
+    }
     @Test void durableAcknowledgementsStayOrderedAndDuplicatePacketsHaveOneOwner()throws Exception {
         var firstEntered=new CountDownLatch(1);var secondDone=new CountDownLatch(1);var releaseFirst=new CountDownLatch(1);
         var reusedEntered=new CountDownLatch(1);var releaseReused=new CountDownLatch(1);var calls=new AtomicInteger();

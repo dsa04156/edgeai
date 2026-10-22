@@ -28,6 +28,8 @@ func New(protocol string, c Connection) (Reader, error) {
 		return nil, fmt.Errorf("invalid connection")
 	}
 	switch protocol {
+	case "edgeai-rtsp":
+		return newRTSP(c)
 	case "edgeai-modbus-tcp":
 		return NewModbus(c)
 	case "edgeai-opc-ua":

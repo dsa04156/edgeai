@@ -1,6 +1,15 @@
 # EdgeAI Kubernetes 배포
 
 `base`는 API·Dashboard·PostgreSQL·MinIO, `overlays/dev`는 namespace·Ingress·이미지 digest를 정의한다.
+Dashboard(`edgeai-dashboard`)는 Kestra v2.0.6 원본 Vue 콘솔이며 관리 API를 직접 호출한다. 기존 Next.js 대시보드는
+배포하지 않으며 소스도 제거했다. Ingress의 `/api/v1/main`은 콘솔 셸 API, 나머지 `/api/v1`은 API로 보낸다.
+`overlays/dev`는 콘솔을 `etri-ser0001-cg0msb`의 hostPort 13080(`10.254.192.47:13080`)으로 열고 Recreate로 교체한다.
+전환 전에 같은 서버에 남아 있는 호스트 Next.js 13080 프로세스를 내린다(기존 release 실행 중지는 배포 작업 범위).
+`overlays/dev`의 API는 원본 수집(`EDGEAI_RAW_HISTORY_ENABLED`)의 유일한 쓰기 주체이고, 중앙 eKuiper Agent가 호출하는 연속 VD 엔진(`EDGEAI_CONTINUOUS_ENABLED`)도 맡는다.
+Secret `edgeai-processing-agent`(키 `credential`)는 `ekuiper` namespace의 기존 공유 credential을 복사해 만든 것이며 Git에 넣지 않는다.
+Agent는 클러스터 DNS로 API에 연결하며, Agent Secret의 `ca.crt`는 stream CA다. eKuiper `helm upgrade` 전에 [VD 처리 문서의 재적용 절차](../../docs/guides/vd-processing.md#현재-dev-클러스터-재적용-2026-10-21-기준)로 렌더링과 CA를 확인한다.
+selector 없는 Service `edgeai-workflow-api`의 Endpoint는 멈춘 호스트(`10.77.0.1:18447`)를 가리킨다. 이 Service는 저장소 밖에서 수동으로 만든 것이다. 콘솔(`EDGEAI_WORKFLOW_API_BASE_URL=""`)과 API(`EDGEAI_RUNTIME_CONTROL_PLANE_URL`)는 이 Service를 쓰지 않는다. runtime을 켜기 전에 이 Service를 정리하거나 다시 연결한다.
+`overlays/dev`는 `components/gpu-inference`(ser0003 GB10 객체 검출 런타임, edgeai-api만 접근)를 포함하고 API에 `EDGEAI_INFERENCE_*`를 설정한다([런타임](../../inference/README.md)).
 ArgoCD는 `overlays/dev`를 감시한다. 초기 연결·검증·롤백은 [CI/CD 문서](../../docs/operations/cicd.md)를 따른다.
 
 ```bash
@@ -73,14 +82,14 @@ kubectl --context <대상-context> apply -f deploy/kubernetes/bootstrap/hdd-stor
 비밀번호·토큰은 Git 밖에서 `edgeai-postgres-hdd/password`, `edgeai-influxdb-api/token`,
 `edgeai-influxdb-admin/token` Secret으로 준비한다. API에는 bucket read/write 토큰만 마운트한다.
 관리 토큰은 InfluxDB 백업 Job에서만 사용한다. DB는 ClusterIP로만 연결하고 NetworkPolicy는
-edgeai-api·전용 백업/복원 Pod와 현재 웹 API 호스트(192.168.0.56)만 허용한다.
-호스트 API는 해당 Service의 ClusterIP를 사용한다. Service를 재생성하면 IP와 호스트 설정을
-함께 갱신한다. 현재 웹 API가 유일한 원본 수집기이고 클러스터 API의 RAW_HISTORY_ENABLED는
-false다. 현재 웹의 실행 설정에 맞춰 클러스터 API의 RUNTIME_ENABLED도 false로 유지해
+edgeai-api·전용 백업/복원 Pod와 현재 웹 API 호스트(10.254.192.47)만 허용한다.
+호스트 API는 해당 Service의 ClusterIP를 사용했다(2026-10-21 06:05Z 재부팅 이후 실행하지 않음).
+2026-10-21부터는 클러스터 API가 유일한 원본 수집기다. dev overlay가 `EDGEAI_RAW_HISTORY_ENABLED=true`로
+ConfigMap의 false를 덮어쓴다. 호스트 API를 다시 켤 때는 둘 중 하나만 수집하게 한다. 클러스터 API의 RUNTIME_ENABLED는 false로 유지해
 이전된 실행 이력에 새 실행 권한을 부여하지 않는다. STREAM의 authority/bindings/runs도 API의
 명시적 환경 변수로 false로 고정해 stream 컴포넌트의 envFrom 설정과 실행 의존성이 충돌하지
 않게 한다. 수집기를 이전할 때 기존 수집기를 종료한 후 새 수집기를 활성화해 MQTT client 충돌을 막는다.
-VD 처리 엔진의 활성화 여부는 이번 DB 이전과 별개로 유지한다.
+VD 처리 엔진은 2026-10-21부터 클러스터 API에서 활성화되어 있다(위 eKuiper 재적용 절차 참조).
 
 매일 한국 시간 03:00 PostgreSQL, 03:30 InfluxDB를 백업한다. 완료 표시·체크섬을 기록한 뒤
 전용 볼륨에서 최근 완료 백업 3개만 유지한다. 원본은 30일, VD 결과는 정책별 1–30일 보존한다.

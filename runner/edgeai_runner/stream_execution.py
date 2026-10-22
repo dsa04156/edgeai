@@ -82,9 +82,10 @@ def execute(runner, assignment):
     # fsGroup emptyDir is setgid: mkdir(0700) inherits 02000. This directory
     # was just created by this owner; retain the SDK's exact private-mode check.
     directory.chmod(0o700)
-    def source_poll(timeout):
+    def source_poll(timeout, cursor=None):
+        body = runner.identity if cursor is None else {**runner.identity, 'cursor': cursor}
         try:
-            return runner.api('streams/input', runner.identity, max_attempts=1, request_timeout=timeout)
+            return runner.api('streams/input', body, max_attempts=1, request_timeout=timeout)
         except RunnerError as error:
             if error.code == 'CONTROL_PLANE_UNAVAILABLE':
                 return {'state': 'WAITING'}

@@ -1,0 +1,46 @@
+title: 운영 현황
+description: EdgeAI 서버의 현재 관측 · 미수집·만료된 사용량은 — 표시 · 최근 실행은 최신 20건
+charts:
+  - id: edge_ai_servers
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions: {displayName: 엣지 AI 서버, numberType: FLAT, width: 3}
+    data: {type: edgeai.data.Infrastructure}
+  - id: edge_devices
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions: {displayName: 엣지 디바이스, numberType: FLAT, width: 3}
+    data: {type: edgeai.data.Infrastructure}
+  - id: sensors
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions: {displayName: 센서 · Mapper 장치, numberType: FLAT, description: KubeEdge 등록 목록, width: 3}
+    data: {type: edgeai.data.Infrastructure}
+  - id: virtual_devices
+    type: io.kestra.plugin.core.dashboard.chart.KPI
+    chartOptions: {displayName: 등록된 가상 장치, numberType: FLAT, description: 등록 수 · 실행 준비 상태와 별도, width: 3}
+    data: {type: edgeai.data.VirtualDevices}
+  - id: node_readiness
+    type: io.kestra.plugin.core.dashboard.chart.Pie
+    chartOptions:
+      displayName: 노드 준비 상태
+      description: READY 준비됨 · NOT_READY 준비 안 됨 · UNKNOWN 확인 불가
+      graphStyle: DONUT
+      tooltip: ALL
+      width: 4
+    data:
+      type: edgeai.data.Infrastructure
+      columns:
+        total: {field: NODE_COUNT, agg: COUNT}
+        state: {field: READINESS}
+  - id: recent_runs
+    type: io.kestra.plugin.core.dashboard.chart.Table
+    chartOptions:
+      displayName: 최근 실행
+      description: 최근 요청 20건 · 상세 화면 연결은 다음 단계
+      width: 8
+      pagination: {enabled: true}
+    data:
+      type: edgeai.data.Runs
+      columns:
+        id: {field: ID, displayName: 실행 ID}
+        state: {field: STATE, displayName: 상태}
+        mode: {field: MODE, displayName: 배치}
+        createdAt: {field: START_DATE, displayName: 요청 시각}

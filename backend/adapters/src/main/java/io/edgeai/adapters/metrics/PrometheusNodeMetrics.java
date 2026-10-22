@@ -115,6 +115,7 @@ public final class PrometheusNodeMetrics implements NodeMetricsSource, AutoClose
         hardware.replaceAll((node, devices) -> devices.stream().filter(a -> devices.stream()
             .filter(b -> a.kind().equals(b.kind()) && a.device().equals(b.device())).count() == 1)
             .sorted(Comparator.comparing(Accelerator::kind).thenComparing(Accelerator::device)).toList());
+        var modelNames = new HashMap<String, Set<String>>();
         for (var metric : PrometheusQueries.METRICS) {
             for (var sample : tagged.getOrDefault(metric.id(), Map.of()).values()) {
                 var stamp = tagged.getOrDefault(metric.id() + "_time", Map.of()).get(sample.identity());
@@ -142,10 +143,18 @@ public final class PrometheusNodeMetrics implements NodeMetricsSource, AutoClose
                         if (peers == 1) matches = candidates.stream().filter(a -> a.vendor().equalsIgnoreCase(vendor)).toList();
                     }
                     if (matches.size() == 1) device = matches.getFirst().device();
+                    // DCGM names the product the inventory only knows by PCI ID; accept it for a fresh exact PCI match.
+                    if (metric.id().startsWith("dcgm") && fresh && matches.size() == 1 && !address.isEmpty()
+                        && !sample.label("modelName").isBlank())
+                        modelNames.computeIfAbsent(node + "\n" + device, key -> new HashSet<>()).add(sample.label("modelName").strip());
                 }
                 rows.computeIfAbsent(node, key -> new ArrayList<>()).add(new Measurement(metric.key(), device, sample.value(), metric.unit(), observedAt, fresh));
             }
         }
+        hardware.replaceAll((node, devices) -> devices.stream().map(a -> {
+            var names = modelNames.getOrDefault(node + "\n" + a.device(), Set.of());
+            return names.size() == 1 ? new Accelerator(a.device(), a.kind(), a.vendor(), names.iterator().next(), a.observedAt(), a.fresh()) : a;
+        }).toList());
         var readiness = new HashMap<String, List<Readiness>>();
         for (var sample : tagged.getOrDefault("node_ready", Map.of()).values()) {
             if (sample.value() != 1) continue;

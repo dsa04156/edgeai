@@ -90,14 +90,17 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         var metadata=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))metadata.put(key,document.get(key));
         // Preserve distinct sequences at the same source millisecond without one tag per event.
         long storageTime=Math.addExact(nanos(observation.observedAt()),sequence%1000000);
-        write(rawBucket,"sensor_original"+tags+" "+typedValue(document.get("value"))+",document="+field(observation.documentJson())+",series_document="+field(quote(metadata))+" "+storageTime);
+        write(rawBucket,"sensor_original"+tags+" "+typedValue(document.get("value"))+",document="+field(observation.documentJson())+",series_document="+field(quote(metadata))+",archive_visible=true "+storageTime);
         if(qualified && matchingOriginal(observation,document,configuration,false)) {
-            String predicate="_measurement=\"sensor_original\" AND \"device_uid\"="+quote(observation.deviceUid().toString())+" AND \"property\"="+quote(observation.property())+" AND \"configuration\"="+quote(configuration)+" AND \"series\"=\"legacy:legacy:0\"";
-            request("/api/v2/delete?org="+encode(org)+"&bucket="+encode(rawBucket),"application/json",quote(Map.of("start",observation.observedAt().toString(),"stop",observation.observedAt().plusNanos(1).toString(),"predicate",predicate)));
+            // InfluxDB2.9.1 DELETE can deadlock TSI compaction and block unrelated writes.
+            // Hide only this exact legacy point through an idempotent write. Typed fields
+            // expire with the bucket; history/catalog exclude the empty document and charts use the boolean visibility field.
+            String legacyTags=",device_uid="+observation.deviceUid()+",property="+tag(observation.property())+",series=legacy:legacy:0,configuration="+tag(configuration);
+            write(rawBucket,"sensor_original"+legacyTags+" document=\"\",series_document=\"\",archive_visible=false "+nanos(observation.observedAt()));
         }
     }
     private boolean matchingOriginal(Observation observation,Map<?,?> document,String configuration,boolean qualified) {
-        String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(observation.deviceUid().toString())+" and r.property == "+quote(observation.property())+" and r.configuration == "+quote(configuration)+" and r.series "+(qualified?"!=":"==")+" \"legacy:legacy:0\"";
+        String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r._value != \"\" and r.device_uid == "+quote(observation.deviceUid().toString())+" and r.property == "+quote(observation.property())+" and r.configuration == "+quote(configuration)+" and r.series "+(qualified?"!=":"==")+" \"legacy:legacy:0\"";
         String query=source(rawBucket,observation.observedAt(),observation.observedAt().plusMillis(1),filter)+" |> group(columns:[]) |> limit(n:1001)";
         var rows=query(query);if(rows.size()>1000)throw new IllegalStateException("Original reconciliation limit exceeded");
         for(var row:rows){var other=json.readValue(row.get("_value"),Map.class);Object a=document.get("value"),b=other.get("value");boolean same=a instanceof Number x&&b instanceof Number y?Double.compare(x.doubleValue(),y.doubleValue())==0:Objects.equals(a,b);if(same&&Objects.equals(document.get("type"),other.get("type"))&&Objects.equals(document.get("observedAt"),other.get("observedAt")))return true;}
@@ -171,48 +174,88 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
     @Override public Map<String,Object> readSensor(UUID uid,String property,Instant from,Instant to,int limit,String cursor,boolean descending) {
         var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=from.isBefore(minimum)?minimum:from;
         if(!start.isBefore(to))return Map.of("items",List.of(),"truncated",false);
-        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor,descending);
+        return documents(source(rawBucket,start,to,"r._measurement == \"sensor_original\" and r._field == \"document\" and r._value != \"\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property)),from,to,limit,cursor,descending);
     }
     public List<Map<String,Object>> sensorSeries() {
-        var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
+        var rows=query(source(rawBucket,Instant.now().minusSeconds(rawDays*86400L),Instant.now(),"r._measurement == \"sensor_original\" and r._field == \"series_document\" and r._value != \"\"")+" |> group(columns:[\"device_uid\",\"property\"]) |> last() |> group(columns:[]) |> limit(n:501)");
         var result=new ArrayList<Map<String,Object>>();for(var row:rows){var document=json.readValue(row.get("_value"),Map.class);var item=new TreeMap<String,Object>();for(var key:List.of("deviceUid","deviceId","namespace","property","unit","type","observedAt","quality"))item.put(key,document.get(key));result.add(item);}return result;
     }
     private static Instant originalBoundary(Instant at) {
         var millis=at.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);return millis.isBefore(at)?millis.plusMillis(1):millis;
     }
-    private long sensorChartCount(String source,Instant from) {
-        var rows=query(source+" |> count() |> map(fn:(r)=> ({_time:time(v:"+quote(from.toString())+"),_value:r._value}))");
-        return rows.isEmpty()?0:Long.parseLong(rows.getFirst().get("_value"));
+    private static long epochNanos(String time){var at=Instant.parse(time);return Math.addExact(Math.multiplyExact(at.getEpochSecond(),1000000000L),at.getNano());}
+    private record ChartPoint(long nanos,String identity,double value,boolean flag) {}
+    private static ChartPoint chartPoint(Map<String,String> row) {
+        double number=Double.parseDouble(row.get("_value"));if(!Double.isFinite(number))throw new IllegalStateException("Invalid original chart value");
+        return new ChartPoint(epochNanos(row.get("_time")),row.get("series")+"|"+row.get("configuration"),number,"B".equals(row.get("kind")));
     }
-    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int selectionSeconds) {
+    private static Map<String,Object> chartItem(ChartPoint point) {
+        // The archive offsets sequences below one millisecond; the original source time is millisecond precision.
+        return Map.of("observedAt",Instant.ofEpochMilli(Math.floorDiv(point.nanos(),1000000L)).toString(),"value",point.flag()?(Object)(point.value()!=0):point.value());
+    }
+    /**
+     * Qualified series are always written with archive_visible=true in the same line, and the reconciliation write that hides a
+     * point targets only the legacy series; so non-legacy value fields are read directly (storage pushdown of window selectors)
+     * and only the legacy series pays for the pivot that applies archive_visible.
+     */
+    @Override public Map<String,Object> readSensorChart(UUID uid,String property,Instant from,Instant to,int windowSeconds,int pointBudget,boolean originalsWithinBudget) {
         var minimum=Instant.now().minusSeconds(rawDays*86400L);var start=originalBoundary(from.isBefore(minimum)?minimum:from);var stop=originalBoundary(to);
-        if(!start.isBefore(stop))return Map.of("items",List.of(),"truncated",false,"displayMode","ORIGINALS","totalObservations",0);
-        String base=source(rawBucket,start,stop,"r._measurement == \"sensor_original\" and (r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
-            +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,_value:float(v:r._value),kind:if r._field == \"value_boolean\" then \"B\" else \"N\"})) |> group(columns:[\"_start\",\"_stop\"])";
-        long count=sensorChartCount(base,start);
-        boolean selected=count>100000;
-        List<Map<String,String>> rows;
-        if(!selected) {
-            rows=query(base+" |> sort(columns:[\"_time\"]) |> limit(n:100001) |> keep(columns:[\"_time\",\"_value\",\"kind\"])");
-            if(rows.size()>100000){count=Math.max(rows.size(),sensorChartCount(base,start));selected=true;}
-        }else rows=List.of();
-        if(selected) {
-            var flux=new StringBuilder("data = ").append(base).append('\n');
-            for(var selector:List.of("first","min","max","last"))flux.append("data |> window(every:").append(selectionSeconds)
-                .append("s) |> sort(columns:[\"_time\"]) |> ").append(selector).append("() |> keep(columns:[\"_time\",\"_value\",\"kind\"]) |> group(columns:[]) |> sort(columns:[\"_time\"]) |> limit(n:2001) |> yield(name:").append(quote(selector)).append(")\n");
-            var unique=new TreeMap<String,Map<String,String>>();
-            for(var row:query(flux.toString()))unique.put(row.get("_time")+"|"+row.get("kind")+"|"+row.get("_value"),row);
-            rows=new ArrayList<>(unique.values());rows.sort(Comparator.comparing(row->Instant.parse(row.get("_time"))));
+        long size=windowSeconds*1000000000L,first=Math.floorDiv(epochNanos(start.toString()),size),windows=start.isBefore(stop)?Math.floorDiv(epochNanos(stop.toString())-1,size)-first+1:0;
+        var counts=new long[(int)windows];var candidates=new TreeMap<Long,List<ChartPoint>>();
+        if(windows>0) {
+            String sensor="r._measurement == \"sensor_original\" and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property);
+            String every=" |> window(every:"+windowSeconds+"s)";
+            String point=" |> map(fn:(r)=> ({_time:r._time,_value:float(v:r._value),kind:KIND,series:r.series,configuration:r.configuration}))";
+            String counted=" |> count() |> map(fn:(r)=> ({_time:r._start,_value:float(v:r._value),kind:\"C\",series:r.series,configuration:r.configuration}))";
+            // Each yield reads its own source: a stream shared by several yields is not pushed down to storage and reads every original.
+            String numeric=source(rawBucket,start,stop,sensor+" and r._field == \"value_numeric\" and r.series != \"legacy:legacy:0\"");
+            String flag=sensor+" and r._field == \"value_boolean\" and r.series != \"legacy:legacy:0\"",flags=source(rawBucket,start,stop,flag);
+            String legacy=source(rawBucket,start,stop,sensor+" and r.series == \"legacy:legacy:0\" and (r._field == \"archive_visible\" or r._field == \"value_numeric\" or r._field == \"value_boolean\")")
+                +" |> pivot(rowKey:[\"_time\"],columnKey:[\"_field\"],valueColumn:\"_value\") |> filter(fn:(r)=> (not exists r.archive_visible or r.archive_visible) and (exists r.value_numeric or exists r.value_boolean))"
+                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then float(v:r.value_boolean) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))";
+            var yields=new ArrayList<String>();
+            for(var selector:List.of("first","last","min","max"))yields.add(numeric+every+" |> "+selector+"()"+point.replace("KIND","\"N\""));
+            // Booleans have no min/max: the first false and first true originals are a window's extremes.
+            // The value predicate stays inside the source filter so storage evaluates it.
+            for(var data:List.of(flags+every+" |> last()",source(rawBucket,start,stop,flag+" and r._value == true")+every,source(rawBucket,start,stop,flag+" and r._value == false")+every))yields.add(data+" |> first()"+point.replace("KIND","\"B\""));
+            yields.add(flags+every+" |> first()"+point.replace("KIND","\"B\""));
+            // The legacy pivot cannot be pushed down, so it is evaluated once and shared by its five yields (repeating it per yield
+            // took 5.2 s instead of 1.6 s over 10.5 days of real legacy originals).
+            for(var selector:List.of("first","last","min","max"))yields.add("legacyRows"+every+" |> "+selector+"() |> keep(columns:[\"_time\",\"_value\",\"kind\",\"series\",\"configuration\"])");
+            for(var data:List.of(numeric,flags,"legacyRows"))yields.add(data+every+counted);
+            var flux=new StringBuilder("legacyRows = "+legacy+"\n");for(int index=0;index<yields.size();index++)flux.append(yields.get(index)).append(" |> yield(name:\"y").append(index).append("\")\n");
+            for(var row:query(flux.toString())) {
+                long nanos=epochNanos(row.get("_time")),index=Math.floorDiv(nanos,size)-first;
+                if(index<0||index>=windows)throw new IllegalStateException("Original chart window out of range");
+                if("C".equals(row.get("kind")))counts[(int)index]+=(long)Double.parseDouble(row.get("_value"));
+                else candidates.computeIfAbsent(index,key->new ArrayList<>()).add(chartPoint(row));
+            }
+        }
+        long total=Arrays.stream(counts).sum();
+        var result=new TreeMap<String,Object>();result.put("truncated",false);result.put("totalObservations",total);
+        if(originalsWithinBudget&&total<=pointBudget) {
+            var rows=total==0?List.<Map<String,String>>of():query(source(rawBucket,start,stop,"r._measurement == \"sensor_original\" and (r._field == \"archive_visible\" or r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
+                +" |> pivot(rowKey:[\"_time\"],columnKey:[\"_field\"],valueColumn:\"_value\") |> filter(fn:(r)=> (not exists r.archive_visible or r.archive_visible) and (exists r.value_numeric or exists r.value_boolean))"
+                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then float(v:r.value_boolean) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))"
+                +" |> group(columns:[\"_start\",\"_stop\"]) |> sort(columns:[\"_time\"]) |> limit(n:"+(pointBudget+1)+") |> keep(columns:[\"_time\",\"_value\",\"kind\",\"series\",\"configuration\"])");
+            // Originals can arrive or be hidden between the two reads: a complete originals response counts what it returns, and
+            // one that no longer fits falls back to the selection below (whose counts come from the same read as its points).
+            if(rows.size()<=pointBudget){result.put("displayMode","ORIGINALS");result.put("totalObservations",(long)rows.size());result.put("items",rows.stream().map(InfluxTelemetryRepository::chartPoint).map(InfluxTelemetryRepository::chartItem).toList());return result;}
         }
         var items=new ArrayList<Map<String,Object>>();
-        for(var row:rows) {
-            double number=Double.parseDouble(row.get("_value"));if(!Double.isFinite(number))throw new IllegalStateException("Invalid original chart value");
-            Object value=number;if("B".equals(row.get("kind")))value=number!=0;
-            // The archive offsets sequences below one millisecond; the original source time is millisecond precision.
-            items.add(Map.of("observedAt",Instant.ofEpochMilli(Instant.parse(row.get("_time")).toEpochMilli()).toString(),"value",value));
+        for(var window:candidates.values()) {
+            var unique=new LinkedHashMap<String,ChartPoint>();
+            var byTime=Comparator.comparingLong(ChartPoint::nanos).thenComparing(ChartPoint::identity);
+            // Equal extremes resolve to the earliest original, as the storage selectors do.
+            var lowest=Comparator.comparingDouble(ChartPoint::value).thenComparing(byTime);
+            var highest=Comparator.comparingDouble(ChartPoint::value).thenComparing(byTime.reversed());
+            for(var chosen:List.of(Collections.min(window,byTime),Collections.max(window,byTime),Collections.min(window,lowest),Collections.max(window,highest)))unique.put(chosen.nanos()+"|"+chosen.identity(),chosen);
+            unique.values().stream().sorted(byTime).map(InfluxTelemetryRepository::chartItem).forEach(items::add);
         }
-        var result=new TreeMap<String,Object>();result.put("items",items);result.put("truncated",false);result.put("displayMode",selected?"SELECTED_ORIGINALS":"ORIGINALS");result.put("totalObservations",selected?count:items.size());
-        if(selected)result.put("selection",Map.of("method","FIRST_MIN_MAX_LAST","windowSeconds",selectionSeconds));return result;
+        result.put("displayMode","SELECTED_ORIGINALS");result.put("items",items);
+        var selection=new TreeMap<String,Object>();selection.put("method","FIRST_MIN_MAX_LAST");selection.put("windowSeconds",windowSeconds);
+        selection.put("bucketStart",Instant.ofEpochSecond(Math.multiplyExact(first,(long)windowSeconds)).toString());selection.put("counts",Arrays.stream(counts).boxed().toList());
+        result.put("selection",selection);return result;
     }
     public Map<String,Object> read(UUID id,String output,Instant from,Instant to,int limit,String cursor,Integer bucket) {
         String filter="r._measurement == \"vd_result\" and r.vd_id == "+quote(id.toString())+" and r.output_id == "+quote(output);

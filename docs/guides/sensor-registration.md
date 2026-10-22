@@ -23,6 +23,7 @@
 | MQTT 입력 | broker Host/Port, 메시지 유효 시간 | 정확한 topic, JSON 경로, 자료형 |
 | Virtual | Container/Emulator/AI Service의 HTTP JSON endpoint path | JSON 경로, 자료형 |
 | Serial JSON | `/dev/edgeai/<endpoint>`, source Device ID, baud rate | 프레임 `sensor`, JSON 경로, 자료형 |
+| RTSP | 인증 없는 `rtsp://host:port/path`, TCP, timeout | 고정 `connected` bool; 실제 영상 프레임 수신으로 연결 판정 |
 | Sense HAT v1 | ARM64 Raspberry Pi, `/dev/i2c-1`, source Device ID | `temp_humidity`, `humidity`, `pitch` 등의 JSON 경로 |
 
 Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQTT 입력에는 wildcard 및 출력용 `edgeai/devices/` topic을 사용할 수 없습니다. JSON 경로는 `values.temperature`처럼 객체 키를 점으로 연결합니다. 인증정보를 Profile에 넣는 기능은 현재 지원하지 않습니다.
@@ -41,7 +42,7 @@ Modbus holding 40001, input 30001, coil 1은 각각 wire address 0입니다. MQT
 
 [실행 구조·환경·데이터 경로](../../deploy/kubeedge/README.md)
 
-기존 웹 `http://192.168.0.56:13080/devices`의 **센서** 탭에서 등록된 측정 항목을 각각 한 행으로 확인합니다. 기본 저장 규격은 Arduino 6개와 Sense HAT 11개이며 실제 등록 목록은 항목 추가·삭제 결과를 따릅니다. 값은 실제 센서에서 읽고, 최신 상태는 DeviceTwin/DMI, 매 수집 데이터는 해당 노드의 MQTT broker로 전달합니다. Twin 갱신 간격은 DMI 예산과 항목 수에 따라 달라집니다. 동일 값이면 KubeEdge가 값을 다시 갱신하지 않을 수 있으며 수집 지속 여부는 DMI heartbeat와 별도 MQTT 수신으로 검증합니다.
+기존 웹 `http://10.254.192.47:13080/devices`의 **센서** 탭에서 등록된 측정 항목을 각각 한 행으로 확인합니다. 기본 저장 규격은 Arduino 6개와 Sense HAT 11개이며 실제 등록 목록은 항목 추가·삭제 결과를 따릅니다. 값은 실제 센서에서 읽고, 최신 상태는 DeviceTwin/DMI, 매 수집 데이터는 해당 노드의 MQTT broker로 전달합니다. Twin 갱신 간격은 DMI 예산과 항목 수에 따라 달라집니다. 동일 값이면 KubeEdge가 값을 다시 갱신하지 않을 수 있으며 수집 지속 여부는 DMI heartbeat와 별도 MQTT 수신으로 검증합니다.
 
 ## Modbus 모의 장치로 등록 연습
 
@@ -54,3 +55,31 @@ Host `10.77.0.5`, Port `1502`, Unit ID `1`, 대상 노드 `etri-dev0002-raspi5`,
 확인합니다. Holding Register는 각각 `40001`, `40003`, `40005`이며 자료형은 `float32`,
 바이트 순서는 `ABCD`입니다. 두 번째 장치는 이름 `practice-modbus-02`, Unit ID `2`를 사용하며
 값은 각각 `33.5`, `0.25`, `0.5`입니다. 이 서버는 실제 생산 센서가 아닌 고정값 모의 장치입니다.
+
+## RTSP 카메라
+
+**새 장치 등록 → 프로토콜 rtsp**에서 카메라 주소와 대상 Edge Node를 입력합니다.
+`rtsp://192.168.0.30:554/live`처럼 인증 없는 주소를 사용하며 계정·비밀번호·query·fragment는 받지 않습니다.
+주소 경로는 `/`, 영문·숫자·`/._-`만 허용합니다. 카메라 인증정보 저장과 RTSPS는 지원하지 않습니다.
+연결 테스트는 TCP 접속이나 SDP 응답만으로 성공하지 않고 FFmpeg가 실제 영상 프레임을 디코딩해야 성공합니다.
+
+등록 후 목록의 **카메라 이름**을 누르면 영상 모달이 열립니다. 최대640픽셀·4MiB JPEG를
+조회 완료 후1초 간격으로 갱신합니다. 일시정지·재개·ESC·닫기를 지원하며 실패하면 이전 영상을 지웁니다.
+숨겨진 탭에서는 조회를 멈추고 모달을 닫으면 진행 중인 요청을 취소합니다.
+이는 무음 미리보기이며 녹화·고화질 연속 재생·AI 추론은 포함하지 않습니다.
+원본 영상은 MQTT/Twin으로 보내지 않으며 수집되는 property는 `connected`뿐입니다.
+미리보기 API는 `GET /api/devices/{id}/preview?uid=<Device UID>`이며 저장된 설정 hash·수집 세대와 UID를 확인합니다.
+
+RTSP Mapper는 기존 scratch 이미지와 별도입니다. 저장소 루트에서 운영 환경에 맞는 registry로
+`docker buildx build --platform linux/amd64,linux/arm64 -f mappers/rtsp.Dockerfile -t <registry>/mapper-rtsp:<version> --push .`
+를 실행하고, 확정한 manifest digest를 API의 `EDGEAI_MAPPER_RTSP=<registry>/mapper-rtsp@sha256:<digest>`에 설정합니다.
+API 재시작 후 새 RTSP 등록 시 노드별 공유 Mapper를 생성합니다. 이 변수가 비어 있으면
+`/api/protocols`에서 RTSP를 설치되지 않음으로 표시하고 등록은 `MAPPER_IMAGE_NOT_CONFIGURED`로 거절합니다.
+API에서 노드 InternalIP의7783포트, Edge Node에서 카메라 RTSP TCP포트로 접근할 수 있어야 합니다.
+Mapper는 FFmpeg 프로세스를 카메라마다 유지하므로 입력 해상도·코덱·카메라 수에 따른 CPU와 메모리 용량을 확인합니다.
+512Mi/2CPU 제한은 초기 배포값이며 다수 카메라의 처리 용량을 보증하지 않습니다.
+
+로컬 회귀 검증은 FFmpeg와 Go1.24.2가 설치된 환경에서 `cd mappers` 후
+`GOTOOLCHAIN=go1.24.2 go test -race ./internal/driver -run RTSP -count=1`로 실행합니다.
+테스트가 로컬 RTSP 서버와 합성 H.264 영상을 생성하며 실제 카메라 주소가 없어도
+영상 디코딩·연결 판정·빈 스트림 실패·종료 후 캐시 폐기를 검증합니다. 물리 카메라별 호환성은 별도 확인이 필요합니다.

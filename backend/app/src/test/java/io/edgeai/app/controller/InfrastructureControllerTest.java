@@ -5,6 +5,7 @@ import io.edgeai.app.service.InfrastructureService;
 import io.edgeai.domain.node.InfrastructureSource.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -22,10 +23,12 @@ class InfrastructureControllerTest {
     @MockitoBean InfrastructureService service;
     @Test void exposesNodeAndDeviceCrdInventoryWithoutCaching() throws Exception {
         when(service.snapshot()).thenReturn(new Snapshot("AVAILABLE", "AVAILABLE", Instant.now(),
-            List.of(new Node("server", "EDGE_AI_SERVER", "arm64", "linux", "READY")),
+            List.of(new Node("server", "EDGE_AI_SERVER", "arm64", "linux", "READY", Map.of("nvidia.com/gpu", "1")), new Node("edge", "EDGE_DEVICE", "arm64", "linux", "READY", Map.of())),
             List.of(new Sensor("sensor", "edge", "temperature", "serial", "UNLOCKED", "UP", List.of("temp")))));
         mvc.perform(get("/api/v1/infrastructure")).andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
             .andExpect(jsonPath("$.nodes[0].kind").value("EDGE_AI_SERVER"))
+            .andExpect(jsonPath("$.nodes[0].allocatable['nvidia.com/gpu']").value("1"))
+            .andExpect(jsonPath("$.nodes[1].allocatable").isMap())
             .andExpect(jsonPath("$.sensors[0].operatingState").value("UP"))
             .andExpect(jsonPath("$.sensors[0].properties[0]").value("temp"));
     }

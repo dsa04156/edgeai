@@ -77,7 +77,7 @@ FastAPI는 loopback 18081, 단일 worker로 실행한다. 동시에 들어온 �
 bash scripts/test/test-platform-service.sh
 ```
 
-외부 호출을 대체한 Python 11개 검사, OpenAPI/생성 타입 일치, Next.js 프록시 검사를
+외부 호출을 대체한 Python 11개 검사, OpenAPI/생성 타입 일치, 콘솔 서버 프록시 검사를
 수행한다. Docker 빌드나 운영 저장소·클러스터 쓰기는 하지 않는다.
 FastAPI 변경 후 계약 갱신:
 
