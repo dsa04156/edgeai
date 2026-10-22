@@ -153,5 +153,11 @@ class Images(unittest.TestCase):
             value=json.loads((overlay/'release.json').read_text())
             self.assertEqual(SOURCE,value['sourceRevision']);self.assertEqual('b'*40,value['runnerSourceRevision'])
 
+            cluster=original.replace('edgeai-api\n','edgeai-api\n    newName: 10.254.192.47:5000/edgeai-api\n')
+            k.write_text(cluster);(overlay/'release.json').unlink()
+            skipped=subprocess.run(command+[json.dumps({'linux/amd64':AMD,'linux/arm64':ARM})],cwd=root,capture_output=True,text=True)
+            self.assertEqual(0,skipped.returncode);self.assertIn('newName',skipped.stdout)
+            self.assertEqual(cluster,k.read_text());self.assertFalse((overlay/'release.json').exists())
+
 
 if __name__=='__main__':unittest.main(verbosity=2)

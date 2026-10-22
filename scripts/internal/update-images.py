@@ -27,6 +27,10 @@ if (set(runner_platforms)!={'linux/amd64','linux/arm64'} or len(set(runner_platf
     parser.error('the two independently tested native Runner digests are required')
 path = Path('deploy/kubernetes/overlays/dev/kustomization.yaml')
 text = path.read_text()
+if re.search(r'- name: ghcr.io/dsa04156/edgeai-[a-z]+\n    newName: ', text):
+    # The overlay deploys cluster-registry images; a GHCR digest does not exist there, so every pin stays with the operator.
+    print('::notice::dev overlay pins cluster-registry images (newName); deployment pins were left unchanged.')
+    raise SystemExit(0)
 for name, digest in [('api', args.api), ('dashboard', args.dashboard), ('minio', args.minio)]:
     pattern = rf'(- name: ghcr.io/dsa04156/edgeai-{name}\n)    (?:newTag|digest): [^\n]+'
     text, count = re.subn(pattern, rf'\g<1>    digest: {digest}', text)

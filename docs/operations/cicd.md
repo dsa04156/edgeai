@@ -38,8 +38,9 @@ Ingress host, StorageClass와 Secret 참조를 확인해 별도 overlay를 준�
 | `workflow_dispatch`, `full_verification=true` | 백업·복구·부하·실행 등 추가 검증 | gitops 단계 생략 |
 
 현재 dev overlay는 API·Dashboard를 클러스터 registry(`10.254.192.47:5000`, `newName`)의 digest로 고정합니다.
-CI의 gitops 단계(`scripts/internal/update-images.py`)는 `newName` 없는 ghcr pin만 갱신하므로 이 overlay에서는
-`Expected one api image pin`으로 실패하고 pin을 바꾸지 않습니다. 운영 이미지 갱신은 클러스터 registry digest를 overlay에 직접 커밋합니다.
+CI의 gitops 단계(`scripts/internal/update-images.py`)는 overlay에 `newName` image가 하나라도 있으면 GHCR digest로 덮어쓰지 않고
+notice만 남긴 채 성공 종료합니다. 이때 `kustomization.yaml`·`release.json` 어느 pin도 바뀌지 않으므로 main push가 자동 배포로 이어지지 않습니다.
+운영 이미지 갱신은 클러스터 registry에 올린 digest를 overlay에 직접 커밋합니다.
 
 정확한 job과 조건은 `.github/workflows`의 workflow가 기준입니다.
 같은 브랜치의 새 실행이 이전 실행을 취소할 수 있으므로 배포 중 수동 검증의 영향을 확인합니다.
