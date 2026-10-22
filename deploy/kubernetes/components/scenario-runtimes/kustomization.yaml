@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - scenario-runtimes.yaml
+images:
+  - name: edgeai-scenario-runtime-gpu
+    newName: 10.254.192.47:5000/edgeai/scenario-runtime-gpu
+    digest: sha256:ebc6cde6d6413acf1df47b2b60d31629db97d7736b233739e6f02d22696828ee
+  - name: edgeai-scenario-runtime-npu
+    newName: 10.254.192.47:5000/edgeai/scenario-runtime-npu
+    digest: sha256:b8cab1c9772841f045132089c8d3c3a395bab151eb10016e9beb7d0aeefa815d
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_SCENARIO_ENABLED, value: 'true'}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_SCENARIO_GPU_URL, value: 'http://edgeai-scenario-gpu.edgeai.svc:8080'}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_SCENARIO_NPU_URL, value: 'http://edgeai-scenario-npu.edgeai.svc:8080'}

@@ -559,6 +559,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios/image-comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GPU/NPU 고정 이미지 비교 시나리오 구성과 런타임 상태
+         * @description 서버에 고정 설정된 100장 비교 데이터셋과 GPU·NPU 대상의 기대 모델 SHA-256/provider, 각 런타임 /health가 2초 안에 스스로 보고한 노드·장치·정밀도·모델 SHA-256을 반환합니다. READY는 보고값이 설정과 일치할 때만이며 MISMATCH(다른 모델·데이터셋·provider), NOT_READY, UNAVAILABLE(연결 실패·형식 오류, reported=null)을 구분합니다. 비활성 환경은 enabled=false와 빈 targets입니다.
+         */
+        get: operations["getImageComparisonScenario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/image-comparison/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 비교 실행 목록
+         * @description 생성 시각 역순입니다. 목록 항목의 snapshot·comparison은 null이며 상세 조회에서 제공합니다.
+         */
+        get: operations["listImageComparisonRuns"];
+        put?: never;
+        /**
+         * 비교 실행 시작
+         * @description 고정 데이터셋의 앞쪽 imageCount장을 같은 순서로 GPU와 NPU에 보냅니다. 서버 전체에서 QUEUED·RUNNING·STOPPING 실행은 1개뿐이며 DB 제약으로 보장합니다. 요청은 저장 즉시 202로 반환되고 서버가 백그라운드에서 실행합니다. 시작 전 두 런타임의 READY와 manifest 바이트 SHA-256을 검증해 불변 snapshot으로 저장하며, 실패하면 FAILED입니다. 이미지마다 두 런타임이 보고한 입력 텐서 SHA-256이 manifest와 같아야 합니다. 한 대상이라도 실패하면 그 이미지 결과를 기록하고 FAILED로 끝냅니다. 자동 재시도는 없습니다. 같은 Idempotency-Key와 같은 imageCount는 기존 실행을 200으로 반환하고 다른 값은 409입니다.
+         */
+        post: operations["startImageComparisonRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/image-comparison/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 비교 실행 상세와 집계
+         * @description 저장된 상태, snapshot(시작 시 검증한 데이터셋·대상 보고값), 대상별 처리 수·지연·처리량과 양쪽 모두 성공한 이미지(paired)의 top-1 일치·라벨 정답 수를 반환합니다. 실행 중에는 진행 중 값입니다. 프로세스가 사라진 실행은 lease 만료 후 INTERRUPTED가 되며 재실행하지 않습니다.
+         */
+        get: operations["getImageComparisonRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/image-comparison/runs/{runId}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 이미지별 대상 결과
+         * @description 전송된 이미지를 데이터셋 순서로 반환합니다. offset은 이미지 번호이며 nextOffset은 그 뒤에 전송된 이미지가 있을 때만 값이 있습니다. 대상 결과가 null이면 실행이 QUEUED·RUNNING·STOPPING일 때만 처리 중이며, 끝난 실행(특히 INTERRUPTED)의 null은 기록되지 않아 앞으로도 생기지 않는 결과입니다.
+         */
+        get: operations["listImageComparisonResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/image-comparison/runs/{runId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 비교 실행 중지
+         * @description QUEUED는 즉시 STOPPED, RUNNING은 STOPPING이 됩니다. 수락된 중지 이후 새 이미지는 전송하지 않으며 처리 중인 1장은 끝까지 기다립니다(런타임 호출 제한 시간 최대 20초). 그 뒤 STOPPED입니다. 그 1장이 실패해도 STOPPED이며 실패는 failureCode·failureMessage와 이미지 결과에 남습니다. 공유 런타임 프로세스는 종료하지 않습니다. 반복 요청과 이미 끝난 실행에 대한 요청은 상태를 바꾸지 않고 현재 값을 반환합니다.
+         */
+        post: operations["stopImageComparisonRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes": {
         parameters: {
             query?: never;
@@ -1916,6 +2020,148 @@ export interface components {
             accelerators?: components["schemas"]["NodeAccelerator"][];
             readiness?: components["schemas"]["NodeReadiness"] | null;
             measurements: components["schemas"]["NodeMetric"][];
+        };
+        ImageComparisonScenario: {
+            /** @enum {string} */
+            id: "gpu-npu-image-comparison";
+            enabled: boolean;
+            /** @enum {integer} */
+            maxImageCount: 100;
+            dataset: {
+                name: string;
+                version: string;
+                preprocessing: string;
+                /** @description null이면 라벨을 정답으로 사용하지 않고 대상 간 일치만 표시합니다. */
+                labelSource: string | null;
+                manifestSha256: string;
+                inputsSha256: string;
+                imageCount: number;
+            };
+            targets: components["schemas"]["ImageComparisonTarget"][];
+            /** Format: uuid */
+            activeRunId: string | null;
+        };
+        ImageComparisonTarget: {
+            /** @enum {string} */
+            id: "GPU" | "NPU";
+            modelName: string;
+            expectedModelSha256: string;
+            expectedProvider: string;
+            /** @enum {string} */
+            status: "READY" | "NOT_READY" | "MISMATCH" | "UNAVAILABLE";
+            reported: null | {
+                nodeName: string;
+                deviceName: string;
+                provider: string;
+                precision: string;
+                runtime: string;
+                modelSha256: string;
+            };
+        };
+        ImageComparisonStart: {
+            imageCount: number;
+        };
+        ImageComparisonRunPage: {
+            items: components["schemas"]["ImageComparisonRun"][];
+            nextOffset: number | null;
+        };
+        ImageComparisonRun: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "QUEUED" | "RUNNING" | "STOPPING" | "STOPPED" | "SUCCEEDED" | "FAILED" | "INTERRUPTED";
+            requestedCount: number;
+            /** @description 두 대상에 전송을 시작한 이미지 수 */
+            dispatchedCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description 런타임 검증 후 RUNNING이 된 시각
+             */
+            startedAt: string | null;
+            /** Format: date-time */
+            stopRequestedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** @description TARGET_FAILED, TARGET_NOT_READY, DATASET_MISMATCH, SCENARIO_DISABLED, INTERNAL_ERROR, OWNER_LOST, PROCESS_STOPPED */
+            failureCode: string | null;
+            failureMessage: string | null;
+            snapshot: null | {
+                dataset: {
+                    kind: string;
+                    preprocessing: string;
+                    manifestSha256: string;
+                    inputsSha256: string;
+                    imageCount: number;
+                };
+                targets: {
+                    /** @enum {string} */
+                    id: "GPU" | "NPU";
+                    modelName: string;
+                    modelSha256: string;
+                    nodeName: string;
+                    deviceName: string;
+                    provider: string;
+                    precision: string;
+                    runtime: string;
+                }[];
+            };
+            comparison: null | components["schemas"]["ImageComparisonSummary"];
+        };
+        /** @description compute 값(meanInferenceMs·p50·p95·computeImagesPerSecond)은 성공 호출에서 런타임이 측정한 시간(런타임 내부 정규화·전송·추론 완료 대기)입니다. meanRoundTripMs는 성공 호출의 API 측정 HTTP 시간 평균입니다. callWallSeconds는 실패·시간 초과를 포함해 API가 측정한 해당 대상의 모든 순차 HTTP 호출 시간 합이고 callWallImagesPerSecond는 성공 수를 이 값으로 나눕니다. 두 대상은 이미지마다 동시에 호출됩니다. paired는 두 대상이 모두 성공한 이미지입니다. */
+        ImageComparisonSummary: {
+            targets: {
+                /** @enum {string} */
+                target: "GPU" | "NPU";
+                processed: number;
+                succeeded: number;
+                failed: number;
+                meanInferenceMs: number | null;
+                p50InferenceMs: number | null;
+                p95InferenceMs: number | null;
+                meanRoundTripMs: number | null;
+                computeImagesPerSecond: number | null;
+                callWallSeconds: number;
+                callWallImagesPerSecond: number | null;
+                pairedLabeledCorrect: number | null;
+            }[];
+            pairedCount: number;
+            top1AgreementCount: number;
+            labelsTrusted: boolean;
+            runWallSeconds: number | null;
+            pairedImagesPerRunWallSecond: number | null;
+        };
+        ImageComparisonResultPage: {
+            items: components["schemas"]["ImageComparisonImageResult"][];
+            nextOffset: number | null;
+        };
+        ImageComparisonImageResult: {
+            index: number;
+            /** @description 원본 데이터셋 경로(원본 이미지 파일은 배포에 포함되지 않음) */
+            path: string;
+            /** @description ImageNet-1k 클래스 번호 */
+            label: number;
+            /** @description 데이터셋 준비 시 TFLite CPU 기준 top-1 */
+            referenceTop1: number;
+            tensorSha256: string;
+            gpu: null | components["schemas"]["ImageComparisonOutcome"];
+            npu: null | components["schemas"]["ImageComparisonOutcome"];
+            top1Agreement: boolean | null;
+        };
+        ImageComparisonOutcome: {
+            /** @enum {string} */
+            status: "SUCCEEDED" | "FAILED";
+            top1: number | null;
+            topK: {
+                classIndex: number;
+                /** @description 런타임 원시 출력값. 대상 간 크기 비교에 사용하지 않습니다. */
+                score: number;
+            }[];
+            inferenceMs: number | null;
+            roundTripMs: number;
+            /** @description RUNTIME_UNAVAILABLE, RUNTIME_BUSY, RUNTIME_REJECTED, RUNTIME_INVALID_RESPONSE, INVALID_RESPONSE, IDENTITY_MISMATCH, INPUT_MISMATCH */
+            failureCode: string | null;
         };
         InferenceModelPage: {
             items: components["schemas"]["InferenceModel"][];
@@ -4606,6 +4852,247 @@ export interface operations {
             };
             /** @description INFERENCE_BUSY(다른 추론 진행 중) 또는 INFERENCE_RUNTIME_UNAVAILABLE(연결 실패·시간 초과) */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getImageComparisonScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 구성과 현재 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonScenario"];
+                };
+            };
+        };
+    };
+    listImageComparisonRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실행 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonRunPage"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startImageComparisonRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 재전송에서 유지할 UUID */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "imageCount": 100
+                 *     }
+                 */
+                "application/json": components["schemas"]["ImageComparisonStart"];
+            };
+        };
+        responses: {
+            /** @description 같은 키·입력의 기존 실행 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonRun"];
+                };
+            };
+            /** @description 새 실행이 QUEUED로 저장됨. state로 실제 진행을 확인하세요. */
+            202: {
+                headers: {
+                    /** @description /api/v1/scenarios/image-comparison/runs/{runId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonRun"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST(Idempotency-Key·imageCount 1~100 정수·추가 필드) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SCENARIO_RUN_ACTIVE(다른 실행 진행 중) 또는 IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_DISABLED(런타임 미설정) 또는 SCENARIO_STORE_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getImageComparisonRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실행 상세 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonRun"];
+                };
+            };
+            /** @description SCENARIO_RUN_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listImageComparisonResults: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 이미지별 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonResultPage"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_RUN_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopImageComparisonRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 중지 반영 후 현재 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageComparisonRun"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SCENARIO_RUN_NOT_FOUND */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -6,6 +6,7 @@ resources:
   - ingress.yaml
   - ../../components/gpu-inference
 components:
+  - ../../components/scenario-runtimes
   - ../../components/stream
   - ../../components/hdd-data-store
 patches:

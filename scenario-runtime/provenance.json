@@ -1,0 +1,29 @@
+{
+  "dataset": {
+    "description": "100 Imagenette2-160 val images preprocessed once with TensorFlow 2.20.0 (RGB, bilinear shortest side 256, center 224, float32 NHWC). Original JPEGs are not distributed.",
+    "manifest.json": "7740c3420918e1264024dd41dbe6c0db18a2f1d283789afc89ef3d0db522d30f",
+    "inputs.npy": "cb0d2db8020f4880f41e033e69bdd67f6591d16d41caf712a6eda651324150d5",
+    "reference.npy": "27ba6c82f0abb7df178fc0a4405c4b86b8d51ae8385afa976efb75a4d19b79d2"
+  },
+  "source_model": {
+    "description": "Hailo Model Zoo resnet_v1_50 TFLite",
+    "resnet_v1_50.zip": "33eaf6896f9fb4876375d53eb12e32a90a12055d86c541f76361817d3aa8d5ad",
+    "model.tflite": "2625772f5e1324c1e2781856926a445b4fe6494b9e0bb0161a7d86df7f095d38"
+  },
+  "gpu": {
+    "description": "tf2onnx 1.16.1 opset 18 conversion of model.tflite; CPU top-1 agreement with the TFLite reference was 100/100 at conversion",
+    "resnet50.onnx": "1737a0c64aff1a923bd73b426fe40700bb7bf2e7c1449bad2c90eda03d93249d",
+    "base_image": "10.254.192.47:5000/ra-pool-cuda@sha256:21cf10aef3f5360f95e4d6e9ef46b2a6aaa06d8660b0cc3738e408666811fddc",
+    "platform": "linux/amd64"
+  },
+  "npu": {
+    "description": "Existing Hailo-8 compilation of the same source model family; equivalence of compiled weights/quantization with the ONNX is not asserted",
+    "model.hef": "a1d82e9121c66e772257490cb3af904d1e90fb4387ad5f683fbc5efe1a05f9f7",
+    "base_image": "10.254.192.47:5000/ra-pool-hailo@sha256:7f70d7b9cb0e8bdc6403bba41bd763180d1faee3179a9522c8b99870344012d1",
+    "platform": "linux/arm64"
+  },
+  "probe_source": {
+    "description": "accelerator-pool inference probe whose device setup the engines adapt",
+    "inference_probe.py": "7f55117afa1f2bd9f2e6a7ce0e654110339a2dbf996f5994b345bf0da3d90515"
+  }
+}

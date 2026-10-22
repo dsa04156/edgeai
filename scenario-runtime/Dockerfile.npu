@@ -1,0 +1,13 @@
+# linux/arm64. The pinned base already holds /opt/fixture/{inputs.npy,reference.npy,manifest.json,model.hef}
+# and HailoRT 4.23.0 (see provenance.json); the runtime re-verifies every SHA-256 at start.
+FROM 10.254.192.47:5000/ra-pool-hailo@sha256:7f70d7b9cb0e8bdc6403bba41bd763180d1faee3179a9522c8b99870344012d1
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp HAILORT_LOGGER_PATH=/tmp \
+    PYTHONPATH=/opt/scenario-runtime \
+    SCENARIO_TARGET=NPU SCENARIO_FIXTURE_DIR=/opt/fixture SCENARIO_MODEL=/opt/fixture/model.hef \
+    SCENARIO_MODEL_SHA256=a1d82e9121c66e772257490cb3af904d1e90fb4387ad5f683fbc5efe1a05f9f7 \
+    SCENARIO_MANIFEST_SHA256=7740c3420918e1264024dd41dbe6c0db18a2f1d283789afc89ef3d0db522d30f
+COPY edgeai_scenario_runtime /opt/scenario-runtime/edgeai_scenario_runtime
+USER 10001:10001
+EXPOSE 8080
+ENTRYPOINT ["python", "-m", "edgeai_scenario_runtime.server"]

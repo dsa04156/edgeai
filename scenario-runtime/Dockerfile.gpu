@@ -1,0 +1,14 @@
+# linux/amd64. The pinned base already holds /opt/fixture/{inputs.npy,reference.npy,manifest.json,resnet50.onnx}
+# and onnxruntime-gpu under /opt/candy/deps (see provenance.json); the runtime re-verifies every SHA-256 at start.
+FROM 10.254.192.47:5000/ra-pool-cuda@sha256:21cf10aef3f5360f95e4d6e9ef46b2a6aaa06d8660b0cc3738e408666811fddc
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp \
+    PYTHONPATH=/opt/candy/deps:/opt/scenario-runtime \
+    LD_LIBRARY_PATH=/opt/candy/deps/nvidia/cuda_nvrtc/lib:/opt/candy/deps/nvidia/cublas/lib:/opt/candy/deps/nvidia/cuda_runtime/lib:/opt/candy/deps/nvidia/cudnn/lib:/opt/candy/deps/nvidia/cufft/lib:/opt/candy/deps/nvidia/curand/lib:/opt/candy/deps/nvidia/nvjitlink/lib:/usr/local/nvidia/lib64:/usr/local/nvidia/lib \
+    SCENARIO_TARGET=GPU SCENARIO_FIXTURE_DIR=/opt/fixture SCENARIO_MODEL=/opt/fixture/resnet50.onnx \
+    SCENARIO_MODEL_SHA256=1737a0c64aff1a923bd73b426fe40700bb7bf2e7c1449bad2c90eda03d93249d \
+    SCENARIO_MANIFEST_SHA256=7740c3420918e1264024dd41dbe6c0db18a2f1d283789afc89ef3d0db522d30f
+COPY edgeai_scenario_runtime /opt/scenario-runtime/edgeai_scenario_runtime
+USER 10001:10001
+EXPOSE 8080
+ENTRYPOINT ["python", "-m", "edgeai_scenario_runtime.server"]

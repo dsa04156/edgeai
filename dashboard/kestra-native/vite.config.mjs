@@ -143,6 +143,7 @@ export default defineConfig(async (env) => {
                   ["workflows", "WorkflowsPage.vue"],
                   ["runs", "RunsPage.vue"],
                   ["inference", "InferencePage.vue"],
+                  ["scenarios", "ScenarioPage.vue"],
                   ["audit", "AuditPage.vue"],
                   ["platform-service", "PlatformServicePage.vue"],
                 ]
@@ -161,6 +162,7 @@ export default defineConfig(async (env) => {
               ["workflows", "워크플로", "FileTreeOutline"],
               ["runs", "실행 · 작업 · 결과", "PlayOutline"],
               ["inference", "모델 추론", "ImageSearchOutline"],
+              ["scenarios", "GPU/NPU 이미지 비교", "CompareHorizontal"],
               ["profiles", "실행 모듈", "PuzzleOutline"],
               ["audit", "감사 기록", "ShieldCheckOutline"],
               ["platform-service", "DDS 배포", "RocketLaunchOutline"],
@@ -174,7 +176,7 @@ export default defineConfig(async (env) => {
             return code
               .replace(
                 'import {computed} from "vue"',
-                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"',
               )
               .replace(
                 /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,

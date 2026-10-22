@@ -1057,6 +1057,162 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/image-comparison:
+    get:
+      tags: [Scenario]
+      operationId: getImageComparisonScenario
+      summary: GPU/NPU 고정 이미지 비교 시나리오 구성과 런타임 상태
+      description: >-
+        서버에 고정 설정된 100장 비교 데이터셋과 GPU·NPU 대상의 기대 모델 SHA-256/provider, 각 런타임 /health가 2초 안에 스스로 보고한
+        노드·장치·정밀도·모델 SHA-256을 반환합니다. READY는 보고값이 설정과 일치할 때만이며 MISMATCH(다른 모델·데이터셋·provider),
+        NOT_READY, UNAVAILABLE(연결 실패·형식 오류, reported=null)을 구분합니다. 비활성 환경은 enabled=false와 빈 targets입니다.
+      responses:
+        '200':
+          description: 구성과 현재 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonScenario'}
+  /api/v1/scenarios/image-comparison/runs:
+    post:
+      tags: [Scenario]
+      operationId: startImageComparisonRun
+      summary: 비교 실행 시작
+      description: >-
+        고정 데이터셋의 앞쪽 imageCount장을 같은 순서로 GPU와 NPU에 보냅니다. 서버 전체에서 QUEUED·RUNNING·STOPPING 실행은 1개뿐이며
+        DB 제약으로 보장합니다. 요청은 저장 즉시 202로 반환되고 서버가 백그라운드에서 실행합니다. 시작 전 두 런타임의 READY와 manifest 바이트
+        SHA-256을 검증해 불변 snapshot으로 저장하며, 실패하면 FAILED입니다. 이미지마다 두 런타임이 보고한 입력 텐서 SHA-256이 manifest와
+        같아야 합니다. 한 대상이라도 실패하면 그 이미지 결과를 기록하고 FAILED로 끝냅니다. 자동 재시도는 없습니다.
+        같은 Idempotency-Key와 같은 imageCount는 기존 실행을 200으로 반환하고 다른 값은 409입니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}, description: 재전송에서 유지할 UUID}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ImageComparisonStart'}
+            example: {imageCount: 100}
+      responses:
+        '200':
+          description: 같은 키·입력의 기존 실행
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonRun'}
+        '202':
+          description: 새 실행이 QUEUED로 저장됨. state로 실제 진행을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/scenarios/image-comparison/runs/{runId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonRun'}
+        '400':
+          description: INVALID_SCENARIO_REQUEST(Idempotency-Key·imageCount 1~100 정수·추가 필드)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '403': {description: CSRF 검증 실패}
+        '409':
+          description: SCENARIO_RUN_ACTIVE(다른 실행 진행 중) 또는 IDEMPOTENCY_CONFLICT
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: SCENARIO_DISABLED(런타임 미설정) 또는 SCENARIO_STORE_UNAVAILABLE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    get:
+      tags: [Scenario]
+      operationId: listImageComparisonRuns
+      summary: 비교 실행 목록
+      description: 생성 시각 역순입니다. 목록 항목의 snapshot·comparison은 null이며 상세 조회에서 제공합니다.
+      parameters:
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: 실행 목록
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonRunPage'}
+        '400':
+          description: INVALID_SCENARIO_REQUEST
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/image-comparison/runs/{runId}:
+    get:
+      tags: [Scenario]
+      operationId: getImageComparisonRun
+      summary: 비교 실행 상세와 집계
+      description: >-
+        저장된 상태, snapshot(시작 시 검증한 데이터셋·대상 보고값), 대상별 처리 수·지연·처리량과 양쪽 모두 성공한 이미지(paired)의
+        top-1 일치·라벨 정답 수를 반환합니다. 실행 중에는 진행 중 값입니다. 프로세스가 사라진 실행은 lease 만료 후 INTERRUPTED가 되며
+        재실행하지 않습니다.
+      parameters:
+      - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 실행 상세
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonRun'}
+        '404':
+          description: SCENARIO_RUN_NOT_FOUND
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/image-comparison/runs/{runId}/results:
+    get:
+      tags: [Scenario]
+      operationId: listImageComparisonResults
+      summary: 이미지별 대상 결과
+      description: 전송된 이미지를 데이터셋 순서로 반환합니다. offset은 이미지 번호이며 nextOffset은 그 뒤에 전송된 이미지가 있을 때만 값이 있습니다. 대상 결과가 null이면 실행이 QUEUED·RUNNING·STOPPING일 때만 처리 중이며, 끝난 실행(특히 INTERRUPTED)의 null은 기록되지 않아 앞으로도 생기지 않는 결과입니다.
+      parameters:
+      - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 100, default: 0}}
+      responses:
+        '200':
+          description: 이미지별 결과
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonResultPage'}
+        '400':
+          description: INVALID_SCENARIO_REQUEST
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: SCENARIO_RUN_NOT_FOUND
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/image-comparison/runs/{runId}/stop:
+    post:
+      tags: [Scenario]
+      operationId: stopImageComparisonRun
+      summary: 비교 실행 중지
+      description: >-
+        QUEUED는 즉시 STOPPED, RUNNING은 STOPPING이 됩니다. 수락된 중지 이후 새 이미지는 전송하지 않으며 처리 중인 1장은 끝까지
+        기다립니다(런타임 호출 제한 시간 최대 20초). 그 뒤 STOPPED입니다. 그 1장이 실패해도 STOPPED이며 실패는
+        failureCode·failureMessage와 이미지 결과에 남습니다. 공유 런타임 프로세스는 종료하지 않습니다. 반복 요청과 이미
+        끝난 실행에 대한 요청은 상태를 바꾸지 않고 현재 값을 반환합니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 중지 반영 후 현재 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageComparisonRun'}
+        '403': {description: CSRF 검증 실패}
+        '404':
+          description: SCENARIO_RUN_NOT_FOUND
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/nodes:
     get:
       tags:
@@ -3567,6 +3723,197 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NodeMetric'
+    ImageComparisonScenario:
+      type: object
+      additionalProperties: false
+      required: [id, enabled, maxImageCount, dataset, targets, activeRunId]
+      properties:
+        id: {type: string, enum: [gpu-npu-image-comparison]}
+        enabled: {type: boolean}
+        maxImageCount: {type: integer, enum: [100]}
+        dataset:
+          type: object
+          additionalProperties: false
+          required: [name, version, preprocessing, labelSource, manifestSha256, inputsSha256, imageCount]
+          properties:
+            name: {type: string}
+            version: {type: string}
+            preprocessing: {type: string}
+            labelSource: {type: [string, 'null'], description: null이면 라벨을 정답으로 사용하지 않고 대상 간 일치만 표시합니다.}
+            manifestSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+            inputsSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+            imageCount: {type: integer}
+        targets:
+          type: array
+          maxItems: 2
+          items: {$ref: '#/components/schemas/ImageComparisonTarget'}
+        activeRunId: {type: [string, 'null'], format: uuid}
+    ImageComparisonTarget:
+      type: object
+      additionalProperties: false
+      required: [id, modelName, expectedModelSha256, expectedProvider, status, reported]
+      properties:
+        id: {type: string, enum: [GPU, NPU]}
+        modelName: {type: string}
+        expectedModelSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        expectedProvider: {type: string}
+        status: {type: string, enum: [READY, NOT_READY, MISMATCH, UNAVAILABLE]}
+        reported:
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            description: 런타임이 스스로 보고한 값
+            required: [nodeName, deviceName, provider, precision, runtime, modelSha256]
+            properties:
+              nodeName: {type: string}
+              deviceName: {type: string}
+              provider: {type: string}
+              precision: {type: string}
+              runtime: {type: string}
+              modelSha256: {type: string}
+    ImageComparisonStart:
+      type: object
+      additionalProperties: false
+      required: [imageCount]
+      properties:
+        imageCount: {type: integer, minimum: 1, maximum: 100}
+    ImageComparisonRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextOffset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ImageComparisonRun'}
+        nextOffset: {type: [integer, 'null']}
+    ImageComparisonRun:
+      type: object
+      additionalProperties: false
+      required: [id, state, requestedCount, dispatchedCount, createdAt, startedAt, stopRequestedAt, finishedAt, failureCode, failureMessage, snapshot, comparison]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [QUEUED, RUNNING, STOPPING, STOPPED, SUCCEEDED, FAILED, INTERRUPTED]}
+        requestedCount: {type: integer, minimum: 1, maximum: 100}
+        dispatchedCount: {type: integer, minimum: 0, maximum: 100, description: 두 대상에 전송을 시작한 이미지 수}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: [string, 'null'], format: date-time, description: 런타임 검증 후 RUNNING이 된 시각}
+        stopRequestedAt: {type: [string, 'null'], format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        failureCode: {type: [string, 'null'], description: 'TARGET_FAILED, TARGET_NOT_READY, DATASET_MISMATCH, SCENARIO_DISABLED, INTERNAL_ERROR, OWNER_LOST, PROCESS_STOPPED'}
+        failureMessage: {type: [string, 'null']}
+        snapshot:
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [dataset, targets]
+            properties:
+              dataset:
+                type: object
+                additionalProperties: false
+                required: [kind, preprocessing, manifestSha256, inputsSha256, imageCount]
+                properties:
+                  kind: {type: string}
+                  preprocessing: {type: string}
+                  manifestSha256: {type: string}
+                  inputsSha256: {type: string}
+                  imageCount: {type: integer}
+              targets:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, modelName, modelSha256, nodeName, deviceName, provider, precision, runtime]
+                  properties:
+                    id: {type: string, enum: [GPU, NPU]}
+                    modelName: {type: string}
+                    modelSha256: {type: string}
+                    nodeName: {type: string}
+                    deviceName: {type: string}
+                    provider: {type: string}
+                    precision: {type: string}
+                    runtime: {type: string}
+        comparison:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ImageComparisonSummary'
+    ImageComparisonSummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        compute 값(meanInferenceMs·p50·p95·computeImagesPerSecond)은 성공 호출에서 런타임이 측정한 시간(런타임 내부 정규화·전송·추론
+        완료 대기)입니다. meanRoundTripMs는 성공 호출의 API 측정 HTTP 시간 평균입니다. callWallSeconds는 실패·시간 초과를 포함해 API가
+        측정한 해당 대상의 모든 순차 HTTP 호출 시간 합이고 callWallImagesPerSecond는 성공 수를 이 값으로 나눕니다. 두 대상은 이미지마다
+        동시에 호출됩니다. paired는 두 대상이 모두 성공한 이미지입니다.
+      required: [targets, pairedCount, top1AgreementCount, labelsTrusted, runWallSeconds, pairedImagesPerRunWallSecond]
+      properties:
+        targets:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [target, processed, succeeded, failed, meanInferenceMs, p50InferenceMs, p95InferenceMs, meanRoundTripMs, computeImagesPerSecond, callWallSeconds, callWallImagesPerSecond, pairedLabeledCorrect]
+            properties:
+              target: {type: string, enum: [GPU, NPU]}
+              processed: {type: integer}
+              succeeded: {type: integer}
+              failed: {type: integer}
+              meanInferenceMs: {type: [number, 'null']}
+              p50InferenceMs: {type: [number, 'null']}
+              p95InferenceMs: {type: [number, 'null']}
+              meanRoundTripMs: {type: [number, 'null']}
+              computeImagesPerSecond: {type: [number, 'null']}
+              callWallSeconds: {type: number}
+              callWallImagesPerSecond: {type: [number, 'null']}
+              pairedLabeledCorrect: {type: [integer, 'null']}
+        pairedCount: {type: integer}
+        top1AgreementCount: {type: integer}
+        labelsTrusted: {type: boolean}
+        runWallSeconds: {type: [number, 'null']}
+        pairedImagesPerRunWallSecond: {type: [number, 'null']}
+    ImageComparisonResultPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextOffset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ImageComparisonImageResult'}
+        nextOffset: {type: [integer, 'null']}
+    ImageComparisonImageResult:
+      type: object
+      additionalProperties: false
+      required: [index, path, label, referenceTop1, tensorSha256, gpu, npu, top1Agreement]
+      properties:
+        index: {type: integer}
+        path: {type: string, description: 원본 데이터셋 경로(원본 이미지 파일은 배포에 포함되지 않음)}
+        label: {type: integer, description: ImageNet-1k 클래스 번호}
+        referenceTop1: {type: integer, description: 데이터셋 준비 시 TFLite CPU 기준 top-1}
+        tensorSha256: {type: string}
+        gpu: {oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ImageComparisonOutcome'}]}
+        npu: {oneOf: [{type: 'null'}, {$ref: '#/components/schemas/ImageComparisonOutcome'}]}
+        top1Agreement: {type: [boolean, 'null']}
+    ImageComparisonOutcome:
+      type: object
+      additionalProperties: false
+      required: [status, top1, topK, inferenceMs, roundTripMs, failureCode]
+      properties:
+        status: {type: string, enum: [SUCCEEDED, FAILED]}
+        top1: {type: [integer, 'null']}
+        topK:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [classIndex, score]
+            properties:
+              classIndex: {type: integer, minimum: 0, maximum: 999}
+              score: {type: number, description: 런타임 원시 출력값. 대상 간 크기 비교에 사용하지 않습니다.}
+        inferenceMs: {type: [number, 'null']}
+        roundTripMs: {type: number}
+        failureCode: {type: [string, 'null'], description: 'RUNTIME_UNAVAILABLE, RUNTIME_BUSY, RUNTIME_REJECTED, RUNTIME_INVALID_RESPONSE, INVALID_RESPONSE, IDENTITY_MISMATCH, INPUT_MISMATCH'}
     InferenceModelPage:
       type: object
       additionalProperties: false
@@ -5432,6 +5779,8 @@ tags:
   description: Kubernetes/KubeEdge 실행 호스트의 실제 관측을 조회합니다.
 - name: Inference
   description: 워크플로와 별도인 이미지 1장 GPU 객체 탐지
+- name: Scenario
+  description: 워크플로와 별도인 GPU/NPU 고정 100장 이미지 분류 비교
 - name: Workflow
   description: 불변 DAG 정의·발행 버전 관리
 - name: Run

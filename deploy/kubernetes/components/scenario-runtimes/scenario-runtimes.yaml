@@ -1,0 +1,155 @@
+# GPU/NPU image comparison runtimes (docs/scenarios/gpu-npu-image-comparison.md). Each serves the fixed dataset
+# baked into its pinned base image and only edgeai-api may call it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-scenario-gpu
+  labels:
+    app.kubernetes.io/name: edgeai-scenario-gpu
+    app.kubernetes.io/part-of: edgeai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one GPU reserved per runtime; a surge Pod would wait for it
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-scenario-gpu
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edgeai-scenario-gpu
+        app.kubernetes.io/part-of: edgeai
+    spec:
+      # amd64 CUDA image; the arm64 GB10 (ser0003) cannot run it.
+      nodeSelector:
+        kubernetes.io/hostname: etri-ser0002-cgnmsb
+        kubernetes.io/arch: amd64
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: runtime
+          image: edgeai-scenario-runtime-gpu
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+          resources:
+            # 1 GiB was OOM-killed in the 2026-10-13 pilot of the same session setup; 3 GiB succeeded.
+            requests: {cpu: "1", memory: 3Gi, nvidia.com/gpu: 1}
+            limits: {cpu: "1", memory: 3Gi, nvidia.com/gpu: 1}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 128Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-scenario-npu
+  labels:
+    app.kubernetes.io/name: edgeai-scenario-npu
+    app.kubernetes.io/part-of: edgeai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # the Hailo-8 device is exclusive
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-scenario-npu
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edgeai-scenario-npu
+        app.kubernetes.io/part-of: edgeai
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: etri-dev0006-raspi5
+        kubernetes.io/arch: arm64
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: runtime
+          image: edgeai-scenario-runtime-npu
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+          resources:
+            requests: {cpu: "1", memory: 1Gi, hailo.ai/h8: 1}
+            limits: {cpu: "1", memory: 1Gi, hailo.ai/h8: 1}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-scenario-gpu
+  labels: {app.kubernetes.io/name: edgeai-scenario-gpu, app.kubernetes.io/part-of: edgeai}
+spec:
+  selector: {app.kubernetes.io/name: edgeai-scenario-gpu}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-scenario-npu
+  labels: {app.kubernetes.io/name: edgeai-scenario-npu, app.kubernetes.io/part-of: edgeai}
+spec:
+  selector: {app.kubernetes.io/name: edgeai-scenario-npu}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-scenario-runtimes
+  labels: {app.kubernetes.io/part-of: edgeai}
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: [edgeai-scenario-gpu, edgeai-scenario-npu]}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: edgeai-api}
+      ports:
+        - {protocol: TCP, port: 8080}

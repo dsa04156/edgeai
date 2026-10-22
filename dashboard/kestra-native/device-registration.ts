@@ -64,12 +64,14 @@ export function createDeviceRegistrationMiddleware({
         "workflow-data-sources",
         "data-store",
         "inference/models",
+        "scenarios/image-comparison",
+        "scenarios/image-comparison/runs",
       ].includes(target) ||
       new RegExp(
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
       ).test(target) ||
       new RegExp(
-        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$`,
+        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$`,
       ).test(target);
     const cameraPreview =
       /^managed-devices\/[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?\/preview$/.test(
@@ -87,9 +89,10 @@ export function createDeviceRegistrationMiddleware({
         "device-profiles",
         "device-connections/test",
         "inference/predict",
+        "scenarios/image-comparison/runs",
       ].includes(target) ||
       new RegExp(
-        `^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
+        `^scenarios/image-comparison/runs/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
       ).test(target);
     const coreDelete =
       (profile && target.includes("/versions/")) ||

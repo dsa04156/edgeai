@@ -59,6 +59,30 @@ edgeai:
     provider: ${EDGEAI_INFERENCE_PROVIDER:}
     runtime-url: ${EDGEAI_INFERENCE_RUNTIME_URL:}
     timeout: ${EDGEAI_INFERENCE_TIMEOUT:20s}
+  # GPU/NPU image comparison (docs/scenarios/gpu-npu-image-comparison.md). Disabled until both runtimes are deployed.
+  scenario:
+    enabled: ${EDGEAI_SCENARIO_ENABLED:false}
+    timeout: ${EDGEAI_SCENARIO_TIMEOUT:20s}
+    lease: ${EDGEAI_SCENARIO_LEASE:60s}
+    heartbeat: ${EDGEAI_SCENARIO_HEARTBEAT:5s}
+    dataset:
+      name: 고정 100장 비교 데이터셋 (Imagenette2-160 val)
+      version: imagenette100-resnet50-tflite-qualification/v1
+      preprocessing: tensorflow-2.20.0-rgb-bilinear-shortest256-center224-float32
+      label-source: Imagenette2-160 val 폴더 WNID → ImageNet-1k 클래스 번호
+      manifest-sha256: 7740c3420918e1264024dd41dbe6c0db18a2f1d283789afc89ef3d0db522d30f
+      inputs-sha256: cb0d2db8020f4880f41e033e69bdd67f6591d16d41caf712a6eda651324150d5
+      image-count: 100
+    gpu:
+      url: ${EDGEAI_SCENARIO_GPU_URL:}
+      model-name: ResNet-v1-50 (TFLite → ONNX opset 18)
+      model-sha256: 1737a0c64aff1a923bd73b426fe40700bb7bf2e7c1449bad2c90eda03d93249d
+      provider: CUDAExecutionProvider
+    npu:
+      url: ${EDGEAI_SCENARIO_NPU_URL:}
+      model-name: ResNet-v1-50 (Hailo Model Zoo HEF)
+      model-sha256: a1d82e9121c66e772257490cb3af904d1e90fb4387ad5f683fbc5efe1a05f9f7
+      provider: HailoRT
   workflow:
     enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:
