@@ -72,8 +72,8 @@ patches:
                   - {name: http, containerPort: 13080, hostPort: 13080}
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:c7f1c4afa0d94f193791fdc7b04a1edece8e407ee07edecc628aa969f1cceede
+    digest: sha256:d484fc65d35157333b833f11963f39aa9f41094d27e0bc3376020e061f26701c
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:2d979eeae9da0835d4ffdaa80b1fcd273ddac40950429beb7052067240de1011
+    digest: sha256:62e95cc8d2594bb0db42471892f6a569fa20f6a3e70f6f828cce4f7a55fd52f8
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:baed54f7e7d8ef3f348ebcb2074b90232d424d6af15a803fc2494b7ac9e44ce3
+    digest: sha256:28b6e5b98520206bcdcc265ab4f59f7b1b8818cff4c0319cd14be7d656fdf1d6
