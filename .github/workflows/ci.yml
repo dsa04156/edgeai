@@ -375,9 +375,9 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   images:
-    needs: [scaffold, storage, runner]
+    needs: [data-store, scaffold, storage, runner]
     if: >-
-      !cancelled() && needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success' &&
+      !cancelled() && needs.data-store.result == 'success' && needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     # Full recovery is opt-in; normal pushes verify the built HTTP stack.
@@ -518,9 +518,9 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   gitops:
-    needs: [images, storage, runner]
+    needs: [data-store, images, storage, runner]
     if: >-
-      !cancelled() && needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success' &&
+      !cancelled() && needs.data-store.result == 'success' && needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success' &&
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5

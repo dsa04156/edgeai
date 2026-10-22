@@ -186,9 +186,11 @@ class Images(unittest.TestCase):
         workflow=(ROOT/'.github/workflows/ci.yml').read_text()
         images=workflow[workflow.index('\n  images:\n'):workflow.index('\n  gitops:\n')]
         gitops=workflow[workflow.index('\n  gitops:\n'):]
-        self.assertIn("needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",images)
+        self.assertIn('\n    needs: [data-store, scaffold, storage, runner]\n',images)
+        self.assertIn("needs.data-store.result == 'success' && needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",images)
         self.assertLess(images.index('scripts/test/test-images.sh'),images.index('docker push "$EDGEAI_API_IMAGE"'))
-        self.assertIn("needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",gitops)
+        self.assertIn('\n    needs: [data-store, images, storage, runner]\n',gitops)
+        self.assertIn("needs.data-store.result == 'success' && needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",gitops)
         self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'",gitops)
         self.assertIn('if [ "$(git rev-parse HEAD)" != "$VERIFIED_REVISION" ]; then',gitops)
         self.assertLess(gitops.index('git rev-parse HEAD'),gitops.index('update-images.py'))
