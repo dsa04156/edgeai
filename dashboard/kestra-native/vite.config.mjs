@@ -142,6 +142,7 @@ export default defineConfig(async (env) => {
                   ["virtual-devices", "VirtualDevicesPage.vue"],
                   ["workflows", "WorkflowsPage.vue"],
                   ["runs", "RunsPage.vue"],
+                  ["inference", "InferencePage.vue"],
                   ["audit", "AuditPage.vue"],
                   ["platform-service", "PlatformServicePage.vue"],
                 ]
@@ -159,6 +160,7 @@ export default defineConfig(async (env) => {
               ["data-store", "데이터 저장소", "LayersTripleOutline"],
               ["workflows", "워크플로", "FileTreeOutline"],
               ["runs", "실행 · 작업 · 결과", "PlayOutline"],
+              ["inference", "모델 추론", "ImageSearchOutline"],
               ["profiles", "실행 모듈", "PuzzleOutline"],
               ["audit", "감사 기록", "ShieldCheckOutline"],
               ["platform-service", "DDS 배포", "RocketLaunchOutline"],
@@ -169,10 +171,15 @@ export default defineConfig(async (env) => {
                   `{id: "edgeai-${id}", title: ${JSON.stringify(title)}, routes: routeStartWith(${JSON.stringify(id === "home" ? id : "edgeai/" + id)}), href: {name: ${JSON.stringify(id === "home" ? id : "edgeai/" + id)}}, icon: {element: ${icon}}}`,
               )
               .join(",\n");
-            return code.replace(
-              /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,
-              `const generated = [{id: "workspace", title: "EdgeAI", child: [${items}]}]\n\n        flatten`,
-            );
+            return code
+              .replace(
+                'import {computed} from "vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"',
+              )
+              .replace(
+                /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,
+                `const generated = [{id: "workspace", title: "EdgeAI", child: [${items}]}]\n\n        flatten`,
+              );
           }
           if (id.endsWith("/src/components/layout/AppTopNavBar.vue"))
             return code

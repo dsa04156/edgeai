@@ -1,5 +1,12 @@
 # 현재 상태
 
+## 2026-10-22 독립 GPU 객체 검출(이미지 업로드 → 검출 결과): 운영 콘솔 13080 배포·실제 GB10 추론 확인
+
+- 런타임 `inference/`: torchvision Faster R-CNN ResNet-50 FPN v2(COCO_V1, 80클래스)를 PyTorch 2.14.1+cu130으로 CUDA에서만 실행한다(CPU 대체 없음). `GET /health`(warm-up 후 READY), `POST /predict`(JPEG/PNG ≤4 MiB, 변 ≤4096, 동시 1건, 초과 503 BUSY). Workflow/Runner/Runtime·DB는 쓰지 않는다. API `/api/v1/inference/*`와 콘솔 `/ui/main/inference`는 같은 작업에서 추가했다(기본 비활성 `EDGEAI_INFERENCE_ENABLED=false`).
+- 시험: 런타임 단위 6/6 통과. 이미지 `10.254.192.47:5000/edgeai/gpu-inference@sha256:dfbb9376…ce9a`(arm64)를 일회용 Pod로 ser0003(NVIDIA GB10)에 띄웠다. `/health` READY, COCO val2017 사진 1장에서 cat 2·remote 2·couch를 검출했다(약 61 ms/장). 동시 요청은 503, 연속 요청 중 GPU 사용률은 63–78%였다.
+- 배포(05:22–05:26Z, kubectl 범위 적용): 런타임 Deployment/Service/NetworkPolicy `edgeai-gpu-inference`(ser0003), API `edgeai-api@sha256:06613f30…6dbc`(jar `d2ca39e2…083d`, 추론 env 7개 추가만), 콘솔 `edgeai-dashboard@sha256:0171da98…8788`. 세 Deployment Ready. 운영 `GET /api/v1/inference/models` `available:true`. `http://10.254.192.47:13080/ui/main/inference`에서 같은 COCO 사진을 실제 업로드해 콘솔 BFF(CSRF)→API→GB10으로 같은 5개 검출(62.5 ms)을 받았다(데스크톱·모바일, 가로 넘침 없음). 센서/VD 상태(연속 47/25/2)·원본 수집 증가는 배포 전과 같다.
+- 한계: overlay 변경은 미커밋이다. Argo CD `edgeai-dev`는 10/21부터 ComparisonError였다. 복구 시 main(이전 이미지·대시보드 replicas=0 override)으로 되돌아가지 않도록 05:29Z에 이 Application의 `spec.syncPolicy.automated`만 제거해 자동 동기화를 멈췄다(다른 spec 동일). source를 main에 반영한 뒤 자동 동기화를 복구해야 한다. 정확도 평가, NPU, Workflow 연동, 부하·장기 시험은 없다. 근거: `output/verification/gpu-inference/runtime.md`, `deployment.md`.
+
 ## 2026-10-22 M7 WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS) 통합·API/콘솔 배포·Runner 게시
 
 - 센서/VD 입력에 `delivery: ALL_OBSERVATIONS`를 추가했다. 실행 시작 이후 수락된 관측을 PostgreSQL feed(V61, 테이블3개 추가만)에 기록하고 수락 순서대로 한 번씩 전달하며, 적체·보관 초과·원본 변경은 GAP/CHANGED 오류로 멈춘다. Runner는 cursor를 출력과 같은 journal commit에 저장한다. Kestra 콘솔 입력 drawer에 `전달 방식`(최신값/모든 관측값)을 추가했다. 설계: ADR0118. 소스 `215023c`(feature branch push).

@@ -9,6 +9,7 @@ Dashboard(`edgeai-dashboard`)는 Kestra v2.0.6 원본 Vue 콘솔이며 관리 AP
 Secret `edgeai-processing-agent`(키 `credential`)는 `ekuiper` namespace의 기존 공유 credential을 복사해 만든 것이며 Git에 넣지 않는다.
 Agent는 클러스터 DNS로 API에 연결하며, Agent Secret의 `ca.crt`는 stream CA다. eKuiper `helm upgrade` 전에 [VD 처리 문서의 재적용 절차](../../docs/guides/vd-processing.md#현재-dev-클러스터-재적용-2026-10-21-기준)로 렌더링과 CA를 확인한다.
 selector 없는 Service `edgeai-workflow-api`의 Endpoint는 멈춘 호스트(`10.77.0.1:18447`)를 가리킨다. 이 Service는 저장소 밖에서 수동으로 만든 것이다. 콘솔(`EDGEAI_WORKFLOW_API_BASE_URL=""`)과 API(`EDGEAI_RUNTIME_CONTROL_PLANE_URL`)는 이 Service를 쓰지 않는다. runtime을 켜기 전에 이 Service를 정리하거나 다시 연결한다.
+`overlays/dev`는 `components/gpu-inference`(ser0003 GB10 객체 검출 런타임, edgeai-api만 접근)를 포함하고 API에 `EDGEAI_INFERENCE_*`를 설정한다([런타임](../../inference/README.md)).
 ArgoCD는 `overlays/dev`를 감시한다. 초기 연결·검증·롤백은 [CI/CD 문서](../../docs/operations/cicd.md)를 따른다.
 
 ```bash

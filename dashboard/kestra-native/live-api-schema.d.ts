@@ -519,6 +519,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inference/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 설정된 이미지 객체 탐지 모델 조회
+         * @description 서버에 고정 설정된 모델만 반환합니다. 미설정 또는 비활성 환경은 빈 목록입니다. available은 런타임 /health가 2초 안에 설정과 같은 모델·노드·장치·provider로 READY를 응답했는지입니다. 워크플로·실행 이력과 무관합니다.
+         */
+        get: operations["listInferenceModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이미지 1장 GPU 객체 탐지
+         * @description 설정된 런타임 1곳에 동기 전달하고 검증한 결과를 반환합니다. 결과와 이미지는 저장하지 않습니다. 서버 대기 시간은 최대 20초이며 자동 재시도와 redirect 추적을 하지 않습니다. 서버당 동시 추론은 1건입니다.
+         */
+        post: operations["predictInference"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes": {
         parameters: {
             query?: never;
@@ -1876,6 +1916,48 @@ export interface components {
             accelerators?: components["schemas"]["NodeAccelerator"][];
             readiness?: components["schemas"]["NodeReadiness"] | null;
             measurements: components["schemas"]["NodeMetric"][];
+        };
+        InferenceModelPage: {
+            items: components["schemas"]["InferenceModel"][];
+        };
+        InferenceModel: {
+            id: string;
+            name: string;
+            /** @description 런타임이 실행되는 Kubernetes 노드 */
+            nodeName: string;
+            /** @description 추론 가속기 이름 */
+            deviceName: string;
+            /** @description 런타임이 설정과 같은 모델로 READY인지 */
+            available: boolean;
+        };
+        InferenceRequest: {
+            modelId: string;
+            /**
+             * Format: byte
+             * @description JPEG 또는 PNG 원본 바이트의 표준 base64(data URI 접두어 없음). 디코딩 후 4 MiB 이하, 가로·세로 각 4096 이하, 전체 16,777,216 픽셀 이하.
+             */
+            imageBase64: string;
+        };
+        InferenceResult: {
+            modelId: string;
+            nodeName: string;
+            deviceName: string;
+            /** @description 런타임 추론 provider(예 pytorch-cuda) */
+            provider: string;
+            imageWidth: number;
+            imageHeight: number;
+            /** @description 런타임이 보고한 추론 시간 */
+            inferenceMs: number;
+            detections: components["schemas"]["InferenceDetection"][];
+        };
+        /** @description 원본 이미지 픽셀 좌표의 상자. x+width·y+height는 이미지 크기를 0.5픽셀 넘지 않습니다. */
+        InferenceDetection: {
+            label: string;
+            score: number;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
         };
         NodeMetricsSnapshot: {
             /** @enum {string} */
@@ -4433,6 +4515,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NodeMetricsSnapshot"];
+                };
+            };
+        };
+    };
+    listInferenceModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 설정된 모델과 현재 준비 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceModelPage"];
+                };
+            };
+        };
+    };
+    predictInference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description 검증된 탐지 결과. 상자 좌표는 원본 이미지(EXIF 회전 미적용) 픽셀 기준입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceResult"];
+                };
+            };
+            /** @description INVALID_INFERENCE_REQUEST(JSON·필드·base64·JPEG/PNG·해상도) 또는 INFERENCE_IMAGE_REJECTED(런타임이 이미지 디코딩·형식 거부) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description INFERENCE_MODEL_NOT_FOUND. 설정된 모델이 아닙니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_IMAGE_TOO_LARGE. 이미지가 4 MiB를 넘거나 런타임이 크기·해상도 초과로 거부했습니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_RUNTIME_INVALID_RESPONSE. 런타임 응답 상태·형식·모델 식별·좌표 검증 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description INFERENCE_BUSY(다른 추론 진행 중) 또는 INFERENCE_RUNTIME_UNAVAILABLE(연결 실패·시간 초과) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };

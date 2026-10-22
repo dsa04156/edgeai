@@ -50,6 +50,15 @@ edgeai:
   prometheus:
     enabled: ${EDGEAI_PROMETHEUS_ENABLED:false}
     url: ${EDGEAI_PROMETHEUS_URL:http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090}
+  inference:
+    enabled: ${EDGEAI_INFERENCE_ENABLED:false}
+    model-id: ${EDGEAI_INFERENCE_MODEL_ID:}
+    model-name: ${EDGEAI_INFERENCE_MODEL_NAME:}
+    node-name: ${EDGEAI_INFERENCE_NODE_NAME:}
+    device-name: ${EDGEAI_INFERENCE_DEVICE_NAME:}
+    provider: ${EDGEAI_INFERENCE_PROVIDER:}
+    runtime-url: ${EDGEAI_INFERENCE_RUNTIME_URL:}
+    timeout: ${EDGEAI_INFERENCE_TIMEOUT:20s}
   workflow:
     enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:

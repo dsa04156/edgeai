@@ -35,7 +35,8 @@ Serial JSON은 정해진 프레임 규격을, Sense HAT은 ARM64 Raspberry Pi의
 ## 현재 개발 경계
 
 WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS)은 API·Kestra 콘솔에 통합·배포되었고 Runner 이미지는 게시만 되었습니다. runtime은 꺼져 있어 운영 실행과 실장비 수용은 남아 있습니다([현재 상태](../../PROGRESS.md)).
-실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
+독립 GPU 객체 검출(이미지 1장 → COCO 박스, [런타임](../../inference/README.md))은 2026-10-22 운영 콘솔(`/ui/main/inference`)과 API에 배포되어 ser0003 GB10에서 실제 추론을 확인했습니다. 단일 모델·동시 1건이며 정확도·부하 수용은 하지 않았습니다.
+Workflow 실행 경로의 실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
 [개발 단계](../../PLAN.md)와 [현재 상태](../../PROGRESS.md)에서 남은 범위를 확인합니다.
 
 특정 날짜의 장비 수, 시험 개수, CI 성공, 배포 digest는 해당 Git 이력의 검증 기록 조건에만 적용합니다.

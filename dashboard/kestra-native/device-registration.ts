@@ -63,6 +63,7 @@ export function createDeviceRegistrationMiddleware({
         "workflow-csrf",
         "workflow-data-sources",
         "data-store",
+        "inference/models",
       ].includes(target) ||
       new RegExp(
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
@@ -85,6 +86,7 @@ export function createDeviceRegistrationMiddleware({
         "workflow-runs",
         "device-profiles",
         "device-connections/test",
+        "inference/predict",
       ].includes(target) ||
       new RegExp(
         `^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
@@ -213,15 +215,22 @@ export function createDeviceRegistrationMiddleware({
         return send(415, "JSON 요청이 필요합니다.");
       const chunks: Buffer[] = [];
       let length = 0;
+      // Only prediction carries an image (4 MiB binary ≈ 5.6 MiB base64 JSON).
+      const inference = target === "inference/predict";
       try {
         for await (const chunk of request) {
           length += chunk.length;
-          if (length > (platform ? 1_100_000 : 65536))
+          if (
+            length >
+            (platform ? 1_100_000 : inference ? 6 * 1024 * 1024 : 65536)
+          )
             return send(
               413,
               platform
                 ? "배포 정의는 1MB 이하로 입력하세요."
-                : "JSON 규격은 64 KiB 이하로 입력하세요.",
+                : inference
+                  ? "추론 이미지는 4 MiB 이하로 선택하세요."
+                  : "JSON 규격은 64 KiB 이하로 입력하세요.",
             );
           chunks.push(chunk);
         }

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-gpu-inference
+  labels:
+    app.kubernetes.io/name: edgeai-gpu-inference
+    app.kubernetes.io/part-of: edgeai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one GPU on the node; a surge Pod would stay Pending
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-gpu-inference
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edgeai-gpu-inference
+        app.kubernetes.io/part-of: edgeai
+    spec:
+      runtimeClassName: nvidia-spark
+      nodeSelector:
+        kubernetes.io/hostname: etri-ser0003-cg0ms0
+        kubernetes.io/arch: arm64
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: inference
+          image: 10.254.192.47:5000/edgeai/gpu-inference@sha256:dfbb9376be488669296ecd55335167f8e8d1d9d5f69c7f74645c895e0444ce9a
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+              nvidia.com/gpu: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-gpu-inference
+  labels:
+    app.kubernetes.io/name: edgeai-gpu-inference
+    app.kubernetes.io/part-of: edgeai
+spec:
+  selector:
+    app.kubernetes.io/name: edgeai-gpu-inference
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-gpu-inference
+  labels:
+    app.kubernetes.io/name: edgeai-gpu-inference
+    app.kubernetes.io/part-of: edgeai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-gpu-inference
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: edgeai-api
+      ports:
+        - protocol: TCP
+          port: 8080
