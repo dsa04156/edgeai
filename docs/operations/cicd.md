@@ -83,8 +83,10 @@ DDS Application의 삭제·prune 정책과 동일하다고 가정하지 않습�
 4. 실제 imageID와 API readiness, 화면·관리 기능을 확인합니다.
 5. 문서 화면은 `/docs`와 포함된 문서 버전을 확인합니다.
 
-Ingress의 주소 게시 방식에 따라 Argo health가 `Progressing`에 남을 수 있습니다.
-이 경우 실제 HTTP 확인과 Argo health 문제를 따로 기록하고 Healthy라고 표시하지 않습니다.
+Argo는 `status.loadBalancer`가 빈 Ingress를 `Progressing`으로 봅니다. 클러스터 Traefik(Helm release `traefik`, 저장소 밖)은
+LoadBalancer 할당기가 없어 `deploy/traefik/values.yaml`로 실제 주소 `10.254.192.47`을 Ingress status에 게시하고 엣지 노드 배치를 막습니다
+(엣지 노드에서는 Ingress provider가 시작되지 않아 모든 경로가 404). 같은 chart 버전에 `--reuse-values`로 적용합니다(파일 주석의 명령).
+health가 다시 `Progressing`이면 실제 HTTP 확인과 Argo health 문제를 따로 기록하고 Healthy라고 표시하지 않습니다.
 
 ## 롤백
 

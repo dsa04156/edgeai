@@ -1,0 +1,36 @@
+# Override for the existing cluster Traefik Helm release (traefik/traefik, chart traefik-39.0.7).
+# Not managed by Argo CD. Apply with the same chart version, keeping the release's other values:
+#   helm upgrade traefik traefik --repo https://traefik.github.io/charts --version 39.0.7 \
+#     -n traefik --reuse-values -f deploy/traefik/values.yaml
+# Rollback: helm -n traefik rollback traefik <previous revision>, then restore the saved live
+# Service/IngressRoute if that revision predates these drift values.
+#
+# Ingress status: no LoadBalancer provider exists, so the published Service never gets an
+# address and every Ingress stays without status.loadBalancer (Argo health Progressing).
+# Publish the address Traefik is actually reachable on instead.
+providers:
+  kubernetesIngress:
+    publishedService:
+      enabled: false
+additionalArguments:
+  - --providers.kubernetesingress.ingressendpoint.ip=10.254.192.47
+
+# Edge nodes have no ClusterIP route to the API server: on them the Ingress/CRD providers
+# fail to start ("endpoint missing for external cluster client") and every route is 404.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-role.kubernetes.io/edge
+              operator: DoesNotExist
+
+# The values below record the live Service and dashboard route (changed by kubectl after
+# release revision 5) so an upgrade does not revert them.
+service:
+  type: LoadBalancer
+  externalIPs:
+    - 10.254.192.47
+ingressRoute:
+  dashboard:
+    matchRule: Host(`10.254.192.47`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))

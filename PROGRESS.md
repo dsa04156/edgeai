@@ -1,11 +1,11 @@
 # 현재 상태
 
-## 2026-10-22 Argo CD `edgeai-dev` GitOps 복구: main `1dcc248` 게시·자동 동기화 재개 (health 미완)
+## 2026-10-22 Argo CD `edgeai-dev` GitOps 복구: main `1dcc248` 게시·자동 동기화 재개, Synced/Healthy
 
 - feature `de327de`와 통합 main `1dcc248`을 fast-forward로 push했다(force 없음). 운영 Application에서 대시보드 replicas=0 override·Ingress ignoreDifferences·RespectIgnoreDifferences를 제거하고 `deploy/argocd/application.yaml`로 `automated{prune:false,selfHeal:true}`를 다시 켰다.
 - 결과: `Synced`, revision `1dcc248`, 조건 없음. API·콘솔·GPU 추론 이미지는 그대로이고 모두 1/1 Ready다. 13080 200, 추론 모델 `available:true`, 원본 수집 증가(20초 +452, 거부 0)를 확인했다.
 - 사고: 수동 부분 sync가 직전 operation의 source(대시보드 replicas=0)를 재사용해 콘솔이 약 24초 중단됐다(06:44:47–06:45:11Z). 같은 ReplicaSet로 즉시 복원했다. 남아 있던 `status.operationState`는 제거했고, 새 operation이 현재 spec source를 쓰는 것을 확인했다.
-- 미완료: 앱 health는 `Progressing`이다. Argo resource tree에서 Healthy가 아닌 리소스는 `Ingress edgeai` 하나다. Traefik Service가 LB 할당 없이 `externalIPs`만 써서 Ingress 주소 status가 비어 있다(10/12부터). 클러스터 공통 설정(Traefik `ingressendpoint.ip` 또는 Argo Ingress health 설정)의 결정이 필요하다. 근거: `output/verification/argocd-recovery/{git,publish}.md`.
+- health: 처음에는 `Progressing`이었다(`Ingress edgeai`만, 주소 status 없음). 원인은 Traefik Pod가 10/19부터 엣지 노드 raspi5에 있어 Ingress provider가 시작되지 못한 것이다. 그래서 모든 Ingress 경로가 404였고 status도 쓰지 못했다. Helm release `traefik`(chart 39.0.7 그대로, `--reuse-values`)에 `deploy/traefik/values.yaml`을 적용했다(revision 6). 엣지 노드 제외 affinity, 주소 `10.254.192.47` 게시, 기존 Service(LoadBalancer+externalIPs)·대시보드 route 기록이 들어 있다. 결과: Ingress 2개 status `10.254.192.47`, edgeai 호스트 `/actuator/health`·`/api/v1/inference/models` 404→200, 13080 200, 앱 `Synced/Healthy`, edgeai Pod 변화 없음. API 문서 색인에 추론 operation 2개를 생성기로 반영했다(75→77). 근거: `output/verification/argocd-recovery/{git,publish}.md`.
 
 ## 2026-10-22 독립 GPU 객체 검출(이미지 업로드 → 검출 결과): 운영 콘솔 13080 배포·실제 GB10 추론 확인
 
