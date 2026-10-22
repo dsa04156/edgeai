@@ -1,5 +1,14 @@
 # 현재 상태
 
+## 2026-10-22 M7 WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS) 통합·API/콘솔 배포·Runner 게시
+
+- 센서/VD 입력에 `delivery: ALL_OBSERVATIONS`를 추가했다. 실행 시작 이후 수락된 관측을 PostgreSQL feed(V61, 테이블3개 추가만)에 기록하고 수락 순서대로 한 번씩 전달하며, 적체·보관 초과·원본 변경은 GAP/CHANGED 오류로 멈춘다. Runner는 cursor를 출력과 같은 journal commit에 저장한다. Kestra 콘솔 입력 drawer에 `전달 방식`(최신값/모든 관측값)을 추가했다. 설계: ADR0118. 소스 `215023c`(feature branch push).
+- 시험(격리 `env -i`·임시 PostgreSQL16, 공유 DB/Influx/MQTT 쓰기 없음): FullObservation 14/14(보관 기간 회귀 포함, 이전 쿼리로는 실패), VD 1/1, LATEST STREAM 33/33, Continuous 8/8, Runner 입력5/5·단위96/96, 대시보드 단위74/74·lint·vue-tsc, Playwright desktop/mobile 2/2(API mock). Spec 리뷰1차 P2(수락 시각이 위치 순서와 달라 보관 기간 전 항목 삭제)를 고쳐2차 PASS, Standards 지적0건. 전체 백엔드 스위트는 돌리지 않았다.
+- 배포(이미지만 교체, env·volume·port·strategy 전후 동일): API `2be0be06…` → `edgeai-api@sha256:870152b4f47867d3cfe7ab6a90b310e312be2b0db184fd7b2902ef8e6499b051`(Flyway V61 적용, 0.46초), 콘솔 `f020d061…` → `edgeai-dashboard@sha256:a8a250b317757bdf647471a17fdbc9c2477d868c4af7ed0f7f9bab55158896c1`. 배포 직전 PostgreSQL 백업(pg_dump16.15, list·sha256 확인, Git 밖 비공개 경로). 이전 API 이미지가 V61 이후에도 Flyway 검증을 통과함을 임시 DB에서 확인했다. dev overlay digest를 live와 맞췄다(`release.json`은 이전 CI 고정값 그대로).
+- Runner: `edgeai/processing-runner@sha256:1faf83fea8a5f726a6ea1a9f78c98511003f304e8301b2e51e30578b8f451de0`(linux/amd64, 기존 Runner `d124054f…` 위에 `215023c` 모듈만 복사)을 게시만 했다. 기존 Profile/Workflow는 바꾸지 않았고, 사용하려면 이 digest로 새 SERVICE Profile 버전을 게시해야 한다(`docs/guides/dag-execution.md`). ARM64 Runner는 없다.
+- 실제 확인(읽기 전용): health/readiness·infrastructure·devices·workflow-data-sources·data-store 200, 배포된 openapi가 계약 파일과 동일, VD 47 RUNNING·25 입력 대기·2 STOPPED와 Run 상태 수 배포 전과 같음, 원본 수집 저장 중(거부0), 콘솔 메뉴14개 오류0, 새 옵션이 배포된 번들에 포함.
+- 한계: `EDGEAI_RUNTIME_ENABLED=false` 그대로라 실제 ALL_OBSERVATIONS Run은 운영에서 실행하지 않았다. feed 정리 worker도 runtime이 꺼져 있어 동작하지 않는다(구독이 없으면 feed 기록도 없음). 운영 UI→API 실제 Run 생성, 24h soak, 실장비 속도, collector 이전 손실은 미검증. 근거: `output/verification/m7-kestra-integration/deployment.md`.
+
 ## 2026-10-21 센서 그래프 드래그·휠 조작을 그래프 안에서 처리·콘솔 재배포
 
 - `InteractiveHistoryChart.vue`: 드래그·휠·툴바 확대/이동은 그래프에서 바로 움직이고, 마지막 입력 후 300ms 조용하면 한 번만 `update:viewport`를 보낸다. 조작 시작은 `explore-start`로 알려 `sensor-history.ts`의 `pause()`가 실시간 추적과 진행 중인 그래프 요청을 멈춘다. 실시간 버튼은 그래프가 실제로 보여 주는 폭(아직 보고되지 않은 확대 포함)을 유지한다(리뷰 P2 수정). 바로 보기 구간 선택이 진행 중 조작보다 우선한다.

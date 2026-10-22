@@ -58,9 +58,9 @@ patches:
 images:
   - name: ghcr.io/dsa04156/edgeai-api
     newName: 10.254.192.47:5000/edgeai-api
-    digest: sha256:2be0be065c34798da35e22bc655477bd2cb94334c2bcf0eb3dc1b2c972141798
+    digest: sha256:870152b4f47867d3cfe7ab6a90b310e312be2b0db184fd7b2902ef8e6499b051
   - name: ghcr.io/dsa04156/edgeai-dashboard
     newName: 10.254.192.47:5000/edgeai-dashboard
-    digest: sha256:f020d06195e1cb7ed36bbfd732724ebceebc9d51e7378d67c9ea97845c487f14
+    digest: sha256:a8a250b317757bdf647471a17fdbc9c2477d868c4af7ed0f7f9bab55158896c1
   - name: ghcr.io/dsa04156/edgeai-minio
     digest: sha256:88d6843bed54094690edd581b4ff7e5bb86c3bba0684bdd893328e234dc75971

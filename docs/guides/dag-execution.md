@@ -32,6 +32,8 @@ JSON 편집 파일은 `edgeai.workflow-editor/v1` 형식으로 DAG와 캔버스 
 
 **전체 관측**(`dataSource.delivery: ALL_OBSERVATIONS`)을 고르면 실행 생성 시점의 시작 위치 이후 수락된 모든 관측을 수락 순서대로 한 번씩 전달합니다. 한 번의 조회 사이에 여러 값이 들어오거나 관측 시각이 같거나 역순이어도 빠뜨리지 않고, 센서 재전송·VD 엔진 재전송은 중복 전달하지 않습니다. 센서는 원본 저장 뒤 MQTT ACK 전, 가상디바이스는 결과 수락 transaction에서 feed에 기록합니다. Mapper 검증 숫자/불리언 센서와 실행 중인 가상디바이스 출력만 지원하며 문자열 센서는 거절합니다. collector가 받기 전의 손실, 시작 전 관측은 대상이 아닙니다. 적체가 한도(기본 10,000건)를 넘거나 보관 범위(기본1시간·원본별50,000건)를 벗어난 복원은 `WORKFLOW_SOURCE_GAP` 오류로 실행을 멈추며 조용히 건너뛰지 않습니다. 설계와 비보장 범위는 [ADR0118](../adr/0118-workflow-source-full-observation-feed.md)을 확인합니다.
 
+Runner 이미지는 각 SERVICE Profile 버전의 `image` digest로 정해집니다. 새 Runner를 registry에 올려도 기존 Profile·Workflow 버전은 바뀌지 않으며, 이전 Runner는 ALL_OBSERVATIONS 응답을 `STREAM_INVALID_SOURCE_RESPONSE`로 실패시킵니다(최신값 방식은 양쪽 모두 그대로). 전체 관측을 쓰려면 `image`를 `10.254.192.47:5000/edgeai/processing-runner@sha256:1faf83fea8a5f726a6ea1a9f78c98511003f304e8301b2e51e30578b8f451de0`(소스 `215023c`, linux/amd64 전용)로 바꾼 새 Profile 버전을 게시하고, 그 버전을 참조하는 새 Workflow 버전을 게시한 뒤 실행합니다. 실행에는 runtime 활성화가 별도로 필요합니다.
+
 센서 UID/설정/원본 세대 또는 가상디바이스 revision/실행 세대가 바뀌면 원본을 조용히 교체하지 않고 해당 실행을 차단합니다. 최신값 방식에서 만료되거나 아직 없는 측정은 기다립니다.
 
 **정상 종료**는 새 입력을 끝내고(전체 관측은 요청 시점까지 확정된 관측을 모두 보낸 뒤) 마지막 DATA·END의 처리 ACK, 서버 확정 체크포인트와 공동 FINALIZE를 기다린 뒤 결과 파일을 저장합니다. 실행 취소와 다릅니다. 실행의 최종 상태·검증된 Result를 확인합니다. SERVICE의 실행 시간 한도는최대24시간이며 무기한 실행을 의미하지 않습니다.
