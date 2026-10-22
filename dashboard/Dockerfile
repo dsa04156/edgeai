@@ -15,8 +15,10 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --froze
 RUN git clone --depth 1 --branch v2.0.6 --filter=blob:none --sparse https://github.com/kestra-io/kestra.git output/kestra-native/upstream \
   && git -C output/kestra-native/upstream sparse-checkout set ui \
   && test "$(git -C output/kestra-native/upstream rev-parse HEAD)" = "$KESTRA_REVISION"
+COPY scripts/dev/record-kestra-lock-hash.mjs /workspace/scripts/dev/record-kestra-lock-hash.mjs
 WORKDIR /workspace/output/kestra-native/upstream/ui
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund && npm run predev
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund \
+  && node /workspace/scripts/dev/record-kestra-lock-hash.mjs . && npm run predev
 COPY dashboard/lib /workspace/dashboard/lib
 COPY dashboard/kestra-native /workspace/dashboard/kestra-native
 # Same packaging as the 13083 dev server: no federation/PWA service worker.

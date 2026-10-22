@@ -16,5 +16,6 @@ fi
 cd "$KESTRA_SOURCE/ui"
 if [ ! -d node_modules ]; then
   npx --yes --package=node@24 --package=npm@11.16.0 -- npm ci --no-audit --no-fund
+  node "$EDGEAI_ROOT/scripts/dev/record-kestra-lock-hash.mjs" .
 fi
 npx --yes --package=node@24 --package=npm@11.16.0 -- npm run predev
