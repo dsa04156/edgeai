@@ -72,6 +72,7 @@ kubectl --context <context> -n edgeai get pods,svc,pvc,ingress
 Argo CD 설치·업그레이드 뒤에는 repo-server가 KubeEdge 엣지 노드에 배치되지 않도록
 `deploy/argocd/repo-server-affinity.patch.yaml`을 다시 적용합니다(파일 주석의 명령). 엣지 노드에는 ClusterIP 경로가 없어 Redis·Git 조회가 실패합니다.
 자동 sync를 다시 켜기 전에는 렌더링 결과와 운영 리소스의 차이(`kubectl diff`)가 Argo 추적 annotation뿐인지 확인합니다.
+Application의 `.operation`을 직접 patch해 수동 sync할 때는 `sync.source`를 현재 spec과 같게 지정합니다. 생략하면 이전 `status.operationState`의 source(예: 제거한 kustomize override)가 재사용될 수 있습니다.
 DDS Application의 삭제·prune 정책과 동일하다고 가정하지 않습니다.
 
 ## 배포 완료 확인
