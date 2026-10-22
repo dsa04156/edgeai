@@ -3,13 +3,16 @@ package io.edgeai.app.config;
 import com.zaxxer.hikari.*;
 import io.edgeai.adapters.repository.JdbcProcessingHistoryRepository;
 import io.edgeai.adapters.repository.InfluxTelemetryRepository;
+import io.edgeai.adapters.repository.JdbcSensorReconciliationQueue;
 import io.edgeai.domain.repository.ProcessingHistoryRepository;
+import io.edgeai.domain.repository.SensorReconciliationQueue;
 import io.edgeai.domain.repository.SensorTelemetryRepository;
 import java.time.Instant;
 import java.util.*;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @Configuration
 class ProcessingHistoryConfiguration {
@@ -19,6 +22,7 @@ class ProcessingHistoryConfiguration {
         @Value("${edgeai.data-store.raw.retention-days:30}") int rawDays,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection) {
         return new InfluxTelemetryRepository(url,org,token,rawBucket,prefix,rawDays,inspection);
     }
+    @Bean SensorReconciliationQueue sensorReconciliationQueue(JdbcTemplate jdbc){return new JdbcSensorReconciliationQueue(jdbc);}
     @Bean(destroyMethod="close") @Primary HistoryStore processingHistoryRepository(@Value("${edgeai.continuous.history.url:}") String url,
         @Value("${edgeai.continuous.history.user:edgeai_history}") String user,@Value("${edgeai.continuous.history.password:}") String password,
         @Value("${spring.datasource.url}") String mainUrl,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection,SensorTelemetryRepository telemetry) {

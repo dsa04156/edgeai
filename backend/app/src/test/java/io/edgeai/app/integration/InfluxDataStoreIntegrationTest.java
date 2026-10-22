@@ -26,6 +26,8 @@ class InfluxDataStoreIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired io.edgeai.app.service.SensorArchiveCollector collector;
     @Autowired io.edgeai.domain.repository.SensorTelemetryRepository archive;
+    @Autowired io.edgeai.app.service.SensorArchiveReconciler reconciler;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean DeviceResourceGateway gateway;
     static final JsonDocuments json=new JsonDocuments();
     final UUID uid=UUID.randomUUID();
@@ -94,7 +96,8 @@ class InfluxDataStoreIntegrationTest {
             archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(legacy)));
             var qualified=new TreeMap<String,Object>(legacy);
             qualified.putAll(Map.of("quality","QUALIFIED","sourceGeneration",generation.toString(),"sessionId","abc","sequence",index+1));
-            archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(qualified)));
+            var stored=new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(qualified));
+            archive.append(stored);org.junit.jupiter.api.Assertions.assertTrue(archive.hideLegacyDuplicate(stored));
             // A legacy retry must not resurrect the reconciled point.
             archive.append(new io.edgeai.domain.repository.SensorTelemetryRepository.Observation(uid,"temperature",time,json.canonical(legacy)));
         }
@@ -163,6 +166,36 @@ class InfluxDataStoreIntegrationTest {
             mvc.perform(get(history())).andExpect(jsonPath("$.items[0].rawPayload").value(payload));publisher.disconnect();
         }
     }
+    @Test void legacyDuplicateHidingWaitsInPostgresThroughAStoreOutageWithoutWithholdingQualifiedAck() throws Exception {
+        long at=Instant.now().toEpochMilli();String legacy=json.canonical(Map.of("DeviceName","archive-sensor","PropertyName","temperature","Namespace","edgeai-devices","Value","41.5","Type","float64","TimeStamp",Long.toString(at)));
+        try(var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"reconcile-archive-"+UUID.randomUUID())) {
+            publisher.connect();Thread.sleep(700);
+            publish(publisher,"edgeai/devices/archive-sensor/temperature",legacy);awaitRows(1);
+            synchronized(reconciler) {
+                // Holding the worker leaves the hide pending, as a slow or failing store would.
+                long completed=((Number)collector.state().get("storedDeliveries")).longValue();
+                publish(publisher,"edgeai/observations/v1/edgeai-devices/archive-sensor/temperature",qualified(at,41.5,1));
+                for(int n=0;n<50&&((Number)collector.state().get("storedDeliveries")).longValue()==completed;n++)Thread.sleep(100);
+                org.junit.jupiter.api.Assertions.assertEquals(completed+1,((Number)collector.state().get("storedDeliveries")).longValue());
+                org.junit.jupiter.api.Assertions.assertEquals(1L,reconciliationRows());
+                ContinuousRegistrationIntegrationTest.influx("stop");
+            }
+            try {
+                // The worker fails against the stopped store; the entry stays queued with a later attempt.
+                for(int n=0;n<40&&attempts()==0;n++)Thread.sleep(100);
+                org.junit.jupiter.api.Assertions.assertTrue(attempts()>0);
+                org.junit.jupiter.api.Assertions.assertEquals(1L,reconciliationRows());
+            }finally{ContinuousRegistrationIntegrationTest.influx("start");}
+            jdbc.update("UPDATE edgeai.sensor_archive_reconciliation SET next_attempt_at=now()");
+            for(int n=0;n<80&&reconciliationRows()>0;n++)Thread.sleep(100);
+            org.junit.jupiter.api.Assertions.assertEquals(0L,reconciliationRows());
+            awaitRows(1);mvc.perform(get(history())).andExpect(jsonPath("$.items[0].quality").value("QUALIFIED"));
+            mvc.perform(get("/api/v1/data-store")).andExpect(status().isOk()).andExpect(jsonPath("$.collector.pendingReconciliations").value(0)).andExpect(jsonPath("$.collector.droppedReconciliations").value(0));
+            publisher.disconnect();
+        }
+    }
+    long reconciliationRows(){return jdbc.queryForObject("SELECT count(*) FROM edgeai.sensor_archive_reconciliation WHERE device_uid=?",Long.class,uid);}
+    int attempts(){return jdbc.queryForObject("SELECT coalesce(max(attempts),0) FROM edgeai.sensor_archive_reconciliation WHERE device_uid=?",Integer.class,uid);}
     @Test void invalidTimeBasisAndFractionalSourceTimestampAreRejected() throws Exception {
         try(var publisher=new OwnedPublisher("tcp://127.0.0.1:"+brokerPort,"invalid-archive-"+UUID.randomUUID())) {
             publisher.connect();Thread.sleep(700);long at=Instant.now().toEpochMilli();String payload=qualified(at,34.5,1);
