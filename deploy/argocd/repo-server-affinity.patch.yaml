@@ -1,0 +1,14 @@
+# Argo CD itself is installed outside this repository; this patch is reapplied after every Argo CD upgrade:
+#   kubectl -n argocd patch deployment argocd-repo-server --type strategic --patch-file deploy/argocd/repo-server-affinity.patch.yaml
+# KubeEdge edge nodes have no ClusterIP routing, so a repo-server there cannot reach argocd-redis or
+# GitHub through Services (ComparisonError "dial tcp <redis ClusterIP>:6379: i/o timeout", 2026-10-21).
+# Same rule as kube-proxy. Matches the live Deployment patched on 2026-10-22.
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: node-role.kubernetes.io/edge, operator: DoesNotExist}

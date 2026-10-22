@@ -37,6 +37,10 @@ Ingress host, StorageClass와 Secret 참조를 확인해 별도 overlay를 준�
 | 일반 push/PR | 단위·계약·화면·스토리지·이미지 기본 검증 | 성공한 main push에 한해 GitOps 갱신 |
 | `workflow_dispatch`, `full_verification=true` | 백업·복구·부하·실행 등 추가 검증 | gitops 단계 생략 |
 
+현재 dev overlay는 API·Dashboard를 클러스터 registry(`10.254.192.47:5000`, `newName`)의 digest로 고정합니다.
+CI의 gitops 단계(`scripts/internal/update-images.py`)는 `newName` 없는 ghcr pin만 갱신하므로 이 overlay에서는
+`Expected one api image pin`으로 실패하고 pin을 바꾸지 않습니다. 운영 이미지 갱신은 클러스터 registry digest를 overlay에 직접 커밋합니다.
+
 정확한 job과 조건은 `.github/workflows`의 workflow가 기준입니다.
 같은 브랜치의 새 실행이 이전 실행을 취소할 수 있으므로 배포 중 수동 검증의 영향을 확인합니다.
 기본 검증 통과는 실모델·성능·전체 복구 수용을 뜻하지 않습니다.
@@ -64,6 +68,9 @@ kubectl --context <context> -n edgeai get pods,svc,pvc,ingress
 ```
 
 플랫폼 Application은 자동 sync·self-heal과 prune 설정을 manifest에서 확인합니다.
+Argo CD 설치·업그레이드 뒤에는 repo-server가 KubeEdge 엣지 노드에 배치되지 않도록
+`deploy/argocd/repo-server-affinity.patch.yaml`을 다시 적용합니다(파일 주석의 명령). 엣지 노드에는 ClusterIP 경로가 없어 Redis·Git 조회가 실패합니다.
+자동 sync를 다시 켜기 전에는 렌더링 결과와 운영 리소스의 차이(`kubectl diff`)가 Argo 추적 annotation뿐인지 확인합니다.
 DDS Application의 삭제·prune 정책과 동일하다고 가정하지 않습니다.
 
 ## 배포 완료 확인

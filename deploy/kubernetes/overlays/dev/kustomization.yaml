@@ -22,12 +22,6 @@ patches:
             containers:
               - name: api
                 env:
-                  # Sole raw-history writer since the host API stopped (2026-10-21); Recreate keeps one subscriber.
-                  - {name: EDGEAI_RAW_HISTORY_ENABLED, value: 'true'}
-                  # The central eKuiper agent (ns ekuiper) calls this API's 18443; it trusts the stream CA
-                  # and shares the credential copied into Secret edgeai-processing-agent (not stored in Git).
-                  - {name: EDGEAI_CONTINUOUS_ENABLED, value: 'true'}
-                  - {name: EDGEAI_CONTINUOUS_CREDENTIAL_FILE, value: /var/run/processing/credential/credential}
                   # Image object detection on the GB10 runtime (components/gpu-inference); the identity must match its /health.
                   - {name: EDGEAI_INFERENCE_ENABLED, value: 'true'}
                   - {name: EDGEAI_INFERENCE_RUNTIME_URL, value: 'http://edgeai-gpu-inference.edgeai.svc:8080'}
@@ -36,11 +30,22 @@ patches:
                   - {name: EDGEAI_INFERENCE_NODE_NAME, value: etri-ser0003-cg0ms0}
                   - {name: EDGEAI_INFERENCE_DEVICE_NAME, value: NVIDIA GB10}
                   - {name: EDGEAI_INFERENCE_PROVIDER, value: pytorch-cuda}
+                  # The central eKuiper agent (ns ekuiper) calls this API's 18443; it trusts the stream CA
+                  # and shares the credential copied into Secret edgeai-processing-agent (not stored in Git).
+                  - {name: EDGEAI_CONTINUOUS_ENABLED, value: 'true'}
+                  - {name: EDGEAI_CONTINUOUS_CREDENTIAL_FILE, value: /var/run/processing/credential/credential}
                 volumeMounts:
                   - {name: processing-credential, mountPath: /var/run/processing/credential, readOnly: true}
             volumes:
               - name: processing-credential
                 secret: {secretName: edgeai-processing-agent, defaultMode: 288}
+  # Appended after the base env so the rendered order equals the running Pod (no restart on sync).
+  # Sole raw-history writer since the host API stopped (2026-10-21); Recreate keeps one subscriber.
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_RAW_HISTORY_ENABLED, value: 'true'}
   # Users reach the console at the server address 10.254.192.47:13080 (formerly the host Next.js process).
   # A hostPort cannot be shared during a rolling update, so the old Pod stops first.
   - patch: |-
