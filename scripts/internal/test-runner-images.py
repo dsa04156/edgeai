@@ -30,7 +30,7 @@ def descriptor():
 def records():
     return [{'formatVersion':1,'scope':'native-runner-platform','sourceRevision':SOURCE,'platform':'linux/'+a,
         'hostMachine':m,'containerMachine':m,'imageConfigDigest':OTHER,'publishedDigest':d,
-        'tests':{'runner-container':96,'stream-mqtt':116}} for a,m,d in [('amd64','x86_64',AMD),('arm64','aarch64',ARM)]]
+        'tests':{'runner-container':96,'stream-mqtt':118}} for a,m,d in [('amd64','x86_64',AMD),('arm64','aarch64',ARM)]]
 
 
 class Images(unittest.TestCase):
@@ -100,7 +100,7 @@ class Images(unittest.TestCase):
     def test_only_two_matching_native_sources_can_be_published(self):
         self.assertEqual({'linux/amd64':AMD,'linux/arm64':ARM},selected(records(),SOURCE))
         for name,value in [('sourceRevision','b'*40),('hostMachine','x86_64'),('containerMachine','x86_64'),
-                ('tests',{'runner-container':95,'stream-mqtt':116}),
+                ('tests',{'runner-container':95,'stream-mqtt':118}),
                 ('tests',{'runner-container':96,'stream-mqtt':112}),
                 ('tests',{'runner-container':111,'stream-mqtt':112}),
                 ('tests',{'runner-container':95,'stream-mqtt':107}),
@@ -115,10 +115,10 @@ class Images(unittest.TestCase):
     def test_native_suite_requires_real_non_skipped_successes(self):
         with tempfile.TemporaryDirectory() as work:
             root=Path(work)
-            for name,count in [('runner-container',96),('stream-mqtt',116)]:
+            for name,count in [('runner-container',96),('stream-mqtt',118)]:
                 p=root/name;p.mkdir();(p/'result.json').write_text(json.dumps({'testId':name,'status':'PASS','exitCode':0}))
                 (p/'output.log').write_text('Ran '+str(count)+' tests in 1.5s\nOK\n')
-            self.assertEqual({'runner-container':96,'stream-mqtt':116},test_results(root))
+            self.assertEqual({'runner-container':96,'stream-mqtt':118},test_results(root))
             p=root/'stream-mqtt'/'output.log';p.write_text(p.read_text()+'OK (skipped=1)\n')
             with self.assertRaises(ValueError):test_results(root)
             p.write_text('Ran 97 tests in 1.5s\nOK\n')
@@ -129,7 +129,7 @@ class Images(unittest.TestCase):
             with self.assertRaises(ValueError):test_results(root)
             p.write_text('Ran 112 tests in 1.5s\nOK\n')
             with self.assertRaises(ValueError):test_results(root)
-            p.write_text('Ran 116 tests in 1.5s\nOK\n')
+            p.write_text('Ran 118 tests in 1.5s\nOK\n')
             (root/'stream-mqtt'/'result.json').write_text(json.dumps({'testId':'stream-mqtt','status':'FAIL','exitCode':1}))
             with self.assertRaises(ValueError):test_results(root)
 
@@ -153,11 +153,48 @@ class Images(unittest.TestCase):
             value=json.loads((overlay/'release.json').read_text())
             self.assertEqual(SOURCE,value['sourceRevision']);self.assertEqual('b'*40,value['runnerSourceRevision'])
 
-            cluster=original.replace('edgeai-api\n','edgeai-api\n    newName: 10.254.192.47:5000/edgeai-api\n')
-            k.write_text(cluster);(overlay/'release.json').unlink()
-            skipped=subprocess.run(command+[json.dumps({'linux/amd64':AMD,'linux/arm64':ARM})],cwd=root,capture_output=True,text=True)
-            self.assertEqual(0,skipped.returncode);self.assertIn('newName',skipped.stdout)
-            self.assertEqual(cluster,k.read_text());self.assertFalse((overlay/'release.json').exists())
+    def test_release_moves_cluster_registry_pins_to_the_tested_ghcr_digests(self):
+        with tempfile.TemporaryDirectory() as work:
+            root=Path(work);overlay=root/'deploy/kubernetes/overlays/dev';overlay.mkdir(parents=True);k=overlay/'kustomization.yaml'
+            unrelated='- name: example/gpu-inference\n    newName: 10.254.192.47:5000/edgeai/gpu-inference\n    digest: '+OTHER+'\n'
+            live=('images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    newName: 10.254.192.47:5000/edgeai-'+n+'\n    digest: '+OTHER+'\n'
+                for n in ['api','dashboard'])+'- name: ghcr.io/dsa04156/edgeai-minio\n    digest: '+OTHER+'\n'+unrelated)
+            digests={'api':'sha256:'+'5'*64,'dashboard':'sha256:'+'6'*64,'minio':'sha256:'+'7'*64}
+            command=[sys.executable,str(ROOT/'scripts/internal/update-images.py'),'--revision',SOURCE,'--api',digests['api'],
+                '--dashboard',digests['dashboard'],'--runner',INDEX,'--minio',digests['minio'],
+                '--runner-platform-digests',json.dumps({'linux/amd64':AMD,'linux/arm64':ARM})]
+            for name,foreign in [('api','registry.example/edgeai-api'),('dashboard','10.254.192.47:5000/edgeai-api')]:
+                bad=live.replace('newName: 10.254.192.47:5000/edgeai-'+name+'\n','newName: '+foreign+'\n')
+                k.write_text(bad)
+                refused=subprocess.run(command,cwd=root,capture_output=True,text=True)
+                self.assertNotEqual(0,refused.returncode);self.assertIn('registry',refused.stderr)
+                self.assertEqual(bad,k.read_text());self.assertFalse((overlay/'release.json').exists())
+            k.write_text(live)
+            moved=subprocess.run(command,cwd=root,capture_output=True,text=True)
+            self.assertEqual(0,moved.returncode,moved.stderr)
+            expected='images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    digest: '+digests[n]+'\n' for n in ['api','dashboard','minio'])+unrelated
+            self.assertEqual(expected,k.read_text())
+            value=json.loads((overlay/'release.json').read_text())
+            self.assertEqual((SOURCE,digests['api'],digests['dashboard'],digests['minio']),
+                (value['sourceRevision'],value['apiDigest'],value['dashboardDigest'],value['minioDigest']))
+            # A later verified revision only replaces the GHCR digests.
+            again=subprocess.run([part.replace(digests['api'],AMD) for part in command],cwd=root,capture_output=True,text=True)
+            self.assertEqual(0,again.returncode,again.stderr)
+            self.assertEqual(expected.replace(digests['api'],AMD),k.read_text())
+
+    def test_pipeline_deploys_only_tested_images_from_the_latest_main_revision(self):
+        workflow=(ROOT/'.github/workflows/ci.yml').read_text()
+        images=workflow[workflow.index('\n  images:\n'):workflow.index('\n  gitops:\n')]
+        gitops=workflow[workflow.index('\n  gitops:\n'):]
+        self.assertIn("needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",images)
+        self.assertLess(images.index('scripts/test/test-images.sh'),images.index('docker push "$EDGEAI_API_IMAGE"'))
+        self.assertIn("needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",gitops)
+        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'",gitops)
+        self.assertIn('if [ "$(git rev-parse HEAD)" != "$VERIFIED_REVISION" ]; then',gitops)
+        self.assertLess(gitops.index('git rev-parse HEAD'),gitops.index('update-images.py'))
+        self.assertIn('API_DIGEST: ${{ needs.images.outputs.api_digest }}',gitops)
+        self.assertIn('DASHBOARD_DIGEST: ${{ needs.images.outputs.dashboard_digest }}',gitops)
+        self.assertIn('MINIO_DIGEST: ${{ needs.storage.outputs.minio_digest }}',gitops)
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

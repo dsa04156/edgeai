@@ -22,7 +22,7 @@ dependencies {
 tasks.named('bootJar') { archiveFileName = 'edgeai-control-plane.jar' }
 // Existing workflow contract tests explicitly exercise the retained integration capability.
 tasks.withType(Test).configureEach { systemProperty 'edgeai.workflow.enabled', 'true' }
-tasks.named('test') { exclude '**/*IntegrationTest.class' }
+tasks.named('test') { exclude '**/*IntegrationTest.class'; exclude '**/SensorChartFixtureTest.class' }
 tasks.register('integrationTest', Test) {
     description = 'Requires a real PostgreSQL database; never substitutes an in-memory database.'
     testClassesDirs = sourceSets.test.output.classesDirs
@@ -53,6 +53,14 @@ tasks.register('dataStoreIntegrationTest', Test) {
     include '**/InfluxDataStoreIntegrationTest.class'
     include '**/ContinuousRegistrationIntegrationTest.class'
     filter { includeTestsMatching '*InfluxDataStoreIntegrationTest'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.selectedStorageOnlyKeepsMatchingComputedValuesWithoutFilteringLiveOutputs'; includeTestsMatching '*ContinuousRegistrationIntegrationTest.everySelectedResultIsRetriedAfterHistoryFailureWithoutStoppingLiveOutputs' }
+}
+
+tasks.register('chartFixtureTest', Test) {
+    description = 'Requires the private chart fixture InfluxDB named by EDGEAI_CHART_FIXTURE; never a shared store.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/SensorChartFixtureTest.class'
+    outputs.upToDateWhen { false }
 }
 
 tasks.register('storageIntegrationTest', Test) {

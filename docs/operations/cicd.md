@@ -37,10 +37,13 @@ Ingress host, StorageClass와 Secret 참조를 확인해 별도 overlay를 준�
 | 일반 push/PR | 단위·계약·화면·스토리지·이미지 기본 검증 | 성공한 main push에 한해 GitOps 갱신 |
 | `workflow_dispatch`, `full_verification=true` | 백업·복구·부하·실행 등 추가 검증 | gitops 단계 생략 |
 
-현재 dev overlay는 API·Dashboard를 클러스터 registry(`10.254.192.47:5000`, `newName`)의 digest로 고정합니다.
-CI의 gitops 단계(`scripts/internal/update-images.py`)는 overlay에 `newName` image가 하나라도 있으면 GHCR digest로 덮어쓰지 않고
-notice만 남긴 채 성공 종료합니다. 이때 `kustomization.yaml`·`release.json` 어느 pin도 바뀌지 않으므로 main push가 자동 배포로 이어지지 않습니다.
-운영 이미지 갱신은 클러스터 registry에 올린 digest를 overlay에 직접 커밋합니다.
+main push의 배포 경로는 `scaffold`·`storage`·`runner` 성공 → `images`가 API·Dashboard(Kestra 콘솔)를 빌드·검증한 뒤
+GHCR(`ghcr.io/dsa04156/edgeai-*`, 공개 패키지)에 push → `gitops`가 그 digest를 dev overlay에 커밋 → Argo CD `edgeai-dev` 자동 sync입니다.
+`gitops`는 checkout한 main HEAD가 검증한 revision과 다르면 pin을 쓰지 않고 다음 실행에 맡깁니다. 앞 job이 하나라도 실패하면 실행되지 않습니다.
+`scripts/internal/update-images.py`는 API·Dashboard·MinIO pin을 이번 실행에서 검증·publish된 GHCR digest로 바꾸고,
+운영자가 넣은 클러스터 registry 사본(`newName: 10.254.192.47:5000/edgeai-<name>`)이 있으면 제거합니다.
+그 밖의 `newName`이 있으면 아무 pin도 바꾸지 않고 실패합니다. GPU inference 등 overlay의 다른 image는 건드리지 않습니다.
+노드는 공개 GHCR을 자격 증명 없이 pull합니다. API·Dashboard는 `Recreate`이므로 배포마다 짧은 중단이 있고, MinIO StatefulSet도 digest가 바뀌면 재시작됩니다.
 
 정확한 job과 조건은 `.github/workflows`의 workflow가 기준입니다.
 같은 브랜치의 새 실행이 이전 실행을 취소할 수 있으므로 배포 중 수동 검증의 영향을 확인합니다.

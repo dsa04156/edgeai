@@ -27,15 +27,16 @@ if (set(runner_platforms)!={'linux/amd64','linux/arm64'} or len(set(runner_platf
     parser.error('the two independently tested native Runner digests are required')
 path = Path('deploy/kubernetes/overlays/dev/kustomization.yaml')
 text = path.read_text()
-if re.search(r'- name: ghcr.io/dsa04156/edgeai-[a-z]+\n    newName: ', text):
-    # The overlay deploys cluster-registry images; a GHCR digest does not exist there, so every pin stays with the operator.
-    print('::notice::dev overlay pins cluster-registry images (newName); deployment pins were left unchanged.')
-    raise SystemExit(0)
+# An operator-built cluster-registry copy is replaced by the exact image this pipeline tested and published to GHCR.
+CLUSTER_REGISTRY = '10.254.192.47:5000'
 for name, digest in [('api', args.api), ('dashboard', args.dashboard), ('minio', args.minio)]:
-    pattern = rf'(- name: ghcr.io/dsa04156/edgeai-{name}\n)    (?:newTag|digest): [^\n]+'
-    text, count = re.subn(pattern, rf'\g<1>    digest: {digest}', text)
-    if count != 1:
+    pattern = rf'(- name: ghcr.io/dsa04156/edgeai-{name}\n)(?:    newName: ([^\n]+)\n)?    (?:newTag|digest): [^\n]+'
+    matches = list(re.finditer(pattern, text))
+    if len(matches) != 1:
         raise SystemExit(f'Expected one {name} image pin')
+    if matches[0].group(2) not in (None, f'{CLUSTER_REGISTRY}/edgeai-{name}'):
+        raise SystemExit(f'Unexpected {name} image registry; deployment pins were left unchanged')
+    text = text[:matches[0].start()] + matches[0].group(1) + f'    digest: {digest}' + text[matches[0].end():]
 path.write_text(text)
 Path('deploy/kubernetes/overlays/dev/release.json').write_text(
     json.dumps({'sourceRevision': args.revision, 'runnerSourceRevision':runner_source, 'apiDigest': args.api,

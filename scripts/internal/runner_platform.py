@@ -11,7 +11,7 @@ from image_identity import digest,manifest,platforms,SINGLE,INDEX
 
 REPOSITORY='ghcr.io/dsa04156/edgeai-runner'
 ARCHITECTURES={'amd64':'x86_64','arm64':'aarch64'}
-EXPECTED_TESTS={'runner-container':96,'stream-mqtt':116}
+EXPECTED_TESTS={'runner-container':96,'stream-mqtt':118}
 RUNNER_INPUTS=['runner/', 'scripts/test/test-runner.sh', 'scripts/test/test-stream.sh',
     'scripts/collect-evidence.sh', 'scripts/lib.sh']
 
