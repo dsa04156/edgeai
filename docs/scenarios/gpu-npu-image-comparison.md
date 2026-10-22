@@ -125,6 +125,11 @@ layer 파일과 소스 SHA-256 일치, 베이스 layer의 fixture·모델 SHA-25
 | NPU (linux/arm64) | `output/scenario-runtime/npu.oci.tar` | `sha256:b8cab1c9772841f045132089c8d3c3a395bab151eb10016e9beb7d0aeefa815d` | `168fbc2ae6b44dbc648e878599584d0e7ecfd8e8c7173791c01acfeb50728239` |
 
 push 후 registry digest는 이 OCI manifest digest와 다를 수 있으므로 `--push` 출력값을 고정한다.
+
+배포 고정값(2026-10-22): GPU `scenario-runtime-gpu@sha256:ebc6cde6d6413acf1df47b2b60d31629db97d7736b233739e6f02d22696828ee`,
+NPU `scenario-runtime-npu:20261022-v2@sha256:c150ae7d1ba40edd2aba35b7d3ba23b43b53ab2bce61b9123f4f15c3fddcdd2c`. 첫 NPU 이미지(`b8cab1c9…`)는
+`ENV PYTHONPATH`가 베이스의 `/opt/python:/usr/lib/python3/dist-packages`(numpy, hailo_platform)를 덮어써 시작 시
+`ModuleNotFoundError: numpy`로 종료됐다. Dockerfile에서 베이스 경로를 뒤에 이어 붙이도록 고쳤다.
 그 뒤 `overlays/dev`의 `components`에 `../../components/scenario-runtimes`를 추가한다. 이 component는
 GPU 런타임을 `etri-ser0002-cgnmsb`(amd64, `nvidia.com/gpu: 1`, 메모리 3Gi — 파일럿에서 1Gi는 OOM),
 NPU 런타임을 `etri-dev0006-raspi5`(`hailo.ai/h8: 1`)에 두고, edgeai-api에서만 접근하게 하며 API에 `EDGEAI_SCENARIO_*`를 추가한다.
