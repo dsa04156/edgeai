@@ -142,6 +142,8 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         if(!row.isEmpty()||!cell.isEmpty()){row.add(cell.toString());records.add(row);}
         var result=new ArrayList<Map<String,String>>();List<String> headers=List.of();
         for(var record:records) {
+            // A query that fails after streaming starts (e.g. one of several yields) still answers 200 with an error table.
+            if(record.equals(List.of("","error","reference")))throw new IllegalStateException("Telemetry query failed");
             if(record.contains("_time") && record.contains("_value")){headers=record;continue;}
             if(record.size()!=headers.size() || headers.isEmpty())continue;
             var mapped=new HashMap<String,String>();for(int i=0;i<headers.size();i++)mapped.put(headers.get(i),record.get(i));
@@ -210,9 +212,10 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
             // Each yield reads its own source: a stream shared by several yields is not pushed down to storage and reads every original.
             String numeric=source(rawBucket,start,stop,sensor+" and r._field == \"value_numeric\" and r.series != \"legacy:legacy:0\"");
             String flag=sensor+" and r._field == \"value_boolean\" and r.series != \"legacy:legacy:0\"",flags=source(rawBucket,start,stop,flag);
+            // InfluxDB 2.9.1 fails float(v:) of a pivoted boolean column ("filter: type conflict: bool != string"); select the number instead.
             String legacy=source(rawBucket,start,stop,sensor+" and r.series == \"legacy:legacy:0\" and (r._field == \"archive_visible\" or r._field == \"value_numeric\" or r._field == \"value_boolean\")")
                 +" |> pivot(rowKey:[\"_time\"],columnKey:[\"_field\"],valueColumn:\"_value\") |> filter(fn:(r)=> (not exists r.archive_visible or r.archive_visible) and (exists r.value_numeric or exists r.value_boolean))"
-                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then float(v:r.value_boolean) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))";
+                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then (if r.value_boolean then 1.0 else 0.0) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))";
             var yields=new ArrayList<String>();
             for(var selector:List.of("first","last","min","max"))yields.add(numeric+every+" |> "+selector+"()"+point.replace("KIND","\"N\""));
             // Booleans have no min/max: the first false and first true originals are a window's extremes.
@@ -236,7 +239,7 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         if(originalsWithinBudget&&total<=pointBudget) {
             var rows=total==0?List.<Map<String,String>>of():query(source(rawBucket,start,stop,"r._measurement == \"sensor_original\" and (r._field == \"archive_visible\" or r._field == \"value_numeric\" or r._field == \"value_boolean\") and r.device_uid == "+quote(uid.toString())+" and r.property == "+quote(property))
                 +" |> pivot(rowKey:[\"_time\"],columnKey:[\"_field\"],valueColumn:\"_value\") |> filter(fn:(r)=> (not exists r.archive_visible or r.archive_visible) and (exists r.value_numeric or exists r.value_boolean))"
-                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then float(v:r.value_boolean) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))"
+                +" |> map(fn:(r)=> ({_start:r._start,_stop:r._stop,_time:r._time,series:r.series,configuration:r.configuration,_value:if exists r.value_boolean then (if r.value_boolean then 1.0 else 0.0) else float(v:r.value_numeric),kind:if exists r.value_boolean then \"B\" else \"N\"}))"
                 +" |> group(columns:[\"_start\",\"_stop\"]) |> sort(columns:[\"_time\"]) |> limit(n:"+(pointBudget+1)+") |> keep(columns:[\"_time\",\"_value\",\"kind\",\"series\",\"configuration\"])");
             // Originals can arrive or be hidden between the two reads: a complete originals response counts what it returns, and
             // one that no longer fits falls back to the selection below (whose counts come from the same read as its points).
