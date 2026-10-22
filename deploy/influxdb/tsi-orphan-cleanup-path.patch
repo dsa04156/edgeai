@@ -1,0 +1,13 @@
+diff --git a/tsdb/index/tsi1/partition.go b/tsdb/index/tsi1/partition.go
+index 0f446d7..e5ff860 100644
+--- a/tsdb/index/tsi1/partition.go
++++ b/tsdb/index/tsi1/partition.go
+@@ -314,7 +314,7 @@ func (p *Partition) deleteNonManifestFiles(m *Manifest) (rErr error) {
+ 			continue
+ 		}
+ 
+-		if err := os.RemoveAll(filename); err != nil {
++		if err := os.RemoveAll(filepath.Join(p.path, filename)); err != nil {
+ 			return err
+ 		}
+ 	}

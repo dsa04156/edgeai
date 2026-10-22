@@ -61,13 +61,17 @@ Retain 및 ArgoCD Prune=false/Delete=false로 데이터 리소스의 자동 삭�
 Pod 교체에는 데이터가 유지되지만 해당 노드·HDD 장애 시 다른 노드에서 자동 복구되지 않는다.
 같은 HDD의 백업은 논리적 복원용이다. 디스크 장애에 대비한 별도 장치·외부 백업은 추가로 필요하다.
 
-고정 InfluxDB2.9.1의 TSI orphan-index 정리는 파일 이름을 cwd 상대 경로로 사용한다
-([해당 구현](https://github.com/influxdata/influxdb/blob/v2.9.1/tsdb/index/tsi1/partition.go#L310-L319)).
-읽기 전용 root에서 `unlinkat ./L0-*.tsl: read-only file system`으로 shard가 열리지 않으면
-데이터를 지우지 말고 기존 writable emptyDir의 `/tmp` workingDir 설정을 유지한다.
-이 설정은 shard-open 실패의 우회이며 실제 partition의 orphan 삭제를 수행하지 않는다.
+InfluxDB 2.9.1의 TSI orphan-index 정리는 파일 이름을 cwd 상대 경로로 삭제한다
+([해당 구현](https://github.com/influxdata/influxdb/blob/v2.9.1/tsdb/index/tsi1/partition.go#L310-L319), upstream 미수정).
+읽기 전용 cwd에서는 `unlinkat ./L0-*.tsl: read-only file system`으로 shard가 열리지 않고, 쓰기 가능한 cwd에서는
+partition orphan은 남기고 cwd의 같은 이름 파일을 지운다. `deploy/influxdb`가 v2.9.1 소스에 경로만
+`filepath.Join(p.path, filename)`으로 고친 patch를 적용해 공식 이미지의 influxd만 교체한다(`influxd version`의 git `d4fa1941fd-edgeai-tsi`).
+CI `influxdb` job이 공식 바이너리와 비교 검증(`scripts/test/test-influx-tsi-cleanup.sh`)한 digest를 dev overlay에 고정한다.
+첫 고정 전 overlay는 공식 이미지를 가리키므로 `/tmp` workingDir 우회를 유지한다. patched digest 고정 후 제거한다.
+patched 이미지로 바뀌면 첫 기동에서 해당 partition의 MANIFEST 밖 파일이 실제로 삭제된다.
 Pod 복귀 후 health만 확인하지 말고 원본 최신 시각 증가와 수집 `COLLECTING`도 확인한다.
-동기 legacy 중복 DELETE가 저장 ACK를 막는 경로의 분리와 upstream 정식 수정 수용은 후속 작업이다.
+qualified 원본은 저장 직후 ACK하고, 같은 legacy 원본 숨김은 PostgreSQL `sensor_archive_reconciliation` 유한 대기열(기본 100000건,
+보관 기간 경과 시 만료)에서 재시도한다. 수집 상태의 `pendingReconciliations`·`droppedReconciliations`로 확인한다.
 
 클러스터 범위 StorageClass/PV는 GitOps AppProject 권한을 확대하지 않고 별도 bootstrap으로
 준비한다. 대상 context·노드·HDD mount·기존 리소스 소유 label과 경로를 먼저 확인한다.

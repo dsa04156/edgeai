@@ -136,9 +136,9 @@ class Images(unittest.TestCase):
     def test_release_requires_both_platforms_before_touching_pins(self):
         with tempfile.TemporaryDirectory() as work:
             root=Path(work);overlay=root/'deploy/kubernetes/overlays/dev';overlay.mkdir(parents=True)
-            k=overlay/'kustomization.yaml';original='images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    digest: '+OTHER+'\n' for n in ['api','dashboard','minio'])
+            k=overlay/'kustomization.yaml';original='images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    digest: '+OTHER+'\n' for n in ['api','dashboard','minio','influxdb'])
             k.write_text(original)
-            command=[sys.executable,str(ROOT/'scripts/internal/update-images.py'),'--revision',SOURCE,'--api',AMD,'--dashboard',AMD,'--runner',INDEX,'--minio',AMD,'--runner-platform-digests']
+            command=[sys.executable,str(ROOT/'scripts/internal/update-images.py'),'--revision',SOURCE,'--api',AMD,'--dashboard',AMD,'--runner',INDEX,'--minio',AMD,'--influxdb',AMD,'--runner-platform-digests']
             bad=subprocess.run(command+[json.dumps({'linux/amd64':AMD})],cwd=root,capture_output=True)
             self.assertNotEqual(0,bad.returncode);self.assertEqual(original,k.read_text());self.assertFalse((overlay/'release.json').exists())
             good=subprocess.run(command+[json.dumps({'linux/amd64':AMD,'linux/arm64':ARM})],cwd=root,capture_output=True)
@@ -158,10 +158,11 @@ class Images(unittest.TestCase):
             root=Path(work);overlay=root/'deploy/kubernetes/overlays/dev';overlay.mkdir(parents=True);k=overlay/'kustomization.yaml'
             unrelated='- name: example/gpu-inference\n    newName: 10.254.192.47:5000/edgeai/gpu-inference\n    digest: '+OTHER+'\n'
             live=('images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    newName: 10.254.192.47:5000/edgeai-'+n+'\n    digest: '+OTHER+'\n'
-                for n in ['api','dashboard'])+'- name: ghcr.io/dsa04156/edgeai-minio\n    digest: '+OTHER+'\n'+unrelated)
-            digests={'api':'sha256:'+'5'*64,'dashboard':'sha256:'+'6'*64,'minio':'sha256:'+'7'*64}
+                for n in ['api','dashboard'])+'- name: ghcr.io/dsa04156/edgeai-minio\n    digest: '+OTHER+'\n'+unrelated
+                +'- name: ghcr.io/dsa04156/edgeai-influxdb\n    newName: public.ecr.aws/docker/library/influxdb\n    digest: '+OTHER+'\n')
+            digests={'api':'sha256:'+'5'*64,'dashboard':'sha256:'+'6'*64,'minio':'sha256:'+'7'*64,'influxdb':'sha256:'+'8'*64}
             command=[sys.executable,str(ROOT/'scripts/internal/update-images.py'),'--revision',SOURCE,'--api',digests['api'],
-                '--dashboard',digests['dashboard'],'--runner',INDEX,'--minio',digests['minio'],
+                '--dashboard',digests['dashboard'],'--runner',INDEX,'--minio',digests['minio'],'--influxdb',digests['influxdb'],
                 '--runner-platform-digests',json.dumps({'linux/amd64':AMD,'linux/arm64':ARM})]
             for name,foreign in [('api','registry.example/edgeai-api'),('dashboard','10.254.192.47:5000/edgeai-api')]:
                 bad=live.replace('newName: 10.254.192.47:5000/edgeai-'+name+'\n','newName: '+foreign+'\n')
@@ -169,14 +170,22 @@ class Images(unittest.TestCase):
                 refused=subprocess.run(command,cwd=root,capture_output=True,text=True)
                 self.assertNotEqual(0,refused.returncode);self.assertIn('registry',refused.stderr)
                 self.assertEqual(bad,k.read_text());self.assertFalse((overlay/'release.json').exists())
+            # Only InfluxDB may start from its official image; MinIO and foreign InfluxDB names are refused.
+            for bad in [live.replace('edgeai-minio\n','edgeai-minio\n    newName: public.ecr.aws/docker/library/influxdb\n'),
+                        live.replace('public.ecr.aws/docker/library/influxdb','docker.io/library/influxdb')]:
+                k.write_text(bad)
+                refused=subprocess.run(command,cwd=root,capture_output=True,text=True)
+                self.assertNotEqual(0,refused.returncode);self.assertIn('registry',refused.stderr)
+                self.assertEqual(bad,k.read_text());self.assertFalse((overlay/'release.json').exists())
             k.write_text(live)
             moved=subprocess.run(command,cwd=root,capture_output=True,text=True)
             self.assertEqual(0,moved.returncode,moved.stderr)
-            expected='images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    digest: '+digests[n]+'\n' for n in ['api','dashboard','minio'])+unrelated
+            expected=('images:\n'+''.join('- name: ghcr.io/dsa04156/edgeai-'+n+'\n    digest: '+digests[n]+'\n' for n in ['api','dashboard','minio'])+unrelated
+                +'- name: ghcr.io/dsa04156/edgeai-influxdb\n    digest: '+digests['influxdb']+'\n')
             self.assertEqual(expected,k.read_text())
             value=json.loads((overlay/'release.json').read_text())
-            self.assertEqual((SOURCE,digests['api'],digests['dashboard'],digests['minio']),
-                (value['sourceRevision'],value['apiDigest'],value['dashboardDigest'],value['minioDigest']))
+            self.assertEqual((SOURCE,digests['api'],digests['dashboard'],digests['minio'],digests['influxdb']),
+                (value['sourceRevision'],value['apiDigest'],value['dashboardDigest'],value['minioDigest'],value['influxdbDigest']))
             # A later verified revision only replaces the GHCR digests.
             again=subprocess.run([part.replace(digests['api'],AMD) for part in command],cwd=root,capture_output=True,text=True)
             self.assertEqual(0,again.returncode,again.stderr)
@@ -189,14 +198,17 @@ class Images(unittest.TestCase):
         self.assertIn('\n    needs: [data-store, scaffold, storage, runner]\n',images)
         self.assertIn("needs.data-store.result == 'success' && needs.scaffold.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",images)
         self.assertLess(images.index('scripts/test/test-images.sh'),images.index('docker push "$EDGEAI_API_IMAGE"'))
-        self.assertIn('\n    needs: [data-store, images, storage, runner]\n',gitops)
-        self.assertIn("needs.data-store.result == 'success' && needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success'",gitops)
+        self.assertIn('\n    needs: [data-store, images, storage, runner, influxdb]\n',gitops)
+        self.assertIn("needs.data-store.result == 'success' && needs.images.result == 'success' && needs.storage.result == 'success' && needs.runner.result == 'success' && needs.influxdb.result == 'success'",gitops)
         self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'",gitops)
         self.assertIn('if [ "$(git rev-parse HEAD)" != "$VERIFIED_REVISION" ]; then',gitops)
         self.assertLess(gitops.index('git rev-parse HEAD'),gitops.index('update-images.py'))
         self.assertIn('API_DIGEST: ${{ needs.images.outputs.api_digest }}',gitops)
         self.assertIn('DASHBOARD_DIGEST: ${{ needs.images.outputs.dashboard_digest }}',gitops)
         self.assertIn('MINIO_DIGEST: ${{ needs.storage.outputs.minio_digest }}',gitops)
+        self.assertIn('INFLUXDB_DIGEST: ${{ needs.influxdb.outputs.influxdb_digest }}',gitops)
+        influxdb=workflow[workflow.index('\n  influxdb:\n'):]
+        self.assertLess(influxdb.index('scripts/test/test-influx-tsi-cleanup.sh'),influxdb.index('docker push "$INFLUXDB_IMAGE"'))
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
