@@ -1,10 +1,11 @@
 {
-  "sourceRevision": "0e2ffe0a428209815063802be401d9766f03c120",
+  "sourceRevision": "9fb793bd023d18e0fa3f4eeb8d76922117c4611f",
   "runnerSourceRevision": "e4b7a6a1a4e2ecbf5a6a2e24ae8179982d185a1a",
-  "apiDigest": "sha256:d484fc65d35157333b833f11963f39aa9f41094d27e0bc3376020e061f26701c",
+  "apiDigest": "sha256:6b85a5531adedddddb1c8d70701996fef476b0f78ba415221d6fc5c23d58d905",
   "dashboardDigest": "sha256:62e95cc8d2594bb0db42471892f6a569fa20f6a3e70f6f828cce4f7a55fd52f8",
   "runnerDigest": "sha256:ed9a4c7dd286cf845dd4631f90af384f92d6c036f0c18d2d7b512e3a52a1c793",
-  "minioDigest": "sha256:28b6e5b98520206bcdcc265ab4f59f7b1b8818cff4c0319cd14be7d656fdf1d6",
+  "minioDigest": "sha256:ab2ea44739407bb64eb1bad1afa31f858db593532c3bc2611b0240c5e5ca900b",
+  "influxdbDigest": "sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82",
   "runtimeImagePlatforms": [
     "linux/amd64",
     "linux/arm64"
