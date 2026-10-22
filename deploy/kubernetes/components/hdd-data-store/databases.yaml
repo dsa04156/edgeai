@@ -189,8 +189,7 @@ spec:
       - name: influxdb
         # deploy/influxdb build (TSI orphan cleanup uses the partition path); the overlay pins its digest.
         image: ghcr.io/dsa04156/edgeai-influxdb:bootstrap
-        # Needed only by the unpatched official image the overlay pins before the first patched digest.
-        # Remove once the patched digest is pinned; the patched binary does not use its cwd.
+        # The unpatched official image deletes TSI orphans relative to its cwd; the patched binary ignores it.
         workingDir: /tmp
         ports:
         - name: influxdb

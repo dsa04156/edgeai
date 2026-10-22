@@ -41,7 +41,7 @@ main push의 배포 경로는 `data-store`·`scaffold`·`storage`·`runner` 성�
 GHCR(`ghcr.io/dsa04156/edgeai-*`, 공개 패키지)에 push → `gitops`가 그 digest를 dev overlay에 커밋 → Argo CD `edgeai-dev` 자동 sync입니다.
 `gitops`는 checkout한 main HEAD가 검증한 revision과 다르면 pin을 쓰지 않고 다음 실행에 맡깁니다. `images`·`gitops` 모두 `data-store` 성공을 요구하며, 앞 job이 하나라도 실패하면 실행되지 않습니다.
 `influxdb` job은 `deploy/influxdb`(InfluxDB 2.9.1 + TSI orphan 정리 경로 patch)를 빌드하고 공식 바이너리와 비교 검증한 뒤
-`ghcr.io/dsa04156/edgeai-influxdb:sha-<sha>`로 publish하며, `gitops`는 이 job의 성공도 요구합니다.
+`ghcr.io/dsa04156/edgeai-influxdb:src-<deploy/influxdb 내용 hash>`로 publish합니다. 같은 입력이면 다시 빌드하지 않고 그 digest를 재사용해 DB를 재시작하지 않으며, `gitops`는 이 job의 성공도 요구합니다.
 `scripts/internal/update-images.py`는 API·Dashboard·MinIO·InfluxDB pin을 이번 실행에서 검증·publish된 GHCR digest로 바꾸고,
 운영자가 넣은 클러스터 registry 사본(`newName: 10.254.192.47:5000/edgeai-<name>`)이 있으면 제거합니다.
 InfluxDB는 첫 고정 전 공식 이미지(`newName: public.ecr.aws/docker/library/influxdb`)도 교체합니다.

@@ -67,7 +67,7 @@ InfluxDB 2.9.1의 TSI orphan-index 정리는 파일 이름을 cwd 상대 경로�
 partition orphan은 남기고 cwd의 같은 이름 파일을 지운다. `deploy/influxdb`가 v2.9.1 소스에 경로만
 `filepath.Join(p.path, filename)`으로 고친 patch를 적용해 공식 이미지의 influxd만 교체한다(`influxd version`의 git `d4fa1941fd-edgeai-tsi`).
 CI `influxdb` job이 공식 바이너리와 비교 검증(`scripts/test/test-influx-tsi-cleanup.sh`)한 digest를 dev overlay에 고정한다.
-첫 고정 전 overlay는 공식 이미지를 가리키므로 `/tmp` workingDir 우회를 유지한다. patched digest 고정 후 제거한다.
+공식 이미지로 되돌릴 때를 위해 `/tmp` workingDir는 유지한다(patched 바이너리는 cwd를 사용하지 않는다).
 patched 이미지로 바뀌면 첫 기동에서 해당 partition의 MANIFEST 밖 파일이 실제로 삭제된다.
 Pod 복귀 후 health만 확인하지 말고 원본 최신 시각 증가와 수집 `COLLECTING`도 확인한다.
 qualified 원본은 저장 직후 ACK하고, 같은 legacy 원본 숨김은 PostgreSQL `sensor_archive_reconciliation` 유한 대기열(기본 100000건,

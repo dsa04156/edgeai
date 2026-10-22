@@ -77,7 +77,7 @@ images:
     digest: sha256:62e95cc8d2594bb0db42471892f6a569fa20f6a3e70f6f828cce4f7a55fd52f8
   - name: ghcr.io/dsa04156/edgeai-minio
     digest: sha256:28b6e5b98520206bcdcc265ab4f59f7b1b8818cff4c0319cd14be7d656fdf1d6
-  # Patched build of deploy/influxdb. The official-image newName is only the bootstrap; update-images.py replaces it.
+  # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.
   - name: ghcr.io/dsa04156/edgeai-influxdb
     newName: public.ecr.aws/docker/library/influxdb
     digest: sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797

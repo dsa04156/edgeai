@@ -73,21 +73,29 @@ class Server:
         self.log_path = run / f'server-{time.monotonic_ns()}.log'
         self.log = open(self.log_path, 'wb')
         self.process = subprocess.Popen(args, cwd=cwd, stdout=self.log, stderr=self.log, start_new_session=True)
-        for _ in range(1200):
-            if self.process.poll() is not None:
-                raise RuntimeError('influxd exited during startup: ' + self.log_path.read_text()[-2000:])
-            try:
-                if json.loads(http(self.origin, '/health')).get('status') == 'pass':
-                    return
-            except (OSError, urllib.error.HTTPError, ValueError):
-                time.sleep(.1)
-        self.process.kill()
-        self.process.wait()
-        raise RuntimeError('influxd readiness timeout')
+        try:
+            for _ in range(1200):
+                if self.process.poll() is not None:
+                    raise RuntimeError('influxd exited during startup: ' + self.log_path.read_text()[-2000:])
+                try:
+                    if json.loads(http(self.origin, '/health')).get('status') == 'pass':
+                        return
+                except (OSError, urllib.error.HTTPError, ValueError):
+                    time.sleep(.1)
+            raise RuntimeError('influxd readiness timeout')
+        except BaseException:
+            self.stop()
+            raise
 
     def stop(self):
-        self.process.send_signal(signal.SIGTERM)
-        self.process.wait(timeout=60)
+        if self.process.poll() is None:
+            # The session holds influxd even when unshare/sh started it.
+            os.killpg(self.process.pid, signal.SIGTERM)
+            try:
+                self.process.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                os.killpg(self.process.pid, signal.SIGKILL)
+                self.process.wait()
         self.log.close()
         return self.log_path.read_text()
 
@@ -143,8 +151,10 @@ def exercise(name, binary, work):
         case = {'manifestFiles': sorted(manifest_files)}
         try:
             server = Server(binary, run, cwd, mode == 'readonly-cwd')
-            case['rowsMatch'] = rows(server, token) == baseline
-            server.stop()
+            try:
+                case['rowsMatch'] = rows(server, token) == baseline
+            finally:
+                server.stop()
         except (RuntimeError, urllib.error.HTTPError) as error:
             case['rowsMatch'] = False
             case['startError'] = str(error)[-300:]
