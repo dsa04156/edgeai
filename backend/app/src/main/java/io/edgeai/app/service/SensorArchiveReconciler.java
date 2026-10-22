@@ -44,13 +44,15 @@ public class SensorArchiveReconciler implements AutoCloseable {
         try {
             queue.expire(clock.instant().minusSeconds(telemetry.rawRetentionDays()*86400L));
             while(true) {
-                var entries=queue.due(clock.instant(),64);
-                for(var entry:entries) {
-                    try{telemetry.hideLegacyDuplicate(entry.observation());queue.complete(entry);}
-                    // An unavailable store would fail the rest of the batch too; wait for the next interval.
-                    catch(RuntimeException e){queue.retry(entry,clock.instant().plusSeconds(Math.min(300L,1L<<Math.min(entry.attempts(),9))));return;}
+                var entries=queue.due(clock.instant(),256);if(entries.isEmpty())return;
+                try{telemetry.hideLegacyDuplicates(entries.stream().map(SensorReconciliationQueue.Entry::observation).toList());}
+                catch(RuntimeException e) {
+                    // An unavailable store would fail the next batch too; wait for the next interval.
+                    for(var entry:entries)queue.retry(entry,clock.instant().plusSeconds(Math.min(300L,1L<<Math.min(entry.attempts(),9))));
+                    return;
                 }
-                if(entries.size()<64)return;
+                for(var entry:entries)queue.complete(entry);
+                if(entries.size()<256)return;
             }
         }catch(RuntimeException e){org.slf4j.LoggerFactory.getLogger(SensorArchiveReconciler.class).warn("Archive reconciliation deferred ({})",e.getClass().getSimpleName());}
     }

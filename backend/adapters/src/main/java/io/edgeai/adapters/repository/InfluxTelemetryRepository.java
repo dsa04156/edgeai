@@ -92,23 +92,48 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         long storageTime=Math.addExact(nanos(observation.observedAt()),sequence%1000000);
         write(rawBucket,"sensor_original"+tags+" "+typedValue(document.get("value"))+",document="+field(observation.documentJson())+",series_document="+field(quote(metadata))+",archive_visible=true "+storageTime);
     }
-    public boolean hideLegacyDuplicate(Observation observation) {
-        var document=json.readValue(observation.documentJson(),Map.class);
-        if(!"QUALIFIED".equals(document.get("quality")))throw new IllegalArgumentException("Only qualified originals supersede legacy originals");
-        String configuration=Objects.toString(document.get("configurationSha256"),"unknown");
-        if(!matchingOriginal(observation,document,configuration,false))return false;
-        // InfluxDB2.9.1 DELETE can deadlock TSI compaction and block unrelated writes.
-        // Hide only this exact legacy point through an idempotent write. Typed fields
-        // expire with the bucket; history/catalog exclude the empty document and charts use the boolean visibility field.
-        String legacyTags=",device_uid="+observation.deviceUid()+",property="+tag(observation.property())+",series=legacy:legacy:0,configuration="+tag(configuration);
-        write(rawBucket,"sensor_original"+legacyTags+" document=\"\",series_document=\"\",archive_visible=false "+nanos(observation.observedAt()));
-        return true;
+    public int hideLegacyDuplicates(List<Observation> observations) {
+        // One read per measurement and nearby period and one write per batch: a serial read and fsync per point fell behind dual publication.
+        var groups=new LinkedHashMap<List<String>,List<Map.Entry<Observation,Map<?,?>>>>();
+        for(var observation:observations) {
+            var document=json.readValue(observation.documentJson(),Map.class);
+            if(!"QUALIFIED".equals(document.get("quality")))throw new IllegalArgumentException("Only qualified originals supersede legacy originals");
+            groups.computeIfAbsent(List.of(observation.deviceUid().toString(),observation.property(),Objects.toString(document.get("configurationSha256"),"unknown")),key->new ArrayList<>()).add(Map.entry(observation,document));
+        }
+        var lines=new LinkedHashSet<String>();
+        for(var group:groups.entrySet()) {
+            var entries=new ArrayList<>(group.getValue());entries.sort(Comparator.comparing(entry->entry.getKey().observedAt()));
+            for(int from=0,to;from<entries.size();from=to) {
+                Instant first=entries.get(from).getKey().observedAt();
+                for(to=from+1;to<entries.size()&&!entries.get(to).getKey().observedAt().isAfter(first.plusSeconds(60));to++);
+                var legacy=legacyOriginals(group.getKey(),first,entries.get(to-1).getKey().observedAt().plusMillis(1));
+                for(var entry:entries.subList(from,to))for(var other:legacy.getOrDefault(entry.getKey().observedAt(),List.of()))if(sameOriginal(entry.getValue(),other)) {
+                    // InfluxDB2.9.1 DELETE can deadlock TSI compaction and block unrelated writes.
+                    // Hide only this exact legacy point through an idempotent write. Typed fields
+                    // expire with the bucket; history/catalog exclude the empty document and charts use the boolean visibility field.
+                    lines.add("sensor_original,device_uid="+group.getKey().get(0)+",property="+tag(group.getKey().get(1))+",series=legacy:legacy:0,configuration="+tag(group.getKey().get(2))+" document=\"\",series_document=\"\",archive_visible=false "+nanos(entry.getKey().observedAt()));
+                }
+            }
+        }
+        if(!lines.isEmpty())write(rawBucket,String.join("\n",lines));
+        return lines.size();
+    }
+    private Map<Instant,List<Map<?,?>>> legacyOriginals(List<String> measurement,Instant from,Instant to) {
+        String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r._value != \"\" and r.device_uid == "+quote(measurement.get(0))+" and r.property == "+quote(measurement.get(1))+" and r.configuration == "+quote(measurement.get(2))+" and r.series == \"legacy:legacy:0\"";
+        var rows=query(source(rawBucket,from,to,filter)+" |> group(columns:[]) |> limit(n:10001)");if(rows.size()>10000)throw new IllegalStateException("Original reconciliation limit exceeded");
+        var result=new HashMap<Instant,List<Map<?,?>>>();
+        for(var row:rows){var other=json.readValue(row.get("_value"),Map.class);result.computeIfAbsent(Instant.parse(row.get("_time")),key->new ArrayList<>()).add(other);}
+        return result;
+    }
+    private static boolean sameOriginal(Map<?,?> document,Map<?,?> other) {
+        Object a=document.get("value"),b=other.get("value");boolean same=a instanceof Number x&&b instanceof Number y?Double.compare(x.doubleValue(),y.doubleValue())==0:Objects.equals(a,b);
+        return same&&Objects.equals(document.get("type"),other.get("type"))&&Objects.equals(document.get("observedAt"),other.get("observedAt"));
     }
     private boolean matchingOriginal(Observation observation,Map<?,?> document,String configuration,boolean qualified) {
         String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r._value != \"\" and r.device_uid == "+quote(observation.deviceUid().toString())+" and r.property == "+quote(observation.property())+" and r.configuration == "+quote(configuration)+" and r.series "+(qualified?"!=":"==")+" \"legacy:legacy:0\"";
         String query=source(rawBucket,observation.observedAt(),observation.observedAt().plusMillis(1),filter)+" |> group(columns:[]) |> limit(n:1001)";
         var rows=query(query);if(rows.size()>1000)throw new IllegalStateException("Original reconciliation limit exceeded");
-        for(var row:rows){var other=json.readValue(row.get("_value"),Map.class);Object a=document.get("value"),b=other.get("value");boolean same=a instanceof Number x&&b instanceof Number y?Double.compare(x.doubleValue(),y.doubleValue())==0:Objects.equals(a,b);if(same&&Objects.equals(document.get("type"),other.get("type"))&&Objects.equals(document.get("observedAt"),other.get("observedAt")))return true;}
+        for(var row:rows)if(sameOriginal(document,json.readValue(row.get("_value"),Map.class)))return true;
         return false;
     }
     public void append(List<Sample> samples) {
