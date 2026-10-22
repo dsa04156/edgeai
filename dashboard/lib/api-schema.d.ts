@@ -2889,6 +2889,10 @@ export interface components {
                 /** @description 이번 프로세스의 저장 수신 횟수. 고유 데이터 행 수가 아닙니다. */
                 storedDeliveries: number;
                 rejectedDeliveries: number;
+                /** @description 저장·ACK가 끝난 qualified 원본 중 같은 legacy 원본 숨김을 기다리는 수. 수집 상태에는 영향을 주지 않습니다. */
+                pendingReconciliations?: number;
+                /** @description 대기열 상한으로 숨김을 예약하지 못한 이번 프로세스의 수. 해당 legacy 중복이 보일 수 있습니다. */
+                droppedReconciliations?: number;
             };
             sensors: {
                 /** Format: uuid */

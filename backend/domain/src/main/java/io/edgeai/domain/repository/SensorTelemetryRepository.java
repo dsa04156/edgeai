@@ -7,7 +7,10 @@ import java.util.*;
 public interface SensorTelemetryRepository {
     record Observation(UUID deviceUid,String property,Instant observedAt,String documentJson) {}
     boolean enabled();
+    /** Stores the original only; a legacy original already superseded by an exact qualified one is skipped. */
     void append(Observation observation);
+    /** Hides the exact legacy duplicate of a stored qualified original; false when none exists. Idempotent. */
+    default boolean hideLegacyDuplicate(Observation qualified){throw new UnsupportedOperationException("Legacy reconciliation is not supported");}
     Map<String,Object> readSensor(UUID deviceUid,String property,Instant from,Instant to,int limit,String cursor);
     default Map<String,Object> readSensor(UUID deviceUid,String property,Instant from,Instant to,int limit,String cursor,boolean descending) {
         if(descending)throw new UnsupportedOperationException("Latest-first sensor history is not supported");

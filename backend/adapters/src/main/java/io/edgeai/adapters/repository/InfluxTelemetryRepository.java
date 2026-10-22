@@ -91,13 +91,18 @@ public final class InfluxTelemetryRepository implements ProcessingHistoryReposit
         // Preserve distinct sequences at the same source millisecond without one tag per event.
         long storageTime=Math.addExact(nanos(observation.observedAt()),sequence%1000000);
         write(rawBucket,"sensor_original"+tags+" "+typedValue(document.get("value"))+",document="+field(observation.documentJson())+",series_document="+field(quote(metadata))+",archive_visible=true "+storageTime);
-        if(qualified && matchingOriginal(observation,document,configuration,false)) {
-            // InfluxDB2.9.1 DELETE can deadlock TSI compaction and block unrelated writes.
-            // Hide only this exact legacy point through an idempotent write. Typed fields
-            // expire with the bucket; history/catalog exclude the empty document and charts use the boolean visibility field.
-            String legacyTags=",device_uid="+observation.deviceUid()+",property="+tag(observation.property())+",series=legacy:legacy:0,configuration="+tag(configuration);
-            write(rawBucket,"sensor_original"+legacyTags+" document=\"\",series_document=\"\",archive_visible=false "+nanos(observation.observedAt()));
-        }
+    }
+    public boolean hideLegacyDuplicate(Observation observation) {
+        var document=json.readValue(observation.documentJson(),Map.class);
+        if(!"QUALIFIED".equals(document.get("quality")))throw new IllegalArgumentException("Only qualified originals supersede legacy originals");
+        String configuration=Objects.toString(document.get("configurationSha256"),"unknown");
+        if(!matchingOriginal(observation,document,configuration,false))return false;
+        // InfluxDB2.9.1 DELETE can deadlock TSI compaction and block unrelated writes.
+        // Hide only this exact legacy point through an idempotent write. Typed fields
+        // expire with the bucket; history/catalog exclude the empty document and charts use the boolean visibility field.
+        String legacyTags=",device_uid="+observation.deviceUid()+",property="+tag(observation.property())+",series=legacy:legacy:0,configuration="+tag(configuration);
+        write(rawBucket,"sensor_original"+legacyTags+" document=\"\",series_document=\"\",archive_visible=false "+nanos(observation.observedAt()));
+        return true;
     }
     private boolean matchingOriginal(Observation observation,Map<?,?> document,String configuration,boolean qualified) {
         String filter="r._measurement == \"sensor_original\" and r._field == \"document\" and r._value != \"\" and r.device_uid == "+quote(observation.deviceUid().toString())+" and r.property == "+quote(observation.property())+" and r.configuration == "+quote(configuration)+" and r.series "+(qualified?"!=":"==")+" \"legacy:legacy:0\"";
