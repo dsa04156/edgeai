@@ -28,7 +28,8 @@ RUN PKG_CONFIG=/usr/local/bin/pkg-config CGO_CFLAGS='-O2 -g -D_LARGEFILE64_SOURC
       -o /out/influxd ./cmd/influxd \
     && /out/influxd version
 
-FROM public.ecr.aws/docker/library/influxdb@sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797
+# Same index digest as the deployed public.ecr.aws mirror; GitHub runners hit its anonymous pull limit (429).
+FROM influxdb@sha256:f551adeb94b6f97626d2043ec90ed17f81de18d15bb5412d2101e0965c93c797
 LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
 COPY --from=build /out/influxd /usr/local/bin/influxd
 RUN influxd version | grep -q 'git: d4fa1941fd-edgeai-tsi'
