@@ -4,8 +4,13 @@
 시간을 저장하고 비교한다. 워크플로·Runner·ResourceAdvisor와 무관한 독립 기능이며, 기존 Faster R-CNN
 추론(`/api/v1/inference/*`)은 바꾸지 않는다.
 
-**상태(2026-10-22):** 코드·관련 시험 통과, 두 런타임 이미지 빌드 완료(아래). registry push,
-클러스터 배포, 실장비 실행은 진행 중이다. 기존 2026-10-13 파일럿 수치는 이 기능의 결과가 아니다.
+**상태(2026-10-22):** 13080 Kestra 콘솔에 배포 완료. [CI 39770025440](https://github.com/dsa04156/edgeai/actions/runs/39770025440) 통과,
+API·콘솔 소스 `0e2ffe0`, NPU 환경 수정 `b1fdaba`, 배포 이미지 고정 `00f5e19`.
+실제 RTX 5080·Hailo-8으로 화면의 시작 버튼을 눌러 1장·100장 실행 모두 SUCCEEDED, 100장 실행 중 중지 버튼으로
+1장 전송 후 STOPPED를 확인했다. 새로고침 후 결과 유지, 브라우저 JS 오류 0건, Argo CD Synced/Healthy.
+100장 실행 ID `be9efb2a-be30-49aa-84f2-9332b868dee2`, 중지 실행 ID `0b70f92d-04a9-447f-83dd-f2f0047f63bc`.
+근거는 아래 로컬 검증 경로의 `live-scenario.json`, `live-result-{desktop,mobile}.png`, `deployment-ci.log`, `deployment-fix.md`.
+기존 2026-10-13 파일럿 수치를 새 실행 결과로 재사용하지 않았다.
 
 검증 기록(`output/`은 Git 제외, 로컬 전용) `output/verification/gpu-npu-scenario-20261022/`:
 
