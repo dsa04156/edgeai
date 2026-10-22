@@ -6,11 +6,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "3"
 spec:
   ingressClassName: traefik
-  # Mirrors the running Ingress (2026-10-22). Users reach the console at 10.254.192.47:13080 (hostPort),
-  # not through this Ingress; moving the host to the traefik address edgeai.10.254.192.47.sslip.io and
-  # routing / to edgeai-dashboard is a separate change.
+  # Users reach the console at 10.254.192.47:13080 (hostPort); this Ingress serves the traefik address.
+  # Routing / to edgeai-dashboard is a separate change.
   rules:
-    - host: edgeai.192.168.0.56.sslip.io
+    - host: edgeai.10.254.192.47.sslip.io
       http: &routes
         paths:
           - path: /api/v1
