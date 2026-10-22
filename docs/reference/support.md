@@ -34,7 +34,7 @@ Serial JSON은 정해진 프레임 규격을, Sense HAT은 ARM64 Raspberry Pi의
 
 ## 현재 개발 경계
 
-관리 화면과 API 완성을 우선하고 Runner/STREAM 고도화는 보류 중입니다.
+WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS)은 API·Kestra 콘솔에 통합·배포되었고 Runner 이미지는 게시만 되었습니다. runtime은 꺼져 있어 운영 실행과 실장비 수용은 남아 있습니다([현재 상태](../../PROGRESS.md)).
 실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
 [개발 단계](../../PLAN.md)와 [현재 상태](../../PROGRESS.md)에서 남은 범위를 확인합니다.
 
