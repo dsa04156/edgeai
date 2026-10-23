@@ -73,11 +73,11 @@ patches:
                   - {name: http, containerPort: 13080, hostPort: 13080}
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:19512ff3df718fb68f77ae53d2c71d02551aaadbb28084885430533c70b92836
+    digest: sha256:f80083ce3f06885e210e2a61f81c3e122e9e339398dec5d80625484e29265e9b
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:62e95cc8d2594bb0db42471892f6a569fa20f6a3e70f6f828cce4f7a55fd52f8
+    digest: sha256:e54fc8245e071f84a2e0c62ad95e5d35f3df9a7b1af1228cfbd58bb2976e54db
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:dd083fe272e17bb3b85936ab8a4ee2aae59fa35c160e1ad3eed63fde7103d028
+    digest: sha256:605db818fd7f98f60facb6ef0f4bcc5bae0b0c83a974930ad4549aaddd30788e
   # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.
   - name: ghcr.io/dsa04156/edgeai-influxdb
     digest: sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82
