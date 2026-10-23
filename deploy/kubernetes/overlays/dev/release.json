@@ -4,7 +4,7 @@
   "apiDigest": "sha256:552da0b6b51161176c86777f5a2dc93bf131f3d4bd54a625fe5df7020e56fe95",
   "dashboardDigest": "sha256:a460dee42a0954299f51c704e31fff544a22fb92d00ccababa55ab043c8d23dc",
   "runnerDigest": "sha256:ed9a4c7dd286cf845dd4631f90af384f92d6c036f0c18d2d7b512e3a52a1c793",
-  "minioDigest": "sha256:26d969314467c10dd0776af6508cfb1c8cc985e4348ceeed67c3274fd1f033c4",
+  "minioDigest": "sha256:ce50e12355c3c1dfac0b84b2538160953401925c10f5e511b9517dc39c29bc41",
   "influxdbDigest": "sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82",
   "runtimeImagePlatforms": [
     "linux/amd64",
