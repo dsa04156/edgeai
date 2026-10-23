@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraState, pinnedSource, pipelineGraph, readDetections, replayLabel, windowGaps } from "../kestra-native/hawkeye-video.ts";
+import { cameraState, pinnedSource, pipelineGraph, readDetections, replayLabel, windowStartIntervals } from "../kestra-native/hawkeye-video.ts";
 
 const dag = {
   tasks: [{ key: "infer" }, { key: "capture" }],
@@ -53,13 +53,10 @@ test("unknown source or accelerator is shown as unobserved, not as ready", () =>
   assert.deepEqual(external.map((n) => [n.status, n.tone, n.location]), [["관측값 없음", "warning", null], ["관측값 없음", "warning", null]]);
 });
 
-test("gaps between windows are measured from the previous end to the next start", () => {
-  assert.deepEqual(windowGaps([
-    { createdAt: "2026-10-23T08:00:00Z", finishedAt: "2026-10-23T08:00:12Z" },
-    { createdAt: "2026-10-23T08:00:15.5Z", finishedAt: "2026-10-23T08:00:27Z" },
-    { createdAt: "2026-10-23T08:00:29Z", finishedAt: null },
-  ]), [null, 3500, 2000]);
-  assert.deepEqual(windowGaps([{ createdAt: "2026-10-23T08:00:00Z", finishedAt: null }, { createdAt: "2026-10-23T08:00:05Z", finishedAt: null }]), [null, null]);
+test("window intervals are measured start to start, never from Run.updatedAt", () => {
+  assert.deepEqual(windowStartIntervals(["2026-10-23T08:00:00Z", "2026-10-23T08:00:15.5Z", "2026-10-23T08:00:29Z"]), [null, 15500, 13500]);
+  assert.deepEqual(windowStartIntervals(["2026-10-23T08:00:00Z"]), [null]);
+  assert.deepEqual(windowStartIntervals([]), []);
 });
 
 test("detections keep the window's single accelerator identity and unreadable frames as failures", () => {

@@ -319,10 +319,10 @@ export function pipelineGraph(input: {
   return { nodes, edges };
 }
 
-/** Milliseconds between a window's end and the next window's start; unknown when either side is missing. */
-export function windowGaps(windows: { createdAt: string; finishedAt: string | null }[]) {
-  return windows.map((w, i) => {
-    const before = windows[i - 1]?.finishedAt;
-    return before ? Date.parse(w.createdAt) - Date.parse(before) : null;
-  });
+/**
+ * Milliseconds from the previous window's start to each window's start. Run.updatedAt keeps changing during runtime
+ * cleanup, so it is not an end time and is not used.
+ */
+export function windowStartIntervals(createdAts: string[]) {
+  return createdAts.map((at, i) => (i ? Date.parse(at) - Date.parse(createdAts[i - 1]) : null));
 }

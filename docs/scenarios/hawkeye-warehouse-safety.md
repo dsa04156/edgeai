@@ -1,15 +1,18 @@
 # 창고 지게차 안전 점검 (Hawkeye Warehouse Safety VLM)
 
-고정된 창고 샘플 이미지 1장을 실제 Hawkeye VLM에 보내 위험 범주·한 줄 설명·측정 시간을 받아 실행 기록으로 저장한다.
-GPU/NPU 이미지 비교(`docs/scenarios/gpu-npu-image-comparison.md`)와 같은 실행 규칙(단일 활성 실행, DB lease, 불변 결과)을
-따르지만 별도 API·테이블·런타임이며 그 기능과 워크플로·Runner·Faster R-CNN 추론은 바꾸지 않는다.
+RTSP 영상 스트림에서 프레임을 수집하고, 플랫폼의 `capture → infer` SERVICE DAG를 실행해 Hawkeye VLM의 판정과 실제 배치 위치를 기록한다.
+콘솔 기본 화면은 영상 점검이며, 고정 샘플 이미지 점검은 `?mode=samples`에서 별도로 제공한다.
 
-**상태(2026-10-23):** API·콘솔·어댑터 구현, 범위 시험 통과, 두 이미지 push와 dev overlay 정의까지 완료. **클러스터 배포·실장비 Pod 실행은 아직 없다.**
-로컬(격리 PostgreSQL, 이 호스트 Ollama 0.32.5 · RTX 5060 Ti)에서 콘솔 화면 시작 버튼으로 두 샘플 실제 추론·저장·새로고침 유지를 확인했다.
+**상태(2026-10-23):** 클러스터 배포 완료. [CI 39925164903](https://github.com/dsa04156/edgeai/actions/runs/39925164903) 통과 후 Argo CD `Synced/Healthy`와 실제 영상 구간 세 개의 성공을 확인했다.
 
 ## 사용
 
-콘솔 메뉴 **창고 지게차 안전 점검**(`/ui/main/scenarios/hawkeye`)에서 실행 대상이 `준비됨`인지 확인하고 샘플을 고른 뒤
+콘솔 [창고 지게차 안전 점검](http://10.254.192.47:13080/ui/main/scenarios/hawkeye)에서 RTSP 카메라와 워크플로 버전을 선택하고 **점검 시작**을 누른다.
+구간을 선택하면 실제 DAG, Task의 노드·Job·Pod UID, 별도로 기록된 GPU 서버, 프레임별 판정이 보인다. **점검 중지**는 진행 중인 구간을 취소하고 다음 구간 생성을 막는다.
+
+### 고정 샘플 점검
+
+`?mode=samples`에서 실행 대상이 `준비됨`인지 확인하고 샘플을 고른 뒤
 **안전 점검 시작**을 누른다. 결과는 모델 범주와 한 줄 설명, 샘플 참조 라벨과의 일치 여부, Ollama가 측정한 처리 시간
 (`total_duration`, 로드 포함)과 API 왕복 시간, 노드와 추론 직후 `/api/ps`가 보고한 GPU/CPU 배치, 모델 digest·입력 SHA-256,
 모델 원문 출력이다. 실행 기록은 DB에 남아 새로고침 후에도 보인다. 한 번에 한 실행만 가능하다.
@@ -23,7 +26,18 @@ GPU/NPU 이미지 비교(`docs/scenarios/gpu-npu-image-comparison.md`)와 같은
 
 ## 영상 워크플로 (hawkeye-video-safety)
 
-**상태(2026-10-23):** API·실행 범위 제한·capture/infer 이미지·어댑터 frame 엔드포인트 구현과 범위 시험 통과. 클러스터 배포와 실장비 창 실행은 아직 없다.
+실제 실행 세션 `595c5e13-3150-4dc6-896f-afa5abb9e465`: 구간 1~3 SUCCEEDED(각 10개 서로 다른 프레임), 구간 4는 사용자 중지로 CANCELLED. 중지 후 실행 Job이 남지 않았고 다음 구간도 생성되지 않았다.
+
+| 실제 관측 위치 | 노드 |
+|---|---|
+| RTSP Mapper | `etri-dev0002-raspi5` |
+| capture / infer Runner | `etri-ser0004-cgnms0` |
+| Hawkeye GPU 서버 | `etri-ser0001-cg0msb` (RTX 5060 Ti) |
+
+입력 `hawkeye-forklift-video`는 [실제 공장 CCTV 데이터셋](https://data.mendeley.com/datasets/xjmtb22pff/1)의 `3_te2.mp4`를 RTSP로 반복 송출한다.
+출처·CC BY 4.0·고정 SHA-256은 `hawkeye-runtime/video-replay/NOTICE.md`와 `source.json`에 기록한다. 실시간 현장 카메라로 표시하지 않는다.
+30프레임의 모델 출력은 spill 26 / safe 4였다. 지게차 과적 영상의 판정 정확도를 검증한 결과가 아니며, 오분류를 수정하거나 참조 라벨로 대체하지 않는다.
+실행 증거는 `output/verification/hawkeye-video-20261023/deployed/`, 기존 상태 보존 비교는 `legacy-comparison.json`(기존 runtime 566·command 892·Run 350개 변경 0)이다.
 
 발행된 SERVICE 워크플로 `hawkeye-video-safety`(DAG `capture` → `infer`, BATCH 연결 `frames`)를 **연속된 BATCH Run(창)**으로 실행한다.
 각 창은 ONLINE RTSP 카메라의 Edge Mapper가 2 fps로 디코딩한 **새 프레임 10장**을 읽어 판정하고, 다음 창은 이전 창 Run이 SUCCEEDED일 때만 만든다.
@@ -106,7 +120,7 @@ BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh ollama -
 BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh adapter --push 10.254.192.47:5000/edgeai/hawkeye-adapter:<tag>
 ```
 
-두 Dockerfile에는 RUN이 없어 arm64 rootless builder가 amd64 이미지를 에뮬레이션 없이 조립한다. 2026-10-23 push(배포 안 함):
+두 Dockerfile에는 RUN이 없어 arm64 rootless builder가 amd64 이미지를 에뮬레이션 없이 조립한다. 2026-10-23 최초 이미지:
 
 | 이미지 | digest |
 |---|---|
@@ -114,10 +128,9 @@ BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh adapter 
 | `hawkeye-adapter:20261023-v1` (`python:3.12.12-slim-bookworm` + 어댑터·샘플 2장) | `sha256:c500262bfb261efb0ec128b3bf541bfb3ab47dcad374ce44dacdf5b6eccf7910` |
 
 `deploy/kubernetes/components/hawkeye-safety`가 두 digest를 고정하고 `overlays/dev`에 포함된다. Pod는 `etri-ser0001-cg0msb`,
-RuntimeClass `ra-nvidia-rtx5060`, Ollama `nvidia.com/gpu: 1`·메모리 4Gi, 어댑터만 edgeai-api에서 접근(NetworkPolicy)이며 API에
-`EDGEAI_HAWKEYE_SAFETY_*`를 추가한다. 레지스트리 manifest(플랫폼 amd64, uid 10001, entrypoint, env)와 `kubectl apply --dry-run=server`는
-확인했지만 **두 컨테이너를 클러스터에서 실행한 적은 없다**(읽기 전용 root filesystem에서의 Ollama 시작 포함). 배포 후 콘솔에서 READY와
-노드·배치를 확인하고 두 샘플을 실행해 evidence를 남긴다.
+RuntimeClass `ra-nvidia-rtx5060`, Ollama `nvidia.com/gpu: 1`·메모리 4Gi이며 API와 `edgeai-runtimes` Runner만 어댑터에 접근한다(NetworkPolicy).
+영상 배포에서는 adapter v2 `sha256:c7ed0047464cec3c4bd9760c2dbad0d2d4ff83920e0d55609cdcddb67d320310`, workflow v2
+`sha256:4c94d2b934bb06e7263d8786bc5e3595fe4eb7c34d78a274188c659ba27e2520`을 사용한다. 실제 클러스터에서 READY·GPU 로드·프레임 추론을 확인했다.
 
 ## 시험
 

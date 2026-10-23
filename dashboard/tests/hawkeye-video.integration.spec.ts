@@ -147,7 +147,7 @@ test("video is the default: start, follow windows on the DAG with real placement
   await expect(flow.getByRole("button", { name: /infer/ })).not.toContainText("etri-ser0001");
 
   // The session advances to window 2; the earlier window keeps its verified result.
-  await expect(page.getByRole("button", { name: /구간 2/ })).toContainText("이전 구간과 2.0초 간격", { timeout: 15000 });
+  await expect(page.getByRole("button", { name: /구간 2/ })).toContainText("이전 구간 시작 후 12.0초", { timeout: 15000 });
   await page.getByRole("button", { name: /구간 1/ }).click();
   await expect(page.getByRole("link", { name: "실행 상세 열기" })).toHaveAttribute("href", new RegExp(`runs\\?run=${RUNS[0]}`));
   const inferNode = flow.getByRole("button", { name: /infer/ });
@@ -192,4 +192,70 @@ test("an offline camera cannot start and states why", async ({ page }) => {
   await expect(page.getByRole("button", { name: "점검 시작" })).toBeDisabled();
   expect(state.starts).toHaveLength(0);
   expect(await noOverflow(page)).toBe(true);
+});
+
+test("frame images load at most two at a time, are not refetched by polling, and follow the selected window", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  api(page);
+  const result = (n: number) => ({ ...detections, frames: Array.from({ length: n }, (_, i) => ({ ...detections.frames[0], seq: i + 1, sha256: `${i}` })) });
+  await page.route(`**/api/control-plane/tasks/${task(1, "infer")}/results/detections/content`, (route) => route.fulfill({ json: result(10) }));
+  await page.route(`**/api/control-plane/tasks/${task(2, "infer")}/results`, (route) =>
+    route.fulfill({ json: { taskId: task(2, "infer"), items: [{ artifacts: [{ port: "detections", mediaType: "application/json" }] }] } }));
+  await page.route(`**/api/control-plane/tasks/${task(2, "infer")}/results/detections/content`, (route) => route.fulfill({ json: result(3) }));
+  // A slow frame reader that records how many reads overlap, as HawkeyeVideoService's bounded readers would see them.
+  const reads = new Map<string, number>();
+  let inFlight = 0, maxInFlight = 0;
+  await page.route("**/api/control-plane/scenarios/hawkeye-safety/video/tasks/*/frames/*", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    reads.set(path, (reads.get(path) ?? 0) + 1);
+    maxInFlight = Math.max(maxInFlight, ++inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    inFlight--;
+    if (path.endsWith(`${task(2, "capture")}/frames/3`))
+      return route.fulfill({ status: 429, json: { code: "RESULT_PREVIEW_BUSY", message: "RESULT_PREVIEW_BUSY" } });
+    return route.fulfill({ contentType: "image/jpeg", body: JPEG });
+  });
+
+  await page.goto("/ui/main/scenarios/hawkeye");
+  await page.getByRole("button", { name: "점검 시작" }).click();
+  await expect(page.getByRole("button", { name: /구간 2/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByAltText("구간 2 프레임 2")).toBeVisible();
+  await expect(page.getByText("프레임 불러오기 실패 · RESULT_PREVIEW_BUSY")).toBeVisible();
+
+  await page.getByRole("button", { name: /구간 1/ }).click();
+  for (let seq = 1; seq <= 10; seq++) {
+    const image = page.getByAltText(`구간 1 프레임 ${seq}`, { exact: true });
+    await expect(image).toHaveAttribute("src", /^blob:/);
+    expect(await image.evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth))).toBeGreaterThan(0);
+  }
+  await expect(page.getByText(/프레임 불러오기 실패/)).toHaveCount(0);
+  const firstSrc = await page.getByAltText("구간 1 프레임 1", { exact: true }).getAttribute("src");
+  // The session is still running, so the 2 s poll re-reads this window's detections twice here.
+  await page.waitForTimeout(4500);
+  const window1 = [...reads].filter(([path]) => path.includes(task(1, "capture")));
+  expect(window1).toHaveLength(10);
+  expect(window1.every(([, count]) => count === 1)).toBe(true);
+  expect(maxInFlight).toBeLessThanOrEqual(2);
+
+  // Window 2's Run answers late: until it does, nothing of window 1 may appear under the "구간 2" label.
+  let release!: () => void;
+  const late = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`**/api/control-plane/workflow-runs/${RUNS[1]}**`, async (route) => {
+    await late;
+    return route.fallback();
+  });
+  await page.getByRole("button", { name: /구간 2/ }).click();
+  await expect(page.getByRole("heading", { name: "구간 2 판정 결과" })).toBeVisible();
+  await expect(page.getByText("실행 정보를 불러오는 중입니다.")).toBeVisible();
+  await expect(page.locator(".hv-frames")).toHaveCount(0);
+  await expect(page.getByAltText(/프레임/)).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "워크플로 단계" })).not.toContainText("etri-ser0003-runner");
+  expect(await page.evaluate((url) => fetch(url!).then(() => true, () => false), firstSrc)).toBe(false);
+  release();
+  await expect(page.getByAltText("구간 2 프레임 1", { exact: true })).toHaveAttribute("src", /^blob:/);
+  await expect(page.locator(".hv-frames > li")).toHaveCount(3);
+  await expect(page.getByAltText(/구간 1 프레임/)).toHaveCount(0);
+  expect(maxInFlight).toBeLessThanOrEqual(2);
+  expect(errors).toEqual([]);
 });

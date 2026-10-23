@@ -76,7 +76,7 @@
         >
           <strong>구간 {{ w.seq }}</strong>
           <span>{{ statusLabel(w.runState) }}</span>
-          <small v-if="gaps[i] != null">이전 구간과 {{ (gaps[i]! / 1000).toFixed(1) }}초 간격</small>
+          <small v-if="gaps[i] != null">이전 구간 시작 후 {{ (gaps[i]! / 1000).toFixed(1) }}초</small>
         </button>
       </div>
     </section>
@@ -105,14 +105,18 @@
       <p v-if="framesNote" class="native-note">{{ framesNote }}</p>
       <ol v-if="frames.length" class="hv-frames">
         <li v-for="f in frames" :key="f.seq" class="hv-frame">
-          <img
-            v-if="captureTaskId"
-            :src="`/api/control-plane/${BASE}/tasks/${captureTaskId}/frames/${f.seq}`"
-            :alt="`구간 ${windowSeq} 프레임 ${f.seq}`"
-            loading="lazy"
-            width="320"
-            height="180"
-          />
+          <template v-if="captureTaskId">
+            <img
+              v-if="frameImages[f.seq]?.url"
+              :src="frameImages[f.seq]!.url"
+              :alt="`구간 ${windowSeq} 프레임 ${f.seq}`"
+              width="320"
+              height="180"
+            />
+            <p v-else :class="['hv-nopreview', { failed: frameImages[f.seq]?.error }]">
+              {{ frameImages[f.seq]?.error ?? "프레임을 불러오는 중…" }}
+            </p>
+          </template>
           <div>
             <p class="hv-category" :class="{ unread: f.category == null }">{{ categoryText(f) }}</p>
             <p v-if="f.explanation" class="hv-explanation">{{ f.explanation }}</p>
@@ -164,7 +168,7 @@ import {
   sourceAddress,
   statusLabel,
   tone,
-  windowGaps,
+  windowStartIntervals,
   type Camera,
   type CameraBinding,
   type DetectionsView,
@@ -232,15 +236,7 @@ const startHelp = computed(() => {
   return "시작하면 첫 구간이 바로 실행되고, 구간이 끝날 때마다 다음 구간을 만듭니다.";
 });
 const windowsAsc = computed(() => [...(session.value?.windows ?? [])].sort((a, b) => a.seq - b.seq));
-const gaps = computed(() =>
-  windowGaps(
-    windowsAsc.value.map((w) => ({
-      createdAt: w.createdAt,
-      // A finished Run is no longer updated, so its updatedAt is its end time.
-      finishedAt: ["SUCCEEDED", "FAILED", "CANCELLED"].includes(w.runState) ? w.updatedAt : null,
-    })),
-  ),
-);
+const gaps = computed(() => windowStartIntervals(windowsAsc.value.map((w) => w.createdAt)));
 const selectedWindow = computed(() => session.value?.windows.find((w) => w.seq === windowSeq.value) ?? null);
 const summary = computed(() => {
   const s = session.value;
@@ -277,6 +273,11 @@ const graph = computed(() => {
 });
 const frames = computed(() => detections.value?.frames ?? []);
 const node = computed(() => graph.value?.nodes.find((n) => n.id === nodeId.value));
+const frameImages = ref<Record<number, { url?: string; error?: string }>>({});
+// Polling rebuilds the detections object every 2 s; only a different capture Task or frame set reloads images.
+const frameKey = computed(() =>
+  captureTaskId.value && frames.value.length ? `${captureTaskId.value}:${frames.value.map((f) => f.seq).join(",")}` : "",
+);
 const framesNote = computed(() => {
   if (!run.value) return "실행 정보를 불러오는 중입니다.";
   const d = detections.value;
@@ -342,12 +343,13 @@ function selectWindow(seq: number) {
 let windowGeneration = 0;
 async function loadWindow() {
   const w = selectedWindow.value, generation = ++windowGeneration;
-  if (!w) {
+  // A different Run must not keep showing the previous window's frames and details under the new window's label.
+  if (!w || w.runId !== run.value?.run.id) {
     run.value = null;
     placements.value = [];
     detections.value = null;
-    return;
   }
+  if (!w) return;
   const [detail, where] = await Promise.all([
     get<Schema["RunDetail"]>(`workflow-runs/${w.runId}`),
     get<Schema["Placement"][]>(`workflow-runs/${w.runId}/placements`),
@@ -366,6 +368,39 @@ async function loadWindow() {
   placements.value = where;
   detections.value = read;
 }
+let frameLoad: AbortController | null = null;
+function releaseFrames() {
+  frameLoad?.abort();
+  frameLoad = null;
+  for (const f of Object.values(frameImages.value)) if (f.url) URL.revokeObjectURL(f.url);
+  frameImages.value = {};
+}
+// The frame reader admits only a few concurrent reads and answers 429 RESULT_PREVIEW_BUSY beyond that, so at most
+// two frames are fetched at a time.
+watch(frameKey, (key) => {
+  releaseFrames();
+  if (!key) return;
+  const controller = (frameLoad = new AbortController()),
+    taskId = captureTaskId.value!,
+    queue = frames.value.map((f) => f.seq);
+  const next = async (): Promise<void> => {
+    const seq = queue.shift();
+    if (seq == null || controller.signal.aborted) return;
+    try {
+      const response = await request(`${BASE}/tasks/${taskId}/frames/${seq}`, {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
+      });
+      const blob = await response.blob();
+      if (controller.signal.aborted) return;
+      frameImages.value[seq] = { url: URL.createObjectURL(blob) };
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      frameImages.value[seq] = { error: `프레임 불러오기 실패 · ${cause instanceof Error ? cause.message : "조회 실패"}` };
+    }
+    return next();
+  };
+  void Promise.all([next(), next()]);
+});
 function start() {
   if (!canStart.value || !camera.value) return;
   void act(async () => {
@@ -428,6 +463,7 @@ onMounted(() => loadAll(() => refresh()));
 onBeforeUnmount(() => {
   alive = false;
   if (preview.value) URL.revokeObjectURL(preview.value);
+  releaseFrames();
 });
 usePoll(refreshPreview, 2000);
 // Non-overlapping and idle while the tab is hidden; a running session is followed every 2 s, otherwise every 10 s.
@@ -598,6 +634,11 @@ usePoll(async () => {
   object-fit: cover;
   border-radius: var(--ks-radius-base);
   background: var(--ks-bg-base);
+}
+.hv-nopreview.failed {
+  padding: var(--ks-spacing-3);
+  color: var(--ks-text-error);
+  overflow-wrap: anywhere;
 }
 .hv-category {
   font-size: var(--ks-font-size-md);
