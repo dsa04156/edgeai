@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - replay.yaml
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_MAPPER_RTSP, value: '10.254.192.47:5000/edgeai/mapper-rtsp@sha256:3a896713cdd9c5a44421c28a78d03ee4032158a8270568741a7bb9589911ec94'}

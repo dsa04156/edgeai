@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-hawkeye-video-replay
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: edgeai-hawkeye-video-replay}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: edgeai-hawkeye-video-replay}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {kubernetes.io/hostname: etri-ser0001-cg0msb}
+      containers:
+        - name: replay
+          image: 10.254.192.47:5000/edgeai/hawkeye-video-replay@sha256:d4664972ed0034497543b521a350d0ef1923b7142adaba187266272ac59e4cbb
+          ports:
+            - {name: rtsp, containerPort: 8554, hostPort: 18555}
+          readinessProbe:
+            tcpSocket: {port: rtsp}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: '1', memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities: {drop: [ALL]}

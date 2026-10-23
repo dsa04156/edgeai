@@ -12,7 +12,7 @@ async function fixture(action) {
     let body = "";
     for await (const part of req) body += part;
     calls.push({ path: req.url, method: req.method, body, headers: req.headers });
-    if (req.url.endsWith("/image")) {
+    if (req.url.endsWith("/image") || /\/frames\/[0-9]+$/.test(req.url)) {
       res.setHeader("Content-Type", "image/jpeg");
       return res.end(jpeg);
     }
@@ -104,6 +104,78 @@ test("Hawkeye routes are exact, method-bound and same-origin", async () => {
       method: "POST", headers: { Origin: "http://evil.example", "Content-Type": "application/json" }, body: "{}",
     });
     assert.equal(crossSite.status, 403);
+    assert.deepEqual(calls, []);
+  });
+});
+
+test("Hawkeye video reads, session detail and verified frame images reach the management API", async () => {
+  await fixture(async (url, calls) => {
+    for (const path of [
+      "scenarios/hawkeye-safety/video",
+      "scenarios/hawkeye-safety/video/sessions?limit=10&offset=0",
+      `scenarios/hawkeye-safety/video/sessions/${run}`,
+    ]) {
+      const response = await fetch(`${url}/api/control-plane/${path}`, { headers: { Cookie: "EDGEAI_SESSION=s" } });
+      assert.equal(response.status, 200, path);
+    }
+    const frame = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/tasks/${run}/frames/12`, {
+      headers: { Cookie: "EDGEAI_SESSION=s" },
+    });
+    assert.equal(frame.status, 200);
+    assert.equal(frame.headers.get("content-type"), "image/jpeg");
+    assert.deepEqual(Buffer.from(await frame.arrayBuffer()), jpeg);
+    assert.deepEqual(calls.map((call) => call.path), [
+      "/api/v1/scenarios/hawkeye-safety/video",
+      "/api/v1/scenarios/hawkeye-safety/video/sessions?limit=10&offset=0",
+      `/api/v1/scenarios/hawkeye-safety/video/sessions/${run}`,
+      `/api/v1/scenarios/hawkeye-safety/video/tasks/${run}/frames/12`,
+    ]);
+    assert.ok(calls.every((call) => call.headers.cookie === "EDGEAI_SESSION=s"));
+  });
+});
+
+test("Hawkeye video start and stop forward CSRF, Idempotency-Key and the JSON body", async () => {
+  await fixture(async (url, calls) => {
+    const body = `{"workflowVersionId":"${run}","camera":{"id":"hawkeye-forklift-video","uid":"${run}"}}`;
+    const started = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/sessions`, {
+      method: "POST",
+      headers: { Origin: url, "Content-Type": "application/json", "X-CSRF-TOKEN": "t", "Idempotency-Key": run },
+      body,
+    });
+    assert.equal(started.status, 200);
+    const stopped = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/sessions/${run}/stop`, {
+      method: "POST",
+      headers: { Origin: url, "Content-Type": "application/json", "X-CSRF-TOKEN": "t" },
+      body: "{}",
+    });
+    assert.equal(stopped.status, 200);
+    assert.deepEqual(calls.map((c) => [c.method, c.path, c.body, c.headers["x-csrf-token"]]), [
+      ["POST", "/api/v1/scenarios/hawkeye-safety/video/sessions", body, "t"],
+      ["POST", `/api/v1/scenarios/hawkeye-safety/video/sessions/${run}/stop`, "{}", "t"],
+    ]);
+    assert.equal(calls[0].headers["idempotency-key"], run);
+  });
+});
+
+test("Hawkeye video routes are exact and method-bound", async () => {
+  await fixture(async (url, calls) => {
+    for (const [path, method] of [
+      ["scenarios/hawkeye-safety/video", "POST"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}`, "POST"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/stop`, "GET"],
+      ["scenarios/hawkeye-safety/video/sessions/x", "GET"],
+      [`scenarios/hawkeye-safety/video/tasks/${run}/frames/12`, "POST"],
+      [`scenarios/hawkeye-safety/video/tasks/${run}/frames/-1`, "GET"],
+      [`scenarios/hawkeye-safety/video/tasks/${run}/frames/12/image`, "GET"],
+      ["scenarios/hawkeye-safety/video/tasks/x/frames/1", "GET"],
+    ]) {
+      const response = await fetch(`${url}/api/control-plane/${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        ...(method === "GET" ? {} : { body: "{}" }),
+      });
+      assert.ok([404, 405].includes(response.status), `${method} ${path}: ${response.status}`);
+    }
     assert.deepEqual(calls, []);
   });
 });

@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Hawkeye video sessions (docs/scenarios/hawkeye-warehouse-safety.md). Turns the runtime on for the
+# hawkeye-video-safety workflow ONLY: EDGEAI_RUNTIME_WORKFLOW_KEYS keeps every other Run, and the runtime rows,
+# commands, retries and publications imported with the HDD data store, out of every worker and dispatch path.
+# Container env overrides the edgeai-config EDGEAI_RUNTIME_ENABLED=false of components/hdd-data-store.
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_RUNTIME_WORKFLOW_KEYS, value: hawkeye-video-safety}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_RUNTIME_ENABLED, value: 'true'}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_HAWKEYE_VIDEO_ENABLED, value: 'true'}

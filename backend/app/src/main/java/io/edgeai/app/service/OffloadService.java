@@ -45,6 +45,7 @@ public class OffloadService {
         var remoteTarget=remote?remoteProvider.select(providerKey):null;
         var initial=executions.task(taskId).orElseThrow(()->error(404,"TASK_NOT_FOUND","작업을 찾을 수 없습니다."));
         var run=executions.run(initial.runId(),true).orElseThrow();var task=executions.task(taskId).orElseThrow();
+        if(!runtimes.inScope(run.id()))throw error(409,"RUNTIME_SCOPE_EXCLUDED","이 워크플로는 현재 실행 범위에 포함되지 않아 위치를 전환할 수 없습니다.");
         previous=operations.byKey(idempotency);if(previous.isPresent())return replay(previous.get(),digest);
         var attempt=executions.attempt(source).orElseThrow(()->error(409,"OFFLOAD_SOURCE_CHANGED","현재 실행 중인 Attempt를 선택하세요."));
         var runtime=runtimes.byAttempt(source).orElse(null);

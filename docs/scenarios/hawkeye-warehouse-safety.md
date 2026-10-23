@@ -21,6 +21,31 @@ GPU/NPU 이미지 비교(`docs/scenarios/gpu-npu-image-comparison.md`)와 같은
 | forklift_0004 (forklift_violation) | forklift_violation · 일치 | 799.9 ms (380.4 ms) | 810.1 ms |
 | forklift_0024 (safe) | spill · 불일치 | 642.7 ms (188.8 ms) | 647.2 ms |
 
+## 영상 워크플로 (hawkeye-video-safety)
+
+**상태(2026-10-23):** API·실행 범위 제한·capture/infer 이미지·어댑터 frame 엔드포인트 구현과 범위 시험 통과. 클러스터 배포와 실장비 창 실행은 아직 없다.
+
+발행된 SERVICE 워크플로 `hawkeye-video-safety`(DAG `capture` → `infer`, BATCH 연결 `frames`)를 **연속된 BATCH Run(창)**으로 실행한다.
+각 창은 ONLINE RTSP 카메라의 Edge Mapper가 2 fps로 디코딩한 **새 프레임 10장**을 읽어 판정하고, 다음 창은 이전 창 Run이 SUCCEEDED일 때만 만든다.
+창과 창 사이(Job 시작·추론 시간)의 프레임은 읽지 않으므로 연속 전량 처리가 아니다.
+
+| 단계 | 실행 주체 | 위치 |
+|---|---|---|
+| 카메라·프레임 추출 | 카메라 장치와 해당 Edge 노드의 RTSP Mapper(ffmpeg). Task가 아님 | Run 접수 시 `parameters.cameraSource`(장치 UID·노드·Mapper Deployment·주소·설정 digest·source generation) |
+| `capture` Task | Runner Job. Mapper `/devices/{id}/preview`에서 디코딩 시각이 앞 프레임보다 늦은 프레임만 받아 ustar(`manifest.json`+JPEG)로 저장 | Run의 Placement(실제 Pod 노드) |
+| `infer` Task | Runner Job. 프레임마다 어댑터 `POST /classify-frame` 호출, 원문·범주·시간 저장 | Run의 Placement. 가속기(어댑터 노드·Pod·`/api/ps` GPU/CPU)는 `detections` 결과에 따로 기록 |
+| 결과 | Task Result(고정 object version·SHA-256) | MinIO |
+
+- 원본 오류(OFFLINE, 응답 없음, 오래된 프레임, 디코딩 시각 역행, 설정·generation 변경)는 Task를 실패시키며 고정 샘플로 대체하지 않는다. 실패·취소된 창은 세션을 FAILED로 끝낸다.
+  세션 시작 후 같은 UID에서 카메라 설정이나 source generation이 바뀌면 다음 창을 만들지 않고 `CAMERA_SOURCE_CHANGED`로 끝낸다.
+- 모델 출력 첫 줄에서 범주를 읽지 못한 프레임은 `category=null`로 남기며 safe로 바꾸지 않는다. 판정 정확도를 보장하지 않는다.
+- API: `GET …/hawkeye-safety/video`, `POST|GET …/video/sessions`, `GET …/video/sessions/{id}`, `POST …/video/sessions/{id}/stop`,
+  `GET …/video/tasks/{taskId}/frames/{seq}`. 창의 Task·Attempt·배치·결과는 기존 Run API를 그대로 쓴다.
+- 실행 범위: `EDGEAI_RUNTIME_WORKFLOW_KEYS`(기본 `*`)에 키를 지정하면 그 워크플로의 Run만 dispatch되고, 다른 Run과 이전에 남은 runtime 행·명령·재시도·결과
+  발행·전환은 어떤 worker 조회에도 잡히지 않는다. `deploy/kubernetes/components/hawkeye-video`가 `hawkeye-video-safety`만 허용하고 실행 기능을 켠다.
+- 게시: `hawkeye-runtime/workflow/hawkeye-video-safety.json`(Profile·DAG), `python3 -I hawkeye-runtime/workflow/publish.py`(공개 API, 재요청 안전).
+  이미지는 `bash hawkeye-runtime/build.sh workflow --push <ref>`(배포된 Runner + 두 workload).
+
 ## 입력과 모델 (출처·라이선스)
 
 | 항목 | 값 |

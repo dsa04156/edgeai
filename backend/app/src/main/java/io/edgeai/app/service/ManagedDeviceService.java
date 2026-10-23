@@ -273,7 +273,10 @@ public class ManagedDeviceService {
             var response=client.send(request,HttpResponse.BodyHandlers.ofString());if(response.statusCode()!=200&&response.statusCode()!=422)throw error(503,"MAPPER_UNAVAILABLE","Mapper 연결 확인을 완료할 수 없습니다.");return map(JSON.parse(response.body(),16384));
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw error(503,"MAPPER_UNAVAILABLE","연결 확인이 중단되었습니다.");}catch(ControlPlaneException e){throw e;}catch(Exception e){throw error(503,"MAPPER_UNAVAILABLE","대상 Edge Mapper에 연결할 수 없습니다. 준비 상태를 확인하세요.");}
     }
-    public byte[] preview(String id,UUID uid){
+    /** Server-owned Run parameter holding the camera identity pinned when the Run is accepted. */
+    public static final String CAMERA_BINDING="cameraSource";
+    private record Camera(String id,String uid,String nodeName,String address,String configurationSha256,String generation,Map<String,Object> resource) {}
+    private Camera camera(String id,UUID uid){
         var resource=request("GET",path("devices")+"/"+name(id),null,200);owned(resource);
         var metadata=map(resource.get("metadata"));if(!uid.toString().equals(metadata.get("uid")))throw error(409,"DEVICE_IDENTITY_CHANGED","카메라가 변경됐습니다. 다시 선택하세요.");
         var spec=map(resource.get("spec"));if(!"edgeai-rtsp".equals(map(spec.get("protocol")).get("protocolName")))throw error(400,"NOT_A_CAMERA","RTSP 카메라만 미리볼 수 있습니다.");
@@ -281,11 +284,37 @@ public class ManagedDeviceService {
         var profile=JSON.decode(Objects.toString(annotations.get("edgeai.io/device-profile")));
         String generation=Objects.toString(annotations.get(ObservationIdentity.ANNOTATION),"");
         try{UUID.fromString(generation);}catch(IllegalArgumentException e){throw error(503,"CAMERA_IDENTITY_UNAVAILABLE","카메라 수집 설정을 확인하세요.");}
-        var target=node(Objects.toString(spec.get("nodeName")));String address=null;
+        String nodeName=Objects.toString(spec.get("nodeName"));var target=node(nodeName);String address=null;
         for(var item:(List<?>)map(target.get("status")).get("addresses")){var a=map(item);if("InternalIP".equals(a.get("type")))address=Objects.toString(a.get("address"));}
         if(address==null)throw error(503,"MAPPER_UNAVAILABLE","노드 주소를 확인할 수 없습니다.");
+        return new Camera(id,uid.toString(),nodeName,address,configuration(profile),generation,resource);
+    }
+    /** {"id","uid"} of a camera selected for a Run; part of the Run request digest. */
+    public static Map<String,Object> cameraReference(Object input){
+        var ref=map(input);fields(ref,Set.of("id","uid"),Set.of("id","uid"));
+        return Map.of("id",name(ref.get("id")),"uid",UUID.fromString(WorkflowInput.text(ref.get("uid"),36)).toString());
+    }
+    /**
+     * Pins the ONLINE RTSP camera a capture Task reads. The Mapper serves a frame only for this exact
+     * configuration digest and source generation, so a changed camera fails the Task instead of feeding other video.
+     */
+    public Map<String,Object> cameraSource(Object input){
+        var ref=cameraReference(input);var camera=camera((String)ref.get("id"),UUID.fromString((String)ref.get("uid")));
+        var view=view(camera.resource());
+        if(!"ONLINE".equals(view.get("state")))throw error(409,"WORKFLOW_SOURCE_UNAVAILABLE","카메라가 ONLINE이 아닙니다. 영상 수신 상태를 확인하세요.");
+        var binding=new TreeMap<String,Object>();
+        binding.put("deviceId",camera.id());binding.put("deviceUid",camera.uid());binding.put("nodeName",camera.nodeName());
+        binding.put("mapperUrl","http://"+camera.address()+":"+mapperPort("rtsp"));
+        // The Mapper Deployment seen Ready at admission; its Pod is not observed here and is not claimed.
+        binding.put("mapperDeployment",map(view.get("mapper")).get("name"));
+        binding.put("configurationSha256",camera.configurationSha256());binding.put("sourceGeneration",camera.generation());
+        binding.put("pinnedAt",clock.instant().toString());
+        return binding;
+    }
+    public byte[] preview(String id,UUID uid){
+        var camera=camera(id,uid);
         try(var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()){
-            var uri=new URI("http",null,address,mapperPort("rtsp"),"/devices/"+id+"/preview","configurationSha256="+configuration(profile)+"&sourceGeneration="+generation,null);
+            var uri=new URI("http",null,camera.address(),mapperPort("rtsp"),"/devices/"+id+"/preview","configurationSha256="+camera.configurationSha256()+"&sourceGeneration="+camera.generation(),null);
             var pending=client.sendAsync(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(7)).GET().build(),info->new CameraFrameBody());
             try {
                 var response=pending.get(7,java.util.concurrent.TimeUnit.SECONDS);

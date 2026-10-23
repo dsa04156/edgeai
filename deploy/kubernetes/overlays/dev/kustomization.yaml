@@ -8,6 +8,8 @@ resources:
 components:
   - ../../components/scenario-runtimes
   - ../../components/hawkeye-safety
+  - ../../components/hawkeye-video-replay
+  - ../../components/hawkeye-video
   - ../../components/stream
   - ../../components/hdd-data-store
 patches:

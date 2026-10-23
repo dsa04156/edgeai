@@ -68,13 +68,15 @@ export function createDeviceRegistrationMiddleware({
         "scenarios/image-comparison/runs",
         "scenarios/hawkeye-safety",
         "scenarios/hawkeye-safety/runs",
+        "scenarios/hawkeye-safety/video",
+        "scenarios/hawkeye-safety/video/sessions",
       ].includes(target) ||
       /^scenarios\/hawkeye-safety\/samples\/[a-z0-9_]{1,40}\/image$/.test(target) ||
       new RegExp(
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
       ).test(target) ||
       new RegExp(
-        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$`,
+        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$|^scenarios/hawkeye-safety/video/sessions/${uuid}$|^scenarios/hawkeye-safety/video/tasks/${uuid}/frames/[0-9]{1,6}$`,
       ).test(target);
     const cameraPreview =
       /^managed-devices\/[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?\/preview$/.test(
@@ -94,9 +96,10 @@ export function createDeviceRegistrationMiddleware({
         "inference/predict",
         "scenarios/image-comparison/runs",
         "scenarios/hawkeye-safety/runs",
+        "scenarios/hawkeye-safety/video/sessions",
       ].includes(target) ||
       new RegExp(
-        `^scenarios/image-comparison/runs/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
+        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
       ).test(target);
     const coreDelete =
       (profile && target.includes("/versions/")) ||

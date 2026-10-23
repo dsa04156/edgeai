@@ -1,0 +1,47 @@
+{
+  "profiles": [
+    {
+      "key": "hawkeye-frame-capture",
+      "version": "1.0.0",
+      "spec": {
+        "apiVersion": "edgeai/v1",
+        "image": "10.254.192.47:5000/edgeai/hawkeye-workflow@sha256:4c94d2b934bb06e7263d8786bc5e3595fe4eb7c34d78a274188c659ba27e2520",
+        "command": ["python3", "/opt/edgeai/hawkeye/hawkeye_capture.py"],
+        "args": [],
+        "resources": {"requests": {"cpu": "100m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}},
+        "platform": {"os": "linux", "architectures": ["amd64"]},
+        "inputs": {},
+        "outputs": {"frames": {"mediaType": "application/x-tar", "maxBytes": 16777216}},
+        "timeoutSeconds": 300,
+        "qos": "Burstable"
+      }
+    },
+    {
+      "key": "hawkeye-frame-infer",
+      "version": "1.0.0",
+      "spec": {
+        "apiVersion": "edgeai/v1",
+        "image": "10.254.192.47:5000/edgeai/hawkeye-workflow@sha256:4c94d2b934bb06e7263d8786bc5e3595fe4eb7c34d78a274188c659ba27e2520",
+        "command": ["python3", "/opt/edgeai/hawkeye/hawkeye_infer.py"],
+        "args": [],
+        "resources": {"requests": {"cpu": "100m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}},
+        "platform": {"os": "linux", "architectures": ["amd64"]},
+        "inputs": {"frames": {"mediaType": "application/x-tar", "maxBytes": 16777216, "required": true}},
+        "outputs": {"detections": {"mediaType": "application/json", "maxBytes": 1048576}},
+        "timeoutSeconds": 900,
+        "qos": "Burstable"
+      }
+    }
+  ],
+  "workflow": {"key": "hawkeye-video-safety", "displayName": "창고 지게차 영상 안전 점검"},
+  "version": {
+    "version": "1.0.0",
+    "tasks": [
+      {"key": "capture", "profile": "hawkeye-frame-capture",
+       "parameters": {"frames": 10, "maxFrameAgeSeconds": 10, "frameTimeoutSeconds": 8}},
+      {"key": "infer", "profile": "hawkeye-frame-infer",
+       "parameters": {"adapterUrl": "http://edgeai-hawkeye-safety.edgeai.svc:8080", "requestTimeoutSeconds": 120, "busyWaitSeconds": 120}}
+    ],
+    "dependencies": [{"fromTask": "capture", "toTask": "infer", "fromPort": "frames", "toPort": "frames", "mode": "BATCH"}]
+  }
+}

@@ -84,7 +84,10 @@ test("the menu opens the page; start, progress and the stored result survive a r
   if (testInfo.project.name === "desktop") {
     await page.getByRole("link", { name: "창고 지게차 안전 점검" }).click();
     await expect(page).toHaveURL(/\/ui\/main\/scenarios\/hawkeye$/);
-  } else await page.goto("/ui/main/scenarios/hawkeye");
+    // Video is the default view; the fixed samples are the secondary option.
+    await page.getByText("샘플 이미지 점검", { exact: true }).click();
+    await expect(page).toHaveURL(/\/ui\/main\/scenarios\/hawkeye\?mode=samples$/);
+  } else await page.goto("/ui/main/scenarios/hawkeye?mode=samples");
   await expect(page.getByText("Hawkeye Warehouse Safety VLM (Qwen3.5-2B LoRA, Q4_K_M + F16 vision encoder)")).toBeVisible();
   await expect(page.getByText("준비됨", { exact: true })).toBeVisible();
   await expect(page.getByText("etri-ser0001-cg0msb", { exact: true })).toBeVisible();
@@ -121,7 +124,7 @@ test("the menu opens the page; start, progress and the stored result survive a r
 
 test("unreadable output is a failure and never shown as safe", async ({ page }) => {
   api(page, { category: null, text: "The aisle looks fine." });
-  await page.goto("/ui/main/scenarios/hawkeye");
+  await page.goto("/ui/main/scenarios/hawkeye?mode=samples");
   await page.getByRole("button", { name: "안전 점검 시작" }).click();
   const result = page.locator(".hawkeye-run");
   await expect(result).toContainText("범주 없음 · 판정 실패", { timeout: 15000 });
@@ -142,7 +145,7 @@ test("an unready or undeployed runtime is explicit and cannot start a run", asyn
     if (path === "scenarios/hawkeye-safety/runs") return route.fulfill({ json: { items: [], nextOffset: null } });
     return route.fulfill({ status: 404, json: { message: `unmocked ${path}` } });
   });
-  await page.goto("/ui/main/scenarios/hawkeye");
+  await page.goto("/ui/main/scenarios/hawkeye?mode=samples");
   await expect(page.getByText("준비 안 됨", { exact: true })).toBeVisible();
   await expect(page.getByText("RuntimeError: warm-up produced no output")).toBeVisible();
   await expect(page.getByRole("button", { name: "안전 점검 시작" })).toBeDisabled();

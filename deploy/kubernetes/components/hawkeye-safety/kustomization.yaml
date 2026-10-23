@@ -8,7 +8,7 @@ images:
     digest: sha256:c57dc2929e6c883d76eb9d555ebf4844d22d2362b9d81469d73ffade35ef93b0
   - name: edgeai-hawkeye-adapter
     newName: 10.254.192.47:5000/edgeai/hawkeye-adapter
-    digest: sha256:c500262bfb261efb0ec128b3bf541bfb3ab47dcad374ce44dacdf5b6eccf7910
+    digest: sha256:c7ed0047464cec3c4bd9760c2dbad0d2d4ff83920e0d55609cdcddb67d320310
 patches:
   - target: {kind: Deployment, name: edgeai-api}
     patch: |-

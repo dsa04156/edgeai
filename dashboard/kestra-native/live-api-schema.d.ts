@@ -747,6 +747,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios/hawkeye-safety/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 영상 안전 점검(발행된 SERVICE 워크플로) 구성
+         * @description 영상 점검은 발행된 SERVICE 워크플로(capture → infer)를 연속된 BATCH Run(창)으로 실행합니다. 각 창은 RTSP 카메라의 Edge Mapper가 디코딩한 새 프레임을 정해진 개수만 읽고, 창과 창 사이의 프레임은 읽지 않습니다. executes는 실행 기능이 켜져 있고 실행 범위 (EDGEAI_RUNTIME_WORKFLOW_KEYS)에 이 워크플로 키가 포함될 때만 true이며, false이면 시작을 거절합니다. versions는 최근 발행 버전 20개입니다.
+         */
+        get: operations["getHawkeyeVideoScenario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/video/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 영상 점검 세션 기록
+         * @description 생성 시각 역순입니다. 목록 항목의 windows는 비어 있고 windowCount만 제공합니다.
+         */
+        get: operations["listHawkeyeVideoSessions"];
+        put?: never;
+        /**
+         * 영상 점검 세션 시작 (첫 창 Run 생성)
+         * @description 선택한 발행 버전과 RTSP 카메라로 세션을 만들고 첫 창 Run을 같은 트랜잭션에서 생성합니다. 카메라가 ONLINE이 아니거나 UID가 다르면 세션 없이 409입니다. Run 생성 시 서버가 카메라의 설정 digest·source generation·Mapper 주소를 parameters.cameraSource로 고정하고, capture Task는 그 신원과 다른 영상을 받지 않습니다. 이전 창 Run이 SUCCEEDED이면 다음 창을 만들고 최대 창 수에서 COMPLETED, 창이 FAILED·CANCELLED이면 다음 창 없이 FAILED입니다. 서버 전체에서 RUNNING 세션은 1개입니다. 같은 Idempotency-Key와 같은 요청은 200으로 기존 세션을, 다른 요청은 409입니다.
+         */
+        post: operations["startHawkeyeVideoSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 영상 점검 세션 상세
+         * @description windows는 최신 창부터이며 각 창의 Run ID와 현재 Run 상태입니다. Task·Attempt·배치·Result는 해당 Run의 공개 API로 조회합니다.
+         */
+        get: operations["getHawkeyeVideoSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 영상 점검 세션 중지
+         * @description 세션을 STOPPED로 끝내고 끝나지 않은 창 Run을 취소합니다. 중지가 확정된 뒤에는 다음 창을 만들지 않습니다. 이미 끝난 세션은 그대로 반환합니다.
+         */
+        post: operations["stopHawkeyeVideoSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/video/tasks/{taskId}/frames/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 창 capture Task의 확정 프레임
+         * @description 세션 창 Run의 capture Task가 확정한 frames 결과(application/x-tar, 고정 object version·SHA-256)에서 프레임 하나를 반환합니다. 프레임도 결과 안 manifest의 SHA-256과 같아야 합니다. 다른 Task나 확정 전 결과는 404입니다.
+         */
+        get: operations["getHawkeyeVideoFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes": {
         parameters: {
             query?: never;
@@ -2301,6 +2405,74 @@ export interface components {
             referenceLabel: string;
             sha256: string;
         };
+        HawkeyeVideoScenario: {
+            enabled: boolean;
+            /** @description 실행 기능이 켜져 있고 실행 범위에 workflowKey가 포함됨 */
+            executes: boolean;
+            workflowKey: string;
+            workflow: {
+                /** Format: uuid */
+                id: string;
+                key: string;
+                displayName: string;
+            } | null;
+            versions: {
+                /** Format: uuid */
+                id: string;
+                version: string;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+            maxWindows: number;
+            /** Format: uuid */
+            activeSessionId: string | null;
+        };
+        HawkeyeVideoStart: {
+            /** Format: uuid */
+            workflowVersionId: string;
+            camera: components["schemas"]["CameraReference"];
+        };
+        /** @description 관리 장치 화면에 등록된 RTSP 카메라의 장치 이름과 UID */
+        CameraReference: {
+            id: string;
+            /** Format: uuid */
+            uid: string;
+        };
+        HawkeyeVideoSessionPage: {
+            items: components["schemas"]["HawkeyeVideoSession"][];
+            nextOffset: number | null;
+        };
+        HawkeyeVideoSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            workflowVersionId: string;
+            camera: components["schemas"]["CameraReference"];
+            maxWindows: number;
+            /** @enum {string} */
+            state: "RUNNING" | "STOPPED" | "COMPLETED" | "FAILED";
+            /** @enum {string|null} */
+            endReason: "USER_STOPPED" | "MAX_WINDOWS" | "WINDOW_FAILED" | "WINDOW_REJECTED" | null;
+            failureCode: string | null;
+            failureMessage: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            endedAt: string | null;
+            windowCount: number;
+            windows: {
+                seq: number;
+                /** Format: uuid */
+                runId: string;
+                runState: string;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
         HawkeyeSafetyStart: {
             sampleId: string;
         };
@@ -2594,6 +2766,8 @@ export interface components {
             [key: string]: components["schemas"]["ExecutionPolicy"];
         };
         RunCreate: {
+            /** @description BATCH Run의 RTSP 카메라 입력. 접수 시 ONLINE·UID를 확인하고 서버가 parameters.cameraSource(장치·노드·Mapper 주소·설정 digest· source generation)로 고정합니다. 클라이언트가 cameraSource를 직접 넣으면 400입니다. STREAM Run에는 사용할 수 없습니다. */
+            camera?: components["schemas"]["CameraReference"];
             /** @description CRD device reference; resolved to parameters.device values at Run admission. No protocol settings. */
             device?: {
                 id: string;
@@ -5501,6 +5675,281 @@ export interface operations {
             };
             /** @description SCENARIO_RUN_NOT_FOUND */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeVideoScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 구성과 활성 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoScenario"];
+                };
+            };
+        };
+    };
+    listHawkeyeVideoSessions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 세션 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoSessionPage"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startHawkeyeVideoSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 재전송에서 유지할 UUID */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HawkeyeVideoStart"];
+            };
+        };
+        responses: {
+            /** @description 같은 키·요청의 기존 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoSession"];
+                };
+            };
+            /** @description 세션과 첫 창 Run이 생성됨 */
+            202: {
+                headers: {
+                    /** @description /api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoSession"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description WORKFLOW_NOT_FOUND 또는 카메라 리소스 없음 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_SESSION_ACTIVE, IDEMPOTENCY_CONFLICT, WORKFLOW_NOT_ALLOWED(다른 워크플로의 버전), WORKFLOW_SOURCE_UNAVAILABLE(카메라 OFFLINE), DEVICE_IDENTITY_CHANGED(UID 불일치) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_DISABLED 또는 RUNTIME_DISABLED(실행 기능 꺼짐·실행 범위 밖) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeVideoSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 세션 상세 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoSession"];
+                };
+            };
+            /** @description SCENARIO_SESSION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopHawkeyeVideoSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @example {} */
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description 중지 후 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoSession"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SCENARIO_SESSION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeVideoFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG 바이트 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description FRAME_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description RESULT_PREVIEW_BUSY */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description FRAMES_ARTIFACT_INVALID */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ARTIFACT_STORE_UNAVAILABLE */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

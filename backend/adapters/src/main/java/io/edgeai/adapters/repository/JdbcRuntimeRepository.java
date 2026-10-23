@@ -11,7 +11,10 @@ import org.springframework.jdbc.core.*;
 /** Mutations run inside a service transaction holding the parent Run lock. */
 public final class JdbcRuntimeRepository implements RuntimeRepository {
     private final JdbcTemplate jdbc;
-    public JdbcRuntimeRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    private final RuntimeScope scope;
+    public JdbcRuntimeRepository(JdbcTemplate jdbc) { this(jdbc,RuntimeScope.UNRESTRICTED); }
+    /** Worker scans and command leases see only Runs inside the runtime scope. */
+    public JdbcRuntimeRepository(JdbcTemplate jdbc,RuntimeScope scope) { this.jdbc=jdbc;this.scope=Objects.requireNonNull(scope); }
     private static Instant instant(ResultSet row,String key) throws SQLException {
         var value=row.getTimestamp(key); return value==null?null:value.toInstant();
     }
@@ -21,6 +24,9 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         r.getObject("job_uid",UUID.class),r.getObject("producer_pod_uid",UUID.class),r.getObject("node_uid",UUID.class),r.getString("node_name"),
         instant(r,"expires_at"),r.getString("failure_reason"),instant(r,"created_at"),instant(r,"updated_at"),r.getObject("remote_allocation_id",UUID.class),r.getObject("vd_id",UUID.class));
     public Optional<RuntimeInstance> runtime(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE id=?",RUNTIME,id).stream().findFirst(); }
+    public boolean inScope(UUID runId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM edgeai.workflow_run WHERE id=? AND "+scope.runCondition("id")+")",Boolean.class,runId));
+    }
     public Optional<RuntimeInstance> byAttempt(UUID id) { return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE attempt_id=?",RUNTIME,id).stream().findFirst(); }
     public List<UUID> readyAttempts(UUID runId,int limit) {
         return jdbc.query("""
@@ -31,10 +37,10 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
             """,(r,n)->r.getObject(1,UUID.class),runId,limit);
     }
     public List<RuntimeInstance> active(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD') AND namespace=? AND remote_allocation_id IS NULL AND vd_id IS NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD') AND namespace=? AND remote_allocation_id IS NULL AND vd_id IS NULL AND observed_state<>'TERMINATED' AND "+scope.runCondition("run_id")+" ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public List<RuntimeInstance> activeRemote(String namespace,int limit) {
-        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE (desired_state='STOPPED' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
+        return jdbc.query("SELECT * FROM edgeai.runtime_instance WHERE (desired_state='STOPPED' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND remote_allocation_id IS NOT NULL AND observed_state<>'TERMINATED' AND "+scope.runCondition("run_id")+" ORDER BY updated_at,id LIMIT ?",RUNTIME,namespace,limit);
     }
     public void create(RuntimeInstance r) {
         Timestamp now=Timestamp.from(r.createdAt());
@@ -163,10 +169,10 @@ public final class JdbcRuntimeRepository implements RuntimeRepository {
         return jdbc.query("""
             UPDATE edgeai.runtime_command SET lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
             WHERE id=(SELECT id FROM edgeai.runtime_command WHERE NOT completed AND available_at<=?
-                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE (kind<>'CREATE' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND vd_id IS NULL AND (remote_allocation_id IS NOT NULL)=?)
+                AND runtime_id IN (SELECT id FROM edgeai.runtime_instance WHERE (kind<>'CREATE' OR task_id IN (SELECT id FROM edgeai.task WHERE initial_mode<>'VD')) AND namespace=? AND vd_id IS NULL AND (remote_allocation_id IS NOT NULL)=? AND %s)
                 AND (lease_until IS NULL OR lease_until<=?) ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
             RETURNING *
-            """,(r,n)->new RuntimeCommand(r.getObject("id",UUID.class),r.getObject("runtime_id",UUID.class),r.getString("kind"),r.getInt("attempts"),
+            """.formatted(scope.runCondition("run_id")),(r,n)->new RuntimeCommand(r.getObject("id",UUID.class),r.getObject("runtime_id",UUID.class),r.getString("kind"),r.getInt("attempts"),
                 r.getObject("lease_owner",UUID.class),instant(r,"lease_until")),owner,Timestamp.from(now.plus(duration)),Timestamp.from(now),Timestamp.from(now),namespace,remote,Timestamp.from(now)).stream().findFirst();
     }
     public boolean finishCommand(UUID id,UUID owner,Instant now) {

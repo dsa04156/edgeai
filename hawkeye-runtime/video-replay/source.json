@@ -1,0 +1,14 @@
+{
+  "name": "hawkeye-forklift-video",
+  "sourceName": "hawkeye-forklift-replay",
+  "protocol": "rtsp",
+  "kind": "physical",
+  "host": "10.254.192.47",
+  "port": 18555,
+  "targetNode": "etri-dev0002-raspi5",
+  "collectionInterval": 1000,
+  "protocolConfig": {"path": "/forklift-replay", "timeoutMs": 5000},
+  "properties": [
+    {"name": "connected", "dataType": "bool", "jsonPath": "connected", "scale": 1, "offset": 0, "unit": ""}
+  ]
+}

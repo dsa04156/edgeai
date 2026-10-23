@@ -29,12 +29,13 @@ public class ExecutionService {
     private final StreamRunService streams;
     private final ManagedDeviceService managedDevices;
     private final WorkflowDataInputService dataInputs;
+    private final io.edgeai.domain.runtime.RuntimeScope scope;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs,io.edgeai.domain.runtime.RuntimeScope scope) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;
+        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;this.scope=scope;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -45,6 +46,7 @@ public class ExecutionService {
         var offload=offloadPolicy(input.get("offload"));String offloadJson=offload==null?null:JSON.canonical(input.get("offload"));
         UUID versionId=uuid(input.get("workflowVersionId"));var parameters=parameters(input.get("parameters"));
         if(parameters.containsKey(WorkflowDataInputService.BINDINGS))throw new IllegalArgumentException("Workflow source bindings are server-owned");
+        if(parameters.containsKey(ManagedDeviceService.CAMERA_BINDING))throw new IllegalArgumentException("Camera source bindings are server-owned");
         if(!(input.get("execution") instanceof Map<?,?> policy)) throw new IllegalArgumentException("Execution policy required");
         String mode=text(policy.get("mode"),8);UUID nodeId;String providerKey=null;
         if(mode.equals("AUTO")) { object(policy,"mode");nodeId=null; }
@@ -64,6 +66,7 @@ public class ExecutionService {
             if(parameters.containsKey("device"))throw new IllegalArgumentException("device input conflicts with parameters.device");
             normalized.put("device",ref);
         }
+        if(input.containsKey("camera"))normalized.put("camera",ManagedDeviceService.cameraReference(input.get("camera")));
         String digest=JSON.digest("edgeai-run-create-v1",normalized);
         repository.lockRequestKey(idempotency);
         var existing=repository.byIdempotencyKey(idempotency);
@@ -75,6 +78,9 @@ public class ExecutionService {
         }
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         var version=workflows.version(versionId).orElseThrow(()->error(404,"WORKFLOW_NOT_FOUND","발행된 DAG 버전이 없습니다."));
+        // Outside the runtime scope a Run is stored exactly as with the runtime disabled and is never dispatched.
+        boolean runtimeEnabled=this.runtimeEnabled && scope.allows(workflows.find(version.workflowId(),false).orElseThrow().key());
+        if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         var dag=storedDag(version.dagJson());
         var definitions=workflows.definitions(versionId);
         var keys=definitions.stream().map(io.edgeai.domain.workflow.TaskDefinition::key).collect(java.util.stream.Collectors.toSet());
@@ -101,6 +107,11 @@ public class ExecutionService {
         if(remoteTarget!=null && offload!=null)throw error(409,"REMOTE_TELEMETRY_UNSUPPORTED","현재 자동 전환 정책은 Kubernetes의 실행 측정을 사용합니다. Remote는 명시적 전환을 사용하세요.");
         if(nodeId!=null && nodes.find(nodeId).isEmpty()) throw error(404,"NODE_NOT_FOUND","실행 정책에서 참조할 노드를 찾을 수 없습니다.");
         parameters=dataInputs.pin(definitions,dag,parameters,runtimeEnabled);
+        if(input.containsKey("camera")) {
+            if(stream)throw error(409,"STREAM_TARGET_UNSUPPORTED","카메라 입력은 BATCH 실행에서만 사용할 수 있습니다.");
+            var resolved=new TreeMap<String,Object>();parameters.forEach((k,v)->resolved.put((String)k,v));
+            resolved.put(ManagedDeviceService.CAMERA_BINDING,managedDevices.cameraSource(input.get("camera")));parameters=resolved;
+        }
         for(var definition:definitions) {
             RuntimeParameters.merge(definition.parametersJson(),JSON.canonical(parameters));
         }

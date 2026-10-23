@@ -50,6 +50,10 @@ spec:
           env:
             - name: NODE_NAME
               valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits: {cpu: 500m, memory: 256Mi}
@@ -92,5 +96,10 @@ spec:
     - from:
         - podSelector:
             matchLabels: {app: edgeai-api}
+        # Runner Pods of the hawkeye-video-safety infer Task (any Job the runtime controller created in its namespace).
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: edgeai-runtimes}
+          podSelector:
+            matchLabels: {app.kubernetes.io/managed-by: edgeai-runtime-controller}
       ports:
         - {protocol: TCP, port: 8080}

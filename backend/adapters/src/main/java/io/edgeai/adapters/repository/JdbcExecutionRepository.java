@@ -3,6 +3,7 @@ package io.edgeai.adapters.repository;
 import io.edgeai.domain.execution.*;
 import io.edgeai.domain.workflow.TaskDefinition;
 import io.edgeai.domain.repository.ExecutionRepository;
+import io.edgeai.domain.runtime.RuntimeScope;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
@@ -11,7 +12,9 @@ import org.springframework.jdbc.core.RowMapper;
 
 public final class JdbcExecutionRepository implements ExecutionRepository {
     private final JdbcTemplate jdbc;
-    public JdbcExecutionRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    private final RuntimeScope scope;
+    public JdbcExecutionRepository(JdbcTemplate jdbc) { this(jdbc,RuntimeScope.UNRESTRICTED); }
+    public JdbcExecutionRepository(JdbcTemplate jdbc,RuntimeScope scope) { this.jdbc=jdbc;this.scope=Objects.requireNonNull(scope); }
     public void requestInputDrain(UUID runId,Instant at) {
         jdbc.update("UPDATE edgeai.workflow_run SET input_drain_requested_at=COALESCE(input_drain_requested_at,?) WHERE id=?",Timestamp.from(at),runId);
     }
@@ -64,7 +67,7 @@ public final class JdbcExecutionRepository implements ExecutionRepository {
             r.getObject("failed_attempt_id",UUID.class),r.getString("namespace"),r.getTimestamp("available_at").toInstant(),r.getTimestamp("deadline").toInstant()),taskId).stream().findFirst();
     }
     public List<UUID> dueRetries(String namespace,Instant now,int limit) {
-        return jdbc.query("SELECT r.task_id FROM edgeai.task_retry r JOIN edgeai.task_attempt a ON a.id=r.failed_attempt_id JOIN edgeai.task t ON t.id=r.task_id WHERE t.initial_mode<>'VD' AND a.mode<>'VD' AND r.namespace=? AND r.available_at<=? ORDER BY r.available_at,r.task_id LIMIT ?",
+        return jdbc.query("SELECT r.task_id FROM edgeai.task_retry r JOIN edgeai.task_attempt a ON a.id=r.failed_attempt_id JOIN edgeai.task t ON t.id=r.task_id WHERE t.initial_mode<>'VD' AND a.mode<>'VD' AND r.namespace=? AND r.available_at<=? AND "+scope.runCondition("t.run_id")+" ORDER BY r.available_at,r.task_id LIMIT ?",
             (r,n)->r.getObject(1,UUID.class),namespace,Timestamp.from(now),limit);
     }
     public void clearRetry(UUID taskId){jdbc.update("DELETE FROM edgeai.task_retry WHERE task_id=?",taskId);}

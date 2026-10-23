@@ -6,6 +6,8 @@ import java.util.*;
 public interface RuntimeRepository {
     Optional<RuntimeInstance> runtime(UUID id);
     Optional<RuntimeInstance> byAttempt(UUID attemptId);
+    /** Whether the Run belongs to a workflow the runtime may execute. */
+    boolean inScope(UUID runId);
     List<UUID> readyAttempts(UUID runId,int limit);
     List<RuntimeInstance> active(String namespace,int limit);
     List<RuntimeInstance> activeRemote(String namespace,int limit);

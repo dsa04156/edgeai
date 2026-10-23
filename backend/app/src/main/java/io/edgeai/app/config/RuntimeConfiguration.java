@@ -30,8 +30,8 @@ class RuntimeConfiguration {
             @Value("${edgeai.storage.runner-endpoint}") String runnerEndpoint,@Value("${edgeai.storage.access-key}") String access,
             @Value("${edgeai.storage.secret-key}") String secret,@Value("${edgeai.storage.bucket}") String bucket){return new S3ArtifactStore(endpoint,runnerEndpoint,access,secret,bucket,clock);}
     @Bean ArtifactCommitService artifactCommitService(RuntimeLifecycleService lifecycle,ArtifactStore store){return new ArtifactCommitService(lifecycle,store);}
-    @Bean RuntimeResultPublicationRepository runtimeResultPublications(org.springframework.jdbc.core.JdbcTemplate jdbc){return new io.edgeai.adapters.repository.JdbcRuntimeResultPublicationRepository(jdbc);}
-    @Bean StreamCompletionPublicationRepository streamCompletionPublications(org.springframework.jdbc.core.JdbcTemplate jdbc){return new io.edgeai.adapters.repository.JdbcStreamCompletionPublicationRepository(jdbc);}
+    @Bean RuntimeResultPublicationRepository runtimeResultPublications(org.springframework.jdbc.core.JdbcTemplate jdbc,io.edgeai.domain.runtime.RuntimeScope scope){return new io.edgeai.adapters.repository.JdbcRuntimeResultPublicationRepository(jdbc,scope);}
+    @Bean StreamCompletionPublicationRepository streamCompletionPublications(org.springframework.jdbc.core.JdbcTemplate jdbc,io.edgeai.domain.runtime.RuntimeScope scope){return new io.edgeai.adapters.repository.JdbcStreamCompletionPublicationRepository(jdbc,scope);}
     @Bean StreamCompletionPublisher streamCompletionPublisher(StreamCompletionPublicationRepository publications,StreamExecutionRepository executions,io.edgeai.domain.storage.StreamCompletionJournal journal){return new StreamCompletionPublisher(publications,executions,journal);}
     @Bean RuntimeResultPublisher runtimeResultPublisher(RuntimeRepository runtimes,io.edgeai.domain.storage.RuntimeResultJournal journal){return new RuntimeResultPublisher(runtimes,journal);}
     @Bean RunnerApiService runnerApiService(RuntimeLifecycleService lifecycle,RuntimeRepository runtimes,ArtifactStore store,ArtifactCommitService commit,Clock clock,io.edgeai.domain.storage.RuntimeStartJournal starts,RuntimeResultPublisher results,StreamCompletionPublisher completions){return new RunnerApiService(lifecycle,runtimes,store,commit,clock,starts,results,completions);}
@@ -41,8 +41,10 @@ class RuntimeConfiguration {
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     RuntimeResultPublicationWorker runtimeResultPublicationWorker(RuntimeResultPublicationRepository publications,RuntimeResultPublisher publisher,RuntimeSettings settings,Clock clock){return new RuntimeResultPublicationWorker(publications,publisher,settings,clock);}
+    /** Feed maintenance is not run-scoped, so a restricted runtime scope leaves the existing feed rows untouched. */
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
+    @ConditionalOnProperty(name="edgeai.runtime.workflow-keys",havingValue="*",matchIfMissing=true)
     WorkflowSourceFeedWorker workflowSourceFeedWorker(WorkflowSourceFeedService feeds,Clock clock,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection){return new WorkflowSourceFeedWorker(feeds,inspection,clock);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)

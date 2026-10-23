@@ -1,6 +1,7 @@
 package io.edgeai.adapters.repository;
 import io.edgeai.domain.execution.*;
 import io.edgeai.domain.repository.OffloadRepository;
+import io.edgeai.domain.runtime.RuntimeScope;
 import java.sql.*;
 import java.time.Instant;
 import java.util.*;
@@ -8,7 +9,9 @@ import org.springframework.jdbc.core.*;
 
 public final class JdbcOffloadRepository implements OffloadRepository {
     private final JdbcTemplate jdbc;
-    public JdbcOffloadRepository(JdbcTemplate jdbc){this.jdbc=jdbc;}
+    private final RuntimeScope scope;
+    public JdbcOffloadRepository(JdbcTemplate jdbc){this(jdbc,RuntimeScope.UNRESTRICTED);}
+    public JdbcOffloadRepository(JdbcTemplate jdbc,RuntimeScope scope){this.jdbc=jdbc;this.scope=Objects.requireNonNull(scope);}
     private static Instant instant(ResultSet r,String name) throws SQLException {var value=r.getTimestamp(name);return value==null?null:value.toInstant();}
     private static final RowMapper<OffloadOperation> ROW=(r,n)->new OffloadOperation(r.getObject("id",UUID.class),r.getObject("task_id",UUID.class),r.getObject("run_id",UUID.class),
         r.getObject("source_attempt_id",UUID.class),r.getObject("target_attempt_id",UUID.class),r.getObject("target_node_id",UUID.class),r.getObject("idempotency_key",UUID.class),
@@ -33,15 +36,15 @@ public final class JdbcOffloadRepository implements OffloadRepository {
     public Optional<OffloadOperation> find(UUID id){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE id=?",ROW,id).stream().findFirst().map(this::members);}
     public Optional<OffloadOperation> byKey(UUID key){return jdbc.query("SELECT * FROM edgeai.task_offload WHERE idempotency_key=?",ROW,key).stream().findFirst().map(this::members);}
     public List<OffloadOperation> forTask(UUID id){return jdbc.query("SELECT * FROM edgeai.task_offload o WHERE task_id=? OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m WHERE m.operation_id=o.id AND m.task_id=?) ORDER BY created_at DESC,id",ROW,id,id).stream().map(this::members).toList();}
-    public List<UUID> active(String namespace,int limit){return jdbc.query("SELECT id FROM edgeai.task_offload WHERE namespace=? AND state IN ('DRAINING','STARTING','CANCELLING') ORDER BY updated_at,id LIMIT ?",(r,n)->r.getObject(1,UUID.class),namespace,limit);}
+    public List<UUID> active(String namespace,int limit){return jdbc.query("SELECT id FROM edgeai.task_offload WHERE namespace=? AND state IN ('DRAINING','STARTING','CANCELLING') AND "+scope.runCondition("run_id")+" ORDER BY updated_at,id LIMIT ?",(r,n)->r.getObject(1,UUID.class),namespace,limit);}
     public List<UUID> automaticCandidates(String namespace,int limit) {
         return jdbc.query("""
             SELECT t.id FROM edgeai.task t JOIN edgeai.workflow_run w ON w.id=t.run_id
             JOIN edgeai.runtime_instance r ON r.task_id=t.id
             WHERE t.initial_mode<>'VD' AND w.offload_policy IS NOT NULL AND w.state='RUNNING' AND t.state='RUNNING'
-              AND r.namespace=? AND r.desired_state='RUNNING' AND r.observed_state='RUNNING'
+              AND r.namespace=? AND r.desired_state='RUNNING' AND r.observed_state='RUNNING' AND %s
             ORDER BY t.updated_at,t.id LIMIT ?
-            """,(r,n)->r.getObject(1,UUID.class),namespace,limit);
+            """.formatted(scope.runCondition("w.id")),(r,n)->r.getObject(1,UUID.class),namespace,limit);
     }
     public void starting(UUID id,UUID attempt,Instant deadline,Instant now){jdbc.update("UPDATE edgeai.task_offload SET target_attempt_id=?,start_deadline=?,state='STARTING',updated_at=? WHERE id=? AND state='DRAINING'",attempt,Timestamp.from(deadline),Timestamp.from(now),id);}
     private static final String TARGET="(o.target_attempt_id=? OR EXISTS(SELECT 1 FROM edgeai.task_offload_member m WHERE m.operation_id=o.id AND m.target_attempt_id=?))";

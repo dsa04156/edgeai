@@ -3,6 +3,7 @@
 GET  /health                 -> 200 READY only after the pinned samples, the Ollama model digest and one warm-up passed; else 503.
 GET  /samples/{id}           -> exact JPEG bytes of one pinned sample.
 POST /classify {"sampleId", "samplesSha256"} -> raw model output, Ollama timings and where Ollama placed the model.
+POST /classify-frame (image/jpeg body) -> the same answer for one camera frame, plus this Pod's identity.
 The prompt, model and samples are fixed server-side; a request can only choose a sample. The output is returned
 verbatim: the API parses the category and never treats unreadable output as safe. One call runs at a time;
 a concurrent request gets 503 BUSY instead of queueing.
@@ -19,6 +20,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_BODY_BYTES = 1024
+MAX_FRAME_BYTES = 1048576
 MAX_OUTPUT_CHARS = 4000
 # Model card quick start text. Its "/no_think " prefix does not disable thinking through the Ollama chat API
 # (feasibility 2026-10-23: empty content on 3 of 5 images), so the request sets "think": false instead.
@@ -53,13 +55,14 @@ class Ollama:
 class Runtime:
     """Holds the verified samples, readiness and the single inference slot."""
 
-    def __init__(self, ollama, model, model_digest, samples_dir, samples_sha256, node_name):
+    def __init__(self, ollama, model, model_digest, samples_dir, samples_sha256, node_name, pod_name="", pod_uid=""):
         self.ollama = ollama
         self.model = model
         self.model_digest = model_digest
         self.samples_dir = samples_dir
         self.expected_samples_sha256 = samples_sha256
         self.node_name = node_name
+        self.pod = {"name": pod_name, "uid": pod_uid}
         self.samples = {}
         self.version = None
         self.placement = None
@@ -148,7 +151,17 @@ class Runtime:
             raise RequestError(409, "SAMPLES_MISMATCH", "the request names another sample set")
         if payload["sampleId"] not in self.samples:
             raise RequestError(400, "INVALID_REQUEST", "unknown sampleId")
-        image = self.samples[payload["sampleId"]]
+        return {"sampleId": payload["sampleId"], **self.answer(self.samples[payload["sampleId"]])}
+
+    def classify_frame(self, image):
+        """A camera frame from a workflow Task: any JPEG, answered with the same prompt, model and options as a sample."""
+        if len(image) < 4 or image[:2] != b"\xff\xd8" or image[-2:] != b"\xff\xd9":
+            raise RequestError(400, "INVALID_FRAME", "body is not a JPEG image")
+        if not self.ready:
+            raise RequestError(503, "NOT_READY", "runtime is not ready")
+        return {"pod": self.pod, **self.answer(image)}
+
+    def answer(self, image):
         # The slot is held until Ollama answers, even if the client has gone away.
         if not self._slot.acquire(blocking=False):
             raise RequestError(503, "BUSY", "a classification is already running")
@@ -166,7 +179,6 @@ class Runtime:
         if not isinstance(content, str) or placement is None:
             raise RequestError(502, "OLLAMA_FAILED", "no message content or model not loaded")
         return {
-            "sampleId": payload["sampleId"],
             "inputSha256": sha256(image),
             **self.identity(),
             "loadedDigest": placement.pop("digest"),
@@ -208,15 +220,27 @@ def make_handler(runtime):
             self._error(404, "NOT_FOUND", "unknown path")
 
         def do_POST(self):
-            if self.path != "/classify":
+            if self.path not in ("/classify", "/classify-frame"):
                 return self._error(404, "NOT_FOUND", "unknown path")
+            frame = self.path == "/classify-frame"
+            limit = MAX_FRAME_BYTES if frame else MAX_BODY_BYTES
             try:
                 length = int(self.headers.get("Content-Length", ""))
             except ValueError:
                 return self._error(411, "LENGTH_REQUIRED", "Content-Length is required")
-            if length < 0 or length > MAX_BODY_BYTES:
+            if length < 0 or length > limit:
                 self.close_connection = True
-                return self._error(413, "BODY_TOO_LARGE", f"body exceeds {MAX_BODY_BYTES} bytes")
+                return self._error(413, "BODY_TOO_LARGE", f"body exceeds {limit} bytes")
+            if frame:
+                if self.headers.get("Content-Type") != "image/jpeg":
+                    return self._error(415, "UNSUPPORTED_MEDIA_TYPE", "image/jpeg is required")
+                body = self.rfile.read(length)
+                if len(body) != length:
+                    return self._error(400, "INVALID_FRAME", "body is shorter than Content-Length")
+                try:
+                    return self._send(200, runtime.classify_frame(body))
+                except RequestError as exc:
+                    return self._error(exc.status, exc.code, str(exc))
             try:
                 payload = json.loads(self.rfile.read(length))
             except (ValueError, UnicodeDecodeError):
@@ -236,7 +260,7 @@ def main():
     runtime = Runtime(Ollama(os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"), float(os.environ.get("OLLAMA_TIMEOUT", "120"))),
                       os.environ["HAWKEYE_MODEL"], os.environ["HAWKEYE_MODEL_DIGEST"],
                       os.environ.get("HAWKEYE_SAMPLES_DIR", "/opt/hawkeye/samples"), os.environ["HAWKEYE_SAMPLES_SHA256"],
-                      os.environ.get("NODE_NAME", ""))
+                      os.environ.get("NODE_NAME", ""), os.environ.get("POD_NAME", ""), os.environ.get("POD_UID", ""))
     runtime.start()
     print(json.dumps({"event": "HAWKEYE_RUNTIME_START", **runtime.health()[1]}), flush=True)
     ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), make_handler(runtime)).serve_forever()

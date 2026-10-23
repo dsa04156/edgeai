@@ -4,6 +4,7 @@ import io.edgeai.domain.repository.StreamCompletionPublicationRepository;
 import io.edgeai.domain.stream.StreamCompletionAuthority;
 import io.edgeai.domain.stream.StreamCheckpointAuthority;
 import io.edgeai.domain.runtime.RuntimeNames;
+import io.edgeai.domain.runtime.RuntimeScope;
 import java.sql.*;
 import java.time.*;
 import java.util.*;
@@ -15,7 +16,9 @@ public final class JdbcStreamCompletionPublicationRepository implements StreamCo
     private static final RowMapper<StreamCompletionAuthority> ROW=(r,n)->new StreamCompletionAuthority(
         r.getObject("id",UUID.class),r.getObject("run_id",UUID.class),r.getString("namespace"),
         r.getTimestamp("granted_at").toInstant(),r.getString("document"));
-    public JdbcStreamCompletionPublicationRepository(JdbcTemplate jdbc){this.jdbc=jdbc;}
+    private final RuntimeScope scope;
+    public JdbcStreamCompletionPublicationRepository(JdbcTemplate jdbc){this(jdbc,RuntimeScope.UNRESTRICTED);}
+    public JdbcStreamCompletionPublicationRepository(JdbcTemplate jdbc,RuntimeScope scope){this.jdbc=jdbc;this.scope=Objects.requireNonNull(scope);}
     public Optional<StreamCompletionAuthority> find(UUID id){return jdbc.query("SELECT * FROM edgeai.stream_completion_publication WHERE id=?",ROW,id).stream().findFirst();}
     public Optional<StreamCompletionAuthority> forAttempt(UUID attempt){
         var rows=jdbc.query("""
@@ -36,9 +39,9 @@ public final class JdbcStreamCompletionPublicationRepository implements StreamCo
         return jdbc.query("""
             UPDATE edgeai.stream_completion_publication SET lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
             WHERE id=(SELECT id FROM edgeai.stream_completion_publication WHERE namespace=? AND (NOT completed OR NOT checkpoint_history_completed)
-                AND available_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
+                AND available_at<=? AND (lease_until IS NULL OR lease_until<=?) AND %s ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
             RETURNING id,lease_owner
-            """,(r,n)->new Lease(r.getObject("id",UUID.class),r.getObject("lease_owner",UUID.class)),owner,Timestamp.from(now.plus(duration)),
+            """.formatted(scope.runCondition("run_id")),(r,n)->new Lease(r.getObject("id",UUID.class),r.getObject("lease_owner",UUID.class)),owner,Timestamp.from(now.plus(duration)),
             Timestamp.from(now),namespace,Timestamp.from(now),Timestamp.from(now)).stream().findFirst();
     }
     public boolean finish(UUID id,UUID owner,Instant now){return jdbc.update("UPDATE edgeai.stream_completion_publication SET completed=true,checkpoint_history_completed=true,lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_owner=?",Timestamp.from(now),id,owner)==1;}

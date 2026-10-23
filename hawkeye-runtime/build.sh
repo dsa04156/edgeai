@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Hawkeye warehouse-safety runtime images (docs/scenarios/hawkeye-warehouse-safety.md). No model or image blobs in Git.
 #   bash hawkeye-runtime/build.sh prepare                 -> output/hawkeye-runtime/{store,samples} verified against provenance.json
-#   bash hawkeye-runtime/build.sh ollama|adapter          -> output/hawkeye-runtime/<target>.oci.tar (local only)
-#   bash hawkeye-runtime/build.sh ollama|adapter --push REF -> push REF and print its digest
+#   bash hawkeye-runtime/build.sh ollama|adapter|workflow  -> output/hawkeye-runtime/<target>.oci.tar (local only)
+#   bash hawkeye-runtime/build.sh ollama|adapter|workflow --push REF -> push REF and print its digest
+#   workflow = released Runner + capture/infer workloads of the video workflow; it needs no model or samples.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(dirname "$here")"
@@ -42,9 +43,10 @@ case "$target" in
     exit 0 ;;
   ollama) platform=linux/amd64 ;;
   adapter) platform=linux/amd64 ;;
-  *) printf 'usage: %s prepare|ollama|adapter [--push REF]\n' "$0" >&2; exit 2 ;;
+  workflow) platform=linux/amd64 ;;
+  *) printf 'usage: %s prepare|ollama|adapter|workflow [--push REF]\n' "$0" >&2; exit 2 ;;
 esac
-verify
+[[ "$target" == workflow ]] || verify
 context="$(mktemp -d "$out/context.XXXXXX")" # same filesystem as the store, for hard links
 trap 'rm -rf "$context"' EXIT
 cp "$here/Dockerfile.$target" "$context/Dockerfile"
@@ -60,6 +62,8 @@ for name in names:
     os.makedirs(os.path.dirname(os.path.join(dest, name)), exist_ok=True)
     os.link(os.path.join(store, name), os.path.join(dest, name))
 PY
+elif [[ "$target" == workflow ]]; then
+  cp "$here/workflow/hawkeye_capture.py" "$here/workflow/hawkeye_infer.py" "$context/"
 else
   cp -r "$here/edgeai_hawkeye_runtime" "$context/"
   cp "$here/samples.json" "$context/"
