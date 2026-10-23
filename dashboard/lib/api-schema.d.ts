@@ -663,6 +663,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios/hawkeye-safety": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 창고 지게차 안전 점검(Hawkeye VLM) 구성과 런타임 상태
+         * @description 고정 모델(Hugging Face 저장소·revision·Ollama manifest digest·GGUF SHA-256)과 공식 합성 데이터셋의 고정 샘플, 어댑터 /health가 3초 안에 스스로 보고한 노드·Ollama 버전·모델 digest·현재 GPU/CPU 배치를 반환합니다. READY는 보고한 모델·digest·샘플 묶음 SHA-256이 설정과 같을 때만이며 MISMATCH, NOT_READY, UNAVAILABLE(연결 실패·형식 오류, reported=null)을 구분합니다. 비활성 환경은 enabled=false와 runtime=null입니다.
+         */
+        get: operations["getHawkeyeSafetyScenario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/samples/{sampleId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 고정 샘플 이미지
+         * @description 런타임에 있는 고정 샘플 JPEG를 설정의 SHA-256과 같을 때만 반환합니다. 합성 이미지이며 실제 CCTV가 아닙니다.
+         */
+        get: operations["getHawkeyeSafetySampleImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 안전 점검 실행 기록
+         * @description 생성 시각 역순입니다. 항목은 상세와 같은 값입니다.
+         */
+        get: operations["listHawkeyeSafetyRuns"];
+        put?: never;
+        /**
+         * 안전 점검 실행 시작 (샘플 1장)
+         * @description 고정 샘플 1장을 Hawkeye 모델에 보냅니다. 서버 전체에서 QUEUED·RUNNING 실행은 1개뿐이며 DB 제약으로 보장합니다. 요청은 저장 즉시 202로 반환되고 서버가 백그라운드에서 실행합니다(어댑터 호출 제한 기본 120초). 시작 전 어댑터 READY를 확인해 노드·모델 digest를 불변 snapshot으로 저장합니다. 응답의 노드·모델 digest·입력 SHA-256이 다르면 FAILED입니다. 모델 출력 첫 줄에서 범주 하나를 읽지 못하면 출력과 시간을 저장한 채 FAILED(UNPARSEABLE_OUTPUT)이며 safe로 바꾸지 않습니다. 자동 재시도는 없습니다. 같은 Idempotency-Key와 같은 sampleId는 기존 실행을 200으로 반환하고 다른 값은 409입니다.
+         */
+        post: operations["startHawkeyeSafetyRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 안전 점검 실행 상세
+         * @description 프로세스가 사라진 실행은 lease 만료 후 INTERRUPTED가 되며 재실행하지 않습니다.
+         */
+        get: operations["getHawkeyeSafetyRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes": {
         parameters: {
             query?: never;
@@ -2162,6 +2246,117 @@ export interface components {
             roundTripMs: number;
             /** @description RUNTIME_UNAVAILABLE, RUNTIME_BUSY, RUNTIME_REJECTED, RUNTIME_INVALID_RESPONSE, INVALID_RESPONSE, IDENTITY_MISMATCH, INPUT_MISMATCH */
             failureCode: string | null;
+        };
+        HawkeyeSafetyScenario: {
+            /** @enum {string} */
+            id: "hawkeye-warehouse-safety";
+            enabled: boolean;
+            categories: ("spill" | "forklift_violation" | "improper_stacking" | "obstacle" | "safe")[];
+            model: {
+                name: string;
+                ollamaName: string;
+                repository: string;
+                revision: string;
+                license: string;
+                manifestDigest: string;
+                languageSha256: string;
+                visionSha256: string;
+            };
+            dataset: {
+                name: string;
+                repository: string;
+                revision: string;
+                license: string;
+                split: string;
+                /** @description 생성 이미지이며 실제 CCTV가 아님 */
+                synthetic: boolean;
+                samplesSha256: string;
+            };
+            samples: components["schemas"]["HawkeyeSafetySample"][];
+            runtime: null | {
+                /** @enum {string} */
+                status: "READY" | "NOT_READY" | "MISMATCH" | "UNAVAILABLE";
+                /** @description 준비되지 않은 이유(어댑터 보고) */
+                error: string | null;
+                reported: null | {
+                    nodeName: string | null;
+                    model: string | null;
+                    modelDigest: string | null;
+                    ollamaVersion: string | null;
+                    processor: string | null;
+                    /** Format: int64 */
+                    sizeBytes: number | null;
+                    /** Format: int64 */
+                    sizeVramBytes: number | null;
+                };
+            };
+            /** Format: uuid */
+            activeRunId: string | null;
+        };
+        HawkeyeSafetySample: {
+            id: string;
+            /** @description 데이터셋 내 경로 */
+            file: string;
+            /** @description 데이터셋 참조 라벨(정답 판정 기준이 아닌 비교용) */
+            referenceLabel: string;
+            sha256: string;
+        };
+        HawkeyeSafetyStart: {
+            sampleId: string;
+        };
+        HawkeyeSafetyRunPage: {
+            items: components["schemas"]["HawkeyeSafetyRun"][];
+            nextOffset: number | null;
+        };
+        HawkeyeSafetyRun: {
+            /** Format: uuid */
+            id: string;
+            sampleId: string;
+            referenceLabel: string;
+            /** @enum {string} */
+            state: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "INTERRUPTED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** @description TARGET_NOT_READY, RUNTIME_*, IDENTITY_MISMATCH, INPUT_MISMATCH, INVALID_RESPONSE, UNPARSEABLE_OUTPUT, OWNER_LOST, PROCESS_STOPPED 등 */
+            failureCode: string | null;
+            failureMessage: string | null;
+            /** @description 시작 시 어댑터가 보고한 실행 대상(snapshot) */
+            target: null | {
+                nodeName: string;
+                model: string;
+                modelDigest: string;
+                ollamaVersion: string;
+                promptSha256: string;
+            };
+            /** @description 모델 응답. UNPARSEABLE_OUTPUT 실패에도 원문·시간이 있으며 category는 null입니다. */
+            result: null | {
+                /** @enum {string|null} */
+                category: "spill" | "forklift_violation" | "improper_stacking" | "obstacle" | "safe" | null;
+                explanation: string | null;
+                /** @description category와 샘플 참조 라벨이 같은지. category가 없으면 null */
+                matchesReference: boolean | null;
+                rawOutput: string;
+                doneReason: string | null;
+                inputSha256: string;
+                /** @description 추론 직후 Ollama /api/ps가 보고한 모델 배치 */
+                processor: string;
+                /** Format: int64 */
+                sizeBytes: number;
+                /** Format: int64 */
+                sizeVramBytes: number;
+                /** @description Ollama total_duration (이 요청의 모델 처리 전체) */
+                inferenceMs: number;
+                /** @description Ollama load_duration */
+                loadMs: number;
+                /** @description API가 측정한 어댑터 호출 시간 */
+                roundTripMs: number;
+                promptEvalCount: number | null;
+                evalCount: number | null;
+            };
         };
         InferenceModelPage: {
             items: components["schemas"]["InferenceModel"][];
@@ -5094,6 +5289,215 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description SCENARIO_RUN_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeSafetyScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 구성과 현재 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeSafetyScenario"];
+                };
+            };
+        };
+    };
+    getHawkeyeSafetySampleImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sampleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG 바이트 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description SAMPLE_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SAMPLE_MISMATCH(런타임 바이트가 고정 SHA-256과 다름) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_DISABLED 또는 RUNTIME_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listHawkeyeSafetyRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실행 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeSafetyRunPage"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startHawkeyeSafetyRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 재전송에서 유지할 UUID */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "sampleId": "forklift_0004"
+                 *     }
+                 */
+                "application/json": components["schemas"]["HawkeyeSafetyStart"];
+            };
+        };
+        responses: {
+            /** @description 같은 키·입력의 기존 실행 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeSafetyRun"];
+                };
+            };
+            /** @description 새 실행이 QUEUED로 저장됨. state로 실제 진행을 확인하세요. */
+            202: {
+                headers: {
+                    /** @description /api/v1/scenarios/hawkeye-safety/runs/{runId} */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeSafetyRun"];
+                };
+            };
+            /** @description INVALID_SCENARIO_REQUEST(Idempotency-Key·고정 sampleId·추가 필드) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SCENARIO_RUN_ACTIVE(다른 실행 진행 중) 또는 IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SCENARIO_DISABLED(런타임 미설정) 또는 SCENARIO_STORE_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeSafetyRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실행 상세 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeSafetyRun"];
+                };
             };
             /** @description SCENARIO_RUN_NOT_FOUND */
             404: {

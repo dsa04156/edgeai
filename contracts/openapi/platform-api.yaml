@@ -1213,6 +1213,138 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/hawkeye-safety:
+    get:
+      tags: [Scenario]
+      operationId: getHawkeyeSafetyScenario
+      summary: 창고 지게차 안전 점검(Hawkeye VLM) 구성과 런타임 상태
+      description: >-
+        고정 모델(Hugging Face 저장소·revision·Ollama manifest digest·GGUF SHA-256)과 공식 합성 데이터셋의 고정 샘플, 어댑터 /health가
+        3초 안에 스스로 보고한 노드·Ollama 버전·모델 digest·현재 GPU/CPU 배치를 반환합니다. READY는 보고한 모델·digest·샘플 묶음
+        SHA-256이 설정과 같을 때만이며 MISMATCH, NOT_READY, UNAVAILABLE(연결 실패·형식 오류, reported=null)을 구분합니다.
+        비활성 환경은 enabled=false와 runtime=null입니다.
+      responses:
+        '200':
+          description: 구성과 현재 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HawkeyeSafetyScenario'}
+  /api/v1/scenarios/hawkeye-safety/samples/{sampleId}/image:
+    get:
+      tags: [Scenario]
+      operationId: getHawkeyeSafetySampleImage
+      summary: 고정 샘플 이미지
+      description: 런타임에 있는 고정 샘플 JPEG를 설정의 SHA-256과 같을 때만 반환합니다. 합성 이미지이며 실제 CCTV가 아닙니다.
+      parameters:
+      - {name: sampleId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: JPEG 바이트
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        '404':
+          description: SAMPLE_NOT_FOUND
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '502':
+          description: SAMPLE_MISMATCH(런타임 바이트가 고정 SHA-256과 다름)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: SCENARIO_DISABLED 또는 RUNTIME_UNAVAILABLE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/hawkeye-safety/runs:
+    post:
+      tags: [Scenario]
+      operationId: startHawkeyeSafetyRun
+      summary: 안전 점검 실행 시작 (샘플 1장)
+      description: >-
+        고정 샘플 1장을 Hawkeye 모델에 보냅니다. 서버 전체에서 QUEUED·RUNNING 실행은 1개뿐이며 DB 제약으로 보장합니다. 요청은 저장 즉시
+        202로 반환되고 서버가 백그라운드에서 실행합니다(어댑터 호출 제한 기본 120초). 시작 전 어댑터 READY를 확인해 노드·모델 digest를
+        불변 snapshot으로 저장합니다. 응답의 노드·모델 digest·입력 SHA-256이 다르면 FAILED입니다. 모델 출력 첫 줄에서 범주 하나를 읽지
+        못하면 출력과 시간을 저장한 채 FAILED(UNPARSEABLE_OUTPUT)이며 safe로 바꾸지 않습니다. 자동 재시도는 없습니다.
+        같은 Idempotency-Key와 같은 sampleId는 기존 실행을 200으로 반환하고 다른 값은 409입니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}, description: 재전송에서 유지할 UUID}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HawkeyeSafetyStart'}
+            example: {sampleId: forklift_0004}
+      responses:
+        '200':
+          description: 같은 키·입력의 기존 실행
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HawkeyeSafetyRun'}
+        '202':
+          description: 새 실행이 QUEUED로 저장됨. state로 실제 진행을 확인하세요.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/scenarios/hawkeye-safety/runs/{runId}'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HawkeyeSafetyRun'}
+        '400':
+          description: INVALID_SCENARIO_REQUEST(Idempotency-Key·고정 sampleId·추가 필드)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '403': {description: CSRF 검증 실패}
+        '409':
+          description: SCENARIO_RUN_ACTIVE(다른 실행 진행 중) 또는 IDEMPOTENCY_CONFLICT
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: SCENARIO_DISABLED(런타임 미설정) 또는 SCENARIO_STORE_UNAVAILABLE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    get:
+      tags: [Scenario]
+      operationId: listHawkeyeSafetyRuns
+      summary: 안전 점검 실행 기록
+      description: 생성 시각 역순입니다. 항목은 상세와 같은 값입니다.
+      parameters:
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: 실행 목록
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HawkeyeSafetyRunPage'}
+        '400':
+          description: INVALID_SCENARIO_REQUEST
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/scenarios/hawkeye-safety/runs/{runId}:
+    get:
+      tags: [Scenario]
+      operationId: getHawkeyeSafetyRun
+      summary: 안전 점검 실행 상세
+      description: 프로세스가 사라진 실행은 lease 만료 후 INTERRUPTED가 되며 재실행하지 않습니다.
+      parameters:
+      - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: 실행 상세
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HawkeyeSafetyRun'}
+        '404':
+          description: SCENARIO_RUN_NOT_FOUND
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/nodes:
     get:
       tags:
@@ -3914,6 +4046,142 @@ components:
         inferenceMs: {type: [number, 'null']}
         roundTripMs: {type: number}
         failureCode: {type: [string, 'null'], description: 'RUNTIME_UNAVAILABLE, RUNTIME_BUSY, RUNTIME_REJECTED, RUNTIME_INVALID_RESPONSE, INVALID_RESPONSE, IDENTITY_MISMATCH, INPUT_MISMATCH'}
+    HawkeyeSafetyScenario:
+      type: object
+      additionalProperties: false
+      required: [id, enabled, categories, model, dataset, samples, runtime, activeRunId]
+      properties:
+        id: {type: string, enum: [hawkeye-warehouse-safety]}
+        enabled: {type: boolean}
+        categories:
+          type: array
+          items: {type: string, enum: [spill, forklift_violation, improper_stacking, obstacle, safe]}
+        model:
+          type: object
+          additionalProperties: false
+          required: [name, ollamaName, repository, revision, license, manifestDigest, languageSha256, visionSha256]
+          properties:
+            name: {type: string}
+            ollamaName: {type: string}
+            repository: {type: string}
+            revision: {type: string}
+            license: {type: string}
+            manifestDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+            languageSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+            visionSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        dataset:
+          type: object
+          additionalProperties: false
+          required: [name, repository, revision, license, split, synthetic, samplesSha256]
+          properties:
+            name: {type: string}
+            repository: {type: string}
+            revision: {type: string}
+            license: {type: string}
+            split: {type: string}
+            synthetic: {type: boolean, description: 생성 이미지이며 실제 CCTV가 아님}
+            samplesSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        samples:
+          type: array
+          items: {$ref: '#/components/schemas/HawkeyeSafetySample'}
+        runtime:
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [status, reported, error]
+            properties:
+              status: {type: string, enum: [READY, NOT_READY, MISMATCH, UNAVAILABLE]}
+              error: {type: [string, 'null'], description: 준비되지 않은 이유(어댑터 보고)}
+              reported:
+                oneOf:
+                - type: 'null'
+                - type: object
+                  additionalProperties: false
+                  description: 어댑터가 스스로 보고한 값. processor는 Ollama /api/ps의 현재 배치(GPU, CPU 또는 CPU/GPU 비율)
+                  required: [nodeName, model, modelDigest, ollamaVersion, processor, sizeBytes, sizeVramBytes]
+                  properties:
+                    nodeName: {type: [string, 'null']}
+                    model: {type: [string, 'null']}
+                    modelDigest: {type: [string, 'null']}
+                    ollamaVersion: {type: [string, 'null']}
+                    processor: {type: [string, 'null']}
+                    sizeBytes: {type: [integer, 'null'], format: int64}
+                    sizeVramBytes: {type: [integer, 'null'], format: int64}
+        activeRunId: {type: [string, 'null'], format: uuid}
+    HawkeyeSafetySample:
+      type: object
+      additionalProperties: false
+      required: [id, file, referenceLabel, sha256]
+      properties:
+        id: {type: string}
+        file: {type: string, description: 데이터셋 내 경로}
+        referenceLabel: {type: string, description: 데이터셋 참조 라벨(정답 판정 기준이 아닌 비교용)}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    HawkeyeSafetyStart:
+      type: object
+      additionalProperties: false
+      required: [sampleId]
+      properties:
+        sampleId: {type: string}
+    HawkeyeSafetyRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextOffset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/HawkeyeSafetyRun'}
+        nextOffset: {type: [integer, 'null']}
+    HawkeyeSafetyRun:
+      type: object
+      additionalProperties: false
+      required: [id, sampleId, referenceLabel, state, createdAt, startedAt, finishedAt, failureCode, failureMessage, target, result]
+      properties:
+        id: {type: string, format: uuid}
+        sampleId: {type: string}
+        referenceLabel: {type: string}
+        state: {type: string, enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, INTERRUPTED]}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: [string, 'null'], format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        failureCode: {type: [string, 'null'], description: 'TARGET_NOT_READY, RUNTIME_*, IDENTITY_MISMATCH, INPUT_MISMATCH, INVALID_RESPONSE, UNPARSEABLE_OUTPUT, OWNER_LOST, PROCESS_STOPPED 등'}
+        failureMessage: {type: [string, 'null']}
+        target:
+          description: 시작 시 어댑터가 보고한 실행 대상(snapshot)
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [nodeName, model, modelDigest, ollamaVersion, promptSha256]
+            properties:
+              nodeName: {type: string}
+              model: {type: string}
+              modelDigest: {type: string}
+              ollamaVersion: {type: string}
+              promptSha256: {type: string}
+        result:
+          description: 모델 응답. UNPARSEABLE_OUTPUT 실패에도 원문·시간이 있으며 category는 null입니다.
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [category, explanation, matchesReference, rawOutput, doneReason, inputSha256, processor, sizeBytes, sizeVramBytes, inferenceMs, loadMs, roundTripMs, promptEvalCount, evalCount]
+            properties:
+              category: {type: [string, 'null'], enum: [spill, forklift_violation, improper_stacking, obstacle, safe, null]}
+              explanation: {type: [string, 'null']}
+              matchesReference: {type: [boolean, 'null'], description: category와 샘플 참조 라벨이 같은지. category가 없으면 null}
+              rawOutput: {type: string}
+              doneReason: {type: [string, 'null']}
+              inputSha256: {type: string}
+              processor: {type: string, description: 추론 직후 Ollama /api/ps가 보고한 모델 배치}
+              sizeBytes: {type: integer, format: int64}
+              sizeVramBytes: {type: integer, format: int64}
+              inferenceMs: {type: number, description: Ollama total_duration (이 요청의 모델 처리 전체)}
+              loadMs: {type: number, description: Ollama load_duration}
+              roundTripMs: {type: number, description: API가 측정한 어댑터 호출 시간}
+              promptEvalCount: {type: [integer, 'null']}
+              evalCount: {type: [integer, 'null']}
     InferenceModelPage:
       type: object
       additionalProperties: false

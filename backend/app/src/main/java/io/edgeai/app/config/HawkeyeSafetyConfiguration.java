@@ -1,0 +1,22 @@
+package io.edgeai.app.config;
+
+import io.edgeai.adapters.repository.JdbcHawkeyeSafetyRepository;
+import io.edgeai.adapters.scenario.HttpHawkeyeRuntime;
+import io.edgeai.domain.repository.HawkeyeSafetyRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+@Configuration
+@EnableConfigurationProperties(HawkeyeSafetyProperties.class)
+public class HawkeyeSafetyConfiguration {
+    @Bean HawkeyeSafetyRepository hawkeyeSafetyRepository(JdbcTemplate jdbc) { return new JdbcHawkeyeSafetyRepository(jdbc); }
+
+    /** The adapter URL is server configuration; the browser never selects an upstream. */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "edgeai.hawkeye-safety.enabled", havingValue = "true")
+    HttpHawkeyeRuntime hawkeyeRuntime(HawkeyeSafetyProperties properties) {
+        return new HttpHawkeyeRuntime(properties.url(), properties.timeout());
+    }
+}

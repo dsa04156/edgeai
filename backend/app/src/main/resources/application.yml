@@ -83,6 +83,38 @@ edgeai:
       model-name: ResNet-v1-50 (Hailo Model Zoo HEF)
       model-sha256: a1d82e9121c66e772257490cb3af904d1e90fb4387ad5f683fbc5efe1a05f9f7
       provider: HailoRT
+  # Hawkeye warehouse-safety VLM (docs/scenarios/hawkeye-warehouse-safety.md). Disabled until the adapter is deployed.
+  hawkeye-safety:
+    enabled: ${EDGEAI_HAWKEYE_SAFETY_ENABLED:false}
+    url: ${EDGEAI_HAWKEYE_SAFETY_URL:}
+    timeout: ${EDGEAI_HAWKEYE_SAFETY_TIMEOUT:120s}
+    lease: ${EDGEAI_HAWKEYE_SAFETY_LEASE:60s}
+    heartbeat: ${EDGEAI_HAWKEYE_SAFETY_HEARTBEAT:5s}
+    model:
+      name: Hawkeye Warehouse Safety VLM (Qwen3.5-2B LoRA, Q4_K_M + F16 vision encoder)
+      ollama-name: hf.co/Jsohal174/hawkeye-warehouse-safety-gguf:latest
+      repository: https://huggingface.co/Jsohal174/hawkeye-warehouse-safety-gguf
+      revision: 9aea324874878ab464fa42e6abd952e178893f79
+      license: CC-BY-4.0
+      manifest-digest: edac48dc7e13c76d23710b693552d2422f599c3c7112f45561888dec48f2d280
+      language-sha256: beef633ddb0671b90cc90f94e254537ae7e7e5c718ed0e73c88c95c8d8d740f3
+      vision-sha256: e1ae17404211c36acc087f15e2615a8d617afa5bafeadc5d2b484ecbe7edb2c2
+    dataset:
+      name: Warehouse Safety Hazard Dataset (합성 이미지, held-out test split)
+      repository: https://huggingface.co/datasets/Jsohal174/warehouse-safety-hazard-dataset
+      revision: b23808ec287ad4aa377f661f9cbda840e76865e1
+      license: CC-BY-4.0
+      split: test
+      samples-sha256: 9c4ae8925a63fcea3ce3ee241fceefbef1d0129295ff11b7a07391f108e11e69
+    samples:
+      - id: forklift_0004
+        file: test/forklift_violation/forklift_0004.jpg
+        reference-label: forklift_violation
+        sha256: 417f2b6cffc30ba1a5ffd3e241efcfb58db16c56918e09b998d70f377f4023ff
+      - id: forklift_0024
+        file: test/safe/forklift_0024.jpg
+        reference-label: safe
+        sha256: eaff9ccb0ab17578bc1cc8e3b255c982bf1d880d0add4d812f6fb32e977e8af4
   workflow:
     enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:

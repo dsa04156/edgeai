@@ -1,0 +1,23 @@
+{
+  "dataset": "Jsohal174/warehouse-safety-hazard-dataset",
+  "revision": "b23808ec287ad4aa377f661f9cbda840e76865e1",
+  "split": "test",
+  "license": "CC-BY-4.0",
+  "synthetic": true,
+  "samples": [
+    {
+      "id": "forklift_0004",
+      "file": "test/forklift_violation/forklift_0004.jpg",
+      "referenceLabel": "forklift_violation",
+      "sha256": "417f2b6cffc30ba1a5ffd3e241efcfb58db16c56918e09b998d70f377f4023ff",
+      "bytes": 157869
+    },
+    {
+      "id": "forklift_0024",
+      "file": "test/safe/forklift_0024.jpg",
+      "referenceLabel": "safe",
+      "sha256": "eaff9ccb0ab17578bc1cc8e3b255c982bf1d880d0add4d812f6fb32e977e8af4",
+      "bytes": 136369
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "model": {
+    "description": "Hawkeye warehouse-safety VLM, Qwen3.5-2B LoRA merge, Q4_K_M language weights + F16 vision encoder (University of Guelph, J. S. Sohal). Pulled with the model card quick start `ollama pull hf.co/Jsohal174/hawkeye-warehouse-safety-gguf` (Ollama 0.32.5); the two blobs equal the HF LFS objects below.",
+    "repository": "https://huggingface.co/Jsohal174/hawkeye-warehouse-safety-gguf",
+    "revision": "9aea324874878ab464fa42e6abd952e178893f79",
+    "license": "CC-BY-4.0",
+    "ollama_name": "hf.co/Jsohal174/hawkeye-warehouse-safety-gguf:latest",
+    "ollama_manifest_digest": "edac48dc7e13c76d23710b693552d2422f599c3c7112f45561888dec48f2d280",
+    "Qwen3.5-2B.Q4_K_M.gguf": "beef633ddb0671b90cc90f94e254537ae7e7e5c718ed0e73c88c95c8d8d740f3",
+    "Qwen3.5-2B.F16-mmproj.gguf": "e1ae17404211c36acc087f15e2615a8d617afa5bafeadc5d2b484ecbe7edb2c2",
+    "ollama_config_blob": "479682583bcaba2b6bc8fb77528beb5061d59a40fa2d75a005474b92024fdb54"
+  },
+  "samples": {
+    "description": "Two held-out test images of the official synthetic dataset (generated renders, not CCTV). Chosen as the first file of each category whose upstream published per-image result (outputs/hawkeye_test_results_fixed.json @ 67b00ab) was correct; not an accuracy sample.",
+    "repository": "https://huggingface.co/datasets/Jsohal174/warehouse-safety-hazard-dataset",
+    "revision": "b23808ec287ad4aa377f661f9cbda840e76865e1",
+    "license": "CC-BY-4.0",
+    "samples.json": "9c4ae8925a63fcea3ce3ee241fceefbef1d0129295ff11b7a07391f108e11e69",
+    "forklift_0004.jpg": "417f2b6cffc30ba1a5ffd3e241efcfb58db16c56918e09b998d70f377f4023ff",
+    "forklift_0024.jpg": "eaff9ccb0ab17578bc1cc8e3b255c982bf1d880d0add4d812f6fb32e977e8af4"
+  },
+  "ollama": {
+    "description": "Official Ollama image; same version as the host binary used for the 2026-10-23 feasibility run on the RTX 5060 Ti",
+    "image": "docker.io/ollama/ollama:0.32.5@sha256:4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131",
+    "platform": "linux/amd64"
+  },
+  "upstream_code": {
+    "repository": "https://github.com/Jsohal174/safety-hazard-detection",
+    "commit": "67b00ab627cd195d0137d175fca854fa098bea06",
+    "license": "none declared; only the prompt text and category names are reused"
+  },
+  "adapter": {
+    "description": "Python standard-library adapter base image (no third-party packages)",
+    "image": "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+    "platform": "linux/amd64"
+  }
+}

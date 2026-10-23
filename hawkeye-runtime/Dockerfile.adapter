@@ -1,0 +1,15 @@
+# linux/amd64. Standard-library adapter in front of the Ollama container of the same Pod; no RUN step, so the
+# arm64 rootless builder assembles it without emulation. Samples are the two pinned dataset images (samples.json).
+FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp PYTHONPATH=/opt/hawkeye-runtime \
+    OLLAMA_URL=http://127.0.0.1:11434 HAWKEYE_SAMPLES_DIR=/opt/hawkeye/samples \
+    HAWKEYE_MODEL=hf.co/Jsohal174/hawkeye-warehouse-safety-gguf:latest \
+    HAWKEYE_MODEL_DIGEST=edac48dc7e13c76d23710b693552d2422f599c3c7112f45561888dec48f2d280 \
+    HAWKEYE_SAMPLES_SHA256=9c4ae8925a63fcea3ce3ee241fceefbef1d0129295ff11b7a07391f108e11e69
+COPY samples.json /opt/hawkeye/samples/samples.json
+COPY samples /opt/hawkeye/samples
+COPY edgeai_hawkeye_runtime /opt/hawkeye-runtime/edgeai_hawkeye_runtime
+USER 10001:10001
+EXPOSE 8080
+ENTRYPOINT ["python", "-m", "edgeai_hawkeye_runtime.server"]

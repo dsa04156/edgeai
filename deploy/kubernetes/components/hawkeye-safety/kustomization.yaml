@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - hawkeye-safety.yaml
+images:
+  - name: edgeai-hawkeye-ollama
+    newName: 10.254.192.47:5000/edgeai/hawkeye-ollama
+    digest: sha256:c57dc2929e6c883d76eb9d555ebf4844d22d2362b9d81469d73ffade35ef93b0
+  - name: edgeai-hawkeye-adapter
+    newName: 10.254.192.47:5000/edgeai/hawkeye-adapter
+    digest: sha256:c500262bfb261efb0ec128b3bf541bfb3ab47dcad374ce44dacdf5b6eccf7910
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_HAWKEYE_SAFETY_ENABLED, value: 'true'}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_HAWKEYE_SAFETY_URL, value: 'http://edgeai-hawkeye-safety.edgeai.svc:8080'}

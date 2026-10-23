@@ -144,12 +144,13 @@ export default defineConfig(async (env) => {
                   ["runs", "RunsPage.vue"],
                   ["inference", "InferencePage.vue"],
                   ["scenarios", "ScenarioPage.vue"],
+                  ["hawkeye", "HawkeyePage.vue", "scenarios/hawkeye"],
                   ["audit", "AuditPage.vue"],
                   ["platform-service", "PlatformServicePage.vue"],
                 ]
                   .map(
-                    ([route, component]) =>
-                      `{name: "edgeai/${route}", path: "/:tenant?/${route}", component: () => import(${JSON.stringify(path.join(nativeRoot, component))})}`,
+                    ([route, component, routePath = route]) =>
+                      `{name: "edgeai/${route}", path: "/:tenant?/${routePath}", component: () => import(${JSON.stringify(path.join(nativeRoot, component))})}`,
                   )
                   .join(",\n") + ",\n    //Flows",
               );
@@ -162,6 +163,8 @@ export default defineConfig(async (env) => {
               ["workflows", "워크플로", "FileTreeOutline"],
               ["runs", "실행 · 작업 · 결과", "PlayOutline"],
               ["inference", "모델 추론", "ImageSearchOutline"],
+              // Before "scenarios": the top bar picks the first item whose path prefixes /scenarios/hawkeye.
+              ["hawkeye", "창고 지게차 안전 점검", "ForkliftIcon"],
               ["scenarios", "GPU/NPU 이미지 비교", "CompareHorizontal"],
               ["profiles", "실행 모듈", "PuzzleOutline"],
               ["audit", "감사 기록", "ShieldCheckOutline"],
@@ -176,7 +179,7 @@ export default defineConfig(async (env) => {
             return code
               .replace(
                 'import {computed} from "vue"',
-                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"',
               )
               .replace(
                 /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,
