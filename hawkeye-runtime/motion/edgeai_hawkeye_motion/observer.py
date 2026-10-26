@@ -10,10 +10,15 @@ gets the same range. Frames evicted from the ring before a window was closed are
 
 The observer stops ingesting when stopped, when its lease is not renewed, or after the source keeps failing for
 FAIL_SECONDS; the state and failure stay readable until a new session replaces it.
+
+A replayed recording can cut between camera views (and wraps from its end to its start). A frame whose 32x24 grayscale
+thumbnail differs from the previous one by more than SCENE_CUT_MAD (mean absolute difference, 0..255) restarts
+tracking (reset SCENE_CUT), so no track or velocity spans two views.
 """
 
 import datetime
 import hashlib
+import io
 import re
 import threading
 import time
@@ -22,12 +27,17 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from PIL import Image
+
 from .motion import Motion
 
 SOURCE_FIELDS = {"deviceId", "deviceUid", "nodeName", "mapperUrl", "mapperDeployment", "configurationSha256", "sourceGeneration"}
 MAPPER_URL = re.compile(r"http://[0-9]{1,3}(\.[0-9]{1,3}){3}:7783")
 FRAME_TIME = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z")
 MAX_FRAME_BYTES = 1048576
+# Measured 2026-10-26 on the 24 fps preview frames of both replay clips: consecutive frames of one view stay at or below
+# 18.4 (p99 11.4-41.9 because of the cuts), every camera cut and the loop wrap is 40.6-54.6.
+SCENE_CUT_MAD = 30.0
 
 
 class SourceError(Exception):
@@ -53,6 +63,13 @@ def frame_time(value):
         raise SourceError("FRAME_TIME_INVALID")
     fraction = (match.group(2) or "").ljust(6, "0")[:6]
     return datetime.datetime.fromisoformat(match.group(1) + "." + fraction + "+00:00")
+
+
+def thumbnail(image):
+    """32x24 grayscale bytes of a JPEG, decoded at reduced size."""
+    picture = Image.open(io.BytesIO(image))
+    picture.draft("L", (80, 60))
+    return picture.convert("L").resize((32, 24), Image.BILINEAR).tobytes()
 
 
 def iso(moment):
@@ -86,8 +103,11 @@ class MapperSource:
 
 
 class Observer:
-    RING_FRAMES = 240
+    # 120 s of the Mapper's 24 fps preview (JPEGs of about 70 KB: about 200 MB): the retained windows plus their latency.
+    RING_FRAMES = 24 * 120
     POLL_SECONDS = 0.1
+    # Wait for a newer frame than the one just read: half the preview's frame interval, so no decoded frame is skipped.
+    FRAME_WAIT_SECONDS = 1 / 48
     FAIL_SECONDS = 10.0
     MAX_FRAME_AGE_SECONDS = 10.0
     RETAINED_WINDOWS = 3
@@ -108,6 +128,7 @@ class Observer:
         self.last_error = None
         self.processed = 0
         self.resets = 0
+        self.scene_cuts = 0
         self.last_detect_ms = None
         self.frames = {}  # seq -> (observation, jpeg), insertion ordered
         self.windows = {}  # k -> closed window
@@ -142,7 +163,7 @@ class Observer:
 
     # --- ingestion -----------------------------------------------------------------------------------------------
     def _run(self):
-        previous, failing_since = None, None
+        previous, failing_since, last_thumbnail = None, None, None
         while not self._stop.is_set():
             if time.monotonic() > self.lease_until:
                 self._end("EXPIRED", {"code": "OBSERVER_EXPIRED", "message": "lease not renewed"})
@@ -166,7 +187,7 @@ class Observer:
             failing_since = None
             if decoded == previous:
                 # The Mapper has not decoded a newer frame yet. An earlier time is processed: Motion restarts tracking.
-                self._stop.wait(self.POLL_SECONDS)
+                self._stop.wait(self.FRAME_WAIT_SECONDS)
                 continue
             previous = decoded
             try:
@@ -174,7 +195,14 @@ class Observer:
             except Exception as error:  # the detector is not trusted to keep running after an error
                 self._end("FAILED", {"code": "DETECTOR_FAILED", "message": type(error).__name__})
                 break
-            observation = self.motion.observe(decoded, detections, width, height)
+            try:
+                small = thumbnail(image)
+            except (OSError, ValueError):
+                small = None
+            cut = small is not None and last_thumbnail is not None \
+                and sum(abs(a - b) for a, b in zip(small, last_thumbnail)) / len(small) > SCENE_CUT_MAD
+            last_thumbnail = small
+            observation = self.motion.observe(decoded, detections, width, height, scene_cut=cut)
             with self._lock:
                 if self.state != "RUNNING":
                     break
@@ -187,6 +215,7 @@ class Observer:
                     self.frames.pop(next(iter(self.frames)))
                 self.processed += 1
                 self.resets += observation["reset"] is not None
+                self.scene_cuts += observation["reset"] == "SCENE_CUT"
                 self.last_detect_ms = observation["detectMs"]
                 self.last_error = None
 
@@ -196,7 +225,8 @@ class Observer:
             return {"sessionId": self.session_id, "epoch": self.epoch, "state": self.state, "failure": self.failure,
                     "lastError": self.last_error, "startedAt": self.started_at, "leaseSeconds": self.lease_seconds,
                     "source": self.source, "observer": identity,
-                    "stats": {"processed": self.processed, "resets": self.resets, "lastDetectMs": self.last_detect_ms}}
+                    "stats": {"processed": self.processed, "resets": self.resets, "sceneCuts": self.scene_cuts,
+                              "lastDetectMs": self.last_detect_ms}}
 
     def latest(self):
         with self._lock:

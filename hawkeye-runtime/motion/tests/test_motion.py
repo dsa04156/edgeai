@@ -132,10 +132,37 @@ class MotionTest(unittest.TestCase):
         self.assertIsNone(after["tracks"][0]["velocity"])
         self.assertEqual(len(after["tracks"][0]["path"]), 1)
 
+    def test_scene_cut_restarts_tracking_without_reusing_ids(self):
+        motion = Motion()
+        before = run(motion, [(t / 2, [forklift(200 + 50 * t, 500)]) for t in range(3)])
+        after = motion.observe(at(1.5), [forklift(300, 500)], 1280, 720, scene_cut=True)
+        self.assertEqual(after["reset"], "SCENE_CUT")
+        self.assertNotEqual(before["tracks"][0]["id"], after["tracks"][0]["id"])
+        self.assertEqual(len(after["tracks"][0]["path"]), 1)
+
     def test_regressed_frame_time_resets(self):
         motion = Motion()
         motion.observe(at(1), [forklift(200, 500)], 1280, 720)
         self.assertEqual(motion.observe(at(0.5), [forklift(200, 500)], 1280, 720)["reset"], "TIME_REGRESSED")
+
+    def test_twenty_four_fps_predicts_after_point_four_seconds_with_a_compact_path(self):
+        # Forklift +100 px/s towards a standing person, observed every 1/24 s for 6 s.
+        motion, seen = Motion(), {}
+        for n in range(24 * 6 + 1):
+            observation = motion.observe(at(n / 24), [forklift(200 + 100 * n / 24, 500), person(1200, 500)], 1280, 720)
+            seen[n] = next(t for t in observation["tracks"] if t["class"] == "forklift")
+        self.assertIsNone(seen[9]["velocity"])  # 0.375 s of history
+        early = seen[10]  # 0.417 s
+        self.assertAlmostEqual(early["velocity"][0], 100, delta=3)
+        self.assertEqual(len(early["predicted"]), 6)
+        self.assertEqual(len({t["id"] for t in seen.values()}), 1)
+        last = seen[24 * 6]
+        self.assertAlmostEqual(last["velocity"][0], 100, delta=3)
+        # The shown path stays compact but still reaches back over seconds, ending at the current point.
+        self.assertLessEqual(len(last["path"]), 10)
+        self.assertEqual(last["path"][-1], [0.0, last["point"][0], last["point"][1]])
+        self.assertLessEqual(last["path"][0][0], -4.0)
+        self.assertEqual(pair(observation)["level"], "NEAR_PATH")
 
     def test_first_frame_is_marked_start(self):
         self.assertEqual(Motion().observe(at(0), [], 1280, 720)["reset"], "START")

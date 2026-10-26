@@ -56,7 +56,7 @@ const camera = { id: "hawkeye-forklift-video", uid: CAMERA_UID, state: "ONLINE",
 
 function api(page: Page) {
   const state = {
-    phase: "idle" as "idle" | "running" | "stopped", starts: [] as unknown[], liveSeq: 0, liveFail: 0, evict: new Set<number>(),
+    phase: "idle" as "idle" | "running" | "stopped", starts: [] as unknown[], liveSeq: 0, liveFail: 0, evict: new Set<number>(), latency: 120,
     live: [] as number[], lost: false, lastError: null as string | null, inFlight: 0, maxInFlight: 0, historyReads: new Map<string, number>(), historyInFlight: 0, historyMax: 0,
   };
   const windows = () => state.phase === "idle" ? [] : [
@@ -72,7 +72,7 @@ function api(page: Page) {
   const track = async <T>(work: () => Promise<T>) => {
     state.maxInFlight = Math.max(state.maxInFlight, ++state.inFlight);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise((resolve) => setTimeout(resolve, state.latency));
       return await work();
     } finally {
       state.inFlight--;
@@ -217,12 +217,23 @@ test("live motion: one compact clip with synced boxes, history/future paths and 
   await shot(page, info, "live");
   await shot(page, info, "dag", "section:has(#hv-graph-title)");
 
-  // About 1 fps, never overlapping status/frame reads.
-  const from = state.live.length;
-  await page.waitForTimeout(3200);
-  expect(state.live.length - from).toBeGreaterThanOrEqual(2);
-  expect(state.live.length - from).toBeLessThanOrEqual(4);
+  // Reads slower than 1/24 s (two 120 ms reads per tick) run back to back, never overlapping: about 4 ticks per second.
+  let from = state.live.length;
+  await page.waitForTimeout(3000);
+  expect(state.live.length - from).toBeGreaterThanOrEqual(9);
+  expect(state.live.length - from).toBeLessThanOrEqual(14);
+  // Fast reads are paced to at most 24 Hz, and the shown rate is the measured one.
+  state.latency = 5;
+  await page.waitForTimeout(500);
+  from = state.live.length;
+  await page.waitForTimeout(3000);
+  expect(state.live.length - from).toBeGreaterThanOrEqual(30);
+  expect(state.live.length - from).toBeLessThanOrEqual(3 * 24 + 2);
   expect(state.maxInFlight).toBe(1);
+  const displayed = Number(/표시 ([0-9.]+) fps/.exec((await page.locator(".hv-stage figcaption").textContent()) ?? "")?.[1]);
+  expect(displayed).toBeGreaterThan(10);
+  expect(displayed).toBeLessThanOrEqual(25);
+  await expect(page.locator(".hv-stage figcaption")).toContainText(/관측 [0-9.]+ fps/);
 
   await page.getByRole("button", { name: "점검 중지" }).click();
   await expect(page.getByRole("button", { name: "점검 시작" })).toBeVisible();

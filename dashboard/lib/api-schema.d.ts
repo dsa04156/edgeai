@@ -1186,7 +1186,7 @@ export interface paths {
         };
         /**
          * 검증된 JSON 출력 파일 본문 조회
-         * @description 확정된 Result의 출력 포트만 조회합니다. 고정 object version·크기·SHA-256·형식을 다시 검증한 뒤 1 MiB 이하 JSON 본문을 반환합니다. 서명 URL이나 저장소 자격 증명을 제공하지 않으며 응답은 no-store입니다.
+         * @description 확정된 Result의 출력 포트만 조회합니다. 고정 object version·크기·SHA-256·형식을 다시 검증한 뒤 8 MiB 이하 JSON 본문을 반환합니다. 서명 URL이나 저장소 자격 증명을 제공하지 않으며 응답은 no-store입니다.
          */
         get: operations["getTaskResultContent"];
         put?: never;
@@ -2557,6 +2557,8 @@ export interface components {
             stats: {
                 processed: number;
                 resets: number;
+                /** @description 화면 전환(다른 카메라 장면·반복 영상의 처음으로 돌아감)으로 추적을 다시 시작한 횟수 */
+                sceneCuts?: number;
                 lastDetectMs: number | null;
             };
             latest: components["schemas"]["HawkeyeMotionObservation"] | null;
@@ -2572,7 +2574,7 @@ export interface components {
             height: number;
             gapMs: number | null;
             /** @enum {string|null} */
-            reset: "START" | "TIME_GAP" | "TIME_REGRESSED" | null;
+            reset: "START" | "TIME_GAP" | "TIME_REGRESSED" | "SCENE_CUT" | null;
             /** @enum {string} */
             status: "NEAR_PATH" | "APPROACHING" | "UNKNOWN" | "NO_CONFLICT" | "NO_PAIR";
             tracks: {

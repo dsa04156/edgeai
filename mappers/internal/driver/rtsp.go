@@ -19,6 +19,9 @@ import (
 
 // RTSP keeps video out of the numeric MQTT/Twin path. Only decoded-frame
 // freshness is a device property; previews are bounded JPEG snapshots.
+// Decoded frames are resampled to previewFPS, the motion observer's analysis rate.
+const previewFPS = 24
+
 type RTSP struct {
 	config  Connection
 	ctx     context.Context
@@ -93,7 +96,7 @@ func (r *RTSP) run() {
 	defer close(r.done)
 	endpoint := (&url.URL{Scheme: "rtsp", Host: net.JoinHostPort(r.config.Host, strconv.Itoa(r.config.Port)), Path: r.config.Path}).String()
 	for r.ctx.Err() == nil {
-		cmd := exec.CommandContext(r.ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", strconv.Itoa(r.config.TimeoutMs*1000), "-analyzeduration", "100000", "-probesize", "32768", "-i", endpoint, "-map", "0:v:0", "-an", "-vf", "fps=2,scale=640:640:force_original_aspect_ratio=decrease", "-threads", "1", "-filter_threads", "1", "-c:v", "mjpeg", "-q:v", "2", "-f", "image2pipe", "-flush_packets", "1", "pipe:1")
+		cmd := exec.CommandContext(r.ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", strconv.Itoa(r.config.TimeoutMs*1000), "-analyzeduration", "100000", "-probesize", "32768", "-i", endpoint, "-map", "0:v:0", "-an", "-vf", "fps="+strconv.Itoa(previewFPS)+",scale=640:640:force_original_aspect_ratio=decrease", "-threads", "1", "-filter_threads", "1", "-c:v", "mjpeg", "-q:v", "2", "-f", "image2pipe", "-flush_packets", "1", "pipe:1")
 		cmd.Stderr = io.Discard
 		pipe, err := cmd.StdoutPipe()
 		if err == nil {

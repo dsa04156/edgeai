@@ -3,7 +3,7 @@
     EDGEAI_API_URL=http://<api> EDGEAI_API_USER=... EDGEAI_API_PASSWORD=... python3 -I hawkeye-runtime/workflow/publish.py [definition.json]
 
 The default definition is hawkeye-video-safety.json (v1 capture → infer); hawkeye-video-safety-v2.json publishes the
-continuous-observation snapshot version. A profile image must be pinned by digest before publishing.
+continuous-observation snapshot version (v2.1 for the 24 fps preview: 32 MiB frames). A profile image must be pinned by digest before publishing.
 
 Every call is replay-safe: an existing identical profile/workflow/version returns 200, a different one 409 (stop and
 publish a new version instead). Prints the published IDs; never prints credentials.

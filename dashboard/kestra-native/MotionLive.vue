@@ -10,6 +10,7 @@
     <span aria-live="polite">
       {{ status.text }}<template v-if="shown"> · 프레임 {{ shown.seq }} · {{ time(shown.frameTime ?? shown.receivedAt) }}</template>
       <template v-if="view"> · 처리 {{ view.stats.processed }} · 추적 재시작 {{ view.stats.resets }}</template>
+      <template v-if="rates"> · {{ rates }}</template>
       <template v-if="note"> · {{ note }}</template>
     </span>
   </MotionStage>
@@ -17,12 +18,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { time } from "./native-api";
-import { liveStatus, type LiveView, type Observation } from "./hawkeye-video";
+import { frameRate, liveStatus, type LiveView, type Observation } from "./hawkeye-video";
 import MotionStage from "./MotionStage.vue";
 
 const props = defineProps<{ sessionId: string }>();
 const emit = defineEmits<{ frame: [observation: Observation | null]; live: [view: LiveView]; ended: [] }>();
-const INTERVAL = 1000;
+/** The observer analyses the Mapper's 24 fps preview; a failed read is retried after a second. */
+const INTERVAL = 1000 / 24,
+  RETRY = 1000;
 const src = ref(""),
   shown = ref<Observation | null>(null),
   view = ref<LiveView | null>(null),
@@ -30,13 +33,23 @@ const src = ref(""),
   note = ref(""),
   lastFrameAt = ref<number | null>(null),
   closed = ref(false),
-  now = ref(Date.now());
+  now = ref(Date.now()),
+  shownAt = ref<number[]>([]),
+  processedAt = ref<[number, number][]>([]);
 const controller = new AbortController();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 const status = computed(() =>
   closed.value ? { text: "관측 종료", tone: "warning" as const, live: false } : liveStatus({ state: view.value?.state ?? "STARTING", lastFrameAt: lastFrameAt.value, error: error.value, now: now.value, failure: view.value?.failure, lastError: view.value?.lastError }),
 );
+/** Measured, not configured: frames this page displayed and frames the observer analysed, over the last 2 s. */
+const rates = computed(() => {
+  const shown = frameRate(shownAt.value, now.value);
+  const samples = processedAt.value, [first, last] = [samples[0], samples[samples.length - 1]];
+  const analysed = samples.length > 1 && last[0] > first[0] ? ((last[1] - first[1]) * 1000) / (last[0] - first[0]) : null;
+  return [shown == null ? "" : `표시 ${shown.toFixed(1)} fps`, analysed == null ? "" : `관측 ${analysed.toFixed(1)} fps`].filter(Boolean).join(" · ");
+});
+const recent = <T,>(list: T[], at: (item: T) => number, time: number) => list.filter((item) => time - at(item) <= 2000);
 const placeholder = computed(() =>
   error.value ? `실시간 관측을 받을 수 없습니다 · ${error.value}` : view.value?.state === "RUNNING" ? "첫 관측 프레임을 기다리는 중…" : "관측을 시작하는 중…",
 );
@@ -64,6 +77,7 @@ async function tick() {
   if (!response.ok) throw new Error(await failure(response));
   const live: LiveView = await response.json();
   view.value = live;
+  processedAt.value = [...recent(processedAt.value, (s) => s[0], now.value), [now.value, live.stats.processed]];
   emit("live", live);
   const latest = live.latest;
   if (latest && latest.seq !== shown.value?.seq) {
@@ -81,13 +95,16 @@ async function tick() {
       src.value = next;
       shown.value = latest;
       lastFrameAt.value = Date.now();
+      shownAt.value = [...recent(shownAt.value, (t) => t, lastFrameAt.value), lastFrameAt.value];
       note.value = "";
       emit("frame", latest);
     }
   }
   return live.state === "RUNNING" || live.state === "STARTING";
 }
+/** Ticks start INTERVAL apart when the reads are faster than that, and right after the previous one when slower. */
 async function loop() {
+  const started = performance.now();
   let again = true;
   try {
     again = await tick();
@@ -98,7 +115,7 @@ async function loop() {
   }
   now.value = Date.now();
   if (controller.signal.aborted) return;
-  if (again) timer = setTimeout(loop, INTERVAL);
+  if (again) timer = setTimeout(loop, Math.max(0, (error.value ? RETRY : INTERVAL) - (performance.now() - started)));
   else emit("ended");
 }
 onMounted(() => void loop());

@@ -192,9 +192,13 @@ export function cameraState(c: Pick<Camera, "state" | "stateReason" | "mapper">)
   const reason = online ? null : (REASONS[c.stateReason ?? ""] ?? (c.mapper.ready ? "카메라가 응답하지 않습니다" : REASONS.MAPPER_NOT_READY));
   return { online, label: online ? "연결됨" : c.state === "OFFLINE" ? "연결 끊김" : "사용 불가", reason };
 }
-/** The registered forklift replay loops a recorded CCTV clip; other cameras carry no such label. */
-export const replayLabel = (c: Pick<Camera, "profile">) =>
-  c.profile.sourceName === "hawkeye-forklift-replay" ? "녹화 영상 반복 재생" : null;
+/** Registered replays loop a recorded clip (sourceName from hawkeye-runtime/video-replay/source*.json); other cameras carry no such label. */
+const REPLAY_LABELS = new Map([
+  ["hawkeye-forklift-replay", "녹화 영상 반복 재생"],
+  ["hawkeye-youtube-turn-replay", "지게차 급회전 · 녹화 영상 반복 재생"],
+  ["hawkeye-youtube-accidents-replay", "지게차 사고 CCTV · 녹화 영상 반복 재생"],
+]);
+export const replayLabel = (c: Pick<Camera, "profile">) => REPLAY_LABELS.get(c.profile.sourceName ?? "") ?? null;
 /** parameters.cameraSource: the camera identity and location the server pinned when the window's Run was created. */
 export type CameraBinding = {
   deviceId: string;
@@ -273,7 +277,7 @@ export type Observation = {
   sha256: string;
   detectMs: number | null;
   gapMs: number | null;
-  reset: null | "START" | "TIME_GAP" | "TIME_REGRESSED";
+  reset: null | "START" | "TIME_GAP" | "TIME_REGRESSED" | "SCENE_CUT";
   status: RiskLevel;
   tracks: Track[];
   pairs: Pair[];
@@ -285,7 +289,7 @@ export type LiveView = {
   /** Latest source read error; the session keeps RUNNING (and its last frame) until repeated errors fail it. */
   lastError: string | null;
   observer: ObserverIdentity | null;
-  stats: { processed: number; resets: number; lastDetectMs: number | null };
+  stats: { processed: number; resets: number; sceneCuts?: number; lastDetectMs: number | null };
   latest: Observation | null;
 };
 type Observations = {
@@ -354,7 +358,12 @@ const RISK: Record<RiskLevel, { label: string; tone: Tone; safe: boolean }> = {
   UNKNOWN: { label: "판단 불가 · 안전 판정 아님", tone: "warning", safe: false },
   NO_PAIR: { label: "지게차·사람 동시 탐지 없음 · 안전 판정 아님", tone: "info", safe: false },
 };
-const RESET: Record<string, string> = { START: "추적 시작", TIME_GAP: "영상 시간 간격으로 추적 재시작", TIME_REGRESSED: "영상 시각 역행으로 추적 재시작" };
+const RESET: Record<string, string> = {
+  START: "추적 시작",
+  TIME_GAP: "영상 시간 간격으로 추적 재시작",
+  TIME_REGRESSED: "영상 시각 역행으로 추적 재시작",
+  SCENE_CUT: "화면 전환으로 추적 재시작",
+};
 const d1 = (n: number) => n.toFixed(1);
 /** One line per forklift–person pair; distances are person-height multiples in the image, not meters. */
 export function riskView(o: Observation | null) {
@@ -372,6 +381,17 @@ export function riskView(o: Observation | null) {
     }),
     reset: o.reset ? RESET[o.reset] ?? o.reset : null,
   };
+}
+
+/** Milliseconds from one recorded frame to the next at their decode spacing, bounded to 20 ms–1 s (500 ms without times). */
+export function playbackDelay(now: { frameTime: string | null }, next: { frameTime: string | null }) {
+  const spacing = now.frameTime && next.frameTime ? Date.parse(next.frameTime) - Date.parse(now.frameTime) : NaN;
+  return Number.isFinite(spacing) && spacing > 0 ? Math.min(Math.max(spacing, 20), 1000) : 500;
+}
+/** Frames per second over the timestamps (ms) of the last two seconds, up to now; null with fewer than two of them. */
+export function frameRate(times: number[], now: number) {
+  const recent = times.filter((t) => now - t <= 2000);
+  return recent.length < 2 || now <= recent[0] ? null : ((recent.length - 1) * 1000) / (now - recent[0]);
 }
 
 /** A frame older than this is no longer called live. */

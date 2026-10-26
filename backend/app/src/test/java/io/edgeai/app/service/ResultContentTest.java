@@ -19,7 +19,7 @@ class ResultContentTest {
         UUID task=UUID.randomUUID();when(executions.task(task)).thenReturn(Optional.of(mock(Task.class)));
         when(runtimes.result(task)).thenReturn(Optional.empty());
         assertThatThrownBy(()->service.content(task,"output")).isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("RESULT_NOT_FOUND"));
-        var artifact=new VerifiedArtifact("fixture","output","fixed-version","a".repeat(64),1048577,"application/json");
+        var artifact=new VerifiedArtifact("fixture","output","fixed-version","a".repeat(64),8388609,"application/json");
         when(runtimes.result(task)).thenReturn(Optional.of(new TaskResult(UUID.randomUUID(),task,UUID.randomUUID(),UUID.randomUUID(),1,UUID.randomUUID(),"sha256:"+"a".repeat(64),Instant.now(),List.of(new TaskResult.Output("output",artifact)))));
         assertThatThrownBy(()->service.content(task,"other")).isInstanceOf(ControlPlaneException.class);
         assertThatThrownBy(()->service.content(task,"output")).isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("RESULT_PREVIEW_UNSUPPORTED"));
@@ -35,5 +35,16 @@ class ResultContentTest {
         doAnswer(call->{Path file=call.getArgument(1);saved.set(file);Files.writeString(file,"{{");return null;}).when(files).downloadFile(eq(artifact),any());
         assertThatThrownBy(()->service.content(task,"output")).isInstanceOfSatisfying(ControlPlaneException.class,e->assertThat(e.code()).isEqualTo("RESULT_JSON_INVALID"));
         assertThat(saved.get()).doesNotExist();assertThat(saved.get().getParent()).doesNotExist();
+    }
+    @Test void jsonUpToTheDeclaredEightMebibyteObservationsPortIsReadable() throws Exception {
+        // A 24 fps Hawkeye observations window with several people is over 1 MiB.
+        var executions=mock(ExecutionRepository.class);var runtimes=mock(RuntimeRepository.class);var files=mock(ArtifactFiles.class);
+        var service=new ResultService(executions,runtimes,mock(RemoteRepository.class),Optional.of(files));UUID task=UUID.randomUUID();
+        when(executions.task(task)).thenReturn(Optional.of(mock(Task.class)));
+        String content="{\"frames\":\""+"x".repeat(3<<20)+"\"}";
+        var artifact=new VerifiedArtifact("fixture","observations","fixed-version","a".repeat(64),content.length(),"application/json");
+        when(runtimes.result(task)).thenReturn(Optional.of(new TaskResult(UUID.randomUUID(),task,UUID.randomUUID(),UUID.randomUUID(),1,UUID.randomUUID(),"sha256:"+"a".repeat(64),Instant.now(),List.of(new TaskResult.Output("observations",artifact)))));
+        doAnswer(call->{Files.writeString(call.getArgument(1),content);return null;}).when(files).downloadFile(eq(artifact),any());
+        assertThat(service.content(task,"observations")).isEqualTo(content);
     }
 }

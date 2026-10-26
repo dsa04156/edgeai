@@ -39,7 +39,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class HawkeyeVideoService {
     public static final String FRAMES_PORT = "frames";
     public static final String FRAMES_MEDIA_TYPE = "application/x-tar";
-    static final long MAX_FRAMES_BYTES = 16L * 1024 * 1024;
+    /** A 10 s window of the 24 fps preview is about 240 JPEGs of about 70 KB. */
+    static final long MAX_FRAMES_BYTES = 32L * 1024 * 1024;
+    /** Verified archives kept for frame reads: playback reads every frame of a window, one download per archive. */
+    private static final int CACHED_ARCHIVES = 2;
     /** Task key that marks a continuous-observation (MOTION) workflow version. */
     public static final String SNAPSHOT_TASK = "snapshot";
     private static final JsonDocuments JSON = new JsonDocuments();
@@ -54,6 +57,10 @@ public class HawkeyeVideoService {
     private final boolean executes;
     private final Clock clock;
     private final Semaphore readers = new Semaphore(4);
+    /** Members of recently read frames archives by their immutable stored identity (object version and digest). */
+    private final Map<io.edgeai.domain.storage.VerifiedArtifact, Map<String, byte[]>> archives = new LinkedHashMap<>(4, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<io.edgeai.domain.storage.VerifiedArtifact, Map<String, byte[]>> eldest) { return size() > CACHED_ARCHIVES; }
+    };
     private final ScheduledExecutorService scheduler;
     private final Optional<HawkeyeMotionObserver> observer;
     private final Map<UUID, String> modes = new ConcurrentHashMap<>();
@@ -357,7 +364,8 @@ public class HawkeyeVideoService {
 
     /**
      * One JPEG from the verified frames artifact of a capture Task in a session window. The artifact digest was checked
-     * when the Result was committed and again on download; the frame must also match its manifest SHA-256.
+     * when the Result was committed and again on download; the frame must also match its manifest SHA-256. The members
+     * of the last few downloaded archives are kept, so a window's frames are read with one download.
      */
     public byte[] frame(UUID taskId, int seq) {
         var task = runs.task(taskId).orElseThrow(HawkeyeVideoService::frameNotFound);
@@ -366,13 +374,25 @@ public class HawkeyeVideoService {
             .map(o -> o.artifact()).findFirst().orElseThrow(HawkeyeVideoService::frameNotFound);
         if (!FRAMES_MEDIA_TYPE.equals(artifact.mediaType()) || artifact.bytes() > MAX_FRAMES_BYTES) throw frameNotFound();
         var store = files.orElseThrow(ArtifactStoreUnavailableException::new);
+        synchronized (archives) {
+            var members = archives.get(artifact);
+            if (members != null) return HawkeyeFrames.frame(members, seq);
+        }
         if (!readers.tryAcquire()) throw new ControlPlaneException(429, "RESULT_PREVIEW_BUSY", "결과 조회가 진행 중입니다. 잠시 후 다시 조회하세요.");
         try {
             var directory = Files.createTempDirectory("edgeai-frames-", PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
             var file = directory.resolve("frames.tar");
             try {
-                store.downloadFile(artifact, file);
-                return HawkeyeFrames.frame(Files.readAllBytes(file), seq);
+                // Concurrent first reads of one archive wait for a single download.
+                synchronized (archives) {
+                    var members = archives.get(artifact);
+                    if (members == null) {
+                        store.downloadFile(artifact, file);
+                        members = HawkeyeFrames.members(Files.readAllBytes(file));
+                        archives.put(artifact, members);
+                    }
+                    return HawkeyeFrames.frame(members, seq);
+                }
             } finally {
                 Files.deleteIfExists(file);
                 Files.deleteIfExists(directory);

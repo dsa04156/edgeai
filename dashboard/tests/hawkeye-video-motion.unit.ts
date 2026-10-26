@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  frameRate,
   liveStatus,
   motionOverlay,
+  playbackDelay,
   pipelineGraph,
   readObservations,
   riskView,
@@ -167,4 +169,26 @@ test("motion graph shows the model identity the runtime observer actually report
   assert.equal(details["모델 digest"], runtimeObserver.model.modelDigest);
   assert.equal(details["엔진 digest"], runtimeObserver.model.engineDigest);
   assert.equal(details["정밀도"], "fp32");
+});
+
+test("recorded 24 fps windows play at their own frame spacing; missing or extreme spacing stays bounded", () => {
+  const at = (ms: number) => ({ frameTime: new Date(Date.parse("2026-10-26T08:00:00Z") + ms).toISOString() });
+  assert.ok(Math.abs(playbackDelay(at(0), at(1000 / 24)) - 1000 / 24) < 1.5);
+  assert.equal(playbackDelay(at(0), at(500)), 500);
+  assert.equal(playbackDelay(at(0), at(5000)), 1000);
+  assert.equal(playbackDelay(at(0), at(1)), 20);
+  assert.equal(playbackDelay({ frameTime: null }, at(40)), 500);
+});
+
+test("shown frame rate is measured from the frames actually displayed in the last two seconds", () => {
+  const shown = Array.from({ length: 49 }, (_, i) => 10_000 + (i * 1000) / 24);
+  assert.ok(Math.abs(frameRate(shown, 12_000)! - 24) < 0.1);
+  // Only frames of the last 2 s count, so a stall shows a falling rate instead of the earlier one.
+  assert.equal(frameRate([10_000, 10_500, 11_000, 13_000], 13_000), 0.5);
+  assert.equal(frameRate([13_000], 13_000), null);
+  assert.equal(frameRate([], 13_000), null);
+});
+
+test("a scene cut is named as a tracking restart", () => {
+  assert.equal(riskView(frame(2, { reset: "SCENE_CUT" })).reset, "화면 전환으로 추적 재시작");
 });

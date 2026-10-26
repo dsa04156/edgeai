@@ -1,0 +1,32 @@
+{
+  "profiles": [
+    {
+      "key": "hawkeye-motion-snapshot",
+      "version": "1.1.0",
+      "spec": {
+        "apiVersion": "edgeai/v1",
+        "image": "10.254.192.47:5000/edgeai/hawkeye-workflow@sha256:9760e68fe00d0b595570820ae341d2ab6cd3a407c0ad633fde20d52090a0a5ae",
+        "command": ["python3", "/opt/edgeai/hawkeye/hawkeye_snapshot.py"],
+        "args": [],
+        "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}},
+        "platform": {"os": "linux", "architectures": ["amd64"]},
+        "inputs": {},
+        "outputs": {
+          "frames": {"mediaType": "application/x-tar", "maxBytes": 33554432},
+          "observations": {"mediaType": "application/json", "maxBytes": 8388608}
+        },
+        "timeoutSeconds": 300,
+        "qos": "Burstable"
+      }
+    }
+  ],
+  "workflow": {"key": "hawkeye-video-safety", "displayName": "창고 지게차 영상 안전 점검"},
+  "version": {
+    "version": "2.1.0",
+    "tasks": [
+      {"key": "snapshot", "profile": "hawkeye-motion-snapshot",
+       "parameters": {"observerUrl": "http://edgeai-hawkeye-motion.edgeai.svc:8080", "windowSeconds": 10, "waitSeconds": 120}}
+    ],
+    "dependencies": []
+  }
+}

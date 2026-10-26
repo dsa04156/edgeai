@@ -7,4 +7,4 @@ patches:
     patch: |-
       - op: add
         path: /spec/template/spec/containers/0/env/-
-        value: {name: EDGEAI_MAPPER_RTSP, value: '10.254.192.47:5000/edgeai/mapper-rtsp@sha256:5183554c98d7a39e65546f7d9656e399c528730be2b58686cb32d48a0b9dabf7'}
+        value: {name: EDGEAI_MAPPER_RTSP, value: '10.254.192.47:5000/edgeai/mapper-rtsp@sha256:3c5f6e97ea993d3011ad5a1e981f128b55199182382ca8c994befdfaed9571e4'}

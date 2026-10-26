@@ -26,7 +26,8 @@
           :aria-valuetext="`프레임 ${index + 1}/${items.length}`"
           @input="seek(Number(($event.target as HTMLInputElement).value), true)"
         />
-        <div class="mh-ticks" aria-hidden="true">
+        <!-- A 24 fps window has about 240 ticks: without gaps they still fit a phone-width track. -->
+        <div class="mh-ticks" :class="{ dense: items.length > 60 }" aria-hidden="true">
           <span v-for="it in items" :key="it.seq" :class="it.tone" />
         </div>
       </div>
@@ -40,7 +41,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { KsButton } from "@kestra-io/design-system";
 import { request, time } from "./native-api";
-import type { HistoryFrame } from "./hawkeye-video";
+import { playbackDelay, type HistoryFrame } from "./hawkeye-video";
 import MotionStage from "./MotionStage.vue";
 
 const props = defineProps<{ taskId: string | null; items: HistoryFrame[]; label: string; empty: string }>();
@@ -106,7 +107,7 @@ function pause() {
   playing.value = false;
   clearTimeout(timer);
 }
-/** Plays at the recorded frame spacing (bounded 0.1–1 s) and waits for a frame that is still loading. */
+/** Plays at the recorded frame spacing (bounded 20 ms–1 s) and waits for a frame that is still loading. */
 function play() {
   const now = props.items[index.value], next = props.items[index.value + 1];
   if (!playing.value || !next) return pause();
@@ -114,12 +115,11 @@ function play() {
     timer = setTimeout(play, 150);
     return;
   }
-  const spacing = now.frameTime && next.frameTime ? Date.parse(next.frameTime) - Date.parse(now.frameTime) : 500;
   timer = setTimeout(() => {
     if (!playing.value) return;
     seek(index.value + 1);
     play();
-  }, Math.min(Math.max(spacing || 500, 100), 1000));
+  }, playbackDelay(now, next));
 }
 function toggle() {
   if (playing.value) return pause();
@@ -161,8 +161,12 @@ onBeforeUnmount(() => {
   gap: 1px;
   height: 4px;
 }
+.mh-ticks.dense {
+  gap: 0;
+}
 .mh-ticks span {
   flex: 1;
+  min-width: 0;
   background: var(--ks-border-default);
   border-radius: 1px;
 }

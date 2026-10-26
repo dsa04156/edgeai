@@ -3,6 +3,7 @@ lease expiry, stop, single active observer, source failures and the real Mapper 
 
 import datetime
 import http.client
+import io
 import json
 import sys
 import threading
@@ -11,6 +12,8 @@ import unittest
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from PIL import Image, ImageOps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from edgeai_hawkeye_motion import server  # noqa: E402
@@ -112,7 +115,8 @@ class ServiceTest(unittest.TestCase):
 
     def test_windows_are_contiguous_and_tracks_continue_across_them(self):
         self.assertEqual(self.start()[0], 201)
-        first, second = self.window(1), self.window(2)
+        # Window 2 ends at or after frame 11 (5.5 s), however late it is closed: the forklift is then within NEAR of its path.
+        first, second = self.window(1), self.window(2, seconds=3)
         self.assertEqual(first["window"]["fromSeq"], 1)
         self.assertEqual(second["window"]["fromSeq"], first["window"]["toSeq"] + 1)
         self.assertEqual(second["window"]["startedAt"], first["window"]["finishedAt"])
@@ -193,6 +197,77 @@ class ServiceTest(unittest.TestCase):
     def test_not_ready_service_refuses_observers(self):
         self.service.ready = False
         self.assertEqual(self.start(), (503, {"error": "NOT_READY"}))
+
+
+class TwentyFourFpsObserverTest(unittest.TestCase):
+    def test_a_ten_second_window_at_24_fps_keeps_every_frame_and_predicts(self):
+        frames, reads = 24 * 10 + 1, []
+
+        def read():
+            if len(reads) == frames:
+                raise SourceError("FRAME_UNAVAILABLE")
+            reads.append(len(reads) + 1)
+            return b"\xff\xd8" + len(reads).to_bytes(4, "big") + b"\xff\xd9", stamp(T0 + datetime.timedelta(seconds=(len(reads) - 1) / 24))
+
+        class Detector(ScriptedDetector):
+            def detect(self, image):  # forklift +100 px/s towards a standing person
+                x = 140 + 100 * (int.from_bytes(image[2:6], "big") - 1) / 24
+                return [Detection("forklift", 0.9, (x, 380, x + 120, 500)), Detection("person", 0.9, (1175, 400, 1225, 500))], 1280, 720, 9.0
+
+        observer = Observer(str(uuid.uuid4()), SOURCE, 30, Detector(), read_frame=read,
+                            clock=lambda: T0 + datetime.timedelta(seconds=len(reads) / 24 + 0.05))
+        observer.POLL_SECONDS = 0.01
+        observer.start()
+        try:
+            deadline = time.monotonic() + 10
+            while observer.processed < frames and time.monotonic() < deadline:
+                time.sleep(0.01)
+            document, _ = observer.window(1, 10)
+        finally:
+            observer.stop()
+            observer.join(2)
+        self.assertEqual((document["window"]["fromSeq"], document["window"]["toSeq"], document["window"]["evicted"]), (1, frames, 0))
+        self.assertEqual(len(document["frames"]), frames)
+        self.assertTrue(all(observer.frame(f["seq"]) for f in document["frames"]))
+        truck = [next(t for t in f["tracks"] if t["class"] == "forklift") for f in document["frames"]]
+        self.assertIsNone(truck[9]["velocity"])
+        self.assertIsNotNone(truck[10]["predicted"])
+        self.assertEqual(document["frames"][-1]["status"], "NEAR_PATH")
+
+
+class SceneCutTest(unittest.TestCase):
+    def test_a_different_camera_scene_restarts_tracking_but_motion_does_not(self):
+        def picture(shift, inverted=False):
+            image = Image.linear_gradient("L").resize((640, 480)).transform((640, 480), Image.AFFINE, (1, 0, -shift, 0, 1, 0))
+            buffer = io.BytesIO()
+            (ImageOps.invert(image) if inverted else image).convert("RGB").save(buffer, "JPEG", quality=90)
+            return buffer.getvalue()
+
+        pictures = [picture(4 * n) for n in range(5)] + [picture(20, inverted=True), picture(24, inverted=True)]
+        reads = []
+
+        def read():
+            if len(reads) == len(pictures):
+                raise SourceError("FRAME_UNAVAILABLE")
+            reads.append(1)
+            return pictures[len(reads) - 1], stamp(T0 + datetime.timedelta(seconds=len(reads) / 24))
+
+        class Detector(ScriptedDetector):
+            def detect(self, image):
+                return [Detection("forklift", 0.9, (100, 380, 220, 500))], 640, 480, 9.0
+
+        observer = Observer(str(uuid.uuid4()), SOURCE, 30, Detector(), read_frame=read,
+                            clock=lambda: T0 + datetime.timedelta(seconds=len(reads) / 24 + 0.05))
+        observer.start()
+        try:
+            deadline = time.monotonic() + 5
+            while observer.processed < len(pictures) and time.monotonic() < deadline:
+                time.sleep(0.01)
+        finally:
+            observer.stop()
+            observer.join(2)
+        self.assertEqual([observer.frames[s][0]["reset"] for s in sorted(observer.frames)], ["START", None, None, None, None, "SCENE_CUT", None])
+        self.assertEqual(observer.describe({})["stats"]["sceneCuts"], 1)
 
 
 class MapperSourceTest(unittest.TestCase):

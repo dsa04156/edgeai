@@ -11,7 +11,7 @@ RTSP 영상에서 지게차·사람을 검출·추적하고 짧은 미래 경로
 
 | 단계 | 실행 주체 | 위치 |
 |---|---|---|
-| 프레임 디코딩 | 카메라의 Edge RTSP Mapper(2 fps, 긴 변 640 이하, JPEG `-q:v 2`) | 세션 `cameraSource`(첫 창 Run이 고정)의 노드 |
+| 프레임 디코딩 | 카메라의 Edge RTSP Mapper(24 fps, 긴 변 640 이하, JPEG `-q:v 2`) | 세션 `cameraSource`(첫 창 Run이 고정)의 노드 |
 | 읽기 → RT-DETR 검출 → ByteTrack → 등속 예측·최근접 접근 | 관측 서비스 `edgeai-hawkeye-motion` 한 Pod 안의 단계. **DAG 작업이 아님** | `etri-ser0001-cg0msb` RTX 5060 Ti(TensorRT). `/health`가 노드·Pod·provider·모델/engine digest를 보고 |
 | `snapshot` Task | Runner Job. 관측 서비스에 창 k를 닫게 하고 프레임 JPEG를 SHA-256으로 검증해 `frames`·`observations` 결과로 저장 | 창 Run의 Placement |
 | 결과 | Task Result(고정 object version·SHA-256) | MinIO |
@@ -19,13 +19,17 @@ RTSP 영상에서 지게차·사람을 검출·추적하고 짧은 미래 경로
 - 세션 시작: 첫 창 Run이 카메라(설정 digest·source generation·Mapper 주소)를 고정한 뒤 API가 같은 source로 관측을 시작한다(`PUT /observers/{session}`).
   API는 매 주기(기본 1초) 임대(15초)를 갱신한다. 관측 서비스는 임대가 끊기면 스스로 읽기를 멈춘다(EXPIRED).
 - 창은 이어진다: 창 k는 창 k-1의 마지막 프레임 다음부터 영상 10초 이상을 덮을 때 닫힌다. Job이 시작되는 동안에도 관측은 계속되므로 창 사이 빈 구간이 없다.
-  추적 상태(ID·경로)는 창 경계와 무관하게 세션 내내 유지된다. 프레임 시각이 2.5초 넘게 비거나 역행하면 추적을 새로 시작하고(`reset`) 표시한다.
+  추적 상태(ID·경로)는 창 경계와 무관하게 세션 내내 유지된다. 프레임 시각이 2.5초 넘게 비거나 역행하거나, 화면이 다른 장면으로 바뀌면(`SCENE_CUT`,
+  카메라 전환·반복 영상의 처음) 추적을 새로 시작하고(`reset`) 표시한다. 같은 ID가 두 장면에 걸치지 않는다.
+- 속도: 관측 서비스는 Mapper가 새 프레임을 낼 때마다(같은 프레임이면 1/48초 뒤 다시) 읽고 120초(2,880프레임)를 보관한다. 실시간 화면은 상태·프레임을 겹치지 않게
+  최대 24 Hz로 읽고 최근 2초의 실제 **표시 fps**와 관측 서비스의 **관측 fps**(처리 수 증가)를 함께 보인다. 설정값이 아니라 측정값이다.
 - 실패는 숨기지 않는다: 원본이 10초 넘게 실패, 검출기 오류, 임대 만료, 관측 인스턴스 재시작(epoch 변경), 다른 source는 세션을 `OBSERVER_FAILED`로 끝내고
   열린 창을 취소한다. 중지는 관측 서비스의 읽기를 멈추고(`DELETE`) 확정된 창 결과는 그대로 조회된다.
 - 좌표·단위: 보정된 바닥 좌표가 없으므로 이미지 픽셀, 거리는 사람 박스 높이 배수, 시간은 프레임 디코딩 시각 기준 초다. 미터·km/h·충돌 확률을 만들지 않는다.
   - `NEAR_PATH`: 현재 또는 3초 안 예측 최근접 거리가 1.0 이하. `APPROACHING`: 거리가 줄고 최근접 거리가 2.0 이하. `NO_CONFLICT`: 둘 다 아님.
   - `UNKNOWN`: 속도를 정할 기록 부족(0.4초 미만) 또는 이번 프레임에서 한쪽이 검출되지 않음(최근 1.5초 추적). 안전이 아니다. `NO_PAIR`: 지게차와 사람이 함께 없음.
-- 한계: 2 fps에서는 박스가 한 프레임에 자기 폭 이상 움직이면 ByteTrack(IoU 연관)이 새 ID를 만든다. 반복 재생의 처음으로 돌아가는 순간도 새 ID가 된다.
+- 한계: 프레임 사이에 박스가 자기 폭 이상 움직이면 ByteTrack(IoU 연관)이 새 ID를 만든다(24 fps에서는 드묾). 실제 24 fps 도달 여부는 Mapper 노드(raspi5)의
+  디코딩·JPEG 인코딩과 HTTP 왕복에 달려 있어 배포 뒤 화면의 측정값으로 확인한다. v1(`capture`)은 0.2초마다 새 프레임을 읽으므로 10장이 약 2초를 덮는다.
   원근 때문에 화면 거리와 실제 거리는 비례하지 않는다. 검출기의 창고 데이터 성능을 이 영상에서 평가하지 않았다.
 
 로컬 실제 검출기 시험(2026-10-26, 3_te1 960×540 2 fps를 실시간으로 내보내는 Mapper 대역 + 실제 TensorRT 검출기·관측 서비스, 15초 1회):
@@ -174,12 +178,13 @@ bash hawkeye-runtime/prepare-forklift-base.sh --push 10.254.192.47:5000/edgeai/f
 HAWKEYE_MOTION_BASE=10.254.192.47:5000/edgeai/forklift-base@sha256:<digest> \
   BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh motion --push 10.254.192.47:5000/edgeai/hawkeye-motion:<tag>
 BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh workflow --push 10.254.192.47:5000/edgeai/hawkeye-workflow:<tag>
-bash hawkeye-runtime/video-replay/build.sh 10.254.192.47:5000/edgeai/hawkeye-video-replay:<tag>                 # 3_te1
+bash hawkeye-runtime/video-replay/build.sh 10.254.192.47:5000/edgeai/hawkeye-video-replay:<tag>                 # 3_te1 + 준비된 YouTube 2개
 ```
 
-digest를 `components/hawkeye-motion/kustomization.yaml`(`PIN_AFTER_BUILD`), `hawkeye-video-safety-v2.json`의 profile image,
-`components/hawkeye-video-replay/replay.yaml`에 고정한 뒤 배포하고 `python3 -I hawkeye-runtime/workflow/publish.py hawkeye-runtime/workflow/hawkeye-video-safety-v2.json`으로
-v2를 발행한다(publish.py는 digest가 없으면 거부). `EDGEAI_RUNTIME_WORKFLOW_KEYS`는 `hawkeye-video-safety` 그대로다. 재생 이미지를 바꾸면 카메라 source generation이
+digest를 `components/hawkeye-motion/kustomization.yaml`(`PIN_AFTER_BUILD`), `hawkeye-video-safety-v2.1.json`의 profile image(`pin-digest-after-build`),
+`components/hawkeye-video-replay/replay.yaml`에 고정한 뒤 배포하고 `python3 -I hawkeye-runtime/workflow/publish.py hawkeye-runtime/workflow/hawkeye-video-safety-v2.1.json`으로
+v2.1을 발행한다(publish.py는 digest가 없으면 거부). 재생 이미지는 `/forklift-replay`(3_te1), `/forklift-turn`, `/forklift-accidents`를 내보내며 장치 등록 본문은
+`hawkeye-runtime/video-replay/source*.json`이다(출처·변환: `video-replay/NOTICE.md`). `EDGEAI_RUNTIME_WORKFLOW_KEYS`는 `hawkeye-video-safety` 그대로다. 재생 이미지를 바꾸면 카메라 source generation이
 바뀌므로 그 전에 시작한 세션은 `CAMERA_SOURCE_CHANGED`로 끝난다.
 
 ## 시험

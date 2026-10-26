@@ -18,7 +18,10 @@ final class HawkeyeFrames {
     private HawkeyeFrames() {}
 
     static byte[] frame(byte[] tar, int seq) {
-        var members = members(tar);
+        return frame(members(tar), seq);
+    }
+
+    static byte[] frame(Map<String, byte[]> members, int seq) {
         if (!(JSON.parse(new String(Objects.requireNonNull(members.get("manifest.json"), "manifest"), StandardCharsets.UTF_8), 1048576)
                 instanceof Map<?, ?> manifest) || !"edgeai.hawkeye.frames/v1".equals(manifest.get("apiVersion"))
                 || !(manifest.get("frames") instanceof List<?> frames)) throw invalid();

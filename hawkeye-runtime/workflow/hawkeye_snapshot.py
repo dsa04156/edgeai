@@ -28,7 +28,8 @@ BINDING = "cameraSource"
 BINDING_FIELDS = {"deviceId", "deviceUid", "nodeName", "mapperUrl", "mapperDeployment", "configurationSha256", "sourceGeneration", "pinnedAt"}
 OBSERVER_URL = re.compile(r"http://[a-z0-9-]+\.[a-z0-9-]+\.svc(\.cluster\.local)?:[0-9]{1,5}")
 MAX_FRAME_BYTES = 1048576
-MAX_FRAMES_BYTES = 16777216
+# A 10 s window at the 24 fps preview is about 240 JPEGs of about 70 KB (16 MB measured 2026-10-26).
+MAX_FRAMES_BYTES = 33554432
 MAX_RESPONSE_BYTES = 8388608
 POLL_SECONDS = 0.5
 NOT_STARTED_SECONDS = 20

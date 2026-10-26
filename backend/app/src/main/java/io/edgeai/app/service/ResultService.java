@@ -19,6 +19,8 @@ public class ResultService {
     private final RuntimeRepository runtimes;
     private final RemoteRepository remotes;
     private final Optional<ArtifactFiles> files;
+    /** The largest declared JSON output port (Hawkeye observations of a 24 fps window). */
+    static final int MAX_JSON_BYTES=8388608;
     private final Semaphore readers=new Semaphore(4);
     public ResultService(ExecutionRepository executions,RuntimeRepository runtimes,RemoteRepository remotes,Optional<ArtifactFiles> files){this.executions=executions;this.runtimes=runtimes;this.remotes=remotes;this.files=files;}
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
@@ -33,15 +35,15 @@ public class ResultService {
         if(executions.task(taskId).isEmpty())throw new ControlPlaneException(404,"TASK_NOT_FOUND","작업을 찾을 수 없습니다.");
         var artifact=runtimes.result(taskId).stream().flatMap(result->result.outputs().stream()).filter(output->output.port().equals(port)).map(TaskResult.Output::artifact).findFirst()
             .orElseThrow(()->new ControlPlaneException(404,"RESULT_NOT_FOUND","확정된 출력 파일이 없습니다."));
-        if(!"application/json".equals(artifact.mediaType()) || artifact.bytes()>1048576)
-            throw new ControlPlaneException(422,"RESULT_PREVIEW_UNSUPPORTED","결과 조회는 1 MiB 이하 JSON 파일을 지원합니다.");
+        if(!"application/json".equals(artifact.mediaType()) || artifact.bytes()>MAX_JSON_BYTES)
+            throw new ControlPlaneException(422,"RESULT_PREVIEW_UNSUPPORTED","결과 조회는 8 MiB 이하 JSON 파일을 지원합니다.");
         var store=files.orElseThrow(ArtifactStoreUnavailableException::new);
         if(!readers.tryAcquire())throw new ControlPlaneException(429,"RESULT_PREVIEW_BUSY","결과 조회가 진행 중입니다. 잠시 후 다시 조회하세요.");
         Path directory=null;
         try {
             directory=Files.createTempDirectory("edgeai-result-",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
             var file=directory.resolve("result.json");store.downloadFile(artifact,file);
-            try {var content=Files.readString(file);WorkflowInput.JSON.parse(content,1048576);return content;}
+            try {var content=Files.readString(file);WorkflowInput.JSON.parse(content,MAX_JSON_BYTES);return content;}
             catch(IllegalArgumentException e){throw new ControlPlaneException(422,"RESULT_JSON_INVALID","결과 파일의 JSON 형식을 확인하세요.");}
         } catch(java.io.IOException e){throw new ArtifactStoreUnavailableException();}
         finally {

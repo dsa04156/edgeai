@@ -5,7 +5,8 @@ reference point of an object is the bottom centre of its box (roughly where it t
 reported in person heights: pixels divided by the box height of the person in the pair, a local scale that follows
 perspective. Velocities are pixels per second from the frames' decode timestamps, never from frame counts.
 
-Prediction is constant velocity (least squares over the last VELOCITY_SECONDS of a track). For a forklift/person
+Prediction is constant velocity (least squares over the last VELOCITY_SECONDS of a track). A track keeps every point of
+its last PATH_SECONDS whatever the frame rate; the reported path is at most PATH_POINTS of them, evenly spread. For a forklift/person
 pair, the time and distance of closest approach over the horizon give:
   NEAR_PATH    predicted (or current) separation within NEAR person heights
   APPROACHING  separation shrinking and closest approach within WATCH person heights
@@ -15,7 +16,8 @@ A frame without both a forklift and a person is NO_PAIR, which is not a safety v
 reported as is and is not a collision probability.
 
 Tracking is supervision's ByteTrack (MIT), one tracker per class so a person can never take a forklift's ID. A
-frame-time gap or regression starts new trackers; IDs are never reused within one Motion.
+frame-time gap or regression, or a scene cut reported by the caller (another camera view), starts new trackers; IDs
+are never reused within one Motion.
 """
 
 import collections
@@ -29,6 +31,7 @@ HORIZON_SECONDS = 3.0
 STEP_SECONDS = 0.5
 VELOCITY_SECONDS = 2.0
 MIN_VELOCITY_SPAN_SECONDS = 0.4
+PATH_SECONDS = 4.5
 PATH_POINTS = 10
 NEAR = 1.0
 WATCH = 2.0
@@ -48,7 +51,7 @@ class Detection:
 class _Track:
     id: str
     cls: str
-    points: collections.deque  # (seconds, x, y)
+    points: collections.deque  # (seconds, x, y) of the last PATH_SECONDS
     box: tuple = None
     confidence: float = 0.0
     last_seen: float = 0.0
@@ -59,7 +62,7 @@ def _round(value, digits=1):
 
 
 class Motion:
-    def __init__(self, track_activation_threshold=0.45, lost_track_buffer=45, frame_rate=2):
+    def __init__(self, track_activation_threshold=0.45, lost_track_buffer=45, frame_rate=24):
         self._tracker_args = dict(track_activation_threshold=track_activation_threshold, lost_track_buffer=lost_track_buffer,
                                   minimum_matching_threshold=0.8, frame_rate=frame_rate)
         self._ids = 0
@@ -72,8 +75,9 @@ class Motion:
         self._external = {}  # (class, tracker id) -> global id within this segment
         self._tracks = {}
 
-    def observe(self, frame_time, detections, width, height):
-        """frame_time: aware datetime of the decoded frame. Returns the JSON-ready observation of this frame."""
+    def observe(self, frame_time, detections, width, height, scene_cut=False):
+        """frame_time: aware datetime of the decoded frame; scene_cut: the image shows a different view than the
+        previous frame. Returns the JSON-ready observation of this frame."""
         if self._origin is None:
             self._origin = frame_time
         now = (frame_time - self._origin).total_seconds()
@@ -87,6 +91,8 @@ class Motion:
                 reset = "TIME_REGRESSED"
             elif gap > MAX_GAP_SECONDS:
                 reset = "TIME_GAP"
+            elif scene_cut:
+                reset = "SCENE_CUT"
             if reset:
                 self._start()
         self._previous = now
@@ -115,10 +121,12 @@ class Motion:
                 self._ids += 1
                 self._external[key] = f"{cls[0].upper()}{self._ids}"
             track_id = self._external[key]
-            track = self._tracks.get(track_id) or _Track(track_id, cls, collections.deque(maxlen=PATH_POINTS))
+            track = self._tracks.get(track_id) or _Track(track_id, cls, collections.deque())
             x1, y1, x2, y2 = (float(v) for v in box)
             track.box, track.confidence, track.last_seen = (x1, y1, x2, y2), float(confidence), now
             track.points.append((now, (x1 + x2) / 2, y2))
+            while now - track.points[0][0] > PATH_SECONDS:
+                track.points.popleft()
             self._tracks[track_id] = track
 
     def _view(self, track, now):
@@ -132,7 +140,7 @@ class Motion:
                          for k in range(1, steps + 1)]
         return {"id": track.id, "class": track.cls, "visible": visible, "confidence": round(track.confidence, 3) if visible else None,
                 "box": [_round(v) for v in track.box] if visible else None, "point": [_round(x), _round(y)],
-                "path": [[round(t - now, 3), _round(px), _round(py)] for t, px, py in track.points],
+                "path": [[round(t - now, 3), _round(px), _round(py)] for t, px, py in _spread(track.points)],
                 "velocity": [_round(velocity[0]), _round(velocity[1])] if velocity is not None and visible else None,
                 "predicted": predicted}
 
@@ -168,6 +176,13 @@ class Motion:
             result["timeToClosest"] = round(t, 2)
             result["closest"] = [[_round(v) for v in f + vf * t], [_round(v) for v in p + vp * t]]
         return result
+
+
+def _spread(points):
+    """At most PATH_POINTS of the points, evenly spaced by index, always including the first and the latest."""
+    if len(points) <= PATH_POINTS:
+        return list(points)
+    return [points[round(i * (len(points) - 1) / (PATH_POINTS - 1))] for i in range(PATH_POINTS)]
 
 
 def _velocity(points):

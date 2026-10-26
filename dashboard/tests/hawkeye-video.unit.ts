@@ -82,8 +82,10 @@ test("a camera can start only when ONLINE with a ready Mapper; otherwise the rea
   assert.equal(cameraState({ state: "ONLINE", mapper: { ready: false } }).reason, "카메라 Mapper가 준비되지 않았습니다");
 });
 
-test("only the registered forklift replay is labelled as a looped recording", () => {
+test("only the registered replays are labelled as looped recordings", () => {
   assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "hawkeye-forklift-replay" } }), "녹화 영상 반복 재생");
+  assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "hawkeye-youtube-turn-replay" } }), "지게차 급회전 · 녹화 영상 반복 재생");
+  assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "hawkeye-youtube-accidents-replay" } }), "지게차 사고 CCTV · 녹화 영상 반복 재생");
   assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "warehouse-cam-1" } }), null);
   assert.equal(replayLabel({ profile: { protocol: "rtsp" } }), null);
 });

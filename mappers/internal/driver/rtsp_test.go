@@ -40,6 +40,12 @@ func cameraFixture(t *testing.T, media bool) Connection {
 
 func cameraSourceFixture(t *testing.T, media bool, source string) Connection {
 	t.Helper()
+	return cameraStreamFixture(t, media, source, 100*time.Millisecond)
+}
+
+// cameraStreamFixture repeats the encoded source frame every period with matching 90 kHz RTP timestamps.
+func cameraStreamFixture(t *testing.T, media bool, source string, period time.Duration) Connection {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	data, err := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", source, "-frames:v", "1", "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-tune", "zerolatency", "-f", "h264", "pipe:1").Output()
@@ -87,7 +93,7 @@ func cameraSourceFixture(t *testing.T, media bool, source string) Connection {
 			if encoder.Init() != nil {
 				return
 			}
-			ticker := time.NewTicker(100 * time.Millisecond)
+			ticker := time.NewTicker(period)
 			defer ticker.Stop()
 			var timestamp uint32
 			for {
@@ -103,7 +109,7 @@ func cameraSourceFixture(t *testing.T, media bool, source string) Connection {
 						p.Timestamp = timestamp
 						_ = stream.WritePacketRTP(track, p)
 					}
-					timestamp += 9000
+					timestamp += uint32(period * 90000 / time.Second)
 				}
 			}
 		}()
@@ -187,6 +193,32 @@ func luminanceTable(t *testing.T, frame []byte) float64 {
 	}
 	t.Fatal("preview JPEG without 8-bit quantization table")
 	return 0
+}
+
+// A 30 fps camera reaches the observer at the 24 fps analysis rate: every decoded frame gets its own decode time.
+func TestRTSPPreviewDecodesAboutTwentyFourFramesPerSecond(t *testing.T) {
+	reader, err := New("edgeai-rtsp", cameraStreamFixture(t, true, "color=c=red:s=64x48:r=30", time.Second/30))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	preview := reader.(interface {
+		Preview(context.Context) ([]byte, time.Time, error)
+	})
+	if _, _, err = preview.Preview(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[time.Time]bool{}
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		_, at, e := preview.Preview(context.Background())
+		if e != nil {
+			t.Fatal(e)
+		}
+		seen[at] = true
+	}
+	if rate := float64(len(seen)) / 3; rate < 20 || rate > 26 {
+		t.Fatalf("decoded preview rate %.1f fps, want about 24", rate)
+	}
 }
 
 func TestRTSPRejectsSDPWithoutFramesAndCancelledPreview(t *testing.T) {
