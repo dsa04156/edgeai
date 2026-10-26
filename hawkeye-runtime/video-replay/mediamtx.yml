@@ -15,3 +15,27 @@ paths:
   forklift-accidents:
     runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/forklift-accidents.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-accidents
     runOnInitRestart: yes
+  forklift-scene-turn-01:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-01.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-01
+    runOnInitRestart: yes
+  forklift-scene-turn-02:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-02.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-02
+    runOnInitRestart: yes
+  forklift-scene-turn-03:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-03.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-03
+    runOnInitRestart: yes
+  forklift-scene-turn-04:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-04.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-04
+    runOnInitRestart: yes
+  forklift-scene-turn-05:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-05.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-05
+    runOnInitRestart: yes
+  forklift-scene-accidents-01:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/accidents-01.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-accidents-01
+    runOnInitRestart: yes
+  forklift-scene-accidents-02:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/accidents-02.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-accidents-02
+    runOnInitRestart: yes
+  forklift-scene-accidents-03:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/accidents-03.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-accidents-03
+    runOnInitRestart: yes

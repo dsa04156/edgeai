@@ -1,0 +1,320 @@
+{
+  "catalog": "hawkeye-video-scenes/v1",
+  "output": {
+    "directory": "output/hawkeye-scenes",
+    "width": 640,
+    "height": 480,
+    "fps": 24,
+    "codec": "h264 baseline, crf 18, preset fast, yuv420p, +faststart, no audio"
+  },
+  "sources": {
+    "tYYNdqPooMI": {
+      "url": "https://www.youtube.com/watch?v=tYYNdqPooMI",
+      "file": "output/hawkeye-youtube/tYYNdqPooMI.mp4",
+      "sha256": "3903a5a963e617b8dfa3951db27000a3952aa636fa2ee8e9da22662f28efb650",
+      "width": 960,
+      "height": 720,
+      "fps": 30,
+      "frames": 558
+    },
+    "lSGMB3h41ug": {
+      "url": "https://www.youtube.com/watch?v=lSGMB3h41ug",
+      "file": "output/hawkeye-youtube/lSGMB3h41ug.mp4",
+      "sha256": "875a07573d0d3b5e0eaea5765c638b3df0967787bea0fd97756933f94677d415",
+      "width": 960,
+      "height": 720,
+      "fps": 30,
+      "frames": 1967
+    }
+  },
+  "scenes": [
+    {
+      "id": "turn-01",
+      "title": "실내 자재 랙 통로 지게차 회전·작업자",
+      "sourceVideoId": "tYYNdqPooMI",
+      "startFrame": 3,
+      "endFrame": 94,
+      "fps": 24,
+      "durationSeconds": 3.041667,
+      "file": "turn-01.mp4",
+      "sha256": "a43b1b6d40c6ccb1baf38385716caadfcb523f8ad67fcd7f367163c44de5960b",
+      "frames": 73,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "tYYNdqPooMI",
+      "frameRanges": [
+        [
+          3,
+          94
+        ]
+      ],
+      "preprocess": {
+        "trim": "frames 0-2 carry the video title and red arrow graphics",
+        "delogo": []
+      },
+      "sourceOverlays": [],
+      "rtspPath": "/forklift-scene-turn-01",
+      "deviceName": "hawkeye-scene-turn-01",
+      "sourceName": "hawkeye-scene-turn-01-replay",
+      "targetNode": "etri-dev0008-raspi5"
+    },
+    {
+      "id": "turn-02",
+      "title": "목재 야적장 적재 지게차 회전·전도",
+      "sourceVideoId": "tYYNdqPooMI",
+      "startFrame": 94,
+      "endFrame": 219,
+      "fps": 24,
+      "durationSeconds": 4.166667,
+      "file": "turn-02.mp4",
+      "sha256": "768928e0ab7b9bef77722cd4df5c6cbf623c3f9fba4fbb191b2cda3d2f43b341",
+      "frames": 100,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "tYYNdqPooMI",
+      "frameRanges": [
+        [
+          94,
+          219
+        ]
+      ],
+      "preprocess": {
+        "trim": "hard cuts at 94 and 219",
+        "delogo": []
+      },
+      "sourceOverlays": [],
+      "rtspPath": "/forklift-scene-turn-02",
+      "deviceName": "hawkeye-scene-turn-02",
+      "sourceName": "hawkeye-scene-turn-02-replay",
+      "targetNode": "etri-dev0008-raspi5"
+    },
+    {
+      "id": "turn-03",
+      "title": "야외 하역장 마스트 올린 지게차 회전·전도",
+      "sourceVideoId": "tYYNdqPooMI",
+      "startFrame": 219,
+      "endFrame": 366,
+      "fps": 24,
+      "durationSeconds": 4.916667,
+      "file": "turn-03.mp4",
+      "sha256": "ac5cd2341adda40e1e36c4101215e0f72f3cc590c3a7b53f488548f63503fc3b",
+      "frames": 118,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "tYYNdqPooMI",
+      "frameRanges": [
+        [
+          219,
+          366
+        ]
+      ],
+      "preprocess": {
+        "trim": "hard cuts at 219 and 366",
+        "delogo": []
+      },
+      "sourceOverlays": [],
+      "rtspPath": "/forklift-scene-turn-03",
+      "deviceName": "hawkeye-scene-turn-03",
+      "sourceName": "hawkeye-scene-turn-03-replay",
+      "targetNode": "etri-dev0008-raspi5"
+    },
+    {
+      "id": "turn-04",
+      "title": "물류센터 통로 적재 팔레트 회전·화물 쏠림",
+      "sourceVideoId": "tYYNdqPooMI",
+      "startFrame": 366,
+      "endFrame": 454,
+      "fps": 24,
+      "durationSeconds": 2.916667,
+      "file": "turn-04.mp4",
+      "sha256": "73f2f2c0b77c6dca98e927ca6d7de44c5e88bc34d5560b9dd691af63d12441b4",
+      "frames": 70,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "tYYNdqPooMI",
+      "frameRanges": [
+        [
+          366,
+          454
+        ]
+      ],
+      "preprocess": {
+        "trim": "hard cuts at 366 and 454",
+        "delogo": []
+      },
+      "sourceOverlays": [],
+      "rtspPath": "/forklift-scene-turn-04",
+      "deviceName": "hawkeye-scene-turn-04",
+      "sourceName": "hawkeye-scene-turn-04-replay",
+      "targetNode": "etri-dev0008-raspi5"
+    },
+    {
+      "id": "turn-05",
+      "title": "식품 창고 전동 팔레트트럭 회전·화물 쏟아짐",
+      "sourceVideoId": "tYYNdqPooMI",
+      "startFrame": 482,
+      "endFrame": 558,
+      "fps": 24,
+      "durationSeconds": 2.541667,
+      "file": "turn-05.mp4",
+      "sha256": "8dae6d4d82530a2086aa488dfa967de9c88e931ab8867b1b58b90f42d53662f4",
+      "frames": 61,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "tYYNdqPooMI",
+      "frameRanges": [
+        [
+          482,
+          558
+        ]
+      ],
+      "preprocess": {
+        "trim": "frames 454-481 are a slide-in transition with a grey band on the right edge",
+        "delogo": []
+      },
+      "sourceOverlays": [],
+      "rtspPath": "/forklift-scene-turn-05",
+      "deviceName": "hawkeye-scene-turn-05",
+      "sourceName": "hawkeye-scene-turn-05-replay",
+      "targetNode": "etri-dev0008-raspi5"
+    },
+    {
+      "id": "accidents-01",
+      "title": "건물 옆 야외 통로 지게차 주행·보행자",
+      "sourceVideoId": "lSGMB3h41ug",
+      "startFrame": 73,
+      "endFrame": 439,
+      "fps": 24,
+      "durationSeconds": 12.208333,
+      "file": "accidents-01.mp4",
+      "sha256": "5e3b2c842d0a5f0403d747ed28893fc8c4bca6bd325b92d083770f69f9d24335",
+      "frames": 293,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "lSGMB3h41ug",
+      "frameRanges": [
+        [
+          73,
+          439
+        ]
+      ],
+      "preprocess": {
+        "trim": "frames 0 and 7-72 carry the 'SOLUTIONS TO PREVENT FORKLIFT ACCIDENTS' title; 439 starts animation",
+        "delogo": [
+          {
+            "x": 186,
+            "y": 626,
+            "w": 588,
+            "h": 34,
+            "reason": "burned-in subtitle line"
+          }
+        ]
+      },
+      "sourceOverlays": [
+        "red circle annotation around the pedestrian and later the forklift, drawn inside the image",
+        "the subtitle band overlaps the bottom road and part of the 'Camera 01' camera label; it is interpolated, not restored"
+      ],
+      "rtspPath": "/forklift-scene-accidents-01",
+      "deviceName": "hawkeye-scene-accidents-01",
+      "sourceName": "hawkeye-scene-accidents-01-replay",
+      "targetNode": "etri-dev0003-raspi5"
+    },
+    {
+      "id": "accidents-02",
+      "title": "고층 랙 통로 마스트 올린 지게차 주행·작업자",
+      "sourceVideoId": "lSGMB3h41ug",
+      "startFrame": 876,
+      "endFrame": 1069,
+      "fps": 24,
+      "durationSeconds": 6.416667,
+      "file": "accidents-02.mp4",
+      "sha256": "4156f0ff12e7b35e811b43b98d62dbb450bbd1c65b5288125bc2b3447ef0f9bf",
+      "frames": 154,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "lSGMB3h41ug",
+      "frameRanges": [
+        [
+          876,
+          1069
+        ]
+      ],
+      "preprocess": {
+        "trim": "animation before 876 and from 1069",
+        "delogo": [
+          {
+            "x": 160,
+            "y": 600,
+            "w": 636,
+            "h": 62,
+            "reason": "burned-in subtitle, single line or first of two lines"
+          },
+          {
+            "x": 428,
+            "y": 640,
+            "w": 104,
+            "h": 46,
+            "reason": "second subtitle line ('raised')"
+          }
+        ]
+      },
+      "sourceOverlays": [
+        "flashing red arrow annotation pointing at the forklift (about source seconds 30.8-33.6), drawn inside the image",
+        "the subtitle band crosses the standing worker's legs; that region is interpolated, not restored"
+      ],
+      "rtspPath": "/forklift-scene-accidents-02",
+      "deviceName": "hawkeye-scene-accidents-02",
+      "sourceName": "hawkeye-scene-accidents-02-replay",
+      "targetNode": "etri-dev0003-raspi5"
+    },
+    {
+      "id": "accidents-03",
+      "title": "자재 적치장 대형 롤 운반 지게차·작업자",
+      "sourceVideoId": "lSGMB3h41ug",
+      "startFrame": 1392,
+      "endFrame": 1615,
+      "fps": 24,
+      "durationSeconds": 7.416667,
+      "file": "accidents-03.mp4",
+      "sha256": "dbb9a5d7c2a08baaf2dccc578fd0ebad225f314ed8745e924303c44be4f03188",
+      "frames": 178,
+      "width": 640,
+      "height": 480,
+      "crop": null,
+      "source": "lSGMB3h41ug",
+      "frameRanges": [
+        [
+          1392,
+          1615
+        ]
+      ],
+      "preprocess": {
+        "trim": "animation before 1392 and from 1615",
+        "delogo": [
+          {
+            "x": 132,
+            "y": 626,
+            "w": 696,
+            "h": 34,
+            "reason": "burned-in subtitle line"
+          }
+        ]
+      },
+      "sourceOverlays": [
+        "the clip is a handheld re-recording of a monitor: the recorder's green '▶1X' playback label moves with the picture and is left as is",
+        "people walking at the bottom cross the subtitle band; that region is interpolated, not restored"
+      ],
+      "rtspPath": "/forklift-scene-accidents-03",
+      "deviceName": "hawkeye-scene-accidents-03",
+      "sourceName": "hawkeye-scene-accidents-03-replay",
+      "targetNode": "etri-dev0003-raspi5"
+    }
+  ]
+}

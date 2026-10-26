@@ -3,5 +3,6 @@ LABEL org.opencontainers.image.source="https://github.com/dsa04156/edgeai"
 COPY forklift.mp4 /media/forklift.mp4
 COPY forklift-turn.mp4 /media/forklift-turn.mp4
 COPY forklift-accidents.mp4 /media/forklift-accidents.mp4
+COPY scenes/ /media/scenes/
 COPY NOTICE.md /media/NOTICE.md
 COPY mediamtx.yml /mediamtx.yml

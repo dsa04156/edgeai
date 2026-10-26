@@ -1,0 +1,24 @@
+{
+  "name": "hawkeye-scene-accidents-02",
+  "sourceName": "hawkeye-scene-accidents-02-replay",
+  "protocol": "rtsp",
+  "kind": "physical",
+  "host": "10.254.192.47",
+  "port": 18555,
+  "targetNode": "etri-dev0003-raspi5",
+  "collectionInterval": 1000,
+  "protocolConfig": {
+    "path": "/forklift-scene-accidents-02",
+    "timeoutMs": 5000
+  },
+  "properties": [
+    {
+      "name": "connected",
+      "dataType": "bool",
+      "jsonPath": "connected",
+      "scale": 1,
+      "offset": 0,
+      "unit": ""
+    }
+  ]
+}
