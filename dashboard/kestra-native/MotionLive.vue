@@ -23,8 +23,9 @@ import MotionStage from "./MotionStage.vue";
 
 const props = defineProps<{ sessionId: string }>();
 const emit = defineEmits<{ frame: [observation: Observation | null]; live: [view: LiveView]; ended: [] }>();
-/** The observer analyses the Mapper's 24 fps preview; a failed read is retried after a second. */
-const INTERVAL = 1000 / 24,
+/** The observer analyses the Mapper's 24 fps preview. Its latest observation is sampled at twice that rate so phase jitter
+ * cannot read one frame twice and skip the next; a failed read is retried after a second. */
+const INTERVAL = 1000 / 48,
   RETRY = 1000;
 const src = ref(""),
   shown = ref<Observation | null>(null),

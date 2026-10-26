@@ -57,7 +57,7 @@ const camera = { id: "hawkeye-forklift-video", uid: CAMERA_UID, state: "ONLINE",
 function api(page: Page) {
   const state = {
     phase: "idle" as "idle" | "running" | "stopped", starts: [] as unknown[], liveSeq: 0, liveFail: 0, evict: new Set<number>(), latency: 120,
-    live: [] as number[], lost: false, lastError: null as string | null, inFlight: 0, maxInFlight: 0, historyReads: new Map<string, number>(), historyInFlight: 0, historyMax: 0,
+    sourceFps: 0, sourceAt: 0, sourceBase: 0, frameReads: [] as number[], live: [] as number[], lost: false, lastError: null as string | null, inFlight: 0, maxInFlight: 0, historyReads: new Map<string, number>(), historyInFlight: 0, historyMax: 0,
   };
   const windows = () => state.phase === "idle" ? [] : [
     { seq: 2, runId: RUNS[1], runState: state.phase === "running" ? "RUNNING" : "CANCELLED", createdAt: "2026-10-26T08:00:03Z", updatedAt: "2026-10-26T08:00:04Z" },
@@ -115,12 +115,17 @@ function api(page: Page) {
       return track(async () => {
         if (state.phase !== "running") return route.fulfill({ status: 409, json: { code: "SESSION_NOT_LIVE", message: "ended" } });
         if (state.liveFail) return route.fulfill({ status: state.liveFail, json: { code: "OBSERVER_UNAVAILABLE", message: "unavailable" } });
-        const seq = ++state.liveSeq;
+        // With sourceFps set, the observer's latest frame advances on the source clock rather than on every read.
+        if (state.sourceFps && !state.sourceAt) [state.sourceAt, state.sourceBase] = [Date.now(), state.liveSeq];
+        const seq = (state.liveSeq = state.sourceFps
+          ? state.sourceBase + Math.floor(((Date.now() - state.sourceAt) * state.sourceFps) / 1000)
+          : state.liveSeq + 1);
         return route.fulfill({ json: { sessionId: SESSION, state: "RUNNING", failure: null, lastError: state.lastError, observer,
           stats: { processed: seq, resets: 1, lastDetectMs: 38.4 }, latest: state.lost ? lostObservation(seq) : { ...observation(seq % 2 ? 1 : 2), seq } } });
       });
     }
     const liveFrame = new RegExp(`^${base}/sessions/${SESSION}/live/frames/(\\d+)$`).exec(path);
+    if (liveFrame) state.frameReads.push(Number(liveFrame[1]));
     if (liveFrame)
       return track(async () => state.evict.has(Number(liveFrame[1]))
         ? route.fulfill({ status: 404, json: { code: "FRAME_EVICTED", message: "evicted" } })
@@ -222,14 +227,18 @@ test("live motion: one compact clip with synced boxes, history/future paths and 
   await page.waitForTimeout(3000);
   expect(state.live.length - from).toBeGreaterThanOrEqual(9);
   expect(state.live.length - from).toBeLessThanOrEqual(14);
-  // Fast reads are paced to at most 24 Hz, and the shown rate is the measured one.
+  // Fast reads sample a 24 fps source at most 48 times a second; each new frame's JPEG is read once, and the shown rate is the measured one.
   state.latency = 5;
+  state.sourceFps = 24;
   await page.waitForTimeout(500);
   from = state.live.length;
+  const reads = state.frameReads.length;
   await page.waitForTimeout(3000);
-  expect(state.live.length - from).toBeGreaterThanOrEqual(30);
-  expect(state.live.length - from).toBeLessThanOrEqual(3 * 24 + 2);
+  expect(state.live.length - from).toBeGreaterThanOrEqual(60);
+  expect(state.live.length - from).toBeLessThanOrEqual(3 * 48 + 2);
   expect(state.maxInFlight).toBe(1);
+  expect(new Set(state.frameReads).size).toBe(state.frameReads.length);
+  expect(state.frameReads.length - reads).toBeGreaterThanOrEqual(3 * 20);
   const displayed = Number(/표시 ([0-9.]+) fps/.exec((await page.locator(".hv-stage figcaption").textContent()) ?? "")?.[1]);
   expect(displayed).toBeGreaterThan(10);
   expect(displayed).toBeLessThanOrEqual(25);
