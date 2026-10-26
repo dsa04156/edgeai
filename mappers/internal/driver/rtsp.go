@@ -93,7 +93,7 @@ func (r *RTSP) run() {
 	defer close(r.done)
 	endpoint := (&url.URL{Scheme: "rtsp", Host: net.JoinHostPort(r.config.Host, strconv.Itoa(r.config.Port)), Path: r.config.Path}).String()
 	for r.ctx.Err() == nil {
-		cmd := exec.CommandContext(r.ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", strconv.Itoa(r.config.TimeoutMs*1000), "-analyzeduration", "100000", "-probesize", "32768", "-i", endpoint, "-map", "0:v:0", "-an", "-vf", "fps=2,scale=640:640:force_original_aspect_ratio=decrease", "-threads", "1", "-filter_threads", "1", "-c:v", "mjpeg", "-f", "image2pipe", "-flush_packets", "1", "pipe:1")
+		cmd := exec.CommandContext(r.ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp", "-timeout", strconv.Itoa(r.config.TimeoutMs*1000), "-analyzeduration", "100000", "-probesize", "32768", "-i", endpoint, "-map", "0:v:0", "-an", "-vf", "fps=2,scale=640:640:force_original_aspect_ratio=decrease", "-threads", "1", "-filter_threads", "1", "-c:v", "mjpeg", "-q:v", "2", "-f", "image2pipe", "-flush_packets", "1", "pipe:1")
 		cmd.Stderr = io.Discard
 		pipe, err := cmd.StdoutPipe()
 		if err == nil {

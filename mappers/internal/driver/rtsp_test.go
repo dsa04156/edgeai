@@ -35,9 +35,14 @@ func (f *rtspFixture) OnPlay(*gortsplib.ServerHandlerOnPlayCtx) (*base.Response,
 
 func cameraFixture(t *testing.T, media bool) Connection {
 	t.Helper()
+	return cameraSourceFixture(t, media, "color=c=red:s=64x48:r=10")
+}
+
+func cameraSourceFixture(t *testing.T, media bool, source string) Connection {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	data, err := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x48:r=10", "-frames:v", "1", "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-tune", "zerolatency", "-f", "h264", "pipe:1").Output()
+	data, err := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", source, "-frames:v", "1", "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-tune", "zerolatency", "-f", "h264", "pipe:1").Output()
 	if err != nil {
 		t.Fatal("FFmpeg test encoder required:", err)
 	}
@@ -143,6 +148,45 @@ func TestRTSPReadsActualVideoAndReturnsBoundedJPEG(t *testing.T) {
 	if red < 50000 || green > 10000 || blue > 10000 {
 		t.Fatal("preview is not the real red fixture frame")
 	}
+}
+
+// Detectors consume the preview: the encoder's default 200 kb/s rate control raised the quantizer on the continuous
+// 640x360 warehouse replay (mean luminance table value ~100), which erased people and most forklifts.
+func TestRTSPPreviewKeepsDetailedFramesAtInferenceQuality(t *testing.T) {
+	reader, err := New("edgeai-rtsp", cameraSourceFixture(t, true, "mandelbrot=s=640x360:r=10"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	preview := reader.(interface {
+		Preview(context.Context) ([]byte, time.Time, error)
+	})
+	deadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(deadline) {
+		frame, _, err := preview.Preview(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if table := luminanceTable(t, frame); table > 8 {
+			t.Fatal("preview JPEG quantization too coarse for inference, mean luminance table value", table)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func luminanceTable(t *testing.T, frame []byte) float64 {
+	t.Helper()
+	for i := 2; i+4 < len(frame) && frame[i] == 0xff; i += 2 + (int(frame[i+2])<<8 | int(frame[i+3])) {
+		if frame[i+1] == 0xdb && frame[i+4]>>4 == 0 && i+5+64 <= len(frame) {
+			sum := 0
+			for _, v := range frame[i+5 : i+5+64] {
+				sum += int(v)
+			}
+			return float64(sum) / 64
+		}
+	}
+	t.Fatal("preview JPEG without 8-bit quantization table")
+	return 0
 }
 
 func TestRTSPRejectsSDPWithoutFramesAndCancelledPreview(t *testing.T) {

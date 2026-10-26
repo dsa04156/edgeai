@@ -11,7 +11,7 @@ RTSP 영상에서 지게차·사람을 검출·추적하고 짧은 미래 경로
 
 | 단계 | 실행 주체 | 위치 |
 |---|---|---|
-| 프레임 디코딩 | 카메라의 Edge RTSP Mapper(2 fps, 960×540) | 세션 `cameraSource`(첫 창 Run이 고정)의 노드 |
+| 프레임 디코딩 | 카메라의 Edge RTSP Mapper(2 fps, 긴 변 640 이하, JPEG `-q:v 2`) | 세션 `cameraSource`(첫 창 Run이 고정)의 노드 |
 | 읽기 → RT-DETR 검출 → ByteTrack → 등속 예측·최근접 접근 | 관측 서비스 `edgeai-hawkeye-motion` 한 Pod 안의 단계. **DAG 작업이 아님** | `etri-ser0001-cg0msb` RTX 5060 Ti(TensorRT). `/health`가 노드·Pod·provider·모델/engine digest를 보고 |
 | `snapshot` Task | Runner Job. 관측 서비스에 창 k를 닫게 하고 프레임 JPEG를 SHA-256으로 검증해 `frames`·`observations` 결과로 저장 | 창 Run의 Placement |
 | 결과 | Task Result(고정 object version·SHA-256) | MinIO |
@@ -32,6 +32,9 @@ RTSP 영상에서 지게차·사람을 검출·추적하고 짧은 미래 경로
 31프레임, 창 3개 `1–11 / 12–21 / 22–31`(빈 구간·유실 0), 추적 시작 1회, 검출 약 9.2 ms. 사람에게 다가가는 동안 `APPROACHING`(최근접 1.6–1.95, 1.7–2.7초),
 지게차 가까이에서 사람 검출이 끊긴 3프레임은 `UNKNOWN(TRACK_LOST)`, 영상 반복 시점에 지게차 새 ID. 중지 후 Mapper 읽기 0회.
 `output/verification/forklift-motion-20261026/observer-smoke/`(Git 제외). 정확도·성능 평가가 아니다.
+
+Mapper JPEG 품질(2026-10-26): `-q:v` 없이 ffmpeg 기본 200 kb/s 율 제어를 쓰면 연속 스트림에서 프레임이 약 11 KB(양자화 표 평균 약 100)로 떨어져,
+같은 TensorRT 검출기로 3_te1 640×360 20프레임에서 사람 0, 지게차 9였다(실제 RTSP 미리보기와 동일). `-q:v 2`(약 65 KB)에서는 사람 16, 지게차 20.
 
 **상태(2026-10-23):** 클러스터 배포 완료. [CI 39925164903](https://github.com/dsa04156/edgeai/actions/runs/39925164903) 통과 후 Argo CD `Synced/Healthy`와 실제 영상 구간 세 개의 성공을 확인했다.
 
