@@ -1,0 +1,13 @@
+# linux/amd64. Continuous forklift/person observer (edgeai_hawkeye_motion) on the RT-DETR Warehouse TensorRT base image
+# (Dockerfile.forklift-base: TensorRT, the NGC ONNX and forklift_detector.py). `build.sh motion` adds the hash-locked
+# manylinux wheels of motion/requirements.txt plus supervision 0.27.0 (ByteTrack). No RUN step, so the arm64 rootless
+# builder assembles it without emulation. FORKLIFT_BASE must be the base image pinned by digest.
+ARG FORKLIFT_BASE
+FROM ${FORKLIFT_BASE}
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+COPY site /opt/hawkeye-motion/site
+COPY edgeai_hawkeye_motion /opt/hawkeye-motion/app/edgeai_hawkeye_motion
+ENV MPLCONFIGDIR=/tmp PYTHONPATH=/opt/hawkeye-motion/app:/opt/forklift/site-packages:/opt/forklift:/opt/hawkeye-motion/site
+USER 10001:10001
+EXPOSE 8080
+ENTRYPOINT ["python", "-m", "edgeai_hawkeye_motion.server"]

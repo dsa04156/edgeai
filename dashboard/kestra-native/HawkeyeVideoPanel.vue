@@ -3,81 +3,104 @@
     <NativeLoading :busy="loading && !capability" label="영상 점검을 불러오는 중…" />
     <NativeFeedback :error="loadError || pollError" />
     <section v-if="capability" class="native-panel hv-control" aria-labelledby="hv-control-title">
-      <div class="native-toolbar">
+      <div class="native-toolbar hv-head">
         <h2 id="hv-control-title">영상 안전 점검</h2>
+        <div class="hv-views" role="group" aria-label="영상 보기">
+          <button v-for="v in views" :key="v.id" type="button" :aria-pressed="view === v.id" @click="setView(v.id)">{{ v.label }}</button>
+        </div>
         <KsButton :disabled="loading" @click="loadAll(() => refresh())">새로고침</KsButton>
       </div>
-      <p class="native-note">
-        카메라 영상을 정해진 길이의 구간으로 나눠 발행된 워크플로(프레임 수집 → Hawkeye 판정)를 차례로 실행합니다.
-        구간 사이에 들어온 영상은 판정하지 않습니다.
-      </p>
+      <p class="native-note">{{ intro }}</p>
       <div class="hv-grid">
-        <div class="hv-preview">
-          <img v-if="preview" :src="preview" :alt="`${camera?.id ?? '카메라'} 최신 영상`" />
-          <p v-else class="hv-nopreview">{{ previewMessage }}</p>
-          <p class="native-note" aria-live="polite">
-            <template v-if="previewAt">{{ time(previewAt) }} 수신 · 2초마다 갱신</template>
-            <template v-else-if="previewError">{{ previewError }}</template>
-          </p>
+        <div class="hv-stage">
+          <h3 v-if="view === 'history'" class="hv-stage-title">구간 {{ windowSeq }} {{ motion ? "관측 기록" : "판정 결과" }}</h3>
+          <MotionLive
+            v-if="view === 'live' && session"
+            :key="session.id"
+            :sessionId="session.id"
+            @frame="(o) => (current = o)"
+            @live="(v) => (liveObserver = v.observer)"
+          />
+          <template v-else-if="view === 'history' && selectedWindow">
+            <p v-if="framesNote" class="native-note">{{ framesNote }}</p>
+            <MotionHistory
+              :taskId="frameTaskId"
+              :items="historyItems"
+              :label="`구간 ${windowSeq}`"
+              :empty="framesNote || '표시할 프레임이 없습니다.'"
+              @frame="(f) => (current = f?.observation ?? null)"
+            />
+          </template>
+          <MotionStage
+            v-else
+            :src="preview || null"
+            :alt="`${camera?.id ?? '카메라'} 최신 영상`"
+            :placeholder="previewMessage"
+            :badge="preview ? { text: '카메라 미리보기', tone: 'info' } : null"
+          >
+            <span aria-live="polite">
+              <template v-if="previewAt">{{ time(previewAt) }} 수신 · 2초마다 갱신 · 추적 표시 없음</template>
+              <template v-else-if="previewError">{{ previewError }}</template>
+            </span>
+          </MotionStage>
         </div>
-        <div class="hv-form">
+        <div class="hv-side">
+          <MotionRisk v-if="motion && view !== 'preview' && session" :observation="current" />
           <KsFormItem label="카메라">
             <KsSelect v-model="cameraId" :disabled="running || starting" placeholder="카메라를 선택하세요" aria-label="카메라">
               <KsOption v-for="c in cameras" :key="c.id" :value="c.id" :label="`${c.id} · ${cameraState(c).label}`" />
             </KsSelect>
           </KsFormItem>
-          <dl v-if="camera" class="hv-facts">
-            <div>
-              <dt>현재 연결 상태</dt>
-              <dd><KsTag :type="cameraState(camera).online ? 'success' : 'danger'">{{ cameraState(camera).label }}</KsTag>
-                <span v-if="cameraState(camera).reason" class="native-note">{{ cameraState(camera).reason }}</span></dd>
-            </div>
-            <div v-if="replayLabel(camera)"><dt>영상 종류</dt><dd>{{ replayLabel(camera) }}</dd></div>
-            <div><dt>Mapper 노드</dt><dd>{{ camera.targetNode }}</dd></div>
-            <div><dt>원본 주소</dt><dd class="hv-mono">{{ sourceAddress(camera) }}</dd></div>
-          </dl>
+          <div v-if="camera" class="hv-camera">
+            <KsTag :type="cameraState(camera).online ? 'success' : 'danger'">{{ cameraState(camera).label }}</KsTag>
+            <span v-if="replayLabel(camera)">{{ replayLabel(camera) }}</span>
+            <span v-if="cameraState(camera).reason" class="native-note">{{ cameraState(camera).reason }}</span>
+            <details class="hv-more">
+              <summary>원본·Mapper</summary>
+              <dl class="hv-facts">
+                <div><dt>Mapper 노드</dt><dd>{{ camera.targetNode }}</dd></div>
+                <div><dt>원본 주소</dt><dd class="hv-mono">{{ sourceAddress(camera) }}</dd></div>
+              </dl>
+            </details>
+          </div>
           <p v-else-if="!cameras.length" class="native-notice">등록된 RTSP 카메라가 없습니다. 장치 관리에서 카메라를 등록하세요.</p>
           <KsFormItem label="워크플로 버전">
             <KsSelect v-model="versionId" :disabled="running || starting || !capability.versions.length" placeholder="발행된 버전 없음" aria-label="워크플로 버전">
-              <KsOption v-for="v in capability.versions" :key="v.id" :value="v.id" :label="`${capability.workflow?.displayName ?? capability.workflowKey} v${v.version}`" />
+              <KsOption v-for="v in capability.versions" :key="v.id" :value="v.id" :label="versionText(v)" />
             </KsSelect>
           </KsFormItem>
-          <p v-if="capability.workflow" class="native-note">
-            <RouterLink :to="{ path: '/ui/main/workflows', query: { workflow: capability.workflow.id } }">워크플로 정의 보기</RouterLink>
-            · 한 번에 최대 {{ capability.maxWindows }}개 구간
-          </p>
           <div class="native-toolbar">
             <KsButton v-if="!running" type="primary" :disabled="!canStart" @click="start">점검 시작</KsButton>
             <KsButton v-else type="danger" :disabled="stopping" @click="stop">점검 중지</KsButton>
+            <RouterLink v-if="capability.workflow" :to="{ path: '/ui/main/workflows', query: { workflow: capability.workflow.id } }">워크플로 정의</RouterLink>
           </div>
           <p class="native-note" role="status">{{ startHelp }}</p>
           <NativeFeedback :error="actionError" />
         </div>
       </div>
-    </section>
-
-    <section v-if="session" class="native-panel hv-session" aria-labelledby="hv-session-title">
-      <div class="native-toolbar">
-        <h2 id="hv-session-title">점검 세션</h2>
-        <KsTag :type="tone(session.state)">{{ sessionLabel(session.state) }}</KsTag>
-      </div>
-      <p class="hv-summary" aria-live="polite">{{ summary }}</p>
-      <p v-if="session.failureCode" role="alert" class="native-notice">
-        {{ session.failureCode }}{{ session.failureMessage ? ` · ${session.failureMessage}` : "" }}
-      </p>
-      <div class="hv-windows" role="group" aria-label="처리 구간">
-        <button
-          v-for="(w, i) in windowsAsc"
-          :key="w.seq"
-          type="button"
-          :class="['hv-window', tone(w.runState), { selected: w.seq === windowSeq }]"
-          :aria-pressed="w.seq === windowSeq"
-          @click="selectWindow(w.seq)"
-        >
-          <strong>구간 {{ w.seq }}</strong>
-          <span>{{ statusLabel(w.runState) }}</span>
-          <small v-if="gaps[i] != null">이전 구간 시작 후 {{ (gaps[i]! / 1000).toFixed(1) }}초</small>
-        </button>
+      <div v-if="session" class="hv-session" aria-labelledby="hv-session-title">
+        <p class="hv-summary" aria-live="polite">
+          <strong id="hv-session-title">점검 세션</strong>
+          <KsTag :type="tone(session.state)">{{ sessionLabel(session.state) }}</KsTag>
+          {{ summary }}
+        </p>
+        <p v-if="session.failureCode" role="alert" class="native-notice">
+          {{ session.failureCode }}{{ session.failureMessage ? ` · ${session.failureMessage}` : "" }}
+        </p>
+        <div class="hv-windows" role="group" aria-label="처리 구간">
+          <button
+            v-for="(w, i) in windowsAsc"
+            :key="w.seq"
+            type="button"
+            :class="['hv-window', tone(w.runState), { selected: view === 'history' && w.seq === windowSeq }]"
+            :aria-pressed="view === 'history' && w.seq === windowSeq"
+            @click="selectWindow(w.seq)"
+          >
+            <strong>구간 {{ w.seq }}</strong>
+            <span>{{ statusLabel(w.runState) }}</span>
+            <small v-if="gaps[i] != null">이전 구간 시작 후 {{ (gaps[i]! / 1000).toFixed(1) }}초</small>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -86,7 +109,10 @@
         <h2 id="hv-graph-title">구간 {{ windowSeq }} 실행 흐름</h2>
         <RouterLink v-if="selectedWindow" :to="{ path: '/ui/main/runs', query: { run: selectedWindow.runId } }">실행 상세 열기</RouterLink>
       </div>
-      <p class="native-note">점선 상자는 워크플로 작업이 아닌 외부 구성 요소입니다. 작업 위치는 실제 배치 기록만 표시합니다.</p>
+      <p class="native-note">
+        점선 상자는 워크플로 작업이 아닌 외부 구성 요소입니다.{{ motion ? " 관측기는 프레임 수신·탐지·추적·예측을 한 서비스에서 계속 실행하고, 구간 작업이 그 관측 기록을 저장합니다." : "" }}
+        작업 위치는 실제 배치 기록만 표시합니다.
+      </p>
       <div class="hv-flow">
         <PipelineGraph :nodes="graph.nodes" :edges="graph.edges" :selected="nodeId" @select="(id) => (nodeId = id)" />
         <aside v-if="node" class="hv-node" aria-live="polite" :aria-label="`${node.label} 상세`">
@@ -98,36 +124,6 @@
           <p v-if="!node.details.length" class="native-note">아직 관측된 정보가 없습니다.</p>
         </aside>
       </div>
-    </section>
-
-    <section v-if="session && selectedWindow" class="native-panel" aria-labelledby="hv-frames-title">
-      <h2 id="hv-frames-title">구간 {{ windowSeq }} 판정 결과</h2>
-      <p v-if="framesNote" class="native-note">{{ framesNote }}</p>
-      <ol v-if="frames.length" class="hv-frames">
-        <li v-for="f in frames" :key="f.seq" class="hv-frame">
-          <template v-if="captureTaskId">
-            <img
-              v-if="frameImages[f.seq]?.url"
-              :src="frameImages[f.seq]!.url"
-              :alt="`구간 ${windowSeq} 프레임 ${f.seq}`"
-              width="320"
-              height="180"
-            />
-            <p v-else :class="['hv-nopreview', { failed: frameImages[f.seq]?.error }]">
-              {{ frameImages[f.seq]?.error ?? "프레임을 불러오는 중…" }}
-            </p>
-          </template>
-          <div>
-            <p class="hv-category" :class="{ unread: f.category == null }">{{ categoryText(f) }}</p>
-            <p v-if="f.explanation" class="hv-explanation">{{ f.explanation }}</p>
-            <dl class="hv-facts">
-              <div><dt>프레임</dt><dd>{{ f.seq }} · {{ time(f.frameTime) }}</dd></div>
-              <div><dt>판정 시간</dt><dd>{{ f.inferenceMs == null ? "—" : `${f.inferenceMs.toFixed(0)} ms` }}{{ f.roundTripMs == null ? "" : ` · 왕복 ${f.roundTripMs.toFixed(0)} ms` }}</dd></div>
-              <div><dt>판정 위치</dt><dd>{{ detections?.accelerator?.nodeName ?? "—" }} · {{ f.processor ?? "—" }}</dd></div>
-            </dl>
-          </div>
-        </li>
-      </ol>
     </section>
 
     <section class="native-panel hv-history">
@@ -160,9 +156,12 @@ import { get, request, requestKey, time, useAction, usePoll, write, type Schema 
 import { categoryText } from "./hawkeye";
 import {
   cameraState,
+  motionFrames,
   pinnedSource,
   pipelineGraph,
   readDetections,
+  readObservations,
+  versionMode,
   sessionLabel,
   replayLabel,
   sourceAddress,
@@ -172,6 +171,10 @@ import {
   type Camera,
   type CameraBinding,
   type DetectionsView,
+  type HistoryFrame,
+  type Observation,
+  type ObservationsView,
+  type ObserverIdentity,
   type VideoCapability,
   type VideoSession,
 } from "./hawkeye-video";
@@ -179,6 +182,10 @@ import NativeFeedback from "./NativeFeedback.vue";
 import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
 import PipelineGraph from "./PipelineGraph.vue";
+import MotionHistory from "./MotionHistory.vue";
+import MotionLive from "./MotionLive.vue";
+import MotionRisk from "./MotionRisk.vue";
+import MotionStage from "./MotionStage.vue";
 
 const BASE = "scenarios/hawkeye-safety/video";
 const PAGE = 10;
@@ -200,6 +207,10 @@ const capability = ref<VideoCapability | null>(null),
   run = ref<Schema["RunDetail"] | null>(null),
   placements = ref<Schema["Placement"][]>([]),
   detections = ref<DetectionsView | null>(null),
+  observations = ref<ObservationsView | null>(null),
+  view = ref<"preview" | "live" | "history">("preview"),
+  current = ref<Observation | null>(null),
+  liveObserver = ref<ObserverIdentity | null>(null),
   nodeId = ref("task:infer"),
   pollError = ref(""),
   preview = ref(""),
@@ -210,8 +221,28 @@ let startKey = requestKey(),
   polling = false,
   previewing = false,
   alive = true,
-  ticks = 0;
+  ticks = 0,
+  picked = false;
 
+const modeOf = (id: string | undefined) => versionMode(capability.value?.versions.find((v) => v.id === id) ?? {});
+const motion = computed(() => (session.value ? (session.value.mode ?? modeOf(session.value.workflowVersionId)) : modeOf(versionId.value)) === "MOTION");
+const versionText = (v: VideoCapability["versions"][number]) =>
+  `${capability.value?.workflow?.displayName ?? capability.value?.workflowKey} v${v.version} · ${versionMode(v) === "MOTION" ? "지게차·사람 추적" : "프레임 판정"}`;
+const intro = computed(() =>
+  modeOf(versionId.value) === "MOTION"
+    ? "관측기가 카메라 영상을 계속 받아 지게차·사람을 추적하고 3초 앞 경로를 예측합니다. 구간마다 워크플로 작업이 그 관측 기록을 저장합니다."
+    : "카메라 영상을 정해진 길이의 구간으로 나눠 발행된 워크플로(프레임 수집 → Hawkeye 판정)를 차례로 실행합니다. 구간 사이에 들어온 영상은 판정하지 않습니다.",
+);
+const canLive = computed(() => motion.value && session.value?.state === "RUNNING");
+const views = computed(() => [
+  canLive.value ? { id: "live" as const, label: "실시간 관측" } : { id: "preview" as const, label: "카메라 미리보기" },
+  ...(session.value?.windows.length ? [{ id: "history" as const, label: "구간 기록" }] : []),
+]);
+function setView(next: "preview" | "live" | "history") {
+  if (view.value === next) return;
+  view.value = next;
+  current.value = null;
+}
 const starting = computed(() => acting.value && !stopping.value);
 const camera = computed(() => cameras.value.find((c) => c.id === cameraId.value));
 const running = computed(() => session.value?.state === "RUNNING");
@@ -228,6 +259,8 @@ const canStart = computed(
 const startHelp = computed(() => {
   const c = capability.value;
   if (running.value) return "점검 중입니다. 중지하면 진행 중인 구간을 취소하고 새 구간을 만들지 않습니다.";
+  if (c?.observer && modeOf(versionId.value) === "MOTION" && c.observer.status !== "READY")
+    return `관측기 ${statusLabel(c.observer.status)}${c.observer.error ? ` · ${c.observer.error}` : ""} · 시작하면 서버가 거부할 수 있습니다.`;
   if (!c?.enabled) return "영상 점검이 이 환경에 설정되지 않았습니다.";
   if (!c.executes) return "워크플로 실행 환경이 꺼져 있어 시작할 수 없습니다.";
   if (c.activeSessionId) return "다른 점검이 진행 중입니다. 그 점검을 중지한 뒤 시작하세요.";
@@ -245,11 +278,18 @@ const summary = computed(() => {
   return `${s.camera.id} · ${time(s.createdAt)} 시작 · 구간 ${s.windowCount}/${s.maxWindows} 생성, ${done}개 완료${s.endedAt ? ` · ${time(s.endedAt)} 종료` : ""}${s.endReason ? ` (${sessionLabel(s.endReason)})` : ""}`;
 });
 const dag = computed(() => (session.value ? dags.value[session.value.workflowVersionId] : undefined));
-const captureTaskId = computed(() => run.value?.tasks.find((t) => t.key === "capture")?.id);
+// The motion workflow (v2) has one snapshot Task that stores the window's frames and observations.
+const frameTaskKey = computed(() =>
+  motion.value ? (dag.value?.tasks.length === 1 ? dag.value.tasks[0].key : "snapshot") : "capture",
+);
+const frameTaskId = computed(() => run.value?.tasks.find((t) => t.key === frameTaskKey.value)?.id ?? null);
 const graph = computed(() => {
   if (!dag.value || !session.value) return null;
   const observed = detections.value?.accelerator;
   const reported = accelerator.value?.reported;
+  const recorded = observations.value?.observer;
+  const live = view.value === "live" ? liveObserver.value : null;
+  const reportedObserver = capability.value?.observer;
   return pipelineGraph({
     dag: dag.value,
     placements: placements.value,
@@ -259,27 +299,58 @@ const graph = computed(() => {
       cameras.value.find((c) => c.id === session.value!.camera.id),
     ),
     // Identity recorded with this window's frames wins over the runtime's current report.
-    accelerator: observed
+    accelerator: motion.value
+      ? null
+      : observed
       ? { ...observed, status: "ANSWERED", basis: "이 구간의 판정 기록" }
       : reported
         ? { nodeName: reported.nodeName ?? null, podUid: null, processor: reported.processor ?? null, status: accelerator.value!.status, basis: "현재 런타임 보고" }
         : null,
-    sourceTask: "capture",
-    acceleratorTask: "infer",
+    sourceTask: frameTaskKey.value,
+    acceleratorTask: motion.value ? "" : "infer",
     result: run.value
-      ? { state: detections.value ? "VERIFIED" : run.value.run.state === "FAILED" ? "FAILED" : "PENDING", verified: frames.value.length }
+      ? {
+          state: (motion.value ? observations.value : detections.value) ? "VERIFIED" : run.value.run.state === "FAILED" ? "FAILED" : "PENDING",
+          verified: historyItems.value.length,
+        }
       : null,
+    observer: motion.value
+      ? recorded
+        ? { ...recorded, status: "RECORDED", basis: "이 구간의 관측 기록" }
+        : live
+          ? { ...live, status: "RUNNING", basis: "실시간 관측 응답" }
+          : reportedObserver
+            ? { ...reportedObserver, basis: "현재 관측기 보고" }
+            : null
+      : undefined,
   });
 });
 const frames = computed(() => detections.value?.frames ?? []);
 const node = computed(() => graph.value?.nodes.find((n) => n.id === nodeId.value));
-const frameImages = ref<Record<number, { url?: string; error?: string }>>({});
-// Polling rebuilds the detections object every 2 s; only a different capture Task or frame set reloads images.
-const frameKey = computed(() =>
-  captureTaskId.value && frames.value.length ? `${captureTaskId.value}:${frames.value.map((f) => f.seq).join(",")}` : "",
+const historyItems = computed<HistoryFrame[]>(() =>
+  motion.value
+    ? motionFrames(observations.value?.frames ?? [])
+    : frames.value.map((f) => ({
+        seq: f.seq,
+        frameTime: f.frameTime,
+        observation: null,
+        tone: f.category == null ? "danger" : "none",
+        caption: categoryText(f),
+        note: [f.explanation, f.inferenceMs == null ? null : `${f.inferenceMs.toFixed(0)} ms${f.roundTripMs == null ? "" : ` · 왕복 ${f.roundTripMs.toFixed(0)} ms`}`]
+          .filter(Boolean)
+          .join(" · "),
+        unread: f.category == null,
+      })),
 );
 const framesNote = computed(() => {
   if (!run.value) return "실행 정보를 불러오는 중입니다.";
+  if (motion.value) {
+    const o = observations.value;
+    if (!o) return ["FAILED", "CANCELLED"].includes(run.value.run.state) ? "이 구간은 결과 없이 끝났습니다." : "관측 기록이 확정되면 표시합니다.";
+    const span = o.window ? ` · 영상 ${time(o.window.startedAt)} ~ ${time(o.window.finishedAt)}` : "";
+    const evicted = o.window?.evicted ? ` · 보관 범위를 넘어 ${o.window.evicted}장 제외` : "";
+    return `검증된 관측 기록 · 프레임 ${o.frames.length}장${span}${evicted}`;
+  }
   const d = detections.value;
   if (!d)
     return ["FAILED", "CANCELLED"].includes(run.value.run.state) ? "이 구간은 결과 없이 끝났습니다." : "판정 결과가 확정되면 표시합니다.";
@@ -321,7 +392,7 @@ async function refresh() {
   cameras.value = devices.items.filter((d) => d.profile.protocol === "rtsp");
   accelerator.value = safety.runtime;
   if (!cameraId.value) cameraId.value = (cameras.value.find((c) => cameraState(c).online) ?? cameras.value[0])?.id ?? "";
-  if (!versionId.value) versionId.value = cap.versions[0]?.id ?? "";
+  if (!versionId.value) versionId.value = (cap.versions.find((v) => versionMode(v) === "MOTION") ?? cap.versions[0])?.id ?? "";
   await loadHistory();
   const id = (typeof route.query.session === "string" && route.query.session) || cap.activeSessionId || history.value[0]?.id;
   if (id) await showSession(id, session.value?.id === id);
@@ -334,10 +405,21 @@ async function showSession(id: string, keepWindow = false) {
   if (changed && route.query.session !== id) await router.replace({ query: { ...route.query, session: id } });
   const latest = detail.windows[0]?.seq ?? null;
   if (changed || !keepWindow || windowSeq.value == null) windowSeq.value = latest;
+  if (changed) {
+    picked = false;
+    nodeId.value = motion.value ? "observer" : "task:infer";
+    setView(canLive.value ? "live" : detail.windows.length ? "history" : "preview");
+  }
   await loadWindow();
 }
+// However the session ended (stop, poll, failure), the live view leaves with it.
+watch(canLive, (live) => {
+  if (!live && view.value === "live") setView(session.value?.windows.length ? "history" : "preview");
+});
 function selectWindow(seq: number) {
   windowSeq.value = seq;
+  picked = true;
+  setView("history");
   void loadAll(() => loadWindow());
 }
 let windowGeneration = 0;
@@ -348,15 +430,21 @@ async function loadWindow() {
     run.value = null;
     placements.value = [];
     detections.value = null;
+    observations.value = null;
   }
   if (!w) return;
   const [detail, where] = await Promise.all([
     get<Schema["RunDetail"]>(`workflow-runs/${w.runId}`),
     get<Schema["Placement"][]>(`workflow-runs/${w.runId}/placements`),
   ]);
-  const infer = detail.tasks.find((t) => t.key === "infer");
-  let read: DetectionsView | null = null;
-  if (infer) {
+  const infer = detail.tasks.find((t) => t.key === (motion.value ? frameTaskKey.value : "infer"));
+  let read: DetectionsView | null = null,
+    observed: ObservationsView | null = null;
+  if (infer && motion.value) {
+    const results = await get<Schema["TaskResults"]>(`tasks/${infer.id}/results`);
+    const port = results.items[0]?.artifacts.find((a) => a.port === "observations")?.port;
+    if (port) observed = readObservations(await (await request(`tasks/${infer.id}/results/${encodeURIComponent(port)}/content`)).json());
+  } else if (infer) {
     const results = await get<Schema["TaskResults"]>(`tasks/${infer.id}/results`);
     const port = results.items[0]?.artifacts.find((a) => a.port === "detections")?.port;
     if (port) {
@@ -367,40 +455,8 @@ async function loadWindow() {
   run.value = detail;
   placements.value = where;
   detections.value = read;
+  observations.value = observed;
 }
-let frameLoad: AbortController | null = null;
-function releaseFrames() {
-  frameLoad?.abort();
-  frameLoad = null;
-  for (const f of Object.values(frameImages.value)) if (f.url) URL.revokeObjectURL(f.url);
-  frameImages.value = {};
-}
-// The frame reader admits only a few concurrent reads and answers 429 RESULT_PREVIEW_BUSY beyond that, so at most
-// two frames are fetched at a time.
-watch(frameKey, (key) => {
-  releaseFrames();
-  if (!key) return;
-  const controller = (frameLoad = new AbortController()),
-    taskId = captureTaskId.value!,
-    queue = frames.value.map((f) => f.seq);
-  const next = async (): Promise<void> => {
-    const seq = queue.shift();
-    if (seq == null || controller.signal.aborted) return;
-    try {
-      const response = await request(`${BASE}/tasks/${taskId}/frames/${seq}`, {
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
-      });
-      const blob = await response.blob();
-      if (controller.signal.aborted) return;
-      frameImages.value[seq] = { url: URL.createObjectURL(blob) };
-    } catch (cause) {
-      if (controller.signal.aborted) return;
-      frameImages.value[seq] = { error: `프레임 불러오기 실패 · ${cause instanceof Error ? cause.message : "조회 실패"}` };
-    }
-    return next();
-  };
-  void Promise.all([next(), next()]);
-});
 function start() {
   if (!canStart.value || !camera.value) return;
   void act(async () => {
@@ -437,7 +493,7 @@ function page(offset: number) {
 }
 async function refreshPreview() {
   const c = camera.value;
-  if (previewing || !c || !cameraState(c).online || document.hidden) return;
+  if (previewing || view.value !== "preview" || !c || !cameraState(c).online || document.hidden) return;
   previewing = true;
   try {
     const response = await request(`managed-devices/${encodeURIComponent(c.id)}/preview?uid=${encodeURIComponent(c.uid)}`);
@@ -463,7 +519,6 @@ onMounted(() => loadAll(() => refresh()));
 onBeforeUnmount(() => {
   alive = false;
   if (preview.value) URL.revokeObjectURL(preview.value);
-  releaseFrames();
 });
 usePoll(refreshPreview, 2000);
 // Non-overlapping and idle while the tab is hidden; a running session is followed every 2 s, otherwise every 10 s.
@@ -472,8 +527,9 @@ usePoll(async () => {
   polling = true;
   try {
     if (running.value && session.value) {
+      // A window the user picked stays put; otherwise the newest window is followed.
       const wasLatest = windowSeq.value === session.value.windows[0]?.seq;
-      await showSession(session.value.id, !wasLatest);
+      await showSession(session.value.id, picked || !wasLatest);
       if (!running.value) {
         capability.value = await get<VideoCapability>(BASE);
         await loadHistory();
@@ -493,26 +549,82 @@ usePoll(async () => {
   gap: var(--ks-spacing-4);
   margin-top: var(--ks-spacing-4);
 }
+.hv-head h2 {
+  margin-right: auto;
+}
+.hv-views {
+  display: inline-flex;
+  border: 1px solid var(--ks-border-default);
+  border-radius: var(--ks-radius-base);
+  overflow: hidden;
+}
+.hv-views button {
+  min-height: 32px;
+  padding: 0 var(--ks-spacing-3);
+  color: var(--ks-text-secondary);
+  background: var(--ks-bg-base);
+  border: 0;
+  cursor: pointer;
+}
+.hv-views button + button {
+  border-left: 1px solid var(--ks-border-default);
+}
+.hv-views button[aria-pressed="true"] {
+  color: var(--ks-text-primary);
+  background: var(--ks-bg-hover);
+  font-weight: 600;
+}
+.hv-views button:focus-visible {
+  outline: 2px solid var(--ks-border-focus);
+  outline-offset: -2px;
+}
+/* The clip is the focal point; controls and the risk forecast sit beside it on wide screens. */
 .hv-grid {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr);
-  gap: var(--ks-spacing-5);
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  gap: var(--ks-spacing-4);
   align-items: start;
 }
-.hv-preview img,
-.hv-nopreview {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: contain;
-  background: var(--ks-bg-base);
-  border-radius: var(--ks-radius-base);
-}
-.hv-nopreview {
+.hv-stage {
   display: grid;
-  place-items: center;
+  gap: var(--ks-spacing-2);
+  min-width: 0;
+}
+.hv-stage-title {
   margin: 0;
+  font-size: var(--ks-font-size-md);
+}
+.hv-stage .native-note {
+  margin: 0;
+}
+.hv-side {
+  display: grid;
+  gap: var(--ks-spacing-3);
+  min-width: 0;
+}
+.hv-side :deep(.kel-form-item) {
+  margin-bottom: 0;
+}
+.hv-camera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ks-spacing-2);
+}
+.hv-more {
+  flex-basis: 100%;
+}
+.hv-more summary {
+  cursor: pointer;
   color: var(--ks-text-secondary);
+  font-size: var(--ks-font-size-xs);
+}
+.hv-session {
+  display: grid;
+  gap: var(--ks-spacing-2);
+  margin-top: var(--ks-spacing-4);
+  padding-top: var(--ks-spacing-3);
+  border-top: 1px solid var(--ks-border-default);
 }
 .hv-facts {
   display: grid;
@@ -536,8 +648,11 @@ usePoll(async () => {
   font-size: var(--ks-font-size-xs);
 }
 .hv-summary {
-  font-size: var(--ks-font-size-md);
-  margin: var(--ks-spacing-2) 0 var(--ks-spacing-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ks-spacing-2);
+  margin: 0;
 }
 .hv-windows {
   display: flex;
@@ -547,9 +662,9 @@ usePoll(async () => {
 .hv-window {
   display: grid;
   gap: 2px;
-  min-width: 7.5rem;
+  min-width: 6.5rem;
   min-height: 44px;
-  padding: var(--ks-spacing-2) var(--ks-spacing-3);
+  padding: var(--ks-spacing-1) var(--ks-spacing-3);
   text-align: left;
   color: var(--ks-text-primary);
   background: var(--ks-bg-base);
@@ -613,45 +728,6 @@ usePoll(async () => {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.hv-frames {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--ks-spacing-4);
-}
-.hv-frame {
-  display: grid;
-  grid-template-columns: 16rem minmax(0, 1fr);
-  gap: var(--ks-spacing-4);
-  padding-bottom: var(--ks-spacing-4);
-  border-bottom: 1px solid var(--ks-border-default);
-}
-.hv-frame img {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: var(--ks-radius-base);
-  background: var(--ks-bg-base);
-}
-.hv-nopreview.failed {
-  padding: var(--ks-spacing-3);
-  color: var(--ks-text-error);
-  overflow-wrap: anywhere;
-}
-.hv-category {
-  font-size: var(--ks-font-size-md);
-  font-weight: var(--ks-font-weight-bold);
-  margin: 0 0 var(--ks-spacing-1);
-}
-.hv-category.unread {
-  color: var(--ks-text-error);
-}
-.hv-explanation {
-  margin: 0 0 var(--ks-spacing-2);
-  overflow-wrap: anywhere;
-}
 .hv-history {
   max-width: 100%;
   overflow-x: auto;
@@ -662,8 +738,7 @@ usePoll(async () => {
   }
 }
 @media (max-width: 900px) {
-  .hv-grid,
-  .hv-frame {
+  .hv-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

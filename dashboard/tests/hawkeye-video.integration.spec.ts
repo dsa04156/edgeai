@@ -123,6 +123,7 @@ test("video is the default: start, follow windows on the DAG with real placement
   await expect(page.getByRole("heading", { name: "영상 안전 점검" })).toBeVisible();
   await expect(page.getByAltText("hawkeye-forklift-video 최신 영상")).toBeVisible();
   await expect(page.getByText("연결됨", { exact: true })).toBeVisible();
+  await page.getByText("원본·Mapper").click();
   await expect(page.getByText("rtsp://10.254.192.47:18555/forklift-replay")).toBeVisible();
   await expect(page.getByText("녹화 영상 반복 재생", { exact: true })).toBeVisible();
   const startButton = page.getByRole("button", { name: "점검 시작" });
@@ -160,11 +161,15 @@ test("video is the default: start, follow windows on the DAG with real placement
   await flow.getByRole("button", { name: /Hawkeye 추론 서버/ }).click();
   await expect(page.getByRole("complementary", { name: "Hawkeye 추론 서버 상세" })).toContainText("이 구간의 판정 기록");
 
-  const frames = page.getByRole("list").filter({ has: page.getByAltText("구간 1 프레임 1") });
-  await expect(frames).toContainText("지게차 위반 (forklift_violation)");
-  await expect(frames).toContainText("A forklift crosses the pedestrian aisle.");
-  await expect(frames).toContainText("612 ms · 왕복 641 ms");
-  await expect(frames).toContainText("범주 없음 · 판정 실패");
+  // One frame at a time in the shared video area; the judged category and timing follow the visible frame.
+  const stage = page.locator(".hv-stage");
+  await expect(page.getByAltText("구간 1 프레임 1")).toBeVisible();
+  await expect(stage.locator("img")).toHaveCount(1);
+  await expect(stage).toContainText("지게차 위반 (forklift_violation)");
+  await expect(stage).toContainText("A forklift crosses the pedestrian aisle.");
+  await expect(stage).toContainText("612 ms · 왕복 641 ms");
+  await page.getByRole("button", { name: "다음 프레임" }).click();
+  await expect(stage).toContainText("범주 없음 · 판정 실패");
   await expect(page.getByText(/프레임 2장, 판정 실패 1장/)).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("video-running.png"), fullPage: true });
@@ -220,7 +225,10 @@ test("frame images load at most two at a time, are not refetched by polling, and
   await page.goto("/ui/main/scenarios/hawkeye");
   await page.getByRole("button", { name: "점검 시작" }).click();
   await expect(page.getByRole("button", { name: /구간 2/ })).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: /구간 2/ }).click();
+  await page.getByRole("button", { name: "다음 프레임" }).click();
   await expect(page.getByAltText("구간 2 프레임 2")).toBeVisible();
+  await page.getByRole("button", { name: "다음 프레임" }).click();
   await expect(page.getByText("프레임 불러오기 실패 · RESULT_PREVIEW_BUSY")).toBeVisible();
 
   await page.getByRole("button", { name: /구간 1/ }).click();
@@ -228,8 +236,10 @@ test("frame images load at most two at a time, are not refetched by polling, and
     const image = page.getByAltText(`구간 1 프레임 ${seq}`, { exact: true });
     await expect(image).toHaveAttribute("src", /^blob:/);
     expect(await image.evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth))).toBeGreaterThan(0);
+    await expect(page.getByText(/프레임 불러오기 실패/)).toHaveCount(0);
+    if (seq < 10) await page.getByRole("button", { name: "다음 프레임" }).click();
   }
-  await expect(page.getByText(/프레임 불러오기 실패/)).toHaveCount(0);
+  await page.getByRole("slider", { name: "프레임 위치" }).fill("0");
   const firstSrc = await page.getByAltText("구간 1 프레임 1", { exact: true }).getAttribute("src");
   // The session is still running, so the 2 s poll re-reads this window's detections twice here.
   await page.waitForTimeout(4500);
@@ -247,14 +257,14 @@ test("frame images load at most two at a time, are not refetched by polling, and
   });
   await page.getByRole("button", { name: /구간 2/ }).click();
   await expect(page.getByRole("heading", { name: "구간 2 판정 결과" })).toBeVisible();
-  await expect(page.getByText("실행 정보를 불러오는 중입니다.")).toBeVisible();
-  await expect(page.locator(".hv-frames")).toHaveCount(0);
+  await expect(page.getByText("실행 정보를 불러오는 중입니다.").first()).toBeVisible();
+  await expect(page.locator(".hv-stage img")).toHaveCount(0);
   await expect(page.getByAltText(/프레임/)).toHaveCount(0);
   await expect(page.getByRole("list", { name: "워크플로 단계" })).not.toContainText("etri-ser0003-runner");
   expect(await page.evaluate((url) => fetch(url!).then(() => true, () => false), firstSrc)).toBe(false);
   release();
   await expect(page.getByAltText("구간 2 프레임 1", { exact: true })).toHaveAttribute("src", /^blob:/);
-  await expect(page.locator(".hv-frames > li")).toHaveCount(3);
+  await expect(page.locator(".hv-stage figcaption")).toContainText("프레임 1/3");
   await expect(page.getByAltText(/구간 1 프레임/)).toHaveCount(0);
   expect(maxInFlight).toBeLessThanOrEqual(2);
   expect(errors).toEqual([]);

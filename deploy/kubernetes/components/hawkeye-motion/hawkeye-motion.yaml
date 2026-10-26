@@ -1,0 +1,102 @@
+# Continuous forklift/person observer of Hawkeye video sessions (docs/scenarios/hawkeye-warehouse-safety.md):
+# NVIDIA RT-DETR 2D Warehouse + ByteTrack + constant-velocity closest approach over one pinned camera at a time.
+# State is in memory only; one replica, and a restart ends running sessions as OBSERVER_LOST instead of resuming.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-hawkeye-motion
+  labels:
+    app.kubernetes.io/name: edgeai-hawkeye-motion
+    app.kubernetes.io/part-of: edgeai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-hawkeye-motion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edgeai-hawkeye-motion
+        app.kubernetes.io/part-of: edgeai
+    spec:
+      # RTX 5060 Ti: the RT-DETR TensorRT engine is built for this GPU on start (about 25 s) into the engine cache.
+      # The Hawkeye VLM in components/hawkeye-safety runs on CPU so this Pod holds the node's only GPU.
+      runtimeClassName: ra-nvidia-rtx5060
+      nodeSelector:
+        kubernetes.io/hostname: etri-ser0001-cg0msb
+        kubernetes.io/arch: amd64
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: observer
+          image: edgeai-hawkeye-motion
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+          resources:
+            requests: {cpu: '1', memory: 2Gi, nvidia.com/gpu: 1}
+            limits: {cpu: '2', memory: 3Gi, nvidia.com/gpu: 1}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: engine, mountPath: /var/cache/forklift}
+          # READY only after the ONNX SHA-256 matched, the engine was built or loaded and one warm-up inference ran.
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+        - name: engine
+          emptyDir: {sizeLimit: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-hawkeye-motion
+  labels: {app.kubernetes.io/name: edgeai-hawkeye-motion, app.kubernetes.io/part-of: edgeai}
+spec:
+  selector: {app.kubernetes.io/name: edgeai-hawkeye-motion}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-hawkeye-motion
+  labels: {app.kubernetes.io/part-of: edgeai}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: edgeai-hawkeye-motion}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: edgeai-api}
+        # Runner Pods of the hawkeye-video-safety snapshot Task.
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: edgeai-runtimes}
+          podSelector:
+            matchLabels: {app.kubernetes.io/managed-by: edgeai-runtime-controller}
+      ports:
+        - {protocol: TCP, port: 8080}

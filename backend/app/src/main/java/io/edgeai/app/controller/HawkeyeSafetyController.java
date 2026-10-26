@@ -9,6 +9,7 @@ import io.edgeai.app.service.HawkeyeSafetyService;
 import io.edgeai.app.service.HawkeyeVideoService;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -73,6 +74,15 @@ public class HawkeyeSafetyController {
     @PostMapping(value = "/video/sessions/{sessionId}/stop", consumes = "application/json")
     public ResponseEntity<HawkeyeVideoSessionResponse> stopVideo(@PathVariable UUID sessionId, @RequestBody String body) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(video.stop(sessionId, body));
+    }
+    @GetMapping("/video/sessions/{sessionId}/live")
+    public ResponseEntity<Map<String, Object>> videoLive(@PathVariable UUID sessionId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(video.live(sessionId));
+    }
+    @GetMapping("/video/sessions/{sessionId}/live/frames/{seq}")
+    public ResponseEntity<byte[]> videoLiveFrame(@PathVariable UUID sessionId, @PathVariable long seq) {
+        // Live frames leave the observer's ring buffer; they are not committed Results and are not cached.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG).body(video.liveFrame(sessionId, seq));
     }
     @GetMapping("/video/tasks/{taskId}/frames/{seq}")
     public ResponseEntity<byte[]> videoFrame(@PathVariable UUID taskId, @PathVariable int seq) {

@@ -1,0 +1,18 @@
+# linux/amd64 base for the RT-DETR Warehouse forklift/person detector (forklift_detector.py) on TensorRT.
+# Assembled by prepare-forklift-base.sh: hash-locked manylinux wheels (forklift-base-requirements.txt) installed for
+# CPython 3.12 x86_64, tensorrt_libs reduced to the runtime, ONNX parser, plugins and the sm120 builder resource, and the
+# NGC ONNX verified by SHA-256. No RUN step, so the arm64 rootless builder assembles it without emulation.
+# The GPU driver (libcuda) comes from the NVIDIA container runtime of the node; the engine is built for that GPU on
+# first start into EDGEAI_FORKLIFT_ENGINE_DIR (mount a writable volume there; about 25 s on an RTX 5060 Ti).
+# Model: nvidia/tao/rtdetr_2d_warehouse deployable_rn50_v1.0.2, NVIDIA Open Model License (see /opt/forklift/model).
+FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp PYTHONPATH=/opt/forklift/site-packages:/opt/forklift \
+    NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    EDGEAI_FORKLIFT_MODEL=/opt/forklift/model/rtdetr_warehouse_v1.0.2.onnx \
+    EDGEAI_FORKLIFT_MODEL_SHA256=7b57da65ea42d0ed835da7ffee0656a7ba32337402ba8bff3dd1d0dd77b17084 \
+    EDGEAI_FORKLIFT_ENGINE_DIR=/var/cache/forklift
+COPY site-packages /opt/forklift/site-packages
+COPY model /opt/forklift/model
+COPY forklift_detector.py /opt/forklift/forklift_detector.py
+USER 10001:10001

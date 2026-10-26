@@ -121,6 +121,9 @@ edgeai:
     workflow-key: ${EDGEAI_HAWKEYE_VIDEO_WORKFLOW_KEY:hawkeye-video-safety}
     max-windows: ${EDGEAI_HAWKEYE_VIDEO_MAX_WINDOWS:30}
     poll: ${EDGEAI_HAWKEYE_VIDEO_POLL:1s}
+    # Continuous forklift/person observer of snapshot workflow versions (deploy/kubernetes/components/hawkeye-motion).
+    observer-url: ${EDGEAI_HAWKEYE_VIDEO_OBSERVER_URL:}
+    observer-lease: ${EDGEAI_HAWKEYE_VIDEO_OBSERVER_LEASE:15s}
   workflow:
     enabled: ${EDGEAI_WORKFLOW_ENABLED:true}
   recovery:

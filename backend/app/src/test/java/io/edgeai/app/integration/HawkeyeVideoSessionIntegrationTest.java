@@ -49,10 +49,15 @@ class HawkeyeVideoSessionIntegrationTest {
     static final String OTHER = "hawkeye-video-it-outside";
     static final String BASE = "/api/v1/scenarios/hawkeye-safety/video";
     private static final Path RUNNER_KEY = key();
+    private static final FakeMotionObserver OBSERVER = observer();
     private static final String NAMESPACE = "video-test-" + UUID.randomUUID();
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) {
         registry.add("edgeai.runtime.key-file", RUNNER_KEY::toString);
         registry.add("edgeai.runtime.namespace", () -> NAMESPACE);
+        registry.add("edgeai.hawkeye-video.observer-url", OBSERVER::url);
+    }
+    private static FakeMotionObserver observer() {
+        try { return new FakeMotionObserver(); } catch (Exception e) { throw new IllegalStateException(e); }
     }
     private static Path key() {
         try {
@@ -60,7 +65,7 @@ class HawkeyeVideoSessionIntegrationTest {
             new java.security.SecureRandom().nextBytes(key); Files.writeString(path, HexFormat.of().formatHex(key)); return path;
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
-    @AfterAll static void removeKey() throws Exception { Files.deleteIfExists(RUNNER_KEY); }
+    @AfterAll static void removeKey() throws Exception { Files.deleteIfExists(RUNNER_KEY); OBSERVER.close(); }
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
@@ -80,7 +85,7 @@ class HawkeyeVideoSessionIntegrationTest {
     private final UUID cameraUid = UUID.randomUUID();
     private String cameraState = "online";
     private Map<String, Object> cameraResource;
-    private UUID version, otherVersion;
+    private UUID version, otherVersion, motionVersion;
 
     @BeforeEach void boundaries() throws Exception {
         when(gateway.authenticatePod(any(), any())).thenAnswer(call -> {
@@ -96,8 +101,10 @@ class HawkeyeVideoSessionIntegrationTest {
         doAnswer(call -> { VerifiedArtifact a = call.getArgument(0); Files.write(call.getArgument(1), objects.get(a.sha256())); return null; })
             .when(storage).downloadFile(any(), any());
         camera();
+        OBSERVER.reset();
         version = publish(KEY);
         otherVersion = publish(OTHER);
+        motionVersion = publish(KEY, "hawkeye-video-safety-v2.json", "2.0.0");
     }
     @AfterEach void settle() {
         for (var id : jdbc.queryForList("SELECT id FROM edgeai.hawkeye_video_session WHERE state='RUNNING'", UUID.class))
@@ -105,19 +112,23 @@ class HawkeyeVideoSessionIntegrationTest {
             catch (Exception e) { throw new IllegalStateException(e); }
     }
 
+    private UUID publish(String workflowKey) throws Exception { return publish(workflowKey, "hawkeye-video-safety.json", "1.0.0"); }
+    /** Publishes a checked-in definition; an image still awaiting its build digest gets a fixed test digest. */
     @SuppressWarnings("unchecked")
-    private UUID publish(String workflowKey) throws Exception {
-        var definition = (Map<String, Object>) json.decode(Files.readString(Path.of("../../hawkeye-runtime/workflow/hawkeye-video-safety.json")));
+    private UUID publish(String workflowKey, String file, String versionName) throws Exception {
+        var definition = (Map<String, Object>) json.decode(Files.readString(Path.of("../../hawkeye-runtime/workflow/" + file)));
         var ids = new HashMap<String, String>();
         for (var profile : (List<Map<String, Object>>) definition.get("profiles")) {
             String key = workflowKey + "-" + profile.get("key");
-            ids.put((String) profile.get("key"), profiles.publish(ProfileIdentity.Kind.SERVICE, json.canonical(Map.of("key", key, "version", "1.0.0", "spec", profile.get("spec")))).version().id().toString());
+            var spec = new TreeMap<>((Map<String, Object>) profile.get("spec"));
+            spec.computeIfPresent("image", (k, image) -> ((String) image).replace("PIN_AFTER_BUILD", "1".repeat(64)));
+            ids.put((String) profile.get("key"), profiles.publish(ProfileIdentity.Kind.SERVICE, json.canonical(Map.of("key", key, "version", "1.0.0", "spec", spec))).version().id().toString());
         }
         var w = workflows.create(json.canonical(Map.of("key", workflowKey, "displayName", "Hawkeye video IT"))).value();
         var v = (Map<String, Object>) definition.get("version");
         var tasks = ((List<Map<String, Object>>) v.get("tasks")).stream().map(t -> Map.of("key", t.get("key"), "serviceProfileVersionId",
             ids.get(t.get("profile")), "parameters", t.get("parameters"))).toList();
-        return workflows.publish(w.id(), json.canonical(Map.of("version", "1.0.0", "tasks", tasks, "dependencies", v.get("dependencies")))).value().id();
+        return workflows.publish(w.id(), json.canonical(Map.of("version", versionName, "tasks", tasks, "dependencies", v.get("dependencies")))).value().id();
     }
 
     /** One owned RTSP camera on an edge node; its state is what DeviceStatus reports. */
@@ -166,6 +177,20 @@ class HawkeyeVideoSessionIntegrationTest {
         var body = new LinkedHashMap<String, Object>(identity); body.put("outputs", List.of(output)); runner(attempt, "uploads", body, 200);
         output.put("versionId", "fixture-version-" + sha.substring(0, 8)); runner(attempt, "commit", body, 201);
         return assignment;
+    }
+    /** Claims the Task's Attempt and commits several outputs: port → (mediaType, content). */
+    private void complete(UUID task, Map<String, Map.Entry<String, byte[]>> outputs) throws Exception {
+        UUID attempt = attempt(task); var pod = new RuntimePod(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "runner-node-snapshot");
+        pods.put(attempt, pod); var identity = Map.of("epoch", 1, "podUid", pod.podUid().toString());
+        runner(attempt, "claim", identity, 200);
+        var list = new ArrayList<Map<String, Object>>();
+        for (var e : outputs.entrySet()) {
+            byte[] content = e.getValue().getValue(); String sha = sha(content); objects.put(sha, content);
+            list.add(new LinkedHashMap<>(Map.of("port", e.getKey(), "bytes", content.length, "sha256", sha, "mediaType", e.getValue().getKey())));
+        }
+        var body = new LinkedHashMap<String, Object>(identity); body.put("outputs", list); runner(attempt, "uploads", body, 200);
+        for (var output : list) output.put("versionId", "fixture-version-" + ((String) output.get("sha256")).substring(0, 8));
+        runner(attempt, "commit", body, 201);
     }
     private void failTask(UUID task) throws Exception {
         UUID attempt = attempt(task); var pod = new RuntimePod(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "runner-node");
@@ -354,6 +379,126 @@ class HawkeyeVideoSessionIntegrationTest {
         mvc.perform(post("/api/v1/workflow-runs").with(user("fixture")).with(csrf()).header("Idempotency-Key", UUID.randomUUID().toString())
             .contentType("application/json").content(forged)).andExpect(status().isBadRequest());
         executions.cancelRun(scoped, "{}");
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void motionSessionsKeepOneObserverAcrossWindowsAndPersistItsSnapshots() throws Exception {
+        var capability = body(mvc.perform(get(BASE).with(user("fixture"))).andExpect(status().isOk()));
+        var modes = ((List<Map<String, Object>>) capability.get("versions")).stream().collect(java.util.stream.Collectors.toMap(v -> v.get("id"), v -> v.get("mode")));
+        assertThat(modes).containsEntry(motionVersion.toString(), "MOTION").containsEntry(version.toString(), "FRAMES");
+        assertThat(capability.path("observer", "status")).isEqualTo("READY");
+        assertThat(capability.path("observer", "nodeName")).isEqualTo("fake-motion-node");
+
+        var started = body(start(UUID.randomUUID(), motionVersion, cameraUid).andExpect(status().isAccepted()));
+        UUID id = UUID.fromString((String) started.get("id"));
+        assertThat(started.get("mode")).isEqualTo("MOTION");
+        assertThat(started.path("observer", "epoch")).isEqualTo(OBSERVER.epoch);
+        UUID run = UUID.fromString((String) session(id).windows().getFirst().get("runId"));
+        var parameters = (Map<String, Object>) json.decode(runs.run(run, false).orElseThrow().parametersJson());
+        assertThat(observerParameter(parameters)).isEqualTo(Map.of("sessionId", id.toString(), "window", 1));
+        // The observer reads exactly the camera the window Run pinned (without its pinning time).
+        var pinned = new TreeMap<>((Map<String, Object>) parameters.get("cameraSource")); pinned.remove("pinnedAt");
+        assertThat(OBSERVER.puts.getFirst()).containsEntry("sessionId", id.toString()).containsEntry("source", pinned).containsEntry("leaseSeconds", 15);
+
+        var live = body(mvc.perform(get(BASE + "/sessions/" + id + "/live").with(user("fixture"))).andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store")));
+        assertThat(live.get("state")).isEqualTo("RUNNING");
+        assertThat(live.path("observer", "epoch")).isEqualTo(OBSERVER.epoch);
+        assertThat(((Number) live.path("latest", "seq")).intValue()).isEqualTo(12);
+        assertThat(mvc.perform(get(BASE + "/sessions/" + id + "/live/frames/12").with(user("fixture"))).andExpect(status().isOk())
+            .andExpect(content().contentType("image/jpeg")).andReturn().getResponse().getContentAsByteArray()).isEqualTo(FakeMotionObserver.FRAME);
+        mvc.perform(get(BASE + "/sessions/" + id + "/live/frames/13").with(user("fixture"))).andExpect(status().isNotFound());
+        // Live frames name the observer instance the session recorded; sequence numbers of another instance are never served.
+        assertThat(OBSERVER.frameEpochs).containsOnly(OBSERVER.epoch);
+
+        // The snapshot Task persists the window; the next window continues the same observer instance.
+        UUID snapshot = task(run, "snapshot");
+        var observations = "{\"apiVersion\":\"edgeai.hawkeye.motion/v1\",\"frames\":[]}".getBytes(StandardCharsets.UTF_8);
+        complete(snapshot, new TreeMap<>(Map.of("frames", Map.entry("application/x-tar", frames(new TreeMap<>((Map<String, Object>) parameters.get("cameraSource")), jpeg(5), jpeg(6))),
+            "observations", Map.entry("application/json", observations))));
+        var second = awaitSession(id, v -> ((Number) v.get("windowCount")).intValue() == 2);
+        UUID run2 = UUID.fromString((String) second.windows().getFirst().get("runId"));
+        assertThat(observerParameter((Map<String, Object>) json.decode(runs.run(run2, false).orElseThrow().parametersJson())))
+            .isEqualTo(Map.of("sessionId", id.toString(), "window", 2));
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (OBSERVER.puts.size() < 3 && System.nanoTime() < deadline) Thread.sleep(50);
+        assertThat(OBSERVER.puts.size()).isGreaterThanOrEqualTo(3);
+        assertThat(session(id).get("state")).isEqualTo("RUNNING");
+        assertThat(mvc.perform(get(BASE + "/tasks/" + snapshot + "/frames/2").with(user("fixture"))).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsByteArray()).isEqualTo(jpeg(6));
+
+        mvc.perform(post(BASE + "/sessions/" + id + "/stop").with(user("fixture")).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isOk());
+        assertThat(OBSERVER.deletes).contains(id.toString());
+        mvc.perform(get(BASE + "/sessions/" + id + "/live").with(user("fixture"))).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SESSION_NOT_LIVE"));
+        // The committed window stays readable after the stop.
+        assertThat(mvc.perform(get(BASE + "/tasks/" + snapshot + "/frames/1").with(user("fixture"))).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsByteArray()).isEqualTo(jpeg(5));
+        assertThat(session(id).windows()).hasSize(2);
+    }
+
+    private static Map<String, Object> observerParameter(Map<String, Object> parameters) {
+        var observer = (Map<?, ?>) parameters.get("observer");
+        return Map.of("sessionId", observer.get("sessionId"), "window", ((Number) observer.get("window")).intValue());
+    }
+
+    @Test
+    void aFailedObserverEndsTheSessionVisiblyAndCancelsItsWindow() throws Exception {
+        UUID id = UUID.fromString((String) body(start(UUID.randomUUID(), motionVersion, cameraUid).andExpect(status().isAccepted())).get("id"));
+        UUID run = UUID.fromString((String) session(id).windows().getFirst().get("runId"));
+        OBSERVER.failure = Map.of("code", "SOURCE_MAPPER_UNREACHABLE", "message", "camera source failing");
+        OBSERVER.state = "FAILED";
+        var failed = awaitSession(id, v -> !"RUNNING".equals(v.get("state")));
+        assertThat(failed.get("state")).isEqualTo("FAILED"); assertThat(failed.get("endReason")).isEqualTo("OBSERVER_FAILED");
+        assertThat(failed.get("failureCode")).isEqualTo("OBSERVER_FAILED");
+        assertThat((String) failed.get("failureMessage")).contains("SOURCE_MAPPER_UNREACHABLE");
+        assertThat(executions.detail(run).run().state()).isIn("CANCELLED", "CANCELLING");
+        Thread.sleep(300);
+        assertThat(session(id).windows()).hasSize(1);
+    }
+
+    @Test
+    void aRestartedObserverIsADiscontinuityNotAContinuation() throws Exception {
+        UUID id = UUID.fromString((String) body(start(UUID.randomUUID(), motionVersion, cameraUid).andExpect(status().isAccepted())).get("id"));
+        // The observer process restarted: it no longer knows the session and would start a new track history.
+        OBSERVER.session = null; OBSERVER.epoch = UUID.randomUUID().toString();
+        var lost = awaitSession(id, v -> !"RUNNING".equals(v.get("state")));
+        assertThat(lost.get("endReason")).isEqualTo("OBSERVER_FAILED"); assertThat(lost.get("failureCode")).isEqualTo("OBSERVER_LOST");
+        assertThat(OBSERVER.deletes).contains(id.toString());
+    }
+
+    @Test
+    void aStopDuringTheFirstObserverStartLeavesNoObserverReading() throws Exception {
+        OBSERVER.holdPut = new java.util.concurrent.CountDownLatch(1);
+        var key = UUID.randomUUID();
+        var starting = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try { return start(key, motionVersion, cameraUid).andReturn().getResponse().getStatus(); }
+            catch (Exception e) { throw new IllegalStateException(e); }
+        });
+        assertThat(OBSERVER.putEntered.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        UUID id = jdbc.queryForObject("SELECT id FROM edgeai.hawkeye_video_session WHERE idempotency_key=?", UUID.class, key);
+        // The stop commits and sends its DELETE while the observer has not received the start yet (404 there).
+        mvc.perform(post(BASE + "/sessions/" + id + "/stop").with(user("fixture")).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isOk());
+        OBSERVER.holdPut.countDown();
+        assertThat(starting.get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(202);
+        // The start's PUT created an observer after the stop; the API stops it again instead of recording or renewing it.
+        assertThat(OBSERVER.deletes).contains(id.toString());
+        assertThat(OBSERVER.state).isEqualTo("STOPPED");
+        assertThat(session(id).get("state")).isEqualTo("STOPPED");
+        assertThat(session(id).get("observer")).isNull();
+        int puts = OBSERVER.puts.size();
+        Thread.sleep(400);
+        assertThat(OBSERVER.puts).hasSize(puts);
+    }
+
+    @Test
+    void motionSessionsNeedAReadyObserver() throws Exception {
+        OBSERVER.ready = false;
+        UUID key = UUID.randomUUID();
+        start(key, motionVersion, cameraUid).andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("OBSERVER_NOT_READY"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.hawkeye_video_session WHERE idempotency_key=?", Integer.class, key)).isZero();
+        assertThat(OBSERVER.puts).isEmpty();
+        // FRAMES versions do not depend on the observer.
+        start(UUID.randomUUID(), version, cameraUid).andExpect(status().isAccepted());
     }
 
     /** Minimal accessor over decoded JSON maps. */

@@ -10,6 +10,7 @@ components:
   - ../../components/hawkeye-safety
   - ../../components/hawkeye-video-replay
   - ../../components/hawkeye-video
+  - ../../components/hawkeye-motion
   - ../../components/stream
   - ../../components/hdd-data-store
 patches:

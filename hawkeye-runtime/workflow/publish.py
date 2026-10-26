@@ -1,6 +1,9 @@
 """Publish the hawkeye-video-safety SERVICE profiles, workflow and DAG version through the public API.
 
-    EDGEAI_API_URL=http://<api> EDGEAI_API_USER=... EDGEAI_API_PASSWORD=... python3 -I hawkeye-runtime/workflow/publish.py
+    EDGEAI_API_URL=http://<api> EDGEAI_API_USER=... EDGEAI_API_PASSWORD=... python3 -I hawkeye-runtime/workflow/publish.py [definition.json]
+
+The default definition is hawkeye-video-safety.json (v1 capture → infer); hawkeye-video-safety-v2.json publishes the
+continuous-observation snapshot version. A profile image must be pinned by digest before publishing.
 
 Every call is replay-safe: an existing identical profile/workflow/version returns 200, a different one 409 (stop and
 publish a new version instead). Prints the published IDs; never prints credentials.
@@ -10,6 +13,7 @@ import base64
 import http.cookiejar
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -46,7 +50,10 @@ class Api:
 
 
 def main():
-    definition = json.loads(DEFINITION.read_text())
+    definition = json.loads((Path(sys.argv[1]) if len(sys.argv) > 1 else DEFINITION).read_text())
+    for profile in definition["profiles"]:
+        if not re.fullmatch(r".+@sha256:[a-f0-9]{64}", profile["spec"]["image"]):
+            raise SystemExit(f"profile {profile['key']}: pin the built image digest first")
     api = Api(os.environ["EDGEAI_API_URL"], os.environ["EDGEAI_API_USER"], os.environ["EDGEAI_API_PASSWORD"])
     profiles = {}
     for profile in definition["profiles"]:

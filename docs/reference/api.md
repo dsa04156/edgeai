@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **94개**입니다.
+계약에 정의된 operation은 **96개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -126,6 +126,8 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/v1/scenarios/hawkeye-safety/video/sessions` | `listHawkeyeVideoSessions` |
 | `GET` | `/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}` | `getHawkeyeVideoSession` |
 | `POST` | `/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/stop` | `stopHawkeyeVideoSession` |
+| `GET` | `/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live` | `getHawkeyeVideoLive` |
+| `GET` | `/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live/frames/{seq}` | `getHawkeyeVideoLiveFrame` |
 | `GET` | `/api/v1/scenarios/hawkeye-safety/video/tasks/{taskId}/frames/{seq}` | `getHawkeyeVideoFrame` |
 | `GET` | `/api/v1/nodes` | `listNodes` |
 | `GET` | `/api/v1/nodes/{nodeId}` | `getNode` |

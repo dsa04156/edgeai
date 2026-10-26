@@ -22,6 +22,8 @@ public interface HawkeyeVideoRepository {
     /** Sets the session camera snapshot once; false when one is already set. */
     boolean pinCamera(UUID sessionId, String cameraSourceJson);
     boolean windowRun(UUID runId);
+    /** Records the observer instance of a RUNNING session once; false when one is recorded or the session ended. */
+    boolean recordObserver(UUID sessionId, String epoch, Instant startedAt);
     /** RUNNING → STOPPED/COMPLETED/FAILED. */
     boolean end(UUID id, String state, String reason, String failureCode, String failureMessage, Instant at);
 }

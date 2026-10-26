@@ -1,0 +1,14 @@
+# Python dependencies the motion observer adds to the forklift-base image (which provides TensorRT, numpy 2.2.6 and
+# pillow 11.3.0) except supervision, which build.sh installs with --no-deps: its opencv-python requirement needs host
+# GUI libraries that the slim base does not have, so opencv-python-headless provides cv2 instead.
+# Lock: uv pip compile --generate-hashes --python-platform x86_64-manylinux_2_28 --python-version 3.12 --only-binary :all:
+#   requirements.in -o requirements.txt
+numpy==2.2.6
+scipy==1.15.3
+opencv-python-headless==4.11.0.86
+pillow==11.3.0
+pyyaml==6.0.3
+defusedxml==0.7.1
+matplotlib
+tqdm
+requests

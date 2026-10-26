@@ -17,7 +17,7 @@ public final class JdbcHawkeyeVideoRepository implements HawkeyeVideoRepository 
         rs.getObject("workflow_version_id", UUID.class), rs.getString("device_id"), rs.getObject("device_uid", UUID.class),
         rs.getString("camera_source"), rs.getInt("max_windows"), rs.getString("state"), rs.getString("end_reason"), rs.getString("failure_code"),
         rs.getString("failure_message"), instant(rs.getTimestamp("created_at")), instant(rs.getTimestamp("updated_at")),
-        instant(rs.getTimestamp("ended_at")));
+        instant(rs.getTimestamp("ended_at")), rs.getString("observer_epoch"), instant(rs.getTimestamp("observer_started_at")));
     private final JdbcTemplate jdbc;
 
     public JdbcHawkeyeVideoRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -64,6 +64,10 @@ public final class JdbcHawkeyeVideoRepository implements HawkeyeVideoRepository 
     }
     @Override public boolean windowRun(UUID runId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM edgeai.hawkeye_video_window WHERE run_id=?)", Boolean.class, runId));
+    }
+    @Override public boolean recordObserver(UUID sessionId, String epoch, Instant startedAt) {
+        return jdbc.update("UPDATE edgeai.hawkeye_video_session SET observer_epoch=?,observer_started_at=? WHERE id=? AND observer_epoch IS NULL AND state='RUNNING'",
+            epoch, Timestamp.from(startedAt), sessionId) == 1;
     }
     @Override public boolean end(UUID id, String state, String reason, String failureCode, String failureMessage, Instant at) {
         return jdbc.update("UPDATE edgeai.hawkeye_video_session SET state=?,end_reason=?,failure_code=?,failure_message=?,updated_at=?,ended_at=? " +

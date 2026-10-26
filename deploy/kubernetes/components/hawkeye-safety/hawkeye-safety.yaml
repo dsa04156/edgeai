@@ -10,7 +10,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate # the node has one GPU; a surge Pod would wait for it
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: edgeai-hawkeye-safety
@@ -20,8 +20,8 @@ spec:
         app.kubernetes.io/name: edgeai-hawkeye-safety
         app.kubernetes.io/part-of: edgeai
     spec:
-      # RTX 5060 Ti; the ser0002 GPU is held by the GPU/NPU comparison runtime.
-      runtimeClassName: ra-nvidia-rtx5060
+      # CPU only: the node's RTX 5060 Ti runs the forklift/person detector (components/hawkeye-motion). Ollama reports
+      # the CPU placement through /api/ps and the adapter stores it (CPU probe 2026-10-26: READY, sizeVramBytes 0).
       nodeSelector:
         kubernetes.io/hostname: etri-ser0001-cg0msb
         kubernetes.io/arch: amd64
@@ -34,9 +34,12 @@ spec:
       containers:
         - name: ollama
           image: edgeai-hawkeye-ollama
+          env:
+            # No GPU is requested; keep the NVIDIA runtime from mounting one anyway.
+            - {name: NVIDIA_VISIBLE_DEVICES, value: void}
           resources:
-            requests: {cpu: "2", memory: 4Gi, nvidia.com/gpu: 1}
-            limits: {cpu: "4", memory: 4Gi, nvidia.com/gpu: 1}
+            requests: {cpu: "2", memory: 4Gi}
+            limits: {cpu: "4", memory: 4Gi}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -3,7 +3,9 @@
 #   bash hawkeye-runtime/build.sh prepare                 -> output/hawkeye-runtime/{store,samples} verified against provenance.json
 #   bash hawkeye-runtime/build.sh ollama|adapter|workflow  -> output/hawkeye-runtime/<target>.oci.tar (local only)
 #   bash hawkeye-runtime/build.sh ollama|adapter|workflow --push REF -> push REF and print its digest
-#   workflow = released Runner + capture/infer workloads of the video workflow; it needs no model or samples.
+#   workflow = released Runner + capture/infer/snapshot workloads of the video workflow; it needs no model or samples.
+#   motion   = continuous observer service on the TensorRT detector base image. Needs HAWKEYE_MOTION_BASE, the image
+#              pushed by prepare-forklift-base.sh pinned by digest (<registry>/<name>@sha256:...).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(dirname "$here")"
@@ -44,9 +46,10 @@ case "$target" in
   ollama) platform=linux/amd64 ;;
   adapter) platform=linux/amd64 ;;
   workflow) platform=linux/amd64 ;;
-  *) printf 'usage: %s prepare|ollama|adapter|workflow [--push REF]\n' "$0" >&2; exit 2 ;;
+  motion) platform=linux/amd64 ;;
+  *) printf 'usage: %s prepare|ollama|adapter|workflow|motion [--push REF]\n' "$0" >&2; exit 2 ;;
 esac
-[[ "$target" == workflow ]] || verify
+[[ "$target" == workflow || "$target" == motion ]] || verify
 context="$(mktemp -d "$out/context.XXXXXX")" # same filesystem as the store, for hard links
 trap 'rm -rf "$context"' EXIT
 cp "$here/Dockerfile.$target" "$context/Dockerfile"
@@ -63,7 +66,14 @@ for name in names:
     os.link(os.path.join(store, name), os.path.join(dest, name))
 PY
 elif [[ "$target" == workflow ]]; then
-  cp "$here/workflow/hawkeye_capture.py" "$here/workflow/hawkeye_infer.py" "$context/"
+  cp "$here/workflow/hawkeye_capture.py" "$here/workflow/hawkeye_infer.py" "$here/workflow/hawkeye_snapshot.py" "$context/"
+elif [[ "$target" == motion ]]; then
+  [[ "${HAWKEYE_MOTION_BASE:-}" =~ @sha256:[a-f0-9]{64}$ ]] || { printf 'set HAWKEYE_MOTION_BASE=<forklift-base>@sha256:...\n' >&2; exit 2; }
+  wheels=(--target "$context/site" --python-platform x86_64-manylinux_2_28 --python-version 3.12 --only-binary :all:)
+  uv pip install -q "${wheels[@]}" --require-hashes -r "$here/motion/requirements.txt"
+  uv pip install -q "${wheels[@]}" --no-deps supervision==0.27.0
+  cp -r "$here/motion/edgeai_hawkeye_motion" "$context/"
+  find "$context" -name __pycache__ -prune -exec rm -rf {} +
 else
   cp -r "$here/edgeai_hawkeye_runtime" "$context/"
   cp "$here/samples.json" "$context/"
@@ -72,6 +82,7 @@ else
 fi
 (cd "$context" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$out/$target-context.sha256"
 args=(buildx build --platform "$platform" --provenance=false --file "$context/Dockerfile")
+[[ "$target" != motion ]] || args+=(--build-arg "FORKLIFT_BASE=$HAWKEYE_MOTION_BASE")
 if [[ "${2:-}" == "--push" ]]; then
   [[ -n "${3:-}" ]] || { printf 'missing image reference after --push\n' >&2; exit 2; }
   docker "${args[@]}" --tag "$3" --output type=registry,registry.insecure=true --metadata-file "$out/$target-metadata.json" "$context"

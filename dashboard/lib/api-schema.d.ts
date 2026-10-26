@@ -756,7 +756,7 @@ export interface paths {
         };
         /**
          * 영상 안전 점검(발행된 SERVICE 워크플로) 구성
-         * @description 영상 점검은 발행된 SERVICE 워크플로(capture → infer)를 연속된 BATCH Run(창)으로 실행합니다. 각 창은 RTSP 카메라의 Edge Mapper가 디코딩한 새 프레임을 정해진 개수만 읽고, 창과 창 사이의 프레임은 읽지 않습니다. executes는 실행 기능이 켜져 있고 실행 범위 (EDGEAI_RUNTIME_WORKFLOW_KEYS)에 이 워크플로 키가 포함될 때만 true이며, false이면 시작을 거절합니다. versions는 최근 발행 버전 20개입니다.
+         * @description 영상 점검은 발행된 SERVICE 워크플로를 연속된 BATCH Run(창)으로 실행합니다. FRAMES 버전(capture → infer)의 각 창은 RTSP 카메라의 Edge Mapper가 디코딩한 새 프레임을 정해진 개수만 읽고, 창과 창 사이의 프레임은 읽지 않습니다. MOTION 버전(snapshot Task)은 연속 관측 서비스가 세션 동안 카메라를 계속 읽고 추적 상태를 유지하며, 각 창 Run은 그 관측의 다음 연속 구간을 결과로 저장합니다. observer는 연속 관측 서비스의 현재 상태(설정되지 않았으면 null)입니다. executes는 실행 기능이 켜져 있고 실행 범위 (EDGEAI_RUNTIME_WORKFLOW_KEYS)에 이 워크플로 키가 포함될 때만 true이며, false이면 시작을 거절합니다. versions는 최근 발행 버전 20개입니다.
          */
         get: operations["getHawkeyeVideoScenario"];
         put?: never;
@@ -782,7 +782,7 @@ export interface paths {
         put?: never;
         /**
          * 영상 점검 세션 시작 (첫 창 Run 생성)
-         * @description 선택한 발행 버전과 RTSP 카메라로 세션을 만들고 첫 창 Run을 같은 트랜잭션에서 생성합니다. 카메라가 ONLINE이 아니거나 UID가 다르면 세션 없이 409입니다. Run 생성 시 서버가 카메라의 설정 digest·source generation·Mapper 주소를 parameters.cameraSource로 고정하고, capture Task는 그 신원과 다른 영상을 받지 않습니다. 이전 창 Run이 SUCCEEDED이면 다음 창을 만들고 최대 창 수에서 COMPLETED, 창이 FAILED·CANCELLED이면 다음 창 없이 FAILED입니다. 서버 전체에서 RUNNING 세션은 1개입니다. 같은 Idempotency-Key와 같은 요청은 200으로 기존 세션을, 다른 요청은 409입니다.
+         * @description 선택한 발행 버전과 RTSP 카메라로 세션을 만들고 첫 창 Run을 같은 트랜잭션에서 생성합니다. 카메라가 ONLINE이 아니거나 UID가 다르면 세션 없이 409입니다. Run 생성 시 서버가 카메라의 설정 digest·source generation·Mapper 주소를 parameters.cameraSource로 고정하고, capture Task는 그 신원과 다른 영상을 받지 않습니다. 이전 창 Run이 SUCCEEDED이면 다음 창을 만들고 최대 창 수에서 COMPLETED, 창이 FAILED·CANCELLED이면 다음 창 없이 FAILED입니다. MOTION 버전은 첫 창이 고정한 카메라로 연속 관측을 시작하고 매 주기 임대를 갱신합니다. 관측이 실패·만료되거나 다른 관측 인스턴스(epoch)로 바뀌면 열린 창을 취소하고 OBSERVER_FAILED로 끝냅니다. 서버 전체에서 RUNNING 세션은 1개입니다. 같은 Idempotency-Key와 같은 요청은 200으로 기존 세션을, 다른 요청은 409입니다.
          */
         post: operations["startHawkeyeVideoSession"];
         delete?: never;
@@ -831,6 +831,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진행 중인 MOTION 세션의 최신 관측
+         * @description 세션이 시작한 연속 관측 인스턴스의 상태와 가장 최근 프레임의 관측(지게차·사람 추적, 최근 경로, 등속 예측 경로, 최근접 접근 신호)입니다. 좌표는 해당 프레임의 이미지 픽셀이고 거리는 사람 박스 높이 배수입니다. 미터·속도·충돌 확률이 아니며 검출 신뢰도는 충돌 확률이 아닙니다. UNKNOWN은 안전이 아니라 판단할 수 없음을, NO_PAIR는 지게차와 사람이 함께 검출되지 않았음을 뜻합니다. 저장되는 결과가 아닙니다.
+         */
+        get: operations["getHawkeyeVideoLive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live/frames/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진행 중인 MOTION 세션이 최근 관측한 프레임
+         * @description 관측 서비스가 메모리에 보관한 최근 프레임 JPEG입니다(저장 안 함, 캐시 금지). 보관 범위를 벗어나면 404입니다.
+         */
+        get: operations["getHawkeyeVideoLiveFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scenarios/hawkeye-safety/video/tasks/{taskId}/frames/{seq}": {
         parameters: {
             query?: never;
@@ -839,8 +879,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 창 capture Task의 확정 프레임
-         * @description 세션 창 Run의 capture Task가 확정한 frames 결과(application/x-tar, 고정 object version·SHA-256)에서 프레임 하나를 반환합니다. 프레임도 결과 안 manifest의 SHA-256과 같아야 합니다. 다른 Task나 확정 전 결과는 404입니다.
+         * 창 capture·snapshot Task의 확정 프레임
+         * @description snapshot Task의 seq는 관측 순번입니다. 세션 창 Run의 capture 또는 snapshot Task가 확정한 frames 결과(application/x-tar, 고정 object version·SHA-256)에서 프레임 하나를 반환합니다. 프레임도 결과 안 manifest의 SHA-256과 같아야 합니다. 다른 Task나 확정 전 결과는 404입니다.
          */
         get: operations["getHawkeyeVideoFrame"];
         put?: never;
@@ -2422,10 +2462,28 @@ export interface components {
                 version: string;
                 /** Format: date-time */
                 createdAt: string;
+                /**
+                 * @description MOTION: snapshot Task와 연속 관측, FRAMES: capture → infer
+                 * @enum {string}
+                 */
+                mode: "MOTION" | "FRAMES";
             }[];
             maxWindows: number;
             /** Format: uuid */
             activeSessionId: string | null;
+            observer: {
+                /** @enum {string} */
+                status: "READY" | "NOT_READY" | "UNAVAILABLE";
+                nodeName: string | null;
+                pod: string | null;
+                /** @description ONNX Runtime이 실제 할당한 첫 실행 공급자 */
+                provider: string | null;
+                /** @description name, version, sha256, input, thresholds */
+                model: {
+                    [key: string]: unknown;
+                } | null;
+                error: string | null;
+            } | null;
         };
         HawkeyeVideoStart: {
             /** Format: uuid */
@@ -2447,12 +2505,20 @@ export interface components {
             id: string;
             /** Format: uuid */
             workflowVersionId: string;
+            /** @enum {string} */
+            mode: "MOTION" | "FRAMES";
             camera: components["schemas"]["CameraReference"];
+            /** @description MOTION 세션이 시작한 관측 인스턴스 */
+            observer: {
+                epoch: string;
+                /** Format: date-time */
+                startedAt: string;
+            } | null;
             maxWindows: number;
             /** @enum {string} */
             state: "RUNNING" | "STOPPED" | "COMPLETED" | "FAILED";
             /** @enum {string|null} */
-            endReason: "USER_STOPPED" | "MAX_WINDOWS" | "WINDOW_FAILED" | "WINDOW_REJECTED" | null;
+            endReason: "USER_STOPPED" | "MAX_WINDOWS" | "WINDOW_FAILED" | "WINDOW_REJECTED" | "OBSERVER_FAILED" | null;
             failureCode: string | null;
             failureMessage: string | null;
             /** Format: date-time */
@@ -2471,6 +2537,70 @@ export interface components {
                 createdAt: string;
                 /** Format: date-time */
                 updatedAt: string;
+            }[];
+        };
+        HawkeyeVideoLive: {
+            /** Format: uuid */
+            sessionId: string;
+            /** @enum {string} */
+            state: "RUNNING" | "FAILED" | "EXPIRED" | "STOPPED";
+            failure: {
+                code: string;
+                message: string;
+            } | null;
+            /** @description 최근 원본 읽기 오류(계속 실패하면 FAILED) */
+            lastError: string | null;
+            /** @description epoch, nodeName, pod, podUid, provider, model */
+            observer: {
+                [key: string]: unknown;
+            };
+            stats: {
+                processed: number;
+                resets: number;
+                lastDetectMs: number | null;
+            };
+            latest: components["schemas"]["HawkeyeMotionObservation"] | null;
+        };
+        /** @description 관측 서비스가 한 프레임에 대해 계산한 값(snapshot Task의 observations 결과 frames[] 항목과 같음). 좌표는 이 프레임 이미지 픽셀, point는 박스 하단 중앙, path·predicted의 첫 값은 이 프레임 디코딩 시각 기준 초, distance·minDistance는 사람 박스 높이 배수입니다. */
+        HawkeyeMotionObservation: {
+            seq: number;
+            frameTime: string;
+            receivedAt: string;
+            sha256: string;
+            detectMs: number;
+            width: number;
+            height: number;
+            gapMs: number | null;
+            /** @enum {string|null} */
+            reset: "START" | "TIME_GAP" | "TIME_REGRESSED" | null;
+            /** @enum {string} */
+            status: "NEAR_PATH" | "APPROACHING" | "UNKNOWN" | "NO_CONFLICT" | "NO_PAIR";
+            tracks: {
+                id: string;
+                /** @enum {string} */
+                class: "forklift" | "person";
+                /** @description false이면 이 프레임에서 검출되지 않은 최근 추적 */
+                visible: boolean;
+                confidence: number | null;
+                box: number[] | null;
+                point: number[];
+                path: number[][];
+                /** @description 픽셀/초 */
+                velocity: number[] | null;
+                predicted: number[][] | null;
+            }[];
+            pairs: {
+                forklift: string;
+                person: string;
+                /** @enum {string} */
+                level: "NEAR_PATH" | "APPROACHING" | "UNKNOWN" | "NO_CONFLICT";
+                /** @enum {string|null} */
+                reason: "INSUFFICIENT_HISTORY" | "TRACK_LOST" | null;
+                distance: number;
+                minDistance: number | null;
+                /** @description 등속 가정 최근접 시점까지의 초(지평 3초) */
+                timeToClosest: number | null;
+                closest: number[][] | null;
             }[];
         };
         HawkeyeSafetyStart: {
@@ -5806,7 +5936,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description SCENARIO_DISABLED 또는 RUNTIME_DISABLED(실행 기능 꺼짐·실행 범위 밖) */
+            /** @description SCENARIO_DISABLED, RUNTIME_DISABLED(실행 기능 꺼짐·실행 범위 밖), MOTION 버전의 OBSERVER_DISABLED(연속 관측 서비스 미설정), OBSERVER_NOT_READY */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -5891,6 +6021,105 @@ export interface operations {
             };
             /** @description SCENARIO_SESSION_NOT_FOUND */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeVideoLive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 최신 관측 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HawkeyeVideoLive"];
+                };
+            };
+            /** @description SCENARIO_SESSION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SESSION_NOT_LIVE(종료된 세션 또는 FRAMES 버전), OBSERVER_LOST(관측 인스턴스가 바뀜) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OBSERVER_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getHawkeyeVideoLiveFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG 바이트 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description FRAME_NOT_FOUND 또는 SCENARIO_SESSION_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SESSION_NOT_LIVE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OBSERVER_UNAVAILABLE */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

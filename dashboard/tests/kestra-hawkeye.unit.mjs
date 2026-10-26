@@ -12,6 +12,10 @@ async function fixture(action) {
     let body = "";
     for await (const part of req) body += part;
     calls.push({ path: req.url, method: req.method, body, headers: req.headers });
+    if (req.url.endsWith("/live/frames/404")) {
+      res.writeHead(404, { "Content-Type": "application/json", "Cache-Control": "max-age=60" });
+      return res.end('{"message":"frame expired"}');
+    }
     if (req.url.endsWith("/image") || /\/frames\/[0-9]+$/.test(req.url)) {
       res.setHeader("Content-Type", "image/jpeg");
       return res.end(jpeg);
@@ -134,6 +138,37 @@ test("Hawkeye video reads, session detail and verified frame images reach the ma
   });
 });
 
+test("Hawkeye live observation JSON and JPEG frames reach the management API uncached", async () => {
+  await fixture(async (url, calls) => {
+    const live = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/sessions/${run}/live`, {
+      headers: { Cookie: "EDGEAI_SESSION=s" },
+    });
+    assert.equal(live.status, 200);
+    assert.match(live.headers.get("content-type"), /^application\/json/);
+    assert.equal(live.headers.get("cache-control"), "no-store");
+    const frame = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/sessions/${run}/live/frames/123456789`, {
+      headers: { Cookie: "EDGEAI_SESSION=s" },
+    });
+    assert.equal(frame.status, 200);
+    assert.equal(frame.headers.get("content-type"), "image/jpeg");
+    assert.equal(frame.headers.get("cache-control"), "no-store");
+    assert.deepEqual(Buffer.from(await frame.arrayBuffer()), jpeg);
+    const history = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/tasks/${run}/frames/123456789`);
+    assert.equal(history.status, 200);
+    const expired = await fetch(`${url}/api/control-plane/scenarios/hawkeye-safety/video/sessions/${run}/live/frames/404`);
+    assert.equal(expired.status, 404);
+    assert.equal(expired.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await expired.json(), { message: "frame expired" });
+    assert.deepEqual(calls.map((call) => call.path), [
+      `/api/v1/scenarios/hawkeye-safety/video/sessions/${run}/live`,
+      `/api/v1/scenarios/hawkeye-safety/video/sessions/${run}/live/frames/123456789`,
+      `/api/v1/scenarios/hawkeye-safety/video/tasks/${run}/frames/123456789`,
+      `/api/v1/scenarios/hawkeye-safety/video/sessions/${run}/live/frames/404`,
+    ]);
+    assert.equal(calls[0].headers.cookie, "EDGEAI_SESSION=s");
+  });
+});
+
 test("Hawkeye video start and stop forward CSRF, Idempotency-Key and the JSON body", async () => {
   await fixture(async (url, calls) => {
     const body = `{"workflowVersionId":"${run}","camera":{"id":"hawkeye-forklift-video","uid":"${run}"}}`;
@@ -168,6 +203,15 @@ test("Hawkeye video routes are exact and method-bound", async () => {
       [`scenarios/hawkeye-safety/video/tasks/${run}/frames/-1`, "GET"],
       [`scenarios/hawkeye-safety/video/tasks/${run}/frames/12/image`, "GET"],
       ["scenarios/hawkeye-safety/video/tasks/x/frames/1", "GET"],
+      [`scenarios/hawkeye-safety/video/tasks/${run}/frames/1234567890`, "GET"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live`, "POST"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live`, "DELETE"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live/frames/1`, "POST"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live/frames/-1`, "GET"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live/frames/1234567890`, "GET"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live/frames`, "GET"],
+      [`scenarios/hawkeye-safety/video/sessions/${run}/live/frames/1/image`, "GET"],
+      ["scenarios/hawkeye-safety/video/sessions/x/live", "GET"],
     ]) {
       const response = await fetch(`${url}/api/control-plane/${path}`, {
         method,

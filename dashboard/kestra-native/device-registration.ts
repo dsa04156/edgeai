@@ -76,7 +76,7 @@ export function createDeviceRegistrationMiddleware({
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
       ).test(target) ||
       new RegExp(
-        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$|^scenarios/hawkeye-safety/video/sessions/${uuid}$|^scenarios/hawkeye-safety/video/tasks/${uuid}/frames/[0-9]{1,6}$`,
+        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$|^scenarios/hawkeye-safety/video/sessions/${uuid}(/live(/frames/[0-9]{1,9})?)?$|^scenarios/hawkeye-safety/video/tasks/${uuid}/frames/[0-9]{1,9}$`,
       ).test(target);
     const cameraPreview =
       /^managed-devices\/[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?\/preview$/.test(

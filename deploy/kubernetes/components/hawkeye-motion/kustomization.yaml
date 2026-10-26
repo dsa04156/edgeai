@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Continuous observer for snapshot (v2) versions of hawkeye-video-safety. Pin the image built by
+# `bash hawkeye-runtime/build.sh motion --push <ref>` before adding this component to an overlay.
+resources:
+  - hawkeye-motion.yaml
+images:
+  - name: edgeai-hawkeye-motion
+    newName: 10.254.192.47:5000/edgeai/hawkeye-motion
+    digest: sha256:d248344710503f1898d67215cc24eb54734d0fa64313afb1d4d811b1855afbdb
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_HAWKEYE_VIDEO_OBSERVER_URL, value: 'http://edgeai-hawkeye-motion.edgeai.svc:8080'}

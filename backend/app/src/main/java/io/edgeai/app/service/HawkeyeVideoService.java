@@ -7,6 +7,7 @@ import io.edgeai.app.exception.ControlPlaneException;
 import io.edgeai.app.support.JsonDocuments;
 import io.edgeai.domain.repository.*;
 import io.edgeai.domain.runtime.RuntimeScope;
+import io.edgeai.domain.scenario.HawkeyeMotionObserver;
 import io.edgeai.domain.scenario.HawkeyeVideoSession;
 import io.edgeai.domain.storage.ArtifactFiles;
 import io.edgeai.domain.storage.ArtifactStoreUnavailableException;
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import org.slf4j.LoggerFactory;
@@ -23,15 +25,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Hawkeye video sessions run one published SERVICE workflow (capture → infer) as consecutive bounded BATCH Runs over
- * one pinned RTSP camera. Each window is an ordinary platform Run; this service only orders them. Frames between two
- * windows are not read: delivery is windowed, never continuous.
+ * Hawkeye video sessions run one published SERVICE workflow as consecutive bounded BATCH Runs (windows) over one
+ * pinned RTSP camera. Each window is an ordinary platform Run; this service only orders them.
+ * <ul>
+ * <li>FRAMES versions (capture → infer): each window reads its own frames, so frames between two windows are not read.</li>
+ * <li>MOTION versions (a {@code snapshot} task): the motion observer service reads the pinned camera continuously for
+ * the whole session and keeps its tracker state; each window Run persists the next contiguous part of that
+ * observation. This service starts the observer with the session's pinned camera, renews its lease every poll, ends
+ * the session when the observer fails, expires or is replaced by another instance (epoch), and stops it at the end.</li>
+ * </ul>
  */
 @Service
 public class HawkeyeVideoService {
     public static final String FRAMES_PORT = "frames";
     public static final String FRAMES_MEDIA_TYPE = "application/x-tar";
     static final long MAX_FRAMES_BYTES = 16L * 1024 * 1024;
+    /** Task key that marks a continuous-observation (MOTION) workflow version. */
+    public static final String SNAPSHOT_TASK = "snapshot";
     private static final JsonDocuments JSON = new JsonDocuments();
     private final HawkeyeVideoRepository repository;
     private final ExecutionService executions;
@@ -45,11 +55,16 @@ public class HawkeyeVideoService {
     private final Clock clock;
     private final Semaphore readers = new Semaphore(4);
     private final ScheduledExecutorService scheduler;
+    private final Optional<HawkeyeMotionObserver> observer;
+    private final Map<UUID, String> modes = new ConcurrentHashMap<>();
+    /** Last successful observer renewal per running MOTION session (in-memory; a restart starts from the session record). */
+    private final Map<UUID, Instant> renewed = new ConcurrentHashMap<>();
 
     public HawkeyeVideoService(HawkeyeVideoRepository repository, ExecutionService executions, ExecutionRepository runs,
             RuntimeRepository runtimes, WorkflowRepository workflows, Optional<ArtifactFiles> files, TransactionTemplate transactions,
             HawkeyeVideoProperties properties, RuntimeScope scope, Clock clock, @Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,
-            @Value("${edgeai.recovery.inspect-only:false}") boolean inspection) {
+            @Value("${edgeai.recovery.inspect-only:false}") boolean inspection, Optional<HawkeyeMotionObserver> observer) {
+        this.observer = observer;
         this.repository = repository; this.executions = executions; this.runs = runs; this.runtimes = runtimes; this.workflows = workflows;
         this.files = files; this.transactions = transactions; this.properties = properties; this.clock = clock;
         this.executes = runtimeEnabled && scope.allows(properties.workflowKey());
@@ -65,11 +80,30 @@ public class HawkeyeVideoService {
     public HawkeyeVideoCapabilityResponse capability() {
         var workflow = workflows.findByKey(properties.workflowKey()).orElse(null);
         var versions = workflow == null ? List.<HawkeyeVideoCapabilityResponse.Version>of() : workflows.versions(workflow.id(), 20, 0).stream()
-            .map(v -> new HawkeyeVideoCapabilityResponse.Version(v.id(), v.version(), v.createdAt())).toList();
+            .map(v -> new HawkeyeVideoCapabilityResponse.Version(v.id(), v.version(), v.createdAt(), mode(v.id()))).toList();
         return new HawkeyeVideoCapabilityResponse(properties.enabled(), properties.enabled() && executes, properties.workflowKey(),
             workflow == null ? null : new HawkeyeVideoCapabilityResponse.Workflow(workflow.id(), workflow.key(), workflow.displayName()),
-            versions, properties.maxWindows(), repository.active().orElse(null));
+            versions, properties.maxWindows(), repository.active().orElse(null), observerStatus());
     }
+
+    /** MOTION when the version has a snapshot task (continuous observation), otherwise FRAMES. Versions are immutable. */
+    String mode(UUID versionId) {
+        return modes.computeIfAbsent(versionId, id -> workflows.definitions(id).stream().anyMatch(d -> d.key().equals(SNAPSHOT_TASK)) ? "MOTION" : "FRAMES");
+    }
+
+    private HawkeyeVideoCapabilityResponse.Observer observerStatus() {
+        if (observer.isEmpty()) return null;
+        try {
+            var reply = observer.get().health();
+            var health = reply.document();
+            String status = reply.status() == 200 && Boolean.TRUE.equals(health.get("ready")) ? "READY" : "NOT_READY";
+            return new HawkeyeVideoCapabilityResponse.Observer(status, text(health.get("nodeName")), text(health.get("pod")),
+                text(health.get("provider")), health.get("model") instanceof Map<?, ?> model ? model : null, text(health.get("error")));
+        } catch (HawkeyeMotionObserver.Unavailable e) {
+            return new HawkeyeVideoCapabilityResponse.Observer("UNAVAILABLE", null, null, null, null, null);
+        }
+    }
+    private static String text(Object value) { return value instanceof String s && !s.isEmpty() ? s : null; }
 
     public Creation<HawkeyeVideoSessionResponse> start(String key, String body) {
         UUID idempotency;
@@ -86,10 +120,17 @@ public class HawkeyeVideoService {
         var workflow = workflows.find(version.workflowId(), false).orElseThrow();
         if (!workflow.key().equals(properties.workflowKey()))
             throw new ControlPlaneException(409, "WORKFLOW_NOT_ALLOWED", "영상 안전 점검 워크플로의 버전을 선택하세요.");
+        boolean motion = mode(versionId).equals("MOTION");
+        if (motion) {
+            var status = observerStatus();
+            if (status == null) throw new ControlPlaneException(503, "OBSERVER_DISABLED", "연속 관측 서비스가 이 환경에 설정되지 않았습니다.");
+            if (!status.status().equals("READY"))
+                throw new ControlPlaneException(503, "OBSERVER_NOT_READY", "연속 관측 서비스가 준비되지 않았습니다 (" + status.status() + ").");
+        }
         var camera = (Map<?, ?>) request.get("camera");
         var now = clock.instant();
         var session = new HawkeyeVideoSession(UUID.randomUUID(), idempotency, digest, versionId, (String) camera.get("id"),
-            UUID.fromString((String) camera.get("uid")), null, properties.maxWindows(), "RUNNING", null, null, null, now, now, null);
+            UUID.fromString((String) camera.get("uid")), null, properties.maxWindows(), "RUNNING", null, null, null, now, now, null, null, null);
         // The first window is created with the session, so an unavailable camera is reported here and leaves no session.
         var created = transactions.execute(status -> {
             if (!repository.create(session)) return null;
@@ -101,6 +142,8 @@ public class HawkeyeVideoService {
             if (raced.isPresent()) return replay(raced.get(), digest);
             throw new ControlPlaneException(409, "SCENARIO_SESSION_ACTIVE", "이미 진행 중인 영상 점검이 있습니다. 중지한 뒤 시작하세요.");
         }
+        // The observer starts with the camera the first window pinned; its window waits for it.
+        if (motion) observe(created);
         return new Creation<>(detail(created), true);
     }
 
@@ -111,13 +154,130 @@ public class HawkeyeVideoService {
             var session = repository.lock(id).orElseThrow(() -> notFound());
             if (!session.state().equals("RUNNING")) return;
             repository.end(id, "STOPPED", "USER_STOPPED", null, null, clock.instant());
-            for (var window : repository.windows(id)) {
-                var run = runs.run(window.runId(), true).orElseThrow();
-                if (!HawkeyeVideoSession.FINISHED_RUN.contains(run.state()) && !run.state().equals("CANCELLING"))
-                    executions.cancelRun(run.id(), "{}");
-            }
+            cancelWindows(id);
         });
+        release(id);
         return detail(id);
+    }
+
+    private void cancelWindows(UUID id) {
+        for (var window : repository.windows(id)) {
+            var run = runs.run(window.runId(), true).orElseThrow();
+            if (!HawkeyeVideoSession.FINISHED_RUN.contains(run.state()) && !run.state().equals("CANCELLING"))
+                executions.cancelRun(run.id(), "{}");
+        }
+    }
+
+    /**
+     * Starts or renews the observer of a running MOTION session. A refused renewal (observer failed, expired, stopped,
+     * watching another source) or a different observer instance ends the session as OBSERVER_FAILED and cancels its
+     * open window; an unreachable observer does so once the lease has run out without a renewal.
+     */
+    @SuppressWarnings("unchecked")
+    void observe(UUID id) {
+        var session = repository.find(id).orElseThrow();
+        if (!session.state().equals("RUNNING") || session.cameraSourceJson() == null || !mode(session.workflowVersionId()).equals("MOTION")) return;
+        if (observer.isEmpty()) { failObserver(id, "OBSERVER_DISABLED", "연속 관측 서비스가 설정되지 않았습니다."); return; }
+        var source = (Map<String, Object>) JSON.decode(session.cameraSourceJson());
+        HawkeyeMotionObserver.Reply reply;
+        try {
+            reply = observer.get().put(id, source, (int) properties.observerLease().toSeconds());
+        } catch (HawkeyeMotionObserver.Unavailable e) {
+            var last = renewed.getOrDefault(id, session.observerStartedAt() == null ? session.createdAt() : session.observerStartedAt());
+            if (clock.instant().isAfter(last.plus(properties.observerLease())))
+                failObserver(id, "OBSERVER_UNAVAILABLE", "연속 관측 서비스에 " + properties.observerLease().toSeconds() + "초 넘게 연결하지 못했습니다.");
+            return;
+        }
+        if (reply.status() != 200 && reply.status() != 201) {
+            String detail = "";
+            try {
+                if (observer.get().live(id).document().get("failure") instanceof Map<?, ?> failure) detail = " · " + failure.get("code");
+            } catch (HawkeyeMotionObserver.Unavailable ignored) {}
+            failObserver(id, reply.error().startsWith("OBSERVER_") ? reply.error() : "OBSERVER_" + reply.error(),
+                "연속 관측이 계속되지 않았습니다 (" + reply.error() + detail + ").");
+            return;
+        }
+        String epoch = text(reply.document().get("epoch"));
+        if (epoch == null) { failObserver(id, "OBSERVER_INVALID", "연속 관측 서비스 응답 형식이 맞지 않습니다."); return; }
+        // A stop that committed while this call was in flight may have sent its DELETE first; the observer this call
+        // started or renewed is stopped again instead of reading until its lease ends.
+        if (!repository.find(id).orElseThrow().state().equals("RUNNING")) { release(id); return; }
+        if (session.observerEpoch() == null) repository.recordObserver(id, epoch, clock.instant());
+        else if (!session.observerEpoch().equals(epoch)) {
+            // Another observer instance would start a new track history under the same session.
+            failObserver(id, "OBSERVER_LOST", "관측 서비스가 다시 시작되어 이전 추적 상태가 사라졌습니다.");
+            return;
+        }
+        renewed.put(id, clock.instant());
+    }
+
+    private void failObserver(UUID id, String code, String message) {
+        transactions.executeWithoutResult(status -> {
+            if (!repository.lock(id).orElseThrow().state().equals("RUNNING")) return;
+            repository.end(id, "FAILED", "OBSERVER_FAILED", code, message, clock.instant());
+            cancelWindows(id);
+        });
+        release(id);
+    }
+
+    /** Stops the observer of an ended session; its lease expiry stops it anyway when this call does not arrive. */
+    private void release(UUID id) {
+        renewed.remove(id);
+        var session = repository.find(id).orElseThrow();
+        if (observer.isEmpty() || session.state().equals("RUNNING") || !mode(session.workflowVersionId()).equals("MOTION")) return;
+        try { observer.get().delete(id); } catch (HawkeyeMotionObserver.Unavailable ignored) {}
+    }
+
+    /** Latest live observation of a running MOTION session, proxied from its own observer instance. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> live(UUID id) {
+        var session = liveSession(id);
+        HawkeyeMotionObserver.Reply reply;
+        try { reply = observer.get().live(id); }
+        catch (HawkeyeMotionObserver.Unavailable e) { throw observerUnavailable(); }
+        if (reply.status() == 404) throw observerUnavailable();
+        var live = reply.document();
+        if (reply.status() != 200 || !id.toString().equals(live.get("sessionId"))) throw observerUnavailable();
+        if (session.observerEpoch() != null && !session.observerEpoch().equals(live.get("epoch")))
+            throw new ControlPlaneException(409, "OBSERVER_LOST", "관측 서비스가 다시 시작되어 이 세션의 실시간 관측이 없습니다.");
+        var identity = live.get("observer") instanceof Map<?, ?> m ? new TreeMap<String, Object>((Map<String, Object>) m) : new TreeMap<String, Object>();
+        identity.put("epoch", live.get("epoch"));
+        var response = new LinkedHashMap<String, Object>();
+        response.put("sessionId", id.toString());
+        response.put("state", live.get("state"));
+        response.put("failure", live.get("failure"));
+        response.put("lastError", live.get("lastError"));
+        response.put("observer", identity);
+        response.put("stats", live.get("stats"));
+        response.put("latest", live.get("latest"));
+        return response;
+    }
+
+    public byte[] liveFrame(UUID id, long seq) {
+        var session = liveSession(id);
+        if (seq < 1 || session.observerEpoch() == null) throw frameNotFound();
+        byte[] frame;
+        try { frame = observer.get().frame(id, session.observerEpoch(), seq).orElseThrow(HawkeyeVideoService::frameNotFound); }
+        catch (HawkeyeMotionObserver.Unavailable e) { throw observerUnavailable(); }
+        catch (HawkeyeMotionObserver.Superseded e) {
+            throw new ControlPlaneException(409, "OBSERVER_LOST", "관측 서비스가 다시 시작되어 이 세션의 실시간 프레임이 없습니다.");
+        }
+        int n = frame.length;
+        if (n < 4 || (frame[0] & 255) != 255 || (frame[1] & 255) != 216 || (frame[n - 2] & 255) != 255 || (frame[n - 1] & 255) != 217)
+            throw observerUnavailable();
+        return frame;
+    }
+
+    private HawkeyeVideoSession liveSession(UUID id) {
+        var session = repository.find(id).orElseThrow(HawkeyeVideoService::notFound);
+        if (!mode(session.workflowVersionId()).equals("MOTION") || observer.isEmpty())
+            throw new ControlPlaneException(409, "SESSION_NOT_LIVE", "연속 관측 버전의 세션만 실시간 관측을 제공합니다.");
+        if (!session.state().equals("RUNNING"))
+            throw new ControlPlaneException(409, "SESSION_NOT_LIVE", "종료된 세션입니다. 저장된 구간 결과를 확인하세요.");
+        return session;
+    }
+    private static ControlPlaneException observerUnavailable() {
+        return new ControlPlaneException(503, "OBSERVER_UNAVAILABLE", "연속 관측 서비스의 응답을 받지 못했습니다.");
     }
 
     public List<HawkeyeVideoSession> list(int limit, int offset) {
@@ -126,16 +286,17 @@ public class HawkeyeVideoService {
     }
 
     public HawkeyeVideoSessionResponse summary(HawkeyeVideoSession session) {
-        return HawkeyeVideoSessionResponse.from(session, repository.windows(session.id()), false);
+        return HawkeyeVideoSessionResponse.from(session, mode(session.workflowVersionId()), repository.windows(session.id()), false);
     }
 
     public HawkeyeVideoSessionResponse detail(UUID id) {
         var session = repository.find(id).orElseThrow(HawkeyeVideoService::notFound);
-        return HawkeyeVideoSessionResponse.from(session, repository.windows(id), true);
+        return HawkeyeVideoSessionResponse.from(session, mode(session.workflowVersionId()), repository.windows(id), true);
     }
 
     /** Creates the next window or ends the session; a failed or cancelled window ends it rather than being skipped. */
     void advance(UUID id) {
+        observe(id);
         try {
             transactions.executeWithoutResult(status -> {
                 var session = repository.lock(id).orElseThrow();
@@ -162,6 +323,7 @@ public class HawkeyeVideoService {
                     repository.end(id, "FAILED", "WINDOW_REJECTED", rejected.code(), rejected.getMessage(), clock.instant());
             });
         }
+        if (!repository.find(id).orElseThrow().state().equals("RUNNING")) release(id);
     }
 
     private void advanceAll() {
@@ -174,7 +336,9 @@ public class HawkeyeVideoService {
 
     @SuppressWarnings("unchecked")
     private void window(HawkeyeVideoSession session, int seq) {
-        var body = JSON.canonical(Map.of("workflowVersionId", session.workflowVersionId().toString(), "parameters", Map.of(),
+        var parameters = mode(session.workflowVersionId()).equals("MOTION")
+            ? Map.of("observer", Map.of("sessionId", session.id().toString(), "window", seq)) : Map.of();
+        var body = JSON.canonical(Map.of("workflowVersionId", session.workflowVersionId().toString(), "parameters", parameters,
             "execution", Map.of("mode", "AUTO"), "camera", Map.of("id", session.deviceId(), "uid", session.deviceUid().toString())));
         var key = UUID.nameUUIDFromBytes(("edgeai-hawkeye-video:" + session.id() + ":" + seq).getBytes(StandardCharsets.UTF_8));
         var run = executions.create(key.toString(), body).value();

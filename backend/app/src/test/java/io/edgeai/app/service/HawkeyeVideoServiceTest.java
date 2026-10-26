@@ -15,8 +15,8 @@ class HawkeyeVideoServiceTest {
     HawkeyeVideoService service(boolean runtimeEnabled, String scope, boolean inspection) {
         return new HawkeyeVideoService(repository, mock(ExecutionService.class), mock(ExecutionRepository.class), mock(RuntimeRepository.class),
             mock(WorkflowRepository.class), Optional.empty(), mock(TransactionTemplate.class),
-            new HawkeyeVideoProperties(true, "hawkeye-video-safety", 3, Duration.ofMillis(20)), RuntimeScope.parse(scope),
-            Clock.systemUTC(), runtimeEnabled, inspection);
+            new HawkeyeVideoProperties(true, "hawkeye-video-safety", 3, Duration.ofMillis(20), "", null), RuntimeScope.parse(scope),
+            Clock.systemUTC(), runtimeEnabled, inspection, Optional.empty());
     }
 
     @Test void sessionsAreNotAdvancedWithoutAnExecutingRuntimeOrInInspection() throws Exception {

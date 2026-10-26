@@ -1,7 +1,37 @@
 # 창고 지게차 안전 점검 (Hawkeye Warehouse Safety VLM)
 
-RTSP 영상 스트림에서 프레임을 수집하고, 플랫폼의 `capture → infer` SERVICE DAG를 실행해 Hawkeye VLM의 판정과 실제 배치 위치를 기록한다.
+RTSP 영상에서 지게차·사람을 검출·추적하고 짧은 미래 경로와 최근접 접근 신호를 계산해(v2, 연속 관측), 플랫폼 SERVICE DAG의 창 Run으로
+결과를 저장한다. 이전 방식(v1, `capture → infer` Hawkeye VLM 프레임 판정)도 그대로 실행·조회된다.
 콘솔 기본 화면은 영상 점검이며, 고정 샘플 이미지 점검은 `?mode=samples`에서 별도로 제공한다.
+
+## 연속 관측 (v2.0.0, 2026-10-26 구현)
+
+계약 요약: [hawkeye-motion-contract.md](hawkeye-motion-contract.md). 구현·시험 수준: 코드와 관련 시험 통과, 실제 검출기로 로컬 관측 서비스 시험.
+클러스터 배포와 실제 RTSP 세션은 이미지 digest 고정 뒤에 확인한다.
+
+| 단계 | 실행 주체 | 위치 |
+|---|---|---|
+| 프레임 디코딩 | 카메라의 Edge RTSP Mapper(2 fps, 960×540) | 세션 `cameraSource`(첫 창 Run이 고정)의 노드 |
+| 읽기 → RT-DETR 검출 → ByteTrack → 등속 예측·최근접 접근 | 관측 서비스 `edgeai-hawkeye-motion` 한 Pod 안의 단계. **DAG 작업이 아님** | `etri-ser0001-cg0msb` RTX 5060 Ti(TensorRT). `/health`가 노드·Pod·provider·모델/engine digest를 보고 |
+| `snapshot` Task | Runner Job. 관측 서비스에 창 k를 닫게 하고 프레임 JPEG를 SHA-256으로 검증해 `frames`·`observations` 결과로 저장 | 창 Run의 Placement |
+| 결과 | Task Result(고정 object version·SHA-256) | MinIO |
+
+- 세션 시작: 첫 창 Run이 카메라(설정 digest·source generation·Mapper 주소)를 고정한 뒤 API가 같은 source로 관측을 시작한다(`PUT /observers/{session}`).
+  API는 매 주기(기본 1초) 임대(15초)를 갱신한다. 관측 서비스는 임대가 끊기면 스스로 읽기를 멈춘다(EXPIRED).
+- 창은 이어진다: 창 k는 창 k-1의 마지막 프레임 다음부터 영상 10초 이상을 덮을 때 닫힌다. Job이 시작되는 동안에도 관측은 계속되므로 창 사이 빈 구간이 없다.
+  추적 상태(ID·경로)는 창 경계와 무관하게 세션 내내 유지된다. 프레임 시각이 2.5초 넘게 비거나 역행하면 추적을 새로 시작하고(`reset`) 표시한다.
+- 실패는 숨기지 않는다: 원본이 10초 넘게 실패, 검출기 오류, 임대 만료, 관측 인스턴스 재시작(epoch 변경), 다른 source는 세션을 `OBSERVER_FAILED`로 끝내고
+  열린 창을 취소한다. 중지는 관측 서비스의 읽기를 멈추고(`DELETE`) 확정된 창 결과는 그대로 조회된다.
+- 좌표·단위: 보정된 바닥 좌표가 없으므로 이미지 픽셀, 거리는 사람 박스 높이 배수, 시간은 프레임 디코딩 시각 기준 초다. 미터·km/h·충돌 확률을 만들지 않는다.
+  - `NEAR_PATH`: 현재 또는 3초 안 예측 최근접 거리가 1.0 이하. `APPROACHING`: 거리가 줄고 최근접 거리가 2.0 이하. `NO_CONFLICT`: 둘 다 아님.
+  - `UNKNOWN`: 속도를 정할 기록 부족(0.4초 미만) 또는 이번 프레임에서 한쪽이 검출되지 않음(최근 1.5초 추적). 안전이 아니다. `NO_PAIR`: 지게차와 사람이 함께 없음.
+- 한계: 2 fps에서는 박스가 한 프레임에 자기 폭 이상 움직이면 ByteTrack(IoU 연관)이 새 ID를 만든다. 반복 재생의 처음으로 돌아가는 순간도 새 ID가 된다.
+  원근 때문에 화면 거리와 실제 거리는 비례하지 않는다. 검출기의 창고 데이터 성능을 이 영상에서 평가하지 않았다.
+
+로컬 실제 검출기 시험(2026-10-26, 3_te1 960×540 2 fps를 실시간으로 내보내는 Mapper 대역 + 실제 TensorRT 검출기·관측 서비스, 15초 1회):
+31프레임, 창 3개 `1–11 / 12–21 / 22–31`(빈 구간·유실 0), 추적 시작 1회, 검출 약 9.2 ms. 사람에게 다가가는 동안 `APPROACHING`(최근접 1.6–1.95, 1.7–2.7초),
+지게차 가까이에서 사람 검출이 끊긴 3프레임은 `UNKNOWN(TRACK_LOST)`, 영상 반복 시점에 지게차 새 ID. 중지 후 Mapper 읽기 0회.
+`output/verification/forklift-motion-20261026/observer-smoke/`(Git 제외). 정확도·성능 평가가 아니다.
 
 **상태(2026-10-23):** 클러스터 배포 완료. [CI 39925164903](https://github.com/dsa04156/edgeai/actions/runs/39925164903) 통과 후 Argo CD `Synced/Healthy`와 실제 영상 구간 세 개의 성공을 확인했다.
 
@@ -34,7 +64,7 @@ RTSP 영상 스트림에서 프레임을 수집하고, 플랫폼의 `capture →
 | capture / infer Runner | `etri-ser0004-cgnms0` |
 | Hawkeye GPU 서버 | `etri-ser0001-cg0msb` (RTX 5060 Ti) |
 
-입력 `hawkeye-forklift-video`는 [실제 공장 CCTV 데이터셋](https://data.mendeley.com/datasets/xjmtb22pff/1)의 `3_te2.mp4`를 RTSP로 반복 송출한다.
+입력 `hawkeye-forklift-video`는 [실제 공장 CCTV 데이터셋](https://data.mendeley.com/datasets/xjmtb22pff/1)의 녹화를 RTSP로 반복 송출한다(아래 실행 기록은 `3_te2.mp4`, 2026-10-26부터 `3_te1.mp4`).
 출처·CC BY 4.0·고정 SHA-256은 `hawkeye-runtime/video-replay/NOTICE.md`와 `source.json`에 기록한다. 실시간 현장 카메라로 표시하지 않는다.
 30프레임의 모델 출력은 spill 26 / safe 4였다. 지게차 과적 영상의 판정 정확도를 검증한 결과가 아니며, 오분류를 수정하거나 참조 라벨로 대체하지 않는다.
 실행 증거는 `output/verification/hawkeye-video-20261023/deployed/`, 기존 상태 보존 비교는 `legacy-comparison.json`(기존 runtime 566·command 892·Run 350개 변경 0)이다.
@@ -54,7 +84,8 @@ RTSP 영상 스트림에서 프레임을 수집하고, 플랫폼의 `capture →
   세션 시작 후 같은 UID에서 카메라 설정이나 source generation이 바뀌면 다음 창을 만들지 않고 `CAMERA_SOURCE_CHANGED`로 끝낸다.
 - 모델 출력 첫 줄에서 범주를 읽지 못한 프레임은 `category=null`로 남기며 safe로 바꾸지 않는다. 판정 정확도를 보장하지 않는다.
 - API: `GET …/hawkeye-safety/video`, `POST|GET …/video/sessions`, `GET …/video/sessions/{id}`, `POST …/video/sessions/{id}/stop`,
-  `GET …/video/tasks/{taskId}/frames/{seq}`. 창의 Task·Attempt·배치·결과는 기존 Run API를 그대로 쓴다.
+  `GET …/video/tasks/{taskId}/frames/{seq}`, v2의 `GET …/video/sessions/{id}/live`, `GET …/video/sessions/{id}/live/frames/{seq}`.
+  창의 Task·Attempt·배치·결과는 기존 Run API를 그대로 쓴다.
 - 실행 범위: `EDGEAI_RUNTIME_WORKFLOW_KEYS`(기본 `*`)에 키를 지정하면 그 워크플로의 Run만 dispatch되고, 다른 Run과 이전에 남은 runtime 행·명령·재시도·결과
   발행·전환은 어떤 worker 조회에도 잡히지 않는다. `deploy/kubernetes/components/hawkeye-video`가 `hawkeye-video-safety`만 허용하고 실행 기능을 켠다.
 - 게시: `hawkeye-runtime/workflow/hawkeye-video-safety.json`(Profile·DAG), `python3 -I hawkeye-runtime/workflow/publish.py`(공개 API, 재요청 안전).
@@ -87,7 +118,8 @@ RTSP 영상 스트림에서 프레임을 수집하고, 플랫폼의 `capture →
 ## 실행 위치
 
 ser0002 RTX 5080은 기존 GPU/NPU 비교 런타임이 `nvidia.com/gpu` 1개를 모두 쓴다. 할당 가능한 amd64 GPU는 ser0001
-(`etri-ser0001-cg0msb`, RTX 5060 Ti 8 GB, 2026-10-23 할당 0/1)뿐이므로 여기에 `nvidia.com/gpu: 1`로 둔다.
+(`etri-ser0001-cg0msb`, RTX 5060 Ti 8 GB)뿐이다. 2026-10-26부터 이 GPU는 연속 관측 서비스(`components/hawkeye-motion`, `nvidia.com/gpu: 1`)가 쓰고,
+Hawkeye VLM Pod는 GPU 요청·RuntimeClass 없이 CPU로 실행한다(`NVIDIA_VISIBLE_DEVICES=void`, CPU 시험 READY·`sizeVramBytes 0`). 아래는 GPU 배치 당시 기록이다.
 Pod는 공식 Ollama(모델 저장소 포함, loopback 전용)와 Python 어댑터 두 컨테이너다. 어댑터는 시작 시 `samples.json`과 샘플
 SHA-256, Ollama `/api/tags`의 manifest digest를 확인하고 warm-up 추론 1회 뒤에만 READY가 된다. 실행마다 `/api/ps`로 실제 GPU/CPU
 배치를 보고한다. 같은 GPU를 다른 프로세스(예: 호스트의 사용자 Ollama)가 쓰면 CPU/GPU 분할로 표시될 수 있으며 그대로 저장한다.
@@ -132,9 +164,29 @@ RuntimeClass `ra-nvidia-rtx5060`, Ollama `nvidia.com/gpu: 1`·메모리 4Gi이�
 영상 배포에서는 adapter v2 `sha256:c7ed0047464cec3c4bd9760c2dbad0d2d4ff83920e0d55609cdcddb67d320310`, workflow v2
 `sha256:4c94d2b934bb06e7263d8786bc5e3595fe4eb7c34d78a274188c659ba27e2520`을 사용한다. 실제 클러스터에서 READY·GPU 로드·프레임 추론을 확인했다.
 
+### 연속 관측 빌드·발행
+
+```bash
+bash hawkeye-runtime/prepare-forklift-base.sh --push 10.254.192.47:5000/edgeai/forklift-base:<tag>       # TensorRT·모델 기반 이미지
+HAWKEYE_MOTION_BASE=10.254.192.47:5000/edgeai/forklift-base@sha256:<digest> \
+  BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh motion --push 10.254.192.47:5000/edgeai/hawkeye-motion:<tag>
+BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh workflow --push 10.254.192.47:5000/edgeai/hawkeye-workflow:<tag>
+bash hawkeye-runtime/video-replay/build.sh 10.254.192.47:5000/edgeai/hawkeye-video-replay:<tag>                 # 3_te1
+```
+
+digest를 `components/hawkeye-motion/kustomization.yaml`(`PIN_AFTER_BUILD`), `hawkeye-video-safety-v2.json`의 profile image,
+`components/hawkeye-video-replay/replay.yaml`에 고정한 뒤 배포하고 `python3 -I hawkeye-runtime/workflow/publish.py hawkeye-runtime/workflow/hawkeye-video-safety-v2.json`으로
+v2를 발행한다(publish.py는 digest가 없으면 거부). `EDGEAI_RUNTIME_WORKFLOW_KEYS`는 `hawkeye-video-safety` 그대로다. 재생 이미지를 바꾸면 카메라 source generation이
+바뀌므로 그 전에 시작한 세션은 `CAMERA_SOURCE_CHANGED`로 끝난다.
+
 ## 시험
 
 ```bash
+# 연속 관측: 추적·예측·위험(교차·후퇴·평행·측면 통과·기록 부족·검출 끊김·시간 공백), 관측 서비스 HTTP(창 연속성·임대·중지·단일 관측·source 고정), snapshot Task
+python3 -m pytest -q hawkeye-runtime/motion/tests          # supervision 0.27.0, numpy (hawkeye-runtime/motion/requirements.txt)
+python3 -m unittest discover -s hawkeye-runtime/tests
+# API: 실제 PostgreSQL(격리 DB) + 시험 전용 가짜 관측 서비스(FakeMotionObserver)
+backend/gradlew -p backend :app:integrationTest --tests io.edgeai.app.integration.HawkeyeVideoSessionIntegrationTest
 # API: 공개 경로 + 실제 PostgreSQL + 시험 전용 가짜 어댑터(FakeHawkeyeRuntime)
 backend/gradlew -p backend :app:integrationTest --tests io.edgeai.app.integration.HawkeyeSafetyScenarioIntegrationTest
 # 콘솔: 프록시·표시 규칙 단위 시험, 브라우저 경계에서 API 응답을 대신하는 Playwright(데스크톱·모바일)
