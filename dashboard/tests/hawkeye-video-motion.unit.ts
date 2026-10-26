@@ -14,6 +14,15 @@ const observer = {
   epoch: "e1", nodeName: "etri-ser0001-cg0msb", pod: "hawkeye-motion-0", provider: "CUDAExecutionProvider",
   model: { name: "rtdetr_warehouse", version: "1.0.2", sha256: "sha256:" + "c".repeat(64) },
 };
+/** The identity shape the TensorRT observer actually reports (forklift-motion-20261026 observer smoke). */
+const runtimeObserver = {
+  nodeName: "local-host", pod: "smoke", provider: "TensorRT 11.4.0.106 GPU (NVIDIA GeForce RTX 5060 Ti, sm120)",
+  model: {
+    provider: "TensorRT 11.4.0.106 GPU (NVIDIA GeForce RTX 5060 Ti, sm120)", model: "nvidia/tao/rtdetr_2d_warehouse:deployable_rn50_v1.0.2",
+    modelDigest: "sha256:7b57da65ea42d0ed835da7ffee0656a7ba32337402ba8bff3dd1d0dd77b17084",
+    engineDigest: "sha256:781a42cee4980ca7f804599c2bd822dc3eefb584fbbc2809c704184ce45b1477", precision: "fp32", input: [3, 640, 640], threshold: 0.5,
+  },
+};
 const frame = (seq: number, over: Partial<Observation> = {}): Observation => ({
   seq, frameTime: `2026-10-26T08:00:0${seq}Z`, receivedAt: `2026-10-26T08:00:0${seq}.05Z`, width: 1280, height: 720, sha256: `${seq}`,
   detectMs: 41.2, gapMs: seq > 1 ? 500 : null, reset: seq === 1 ? "START" : null, status: "NEAR_PATH",
@@ -146,4 +155,16 @@ test("motion graph puts the continuous observer between the camera and the snaps
   const unknown = pipelineGraph({ dag, placements: [], source: null, accelerator: null, sourceTask: "snapshot", acceleratorTask: "", result: null, observer: null });
   assert.deepEqual(unknown.nodes.find((n) => n.id === "observer")!.status, "관측값 없음");
   assert.equal(unknown.nodes.find((n) => n.id === "observer")!.location, null);
+});
+
+test("motion graph shows the model identity the runtime observer actually reports", () => {
+  const graph = pipelineGraph({
+    dag: { tasks: [{ key: "snapshot" }], dependencies: [] }, placements: [], source: null, accelerator: null,
+    sourceTask: "snapshot", acceleratorTask: "", result: null, observer: { status: "READY", ...runtimeObserver },
+  });
+  const details = Object.fromEntries(graph.nodes.find((n) => n.id === "observer")!.details);
+  assert.equal(details["모델"], "nvidia/tao/rtdetr_2d_warehouse:deployable_rn50_v1.0.2");
+  assert.equal(details["모델 digest"], runtimeObserver.model.modelDigest);
+  assert.equal(details["엔진 digest"], runtimeObserver.model.engineDigest);
+  assert.equal(details["정밀도"], "fp32");
 });

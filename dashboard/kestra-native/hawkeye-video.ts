@@ -88,8 +88,19 @@ export type ObserverIdentity = {
   nodeName: string | null;
   pod: string | null;
   provider: string | null;
-  model: { name: string; version: string; sha256?: string } | null;
+  /** The runtime reports {model, modelDigest, engineDigest, precision, ...}; {name, version, sha256} is the earlier fixture shape. */
+  model: {
+    model?: string;
+    modelDigest?: string;
+    engineDigest?: string;
+    precision?: string;
+    name?: string;
+    version?: string;
+    sha256?: string;
+  } | null;
 };
+const modelLabel = (m: ObserverIdentity["model"]) => m?.model ?? ([m?.name, m?.version].filter(Boolean).join(" ") || null);
+const modelDigest = (m: ObserverIdentity["model"]) => m?.modelDigest ?? m?.sha256 ?? null;
 export type VideoCapability = {
   enabled: boolean;
   executes: boolean;
@@ -443,8 +454,10 @@ export function pipelineGraph(input: {
             ["노드", observer.nodeName ?? "관측값 없음"],
             ["Pod", observer.pod ?? "관측값 없음"],
             ["실행 제공자", observer.provider ?? "관측값 없음"],
-            ["모델", observer.model ? `${observer.model.name} ${observer.model.version}` : "관측값 없음"],
-            ...(observer.model?.sha256 ? [["모델 digest", observer.model.sha256] as [string, string]] : []),
+            ["모델", modelLabel(observer.model) ?? "관측값 없음"],
+            ...(modelDigest(observer.model) ? [["모델 digest", modelDigest(observer.model)!] as [string, string]] : []),
+            ...(observer.model?.engineDigest ? [["엔진 digest", observer.model.engineDigest] as [string, string]] : []),
+            ...(observer.model?.precision ? [["정밀도", observer.model.precision] as [string, string]] : []),
             ...(observer.epoch != null ? [["관측 epoch", String(observer.epoch)] as [string, string]] : []),
             ...(observer.basis ? [["근거", observer.basis] as [string, string]] : []),
           ]

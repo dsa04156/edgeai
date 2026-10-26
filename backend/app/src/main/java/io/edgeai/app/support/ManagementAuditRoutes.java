@@ -64,6 +64,8 @@ public final class ManagementAuditRoutes {
         new Route("GET","/api/v1/scenarios/hawkeye-safety/video/sessions","listHawkeyeVideoSessions"),
         new Route("GET","/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}","getHawkeyeVideoSession"),
         new Route("POST","/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/stop","stopHawkeyeVideoSession"),
+        new Route("GET","/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live","getHawkeyeVideoLive"),
+        new Route("GET","/api/v1/scenarios/hawkeye-safety/video/sessions/{sessionId}/live/frames/{seq}","getHawkeyeVideoLiveFrame"),
         new Route("GET","/api/v1/scenarios/hawkeye-safety/video/tasks/{taskId}/frames/{seq}","getHawkeyeVideoFrame"),
         new Route("GET","/api/v1/infrastructure","getInfrastructure"),
         new Route("GET","/api/v1/sensors/readings","getSensorReadings"),
