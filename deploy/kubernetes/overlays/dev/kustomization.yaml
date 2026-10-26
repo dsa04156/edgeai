@@ -80,7 +80,7 @@ images:
   - name: ghcr.io/dsa04156/edgeai-dashboard
     digest: sha256:ca6d21220c408f73acd500ec809b8904cc1912860d87deb4e215ce1a2e627e0e
   - name: ghcr.io/dsa04156/edgeai-minio
-    digest: sha256:92fdbea39f5aa2673b9b7ac4f0b885b4e4fa6d6233b0b7c134b9a1fdf9c0d3da
+    digest: sha256:ce50e12355c3c1dfac0b84b2538160953401925c10f5e511b9517dc39c29bc41
   # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.
   - name: ghcr.io/dsa04156/edgeai-influxdb
     digest: sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82
