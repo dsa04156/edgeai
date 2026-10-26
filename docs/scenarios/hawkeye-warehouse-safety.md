@@ -210,3 +210,11 @@ EDGEAI_DASHBOARD_PORT=<port> npx playwright test --config dashboard/playwright.p
 
 가짜 어댑터와 Playwright 응답은 시험에서만 쓰며 모델 동작의 증거가 아니다. 실제 추론 증거는 로컬 검증 기록
 `output/verification/hawkeye-20261023/`(Git 제외)의 `real/`에 있다.
+
+### 2026-10-26 HSE 원본 배포 확인
+
+- 재생 이미지: `10.254.192.47:5000/edgeai/hawkeye-video-replay@sha256:0839b796c07bba3f0362b08be657643b7d491d746272ac416d3b563278c4d4c0`. 두 원본을 `etri-dev0003-raspi5`에 등록했고 기존 8개 장면을 유지했다.
+- 실제 웹에서 두 원본을 각각 시작·중지하고 연속 프레임, 지게차/사람 탐지와 예상 경로, 완료된 관측 구간 및 Mapper 배치 DAG를 확인했다. Blackpool 세션 `957ab33a-17c9-48cf-844c-9e1879da52e5`, Leggett 세션 `441fb050-b44e-46d8-9697-ff954cac013b`.
+- 약 45초 관측: Blackpool 분석 17.26fps / 브라우저 표시 17.17fps, Leggett 분석 22.16fps / 표시 21.29fps. RTSP 원본은 1920×1080·24fps, 분석·표시는 640×360이다. Leggett에서 `NEAR_PATH`·`APPROACHING`이 관측됐으나 사고 탐지 정확도 검증을 뜻하지 않는다.
+- 근거: 로컬 `output/verification/hawkeye-hse/live-hawkeye-scene-hse-*/`의 세션·Run·프레임 관측·측정값·스크린샷. 단위 시험 11개, 관련 Playwright 10개(데스크톱/모바일), typecheck, 변경 파일 lint, release 빌드 통과.
+- 웹 이미지는 CI `40275245642`의 검증된 dashboard digest만 반영한다. 영상 카탈로그 변경과 무관한 API·Runner·MinIO·InfluxDB의 운영 이미지는 유지한다.
