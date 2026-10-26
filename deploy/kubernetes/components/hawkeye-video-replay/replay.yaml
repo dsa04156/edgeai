@@ -15,7 +15,7 @@ spec:
       nodeSelector: {kubernetes.io/hostname: etri-ser0001-cg0msb}
       containers:
         - name: replay
-          image: 10.254.192.47:5000/edgeai/hawkeye-video-replay@sha256:bda4382a9928185e8f57253f904ae54b5608dda3353c91643037ee54fd3c0ddb
+          image: 10.254.192.47:5000/edgeai/hawkeye-video-replay@sha256:0839b796c07bba3f0362b08be657643b7d491d746272ac416d3b563278c4d4c0
           ports:
             - {name: rtsp, containerPort: 8554, hostPort: 18555}
           readinessProbe:
