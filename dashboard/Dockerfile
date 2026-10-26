@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund \
   && node /workspace/scripts/dev/record-kestra-lock-hash.mjs . && npm run predev
 COPY dashboard/lib /workspace/dashboard/lib
 COPY dashboard/kestra-native /workspace/dashboard/kestra-native
+# hawkeye-video.ts imports the scene catalog the replay image is built from.
+COPY hawkeye-runtime/video-replay/scenes.json /workspace/hawkeye-runtime/video-replay/scenes.json
 # Same packaging as the 13083 dev server: no federation/PWA service worker.
 RUN STORYBOOK=1 EDGEAI_KESTRA_OUT_DIR=/workspace/release/dist \
     npm exec -- vite build --config /workspace/dashboard/kestra-native/vite.config.mjs \

@@ -1,4 +1,6 @@
 // Display model of the Hawkeye video workflow graph; every value comes from the API, nothing is inferred.
+import catalog from "../../hawkeye-runtime/video-replay/scenes.json" with { type: "json" };
+
 type Dag = {
   tasks: { key: string }[];
   dependencies: { fromTask: string; fromPort?: string; toTask: string; toPort?: string }[];
@@ -198,7 +200,81 @@ const REPLAY_LABELS = new Map([
   ["hawkeye-youtube-turn-replay", "지게차 급회전 · 녹화 영상 반복 재생"],
   ["hawkeye-youtube-accidents-replay", "지게차 사고 CCTV · 녹화 영상 반복 재생"],
 ]);
-export const replayLabel = (c: Pick<Camera, "profile">) => REPLAY_LABELS.get(c.profile.sourceName ?? "") ?? null;
+/** One recorded CCTV scene cut from a source clip (hawkeye-runtime/video-replay/scenes.json); its device reports `sourceName`. */
+export type Scene = {
+  id: string;
+  title: string;
+  sourceName: string;
+  sourceVideoId: string;
+  /** Half-open frame range of the original clip. */
+  startFrame: number;
+  endFrame: number;
+  fps: number;
+  durationSeconds: number;
+  /** Original clip page and frame rate (startFrame/endFrame count its frames), from the catalog's sources. */
+  sourceUrl: string;
+  sourceFps: number;
+};
+const SOURCES: Record<string, { url: string; fps: number }> = catalog.sources;
+export const SCENES: Scene[] = catalog.scenes.map((s: Omit<Scene, "sourceUrl" | "sourceFps">) => ({ ...s, sourceUrl: SOURCES[s.sourceVideoId].url, sourceFps: SOURCES[s.sourceVideoId].fps }));
+const SCENE_GROUPS: [string, string][] = [
+  ["turn-", "지게차 급회전"],
+  ["accidents-", "지게차 사고 CCTV"],
+];
+const sceneGroup = (s: Scene) => SCENE_GROUPS.find(([prefix]) => s.id.startsWith(prefix))?.[1] ?? "녹화 장면";
+/** Only devices whose sourceName is in the catalog are scenes. */
+export const sceneOf = (c: Pick<Camera, "profile">, scenes = SCENES) => scenes.find((s) => s.sourceName === c.profile.sourceName) ?? null;
+const seconds = (n: number) => `${Number(n.toFixed(1))}초`;
+export const replayLabel = (c: Pick<Camera, "profile">, scenes = SCENES) => {
+  const scene = sceneOf(c, scenes);
+  return scene ? `${sceneGroup(scene)} · ${scene.title} · 녹화 장면 반복 재생` : (REPLAY_LABELS.get(c.profile.sourceName ?? "") ?? null);
+};
+/**
+ * How a source is offered for selection: scenes by their clip with title and length, the earlier full-clip replays,
+ * then every other RTSP device as a camera. Groups keep catalog order.
+ */
+export function sourceView(c: Pick<Camera, "id" | "profile">, scenes = SCENES) {
+  const scene = sceneOf(c, scenes);
+  if (scene)
+    return {
+      group: `녹화 장면 · ${sceneGroup(scene)}`,
+      option: `${scene.title} · ${seconds(scene.durationSeconds)}`,
+      kind: "녹화 영상 · 실시간 분석 가능",
+      scene,
+      details: [
+        ["원본 영상", scene.sourceUrl],
+        [
+          "원본 구간",
+          `원본 ${scene.sourceFps} fps 프레임 ${scene.startFrame}–${scene.endFrame - 1} · ${(scene.startFrame / scene.sourceFps).toFixed(2)}–${(scene.endFrame / scene.sourceFps).toFixed(2)}초`,
+        ],
+        ["재생", `${seconds(scene.durationSeconds)} 반복 · ${scene.fps} fps`],
+      ] as [string, string][],
+    };
+  const replay = REPLAY_LABELS.get(c.profile.sourceName ?? "");
+  return replay
+    ? { group: "기존 녹화 영상", option: c.id, kind: replay, scene: null, details: [] as [string, string][] }
+    : { group: "카메라", option: c.id, kind: "카메라", scene: null, details: [] as [string, string][] };
+}
+/** The source a fresh page selects: the first online scene in catalog order, else any online camera, else the first one. */
+export function defaultSource<C extends Pick<Camera, "id" | "profile" | "state" | "stateReason" | "mapper">>(cameras: C[], scenes = SCENES) {
+  const online = cameras.filter((c) => cameraState(c).online);
+  const scene = scenes.map((s) => online.find((c) => sceneOf(c, [s]))).find(Boolean);
+  return scene ?? online[0] ?? cameras[0] ?? null;
+}
+/** Sources grouped for the selector; scene groups follow the catalog, then earlier replays, then cameras. */
+export function sourceGroups<C extends Pick<Camera, "id" | "profile">>(cameras: C[], scenes = SCENES) {
+  const rank = (c: C) => {
+    const s = sceneOf(c, scenes);
+    return s ? scenes.indexOf(s) : scenes.length + (sourceView(c, scenes).group === "카메라" ? 1 : 0);
+  };
+  const groups = new Map<string, { label: string; items: { camera: C; option: string }[] }>();
+  for (const c of [...cameras].sort((a, b) => rank(a) - rank(b))) {
+    const v = sourceView(c, scenes);
+    if (!groups.has(v.group)) groups.set(v.group, { label: v.group, items: [] });
+    groups.get(v.group)!.items.push({ camera: c, option: v.option });
+  }
+  return [...groups.values()];
+}
 /** parameters.cameraSource: the camera identity and location the server pinned when the window's Run was created. */
 export type CameraBinding = {
   deviceId: string;

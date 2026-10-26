@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraState, pinnedSource, pipelineGraph, readDetections, replayLabel, windowStartIntervals } from "../kestra-native/hawkeye-video.ts";
+import { cameraState, defaultSource, pinnedSource, pipelineGraph, readDetections, replayLabel, SCENES, sourceGroups, sourceView, windowStartIntervals } from "../kestra-native/hawkeye-video.ts";
 
 const dag = {
   tasks: [{ key: "infer" }, { key: "capture" }],
@@ -88,6 +88,54 @@ test("only the registered replays are labelled as looped recordings", () => {
   assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "hawkeye-youtube-accidents-replay" } }), "지게차 사고 CCTV · 녹화 영상 반복 재생");
   assert.equal(replayLabel({ profile: { protocol: "rtsp", sourceName: "warehouse-cam-1" } }), null);
   assert.equal(replayLabel({ profile: { protocol: "rtsp" } }), null);
+});
+
+const scene = (id: string, title: string, sourceVideoId: string, durationSeconds: number) => ({
+  id, title, sourceName: `hawkeye-scene-${id}-replay`, sourceVideoId, startFrame: 3, endFrame: 94, fps: 24, durationSeconds,
+  sourceUrl: `https://www.youtube.com/watch?v=${sourceVideoId}`, sourceFps: 30,
+});
+const scenes = [scene("turn-01", "실내 랙 통로 회전", "tYYNdqPooMI", 3.04), scene("accidents-01", "야외 통로 보행자", "lSGMB3h41ug", 12.2)];
+const device = (id: string, sourceName?: string) => ({ id, profile: { protocol: "rtsp", sourceName } });
+
+test("scene devices are grouped by source clip with title and length; replays and cameras keep their own groups", () => {
+  const cams = [device("cam-1"), device("hawkeye-forklift-video", "hawkeye-forklift-replay"), device("hawkeye-scene-accidents-01", "hawkeye-scene-accidents-01-replay"),
+    device("hawkeye-scene-turn-01", "hawkeye-scene-turn-01-replay"), device("unknown-scene", "hawkeye-scene-turn-09-replay")];
+  assert.deepEqual(sourceGroups(cams, scenes).map((g) => [g.label, g.items.map((i) => i.option)]), [
+    ["녹화 장면 · 지게차 급회전", ["실내 랙 통로 회전 · 3초"]],
+    ["녹화 장면 · 지게차 사고 CCTV", ["야외 통로 보행자 · 12.2초"]],
+    ["기존 녹화 영상", ["hawkeye-forklift-video"]],
+    ["카메라", ["cam-1", "unknown-scene"]],
+  ]);
+  const view = sourceView(cams[3], scenes);
+  assert.equal(view.kind, "녹화 영상 · 실시간 분석 가능");
+  assert.deepEqual(Object.fromEntries(view.details), {
+    "원본 영상": "https://www.youtube.com/watch?v=tYYNdqPooMI", "원본 구간": "원본 30 fps 프레임 3–93 · 0.10–3.13초", "재생": "3초 반복 · 24 fps" });
+  assert.equal(sourceView(cams[0], scenes).kind, "카메라");
+  assert.equal(sourceView(cams[1], scenes).kind, "녹화 영상 반복 재생");
+  assert.equal(replayLabel(cams[3], scenes), "지게차 급회전 · 실내 랙 통로 회전 · 녹화 장면 반복 재생");
+  assert.equal(replayLabel(cams[0], scenes), null);
+});
+
+test("a fresh page selects the first online scene in catalog order, else an online camera", () => {
+  const at = (id: string, state: string, sourceName?: string) => ({ ...device(id, sourceName), state, mapper: { ready: true } });
+  const cam = at("cam-1", "ONLINE"), accident = at("a", "ONLINE", "hawkeye-scene-accidents-01-replay");
+  assert.equal(defaultSource([cam, accident, at("t", "ONLINE", "hawkeye-scene-turn-01-replay")], scenes)?.id, "t");
+  assert.equal(defaultSource([cam, accident, at("t", "OFFLINE", "hawkeye-scene-turn-01-replay")], scenes)?.id, "a");
+  assert.equal(defaultSource([at("off", "OFFLINE"), cam], scenes)?.id, "cam-1");
+  assert.equal(defaultSource([at("off", "OFFLINE")], scenes)?.id, "off");
+  assert.equal(defaultSource([], scenes), null);
+});
+
+test("the bundled scene catalog names eight scenes in two clip groups, each with its own device source", () => {
+  assert.equal(SCENES.length, 8);
+  assert.equal(new Set(SCENES.map((s) => s.sourceName)).size, 8);
+  const groups = sourceGroups(SCENES.map((s) => device(`dev-${s.id}`, s.sourceName)));
+  assert.deepEqual(groups.map((g) => [g.label, g.items.length]), [["녹화 장면 · 지게차 급회전", 5], ["녹화 장면 · 지게차 사고 CCTV", 3]]);
+  for (const s of SCENES) {
+    assert.ok(s.title && s.durationSeconds > 0 && s.fps === 24 && s.endFrame > s.startFrame, s.id);
+    assert.match(s.sourceUrl, /^https:\/\/www\.youtube\.com\//);
+    assert.equal(s.sourceFps, 30, s.id);
+  }
 });
 
 test("a past window shows the camera pinned in its Run, with the current connection marked as current", () => {

@@ -81,7 +81,8 @@ export default defineConfig(async (env) => {
       host: "0.0.0.0",
       port: 13083,
       strictPort: true,
-      fs: { allow: [sourceRoot, path.dirname(nativeRoot)] },
+      // hawkeye-video.ts imports the scene catalog from the replay image's sources.
+      fs: { allow: [sourceRoot, path.dirname(nativeRoot), path.join(nativeRoot, "../../hawkeye-runtime/video-replay")] },
     },
     plugins: [
       {

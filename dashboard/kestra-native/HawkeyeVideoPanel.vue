@@ -48,16 +48,21 @@
           <MotionRisk v-if="motion && view !== 'preview' && session" :observation="current" />
           <KsFormItem label="카메라">
             <KsSelect v-model="cameraId" :disabled="running || starting" placeholder="카메라를 선택하세요" aria-label="카메라">
-              <KsOption v-for="c in cameras" :key="c.id" :value="c.id" :label="`${c.id} · ${cameraState(c).label}`" />
+              <KsOptionGroup v-for="g in sourceGroups(cameras)" :key="g.label" :label="g.label">
+                <KsOption v-for="{ camera: c, option } in g.items" :key="c.id" :value="c.id" :label="`${option} · ${cameraState(c).label}`" />
+              </KsOptionGroup>
             </KsSelect>
           </KsFormItem>
           <div v-if="camera" class="hv-camera">
             <KsTag :type="cameraState(camera).online ? 'success' : 'danger'">{{ cameraState(camera).label }}</KsTag>
-            <span v-if="replayLabel(camera)">{{ replayLabel(camera) }}</span>
+            <span>{{ source!.kind }}</span>
+            <span v-if="source!.scene" class="native-note">{{ source!.group }} · {{ source!.option }}</span>
             <span v-if="cameraState(camera).reason" class="native-note">{{ cameraState(camera).reason }}</span>
             <details class="hv-more">
               <summary>원본·Mapper</summary>
               <dl class="hv-facts">
+                <div v-for="[k, v] in source!.details" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div>
+                <div><dt>장치</dt><dd>{{ camera.id }}</dd></div>
                 <div><dt>Mapper 노드</dt><dd>{{ camera.targetNode }}</dd></div>
                 <div><dt>원본 주소</dt><dd class="hv-mono">{{ sourceAddress(camera) }}</dd></div>
               </dl>
@@ -75,6 +80,9 @@
             <RouterLink v-if="capability.workflow" :to="{ path: '/ui/main/workflows', query: { workflow: capability.workflow.id } }">워크플로 정의</RouterLink>
           </div>
           <p class="native-note" role="status">{{ startHelp }}</p>
+          <p v-if="modeOf(versionId) === 'MOTION'" class="native-note">
+            분석 결과는 구간을 기다리지 않고 프레임마다 바로 영상 위에 표시합니다. 10초 구간은 관측 기록을 저장하는 단위입니다.
+          </p>
           <NativeFeedback :error="actionError" />
         </div>
       </div>
@@ -151,11 +159,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { KsButton, KsFormItem, KsOption, KsSelect, KsTag } from "@kestra-io/design-system";
+import { KsButton, KsFormItem, KsOption, KsOptionGroup, KsSelect, KsTag } from "@kestra-io/design-system";
 import { get, request, requestKey, time, useAction, usePoll, write, type Schema } from "./native-api";
 import { categoryText } from "./hawkeye";
 import {
   cameraState,
+  defaultSource,
   motionFrames,
   pinnedSource,
   pipelineGraph,
@@ -163,8 +172,9 @@ import {
   readObservations,
   versionMode,
   sessionLabel,
-  replayLabel,
   sourceAddress,
+  sourceGroups,
+  sourceView,
   statusLabel,
   tone,
   windowStartIntervals,
@@ -245,6 +255,7 @@ function setView(next: "preview" | "live" | "history") {
 }
 const starting = computed(() => acting.value && !stopping.value);
 const camera = computed(() => cameras.value.find((c) => c.id === cameraId.value));
+const source = computed(() => (camera.value ? sourceView(camera.value) : null));
 const running = computed(() => session.value?.state === "RUNNING");
 const canStart = computed(
   () =>
@@ -391,10 +402,11 @@ async function refresh() {
   capability.value = cap;
   cameras.value = devices.items.filter((d) => d.profile.protocol === "rtsp");
   accelerator.value = safety.runtime;
-  if (!cameraId.value) cameraId.value = (cameras.value.find((c) => cameraState(c).online) ?? cameras.value[0])?.id ?? "";
+  if (!cameraId.value) cameraId.value = defaultSource(cameras.value)?.id ?? "";
   if (!versionId.value) versionId.value = (cap.versions.find((v) => versionMode(v) === "MOTION") ?? cap.versions[0])?.id ?? "";
   await loadHistory();
-  const id = (typeof route.query.session === "string" && route.query.session) || cap.activeSessionId || history.value[0]?.id;
+  // Only an explicit or active session opens by itself; the newest stored one would show an old source's history as current.
+  const id = (typeof route.query.session === "string" && route.query.session) || cap.activeSessionId;
   if (id) await showSession(id, session.value?.id === id);
 }
 async function showSession(id: string, keepWindow = false) {
@@ -402,6 +414,8 @@ async function showSession(id: string, keepWindow = false) {
   if (capability.value?.workflow) await loadDag(detail.workflowVersionId, capability.value.workflow.id);
   const changed = session.value?.id !== id;
   session.value = detail;
+  // The selector follows the shown session, so it never names a different source than the clip and records below.
+  if (cameras.value.some((c) => c.id === detail.camera.id)) cameraId.value = detail.camera.id;
   if (changed && route.query.session !== id) await router.replace({ query: { ...route.query, session: id } });
   const latest = detail.windows[0]?.seq ?? null;
   if (changed || !keepWindow || windowSeq.value == null) windowSeq.value = latest;
@@ -413,6 +427,22 @@ async function showSession(id: string, keepWindow = false) {
   await loadWindow();
 }
 // However the session ended (stop, poll, failure), the live view leaves with it.
+/** Clears a finished session from view (and the URL) so a newly chosen source shows its own preview. */
+async function leaveSession() {
+  if (!session.value || running.value) return;
+  session.value = null;
+  windowSeq.value = null;
+  void loadWindow();
+  setView("preview");
+  if (route.query.session) {
+    const query = { ...route.query };
+    delete query.session;
+    await router.replace({ query });
+  }
+}
+watch(cameraId, (id) => {
+  if (session.value && session.value.camera.id !== id) void leaveSession();
+});
 watch(canLive, (live) => {
   if (!live && view.value === "live") setView(session.value?.windows.length ? "history" : "preview");
 });
@@ -460,6 +490,8 @@ async function loadWindow() {
 function start() {
   if (!canStart.value || !camera.value) return;
   void act(async () => {
+    // A finished session stays in the records; the stage shows only the new one from here on.
+    await leaveSession();
     const created = await write<VideoSession>(
       `${BASE}/sessions`,
       "POST",

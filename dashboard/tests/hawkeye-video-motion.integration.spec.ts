@@ -7,6 +7,7 @@ const WORKFLOW = "8b0f3c51-2f7e-4d0b-9a64-1f3f7b0d5a10";
 const V2 = "0d6c7a4e-9a5b-4c1e-8f3d-2b7e6a9c1d22";
 const V1 = "0d6c7a4e-9a5b-4c1e-8f3d-2b7e6a9c1d20";
 const SESSION = "5e2d1c0b-7a6f-4e3d-9c8b-1a2b3c4d5e61";
+const OLD = "5e2d1c0b-7a6f-4e3d-9c8b-1a2b3c4d5e60";
 const CAMERA_UID = "2dffb17e-028d-43ed-a992-b854b9d4c8ef";
 const RUNS = ["c1000000-0000-4000-8000-000000000001", "c1000000-0000-4000-8000-000000000002"];
 const SNAP = ["d1000000-0000-4000-8000-000000000001", "d1000000-0000-4000-8000-000000000002"];
@@ -54,17 +55,31 @@ const camera = { id: "hawkeye-forklift-video", uid: CAMERA_UID, state: "ONLINE",
   profile: { name: "hawkeye-forklift-video", protocol: "rtsp", host: "10.254.192.47", port: 18555, protocolConfig: { path: "/forklift-replay" },
     properties: [], sourceName: "hawkeye-forklift-replay" } };
 
+// Scene devices as the replay catalog registers them: one per scene, named by the catalog's own sourceName.
+const SCENES: { id: string; title: string; sourceName: string; deviceName: string; rtspPath: string; sourceVideoId: string }[] =
+  JSON.parse(readFileSync(`${process.cwd()}/../hawkeye-runtime/video-replay/scenes.json`, "utf8")).scenes;
+const sceneCamera = (s: (typeof SCENES)[number], n: number) => ({ ...camera, id: s.deviceName, uid: `5c000000-0000-4000-8000-00000000000${n}`,
+  targetNode: "etri-dev0008-raspi5", profile: { ...camera.profile, name: s.deviceName, protocolConfig: { path: s.rtspPath }, sourceName: s.sourceName } });
+const scenes = [SCENES[0], SCENES.find((s) => s.sourceVideoId !== SCENES[0].sourceVideoId)!].map(sceneCamera);
+
 function api(page: Page) {
   const state = {
     phase: "idle" as "idle" | "running" | "stopped", starts: [] as unknown[], liveSeq: 0, liveFail: 0, evict: new Set<number>(), latency: 120,
     sourceFps: 0, sourceAt: 0, sourceBase: 0, frameReads: [] as number[], live: [] as number[], lost: false, lastError: null as string | null, inFlight: 0, maxInFlight: 0, historyReads: new Map<string, number>(), historyInFlight: 0, historyMax: 0,
+    /** A finished session of the replay camera is already stored; the scene devices are registered. */
+    stored: false, started: camera as { id: string; uid: string },
   };
+  const old = (detail = true) => ({
+    id: OLD, workflowVersionId: V2, mode: "MOTION", camera: { id: camera.id, uid: CAMERA_UID }, maxWindows: 5, state: "STOPPED", endReason: "USER_STOPPED",
+    failureCode: null, failureMessage: null, createdAt: "2026-10-26T07:00:00Z", updatedAt: "2026-10-26T07:00:20Z", endedAt: "2026-10-26T07:00:20Z", windowCount: 1,
+    windows: detail ? [{ seq: 1, runId: RUNS[0], runState: "SUCCEEDED", createdAt: "2026-10-26T07:00:00Z", updatedAt: "2026-10-26T07:00:10Z" }] : [],
+  });
   const windows = () => state.phase === "idle" ? [] : [
     { seq: 2, runId: RUNS[1], runState: state.phase === "running" ? "RUNNING" : "CANCELLED", createdAt: "2026-10-26T08:00:03Z", updatedAt: "2026-10-26T08:00:04Z" },
     { seq: 1, runId: RUNS[0], runState: "SUCCEEDED", createdAt: "2026-10-26T08:00:00Z", updatedAt: "2026-10-26T08:00:03Z" },
   ];
   const session = (detail = true) => ({
-    id: SESSION, workflowVersionId: V2, mode: "MOTION", camera: { id: camera.id, uid: CAMERA_UID }, maxWindows: 5,
+    id: SESSION, workflowVersionId: V2, mode: "MOTION", camera: { id: state.started.id, uid: state.started.uid }, maxWindows: 5,
     state: state.phase === "stopped" ? "STOPPED" : "RUNNING", endReason: state.phase === "stopped" ? "USER_STOPPED" : null,
     failureCode: null, failureMessage: null, createdAt: "2026-10-26T08:00:00Z", updatedAt: "2026-10-26T08:00:00Z",
     endedAt: state.phase === "stopped" ? "2026-10-26T08:00:20Z" : null, windowCount: windows().length, windows: detail ? windows() : [],
@@ -90,7 +105,7 @@ function api(page: Page) {
         maxWindows: 5, activeSessionId: state.phase === "running" ? SESSION : null, observer: { status: "READY", ...observer } } });
     if (path === "scenarios/hawkeye-safety")
       return route.fulfill({ json: { runtime: { status: "READY", error: null, reported: { nodeName: "etri-ser0001-cg0msb", processor: "GPU" } } } });
-    if (path === "managed-devices") return route.fulfill({ json: { items: [camera] } });
+    if (path === "managed-devices") return route.fulfill({ json: { items: [camera, ...(state.stored ? scenes : [])] } });
     if (/^managed-devices\/[a-z0-9-]+\/preview$/.test(path)) return route.fulfill({ contentType: "image/jpeg", body: JPEG });
     if (path === `workflows/${WORKFLOW}`)
       return route.fulfill({ json: { workflow: { id: WORKFLOW }, nextOffset: null, versions: [
@@ -99,9 +114,11 @@ function api(page: Page) {
           dependencies: [{ fromTask: "capture", fromPort: "frames", toTask: "infer", toPort: "frames" }] } },
       ] } });
     if (path === `${base}/sessions` && request.method() === "GET")
-      return route.fulfill({ json: { items: state.phase === "idle" ? [] : [session(false)], nextOffset: null } });
+      return route.fulfill({ json: { items: [...(state.phase === "idle" ? [] : [session(false)]), ...(state.stored ? [old(false)] : [])], nextOffset: null } });
+    if (path === `${base}/sessions/${OLD}`) return route.fulfill({ json: old() });
     if (path === `${base}/sessions` && request.method() === "POST") {
       state.starts.push(request.postDataJSON());
+      state.started = request.postDataJSON().camera;
       state.phase = "running";
       return route.fulfill({ status: 202, json: session() });
     }
@@ -344,5 +361,59 @@ test("live: a person lost by the detector is shown as an undecidable last positi
   await expect(overlay.locator('[data-track="P7"]')).toHaveCount(1);
   await expect(overlay.locator("[data-lost]")).toHaveCount(0);
   await expect(page.getByTestId("stage-badge")).toHaveText("실시간");
+  expect(errors).toEqual([]);
+});
+
+test("choosing another scene shows that source's preview, not a stored session's history; starting goes live on it", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const state = api(page);
+  state.stored = true;
+  // A plain load does not reopen the newest stored session; it previews the first online scene of the catalog.
+  const [turn, accident] = scenes, title = (id: string) => SCENES.find((s) => s.deviceName === id)!.title;
+  await page.goto("/ui/main/scenarios/hawkeye");
+  await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
+  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+  await expect(page.locator(".hv-camera")).toContainText("녹화 영상 · 실시간 분석 가능");
+  await expect(page.getByRole("button", { name: "구간 기록" })).toHaveCount(0);
+  await expect(page.locator(".hv-history")).toContainText(camera.id);
+  // An explicit session link still opens that session's records.
+  await page.goto(`/ui/main/scenarios/hawkeye?session=${OLD}`);
+  await expect(page.getByRole("heading", { name: "구간 1 관측 기록" })).toBeVisible();
+  await expect(page.locator(".hv-stage [data-track]").first()).toBeVisible();
+
+  await page.locator(".kel-form-item").filter({ has: page.getByRole("combobox", { name: "카메라" }) }).locator(".kel-select").click();
+  await expect(page.getByText("녹화 장면 · 지게차 급회전", { exact: true })).toBeVisible();
+  await expect(page.getByText("녹화 장면 · 지게차 사고 CCTV", { exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: new RegExp(`^${title(accident.id)} · [0-9.]+초 · 연결됨$`) })).toBeVisible();
+  await page.getByRole("option", { name: new RegExp(`^${title(turn.id)} · `) }).click();
+  await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
+  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+  await expect(page.getByRole("button", { name: "구간 기록" })).toHaveCount(0);
+  await expect(page.locator(".hv-session")).toHaveCount(0);
+  await expect(page.locator(".hv-stage [data-track]")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "충돌 위험 예측" })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/session=/);
+  await expect(page.locator(".hv-camera")).toContainText("녹화 영상 · 실시간 분석 가능");
+  await expect(page.locator(".hv-camera")).toContainText(title(turn.id));
+  await expect(page.getByText(/10초 구간은 관측 기록을 저장하는 단위입니다/)).toBeVisible();
+  // The 10 s refresh must not bring the stored session back.
+  await page.waitForTimeout(11000);
+  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+
+  // Browsing a stored record still works and names its own source.
+  await page.locator(".hv-history").getByRole("button").first().click();
+  await expect(page.getByRole("heading", { name: "구간 1 관측 기록" })).toBeVisible();
+  await expect(page.locator(".hv-camera")).toContainText("녹화 영상 반복 재생");
+  await page.locator(".kel-form-item").filter({ has: page.getByRole("combobox", { name: "카메라" }) }).locator(".kel-select").click();
+  await page.getByRole("option", { name: new RegExp(`^${title(turn.id)} · `) }).click();
+  await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
+
+  await page.getByRole("button", { name: "점검 시작" }).click();
+  await expect(page.getByRole("button", { name: "실시간 관측" })).toHaveAttribute("aria-pressed", "true");
+  expect(state.starts).toEqual([{ workflowVersionId: V2, camera: { id: turn.id, uid: turn.uid } }]);
+  await expect(page.getByTestId("stage-badge")).toHaveText("실시간");
+  await expect(page.locator(".hv-summary")).toContainText(turn.id);
+  expect(await noOverflow(page)).toBe(true);
   expect(errors).toEqual([]);
 });
