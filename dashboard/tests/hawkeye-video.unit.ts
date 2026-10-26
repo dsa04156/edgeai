@@ -91,7 +91,7 @@ test("only the registered replays are labelled as looped recordings", () => {
 });
 
 const scene = (id: string, title: string, sourceVideoId: string, durationSeconds: number) => ({
-  id, title, sourceName: `hawkeye-scene-${id}-replay`, sourceVideoId, startFrame: 3, endFrame: 94, fps: 24, durationSeconds,
+  id, title, sourceName: `hawkeye-scene-${id}-replay`, sourceVideoId, startFrame: 3, endFrame: 94, fps: 24, durationSeconds, width: 640, height: 480,
   sourceUrl: `https://www.youtube.com/watch?v=${sourceVideoId}`, sourceFps: 30,
 });
 const scenes = [scene("turn-01", "실내 랙 통로 회전", "tYYNdqPooMI", 3.04), scene("accidents-01", "야외 통로 보행자", "lSGMB3h41ug", 12.2)];
@@ -109,7 +109,8 @@ test("scene devices are grouped by source clip with title and length; replays an
   const view = sourceView(cams[3], scenes);
   assert.equal(view.kind, "녹화 영상 · 실시간 분석 가능");
   assert.deepEqual(Object.fromEntries(view.details), {
-    "원본 영상": "https://www.youtube.com/watch?v=tYYNdqPooMI", "원본 구간": "원본 30 fps 프레임 3–93 · 0.10–3.13초", "재생": "3초 반복 · 24 fps" });
+    "원본 영상": "https://www.youtube.com/watch?v=tYYNdqPooMI", "원본 구간": "원본 30 fps 프레임 3–93 · 0.10–3.13초", "재생": "3초 반복 · 24 fps",
+    "해상도": "재생 영상 640×480 · Mapper 분석 프레임은 640×640 이내로 축소" });
   assert.equal(sourceView(cams[0], scenes).kind, "카메라");
   assert.equal(sourceView(cams[1], scenes).kind, "녹화 영상 반복 재생");
   assert.equal(replayLabel(cams[3], scenes), "지게차 급회전 · 실내 랙 통로 회전 · 녹화 장면 반복 재생");
@@ -126,15 +127,16 @@ test("a fresh page selects the first online scene in catalog order, else an onli
   assert.equal(defaultSource([], scenes), null);
 });
 
-test("the bundled scene catalog names eight scenes in two clip groups, each with its own device source", () => {
-  assert.equal(SCENES.length, 8);
-  assert.equal(new Set(SCENES.map((s) => s.sourceName)).size, 8);
+test("the bundled scene catalog names ten scenes in three clip groups, HSE accidents first, each with its own device source", () => {
+  assert.equal(SCENES.length, 10);
+  assert.equal(new Set(SCENES.map((s) => s.sourceName)).size, 10);
   const groups = sourceGroups(SCENES.map((s) => device(`dev-${s.id}`, s.sourceName)));
-  assert.deepEqual(groups.map((g) => [g.label, g.items.length]), [["녹화 장면 · 지게차 급회전", 5], ["녹화 장면 · 지게차 사고 CCTV", 3]]);
+  assert.deepEqual(groups.map((g) => [g.label, g.items.length]), [
+    ["녹화 장면 · HSE 실제 사고", 2], ["녹화 장면 · 지게차 급회전", 5], ["녹화 장면 · 지게차 사고 CCTV", 3]]);
   for (const s of SCENES) {
     assert.ok(s.title && s.durationSeconds > 0 && s.fps === 24 && s.endFrame > s.startFrame, s.id);
     assert.match(s.sourceUrl, /^https:\/\/www\.youtube\.com\//);
-    assert.equal(s.sourceFps, 30, s.id);
+    assert.deepEqual([s.sourceFps, s.width, s.height], s.id.startsWith("hse-") ? [25, 1920, 1080] : [30, 640, 480], s.id);
   }
 });
 

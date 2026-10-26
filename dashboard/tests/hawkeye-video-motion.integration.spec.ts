@@ -60,7 +60,8 @@ const SCENES: { id: string; title: string; sourceName: string; deviceName: strin
   JSON.parse(readFileSync(`${process.cwd()}/../hawkeye-runtime/video-replay/scenes.json`, "utf8")).scenes;
 const sceneCamera = (s: (typeof SCENES)[number], n: number) => ({ ...camera, id: s.deviceName, uid: `5c000000-0000-4000-8000-00000000000${n}`,
   targetNode: "etri-dev0008-raspi5", profile: { ...camera.profile, name: s.deviceName, protocolConfig: { path: s.rtspPath }, sourceName: s.sourceName } });
-const scenes = [SCENES[0], SCENES.find((s) => s.sourceVideoId !== SCENES[0].sourceVideoId)!].map(sceneCamera);
+// The first scene of the catalog (an HSE accident) and the first scene of another clip group.
+const scenes = [SCENES[0], SCENES.find((s) => !s.id.startsWith("hse-"))!].map(sceneCamera);
 
 function api(page: Page) {
   const state = {
@@ -370,10 +371,10 @@ test("choosing another scene shows that source's preview, not a stored session's
   const state = api(page);
   state.stored = true;
   // A plain load does not reopen the newest stored session; it previews the first online scene of the catalog.
-  const [turn, accident] = scenes, title = (id: string) => SCENES.find((s) => s.deviceName === id)!.title;
+  const [first, second] = scenes, title = (id: string) => SCENES.find((s) => s.deviceName === id)!.title;
   await page.goto("/ui/main/scenarios/hawkeye");
   await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
-  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+  await expect(page.getByAltText(`${first.id} 최신 영상`)).toBeVisible();
   await expect(page.locator(".hv-camera")).toContainText("녹화 영상 · 실시간 분석 가능");
   await expect(page.getByRole("button", { name: "구간 기록" })).toHaveCount(0);
   await expect(page.locator(".hv-history")).toContainText(camera.id);
@@ -383,37 +384,37 @@ test("choosing another scene shows that source's preview, not a stored session's
   await expect(page.locator(".hv-stage [data-track]").first()).toBeVisible();
 
   await page.locator(".kel-form-item").filter({ has: page.getByRole("combobox", { name: "카메라" }) }).locator(".kel-select").click();
+  await expect(page.getByText("녹화 장면 · HSE 실제 사고", { exact: true })).toBeVisible();
   await expect(page.getByText("녹화 장면 · 지게차 급회전", { exact: true })).toBeVisible();
-  await expect(page.getByText("녹화 장면 · 지게차 사고 CCTV", { exact: true })).toBeVisible();
-  await expect(page.getByRole("option", { name: new RegExp(`^${title(accident.id)} · [0-9.]+초 · 연결됨$`) })).toBeVisible();
-  await page.getByRole("option", { name: new RegExp(`^${title(turn.id)} · `) }).click();
+  await expect(page.getByRole("option", { name: new RegExp(`^${title(second.id)} · [0-9.]+초 · 연결됨$`) })).toBeVisible();
+  await page.getByRole("option", { name: new RegExp(`^${title(first.id)} · `) }).click();
   await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
-  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+  await expect(page.getByAltText(`${first.id} 최신 영상`)).toBeVisible();
   await expect(page.getByRole("button", { name: "구간 기록" })).toHaveCount(0);
   await expect(page.locator(".hv-session")).toHaveCount(0);
   await expect(page.locator(".hv-stage [data-track]")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "충돌 위험 예측" })).toHaveCount(0);
   await expect(page).not.toHaveURL(/session=/);
   await expect(page.locator(".hv-camera")).toContainText("녹화 영상 · 실시간 분석 가능");
-  await expect(page.locator(".hv-camera")).toContainText(title(turn.id));
+  await expect(page.locator(".hv-camera")).toContainText(title(first.id));
   await expect(page.getByText(/10초 구간은 관측 기록을 저장하는 단위입니다/)).toBeVisible();
   // The 10 s refresh must not bring the stored session back.
   await page.waitForTimeout(11000);
-  await expect(page.getByAltText(`${turn.id} 최신 영상`)).toBeVisible();
+  await expect(page.getByAltText(`${first.id} 최신 영상`)).toBeVisible();
 
   // Browsing a stored record still works and names its own source.
   await page.locator(".hv-history").getByRole("button").first().click();
   await expect(page.getByRole("heading", { name: "구간 1 관측 기록" })).toBeVisible();
   await expect(page.locator(".hv-camera")).toContainText("녹화 영상 반복 재생");
   await page.locator(".kel-form-item").filter({ has: page.getByRole("combobox", { name: "카메라" }) }).locator(".kel-select").click();
-  await page.getByRole("option", { name: new RegExp(`^${title(turn.id)} · `) }).click();
+  await page.getByRole("option", { name: new RegExp(`^${title(first.id)} · `) }).click();
   await expect(page.getByTestId("stage-badge")).toHaveText("카메라 미리보기");
 
   await page.getByRole("button", { name: "점검 시작" }).click();
   await expect(page.getByRole("button", { name: "실시간 관측" })).toHaveAttribute("aria-pressed", "true");
-  expect(state.starts).toEqual([{ workflowVersionId: V2, camera: { id: turn.id, uid: turn.uid } }]);
+  expect(state.starts).toEqual([{ workflowVersionId: V2, camera: { id: first.id, uid: first.uid } }]);
   await expect(page.getByTestId("stage-badge")).toHaveText("실시간");
-  await expect(page.locator(".hv-summary")).toContainText(turn.id);
+  await expect(page.locator(".hv-summary")).toContainText(first.id);
   expect(await noOverflow(page)).toBe(true);
   expect(errors).toEqual([]);
 });

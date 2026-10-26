@@ -211,6 +211,9 @@ export type Scene = {
   endFrame: number;
   fps: number;
   durationSeconds: number;
+  /** Size of the replayed clip; the Mapper downsizes decoded frames to fit 640×640 before analysis. */
+  width: number;
+  height: number;
   /** Original clip page and frame rate (startFrame/endFrame count its frames), from the catalog's sources. */
   sourceUrl: string;
   sourceFps: number;
@@ -218,6 +221,7 @@ export type Scene = {
 const SOURCES: Record<string, { url: string; fps: number }> = catalog.sources;
 export const SCENES: Scene[] = catalog.scenes.map((s: Omit<Scene, "sourceUrl" | "sourceFps">) => ({ ...s, sourceUrl: SOURCES[s.sourceVideoId].url, sourceFps: SOURCES[s.sourceVideoId].fps }));
 const SCENE_GROUPS: [string, string][] = [
+  ["hse-", "HSE 실제 사고"],
   ["turn-", "지게차 급회전"],
   ["accidents-", "지게차 사고 CCTV"],
 ];
@@ -248,6 +252,7 @@ export function sourceView(c: Pick<Camera, "id" | "profile">, scenes = SCENES) {
           `원본 ${scene.sourceFps} fps 프레임 ${scene.startFrame}–${scene.endFrame - 1} · ${(scene.startFrame / scene.sourceFps).toFixed(2)}–${(scene.endFrame / scene.sourceFps).toFixed(2)}초`,
         ],
         ["재생", `${seconds(scene.durationSeconds)} 반복 · ${scene.fps} fps`],
+        ["해상도", `재생 영상 ${scene.width}×${scene.height} · Mapper 분석 프레임은 640×640 이내로 축소`],
       ] as [string, string][],
     };
   const replay = REPLAY_LABELS.get(c.profile.sourceName ?? "");

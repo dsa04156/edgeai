@@ -1,12 +1,14 @@
 # Forklift video replay
 
-These inputs are repeating recordings, not live factory cameras. The image serves three RTSP paths kept for existing registrations, and eight single-scene paths:
+These inputs are repeating recordings, not live factory cameras. The image serves three RTSP paths kept for existing registrations, and ten single-scene paths:
 
 | Path | Clip | Device registration |
 |---|---|---|
 | `/forklift-replay` | dataset clip `3_te1.mp4` (below), unchanged | `source.json` |
 | `/forklift-turn` | YouTube `tYYNdqPooMI`, converted | `source-turn.json` |
 | `/forklift-accidents` | YouTube `lSGMB3h41ug`, real CCTV parts only, converted | `source-accidents.json` |
+| `/forklift-scene-hse-blackpool` | `hse-blackpool` 블랙풀 의류업체 야외 적치장 지게차–배송기사 충돌 (HSE `ckeK0dtgGFU` frames `[0,647)`, whole video) | `source-scene-hse-blackpool.json` |
+| `/forklift-scene-hse-leggett` | `hse-leggett` 반즐리 창고 탑승형 팔레트 트럭–지게차 충돌 (HSE `3xqg5JccPeI` frames `[0,722)`) | `source-scene-hse-leggett.json` |
 | `/forklift-scene-turn-01` | `turn-01` 실내 자재 랙 통로 지게차 회전·작업자 (`tYYNdqPooMI` frames `[3,94)`) | `source-scene-turn-01.json` |
 | `/forklift-scene-turn-02` | `turn-02` 목재 야적장 적재 지게차 회전·전도 (`tYYNdqPooMI` frames `[94,219)`) | `source-scene-turn-02.json` |
 | `/forklift-scene-turn-03` | `turn-03` 야외 하역장 마스트 올린 지게차 회전·전도 (`tYYNdqPooMI` frames `[219,366)`) | `source-scene-turn-03.json` |
@@ -59,17 +61,41 @@ prepared files in `output/hawkeye-youtube/` and checks their SHA-256; it fails i
 Camera cuts and the loop wrap are new scenes: the motion observer restarts tracking there (reset `SCENE_CUT`), so no track or
 velocity spans two views.
 
+## HSE accident scenes `hse-blackpool` and `hse-leggett`
+
+Both are actual workplace accidents published by the UK Health and Safety Executive (HSE) on YouTube. No open licence or
+redistribution permission was confirmed. They are used for this lab replay only, are not committed to Git, and keep their source attribution; the CC BY 4.0 notice above does not apply to them. The
+files are HSE's edited publications, not unedited camera recordings: HSE's logo, captions and highlighting are drawn into
+the picture and are kept. The published 1920×1080 rendition is soft and compressed; it does not carry 1080p camera detail.
+
+- `hse-blackpool`: “Blackpool clothing company fined after worker hit by forklift truck”, https://www.youtube.com/watch?v=ckeK0dtgGFU.
+  HSE: a delivery driver was hit by a forklift truck at T.Print, Blackpool, on 2022-03-25 (forklift–pedestrian collision).
+  Downloaded file 1920×1080, 25 fps, 25.88 s, 647 frames, SHA-256 `4ad279ed188efee3afb0c6062cc992702a437386f46ab7122f5f1e3154bf36cd`.
+  The whole video is one CCTV view without a title card or outro, so all frames are used.
+- `hse-leggett`: HSE video linked from its press release of 2026-10-23 (Leggett & Platt Components Europe Ltd, Barnsley),
+  https://www.youtube.com/watch?v=3xqg5JccPeI. On 2024-11-14 a worker riding a pallet truck collided with the side of a
+  forklift. This is a vehicle–vehicle collision with a riding worker, **not** a pedestrian struck by a forklift.
+  Downloaded file 1920×1080, 25 fps, 31.8 s, 795 frames, SHA-256 `db0ffe0c279ed115c89d566c54b654f5088a93c6e165a79d297c7e3eb360eb02`.
+  Frames 722-794 (white wipe and HSE logo outro) are cut; the fade-in from black and the captioned lead-in are kept.
+
+The scene list in `scenes.json` records the overlays left in each clip. These clips keep the 1920×1080 size of the
+download (`fps=24`, `scale=1920:1080`, same encoding as below); the Mapper still downsizes decoded frames to fit 640×640 for
+preview and inference. No mask, box, prediction or collision label is added. The UI shows only the model's output, which can
+be `UNKNOWN` or `NO_PAIR` where the vehicles or the worker are occluded or too small to detect.
+
 ## Single-scene paths `/forklift-scene-<id>`
 
-`scenes.json` is the catalog of the eight scenes: Korean title, source video, half-open source frame range at 30 fps, the
-trim reason, the masked rectangles, source overlays that remain, RTSP path, registration names (`hawkeye-scene-<id>`,
-source `hawkeye-scene-<id>-replay`), and the frame count and SHA-256 of each prepared clip. The scenes come from the same two
+`scenes.json` is the catalog of the ten scenes (the two HSE scenes above come first): Korean title, source video,
+half-open source frame range at the source's frame rate (30 fps for TEKNECT Global, 25 fps for HSE), the
+trim reason, the masked rectangles, source overlays that remain, output size, RTSP path, registration names (`hawkeye-scene-<id>`,
+source `hawkeye-scene-<id>-replay`), and the frame count and SHA-256 of each prepared clip. The other eight scenes come from the same two
 TEKNECT Global videos, so the licence statement above applies to them as well, and the clips are not committed to Git.
 
-Each scene is one camera view between hard cuts, so each path loops a single view. `prepare-scenes.py` cuts them from the
+Each scene is one camera view between hard cuts, so each path loops a single view (`hse-leggett` keeps HSE's zoom edits of that view). `prepare-scenes.py` cuts them from the
 original files (whose SHA-256 it checks) into `output/hawkeye-scenes/`: select the frame range, `delogo` the listed
-rectangles in source pixels, `fps=24`, `scale=640:480`, then the encoding above (`-threads 4`, no metadata, so a rerun on
-the same ffmpeg reproduces the digests; `--record` writes new digests after a deliberate recipe change). The picture is not
+rectangles in source pixels, `fps=24`, `scale=640:480` (the scene's own size, 1920:1080 for the HSE scenes), then the encoding above (`-threads 4`, no metadata, so a rerun on
+the same ffmpeg reproduces the digests; `--record` writes new digests after a deliberate recipe change; scene ids after the
+options limit the run to those scenes, e.g. `prepare-scenes.py hse-blackpool hse-leggett`). The picture is not
 cropped, so forklifts and people at the image edges stay in view.
 
 - Title, promotional title cards, and transitions are removed by the frame ranges (title frames 0-2 of `tYYNdqPooMI`,

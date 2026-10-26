@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Cut the scene clips listed in scenes.json from the original YouTube files.
+"""Cut the scene clips listed in scenes.json from the original source files.
 
 Run from anywhere: `prepare-scenes.py` renders every scene into output/hawkeye-scenes/ and checks the
 result against the digests in scenes.json; `prepare-scenes.py --record` writes the new frame counts and
-digests into scenes.json instead (after a deliberate change of a scene's recipe).
+digests into scenes.json instead (after a deliberate change of a scene's recipe). Scene ids after the
+options limit the run to those scenes, so adding a scene does not re-render the others.
 """
 import hashlib
 import json
@@ -26,10 +27,11 @@ def sha256(path):
 
 def video_filter(scene, output):
     # Frame ranges are half-open source frame numbers; delogo works in source pixels before scaling.
+    # Each scene names its own output size (the catalog-wide size is the default).
     parts = [f"between(n,{start},{end - 1})" for start, end in scene["frameRanges"]]
     chain = [f"select='{'+'.join(parts)}'", "setpts=N/FRAME_RATE/TB"]
     chain += [f"delogo=x={box['x']}:y={box['y']}:w={box['w']}:h={box['h']}" for box in scene["preprocess"]["delogo"]]
-    chain += [f"fps={output['fps']}", f"scale={output['width']}:{output['height']}"]
+    chain += [f"fps={output['fps']}", f"scale={scene.get('width', output['width'])}:{scene.get('height', output['height'])}"]
     return ",".join(chain)
 
 
@@ -42,18 +44,22 @@ def count_frames(path):
 
 
 def main():
-    record = sys.argv[1:] == ["--record"]
-    if sys.argv[1:] not in ([], ["--record"]):
-        sys.exit("usage: prepare-scenes.py [--record]")
+    args = sys.argv[1:]
+    record = args[:1] == ["--record"]
+    selected = set(args[1:] if record else args)
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    if selected - {scene["id"] for scene in catalog["scenes"]}:
+        sys.exit("usage: prepare-scenes.py [--record] [scene-id ...]")
+    scenes = [scene for scene in catalog["scenes"] if not selected or scene["id"] in selected]
     output = catalog["output"]
     out_dir = ROOT / output["directory"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    for name, source in catalog["sources"].items():
+    for name in sorted({scene["source"] for scene in scenes}):
+        source = catalog["sources"][name]
         if sha256(ROOT / source["file"]) != source["sha256"]:
             sys.exit(f"source {name} does not match its SHA-256: {source['file']}")
     mismatches = []
-    for scene in catalog["scenes"]:
+    for scene in scenes:
         source = catalog["sources"][scene["source"]]
         target = out_dir / scene["file"]
         subprocess.run(

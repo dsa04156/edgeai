@@ -8,6 +8,24 @@
     "codec": "h264 baseline, crf 18, preset fast, yuv420p, +faststart, no audio"
   },
   "sources": {
+    "ckeK0dtgGFU": {
+      "url": "https://www.youtube.com/watch?v=ckeK0dtgGFU",
+      "file": "output/scenario-video-research/collision/hse-blackpool-1080p.mp4",
+      "sha256": "4ad279ed188efee3afb0c6062cc992702a437386f46ab7122f5f1e3154bf36cd",
+      "width": 1920,
+      "height": 1080,
+      "fps": 25,
+      "frames": 647
+    },
+    "3xqg5JccPeI": {
+      "url": "https://www.youtube.com/watch?v=3xqg5JccPeI",
+      "file": "output/scenario-video-research/collision/hse-leggett-1080p-original.mp4",
+      "sha256": "db0ffe0c279ed115c89d566c54b654f5088a93c6e165a79d297c7e3eb360eb02",
+      "width": 1920,
+      "height": 1080,
+      "fps": 25,
+      "frames": 795
+    },
     "tYYNdqPooMI": {
       "url": "https://www.youtube.com/watch?v=tYYNdqPooMI",
       "file": "output/hawkeye-youtube/tYYNdqPooMI.mp4",
@@ -28,6 +46,78 @@
     }
   },
   "scenes": [
+    {
+      "id": "hse-blackpool",
+      "title": "블랙풀 의류업체 야외 적치장 지게차–배송기사 충돌",
+      "sourceVideoId": "ckeK0dtgGFU",
+      "startFrame": 0,
+      "endFrame": 647,
+      "fps": 24,
+      "durationSeconds": 25.875,
+      "file": "hse-blackpool.mp4",
+      "sha256": "fda295e950616adb879fa85f31daadfb0196ae8d4bc35f5fcbfc107ce673ba10",
+      "frames": 621,
+      "width": 1920,
+      "height": 1080,
+      "crop": null,
+      "source": "ckeK0dtgGFU",
+      "frameRanges": [
+        [
+          0,
+          647
+        ]
+      ],
+      "preprocess": {
+        "trim": "none: the whole HSE video is one continuous CCTV view without a title card or outro",
+        "delogo": []
+      },
+      "sourceOverlays": [
+        "HSE logo at the top right throughout",
+        "from about source frame 40 (1.6 s) HSE darkens everything outside the area of the incident; the darkening is in the published picture",
+        "the published 1080p picture is soft and strongly compressed; it does not carry 1080p CCTV detail"
+      ],
+      "rtspPath": "/forklift-scene-hse-blackpool",
+      "deviceName": "hawkeye-scene-hse-blackpool",
+      "sourceName": "hawkeye-scene-hse-blackpool-replay",
+      "targetNode": "etri-dev0003-raspi5"
+    },
+    {
+      "id": "hse-leggett",
+      "title": "반즐리 창고 탑승형 팔레트 트럭–지게차 충돌",
+      "sourceVideoId": "3xqg5JccPeI",
+      "startFrame": 0,
+      "endFrame": 722,
+      "fps": 24,
+      "durationSeconds": 28.875,
+      "file": "hse-leggett.mp4",
+      "sha256": "de9b1170a3e7134b96c46c5a575e2bb0cb7197880e8335974972ae0088d9396e",
+      "frames": 693,
+      "width": 1920,
+      "height": 1080,
+      "crop": null,
+      "source": "3xqg5JccPeI",
+      "frameRanges": [
+        [
+          0,
+          722
+        ]
+      ],
+      "preprocess": {
+        "trim": "frames 722-794 are a white wipe and the HSE logo outro; the fade-in from black (frames 0-7) and the captioned lead-in are kept",
+        "delogo": []
+      },
+      "sourceOverlays": [
+        "magenta HSE caption boxes over the bottom left for most of the clip",
+        "a white circle marking the worker (about source seconds 3.5-4.5)",
+        "HSE pause and zoom-in edits of the same camera; each cut restarts tracking like a scene cut",
+        "the CCTV clock and 'Logistics 1' camera label are original",
+        "the collision is between a forklift and a worker riding a pallet truck, not a pedestrian; the zoomed parts are soft"
+      ],
+      "rtspPath": "/forklift-scene-hse-leggett",
+      "deviceName": "hawkeye-scene-hse-leggett",
+      "sourceName": "hawkeye-scene-hse-leggett-replay",
+      "targetNode": "etri-dev0003-raspi5"
+    },
     {
       "id": "turn-01",
       "title": "실내 자재 랙 통로 지게차 회전·작업자",

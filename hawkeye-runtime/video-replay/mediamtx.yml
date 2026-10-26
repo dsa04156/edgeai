@@ -15,6 +15,12 @@ paths:
   forklift-accidents:
     runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/forklift-accidents.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-accidents
     runOnInitRestart: yes
+  forklift-scene-hse-blackpool:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/hse-blackpool.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-hse-blackpool
+    runOnInitRestart: yes
+  forklift-scene-hse-leggett:
+    runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/hse-leggett.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-hse-leggett
+    runOnInitRestart: yes
   forklift-scene-turn-01:
     runOnInit: ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i /media/scenes/turn-01.mp4 -map 0:v:0 -c:v copy -an -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/forklift-scene-turn-01
     runOnInitRestart: yes

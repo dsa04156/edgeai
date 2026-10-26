@@ -178,8 +178,14 @@ bash hawkeye-runtime/prepare-forklift-base.sh --push 10.254.192.47:5000/edgeai/f
 HAWKEYE_MOTION_BASE=10.254.192.47:5000/edgeai/forklift-base@sha256:<digest> \
   BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh motion --push 10.254.192.47:5000/edgeai/hawkeye-motion:<tag>
 BUILDX_BUILDER=edgeai-kube-arm64-rootless bash hawkeye-runtime/build.sh workflow --push 10.254.192.47:5000/edgeai/hawkeye-workflow:<tag>
-bash hawkeye-runtime/video-replay/build.sh 10.254.192.47:5000/edgeai/hawkeye-video-replay:<tag>                 # 3_te1 + 준비된 YouTube 2개
+python3 -I hawkeye-runtime/video-replay/prepare-scenes.py hse-blackpool hse-leggett                         # 장면 클립(지정한 장면만), scenes.json digest 대조
+bash hawkeye-runtime/video-replay/build.sh 10.254.192.47:5000/edgeai/hawkeye-video-replay:<tag>                 # 3_te1 + 준비된 YouTube 2개 + 장면 10개
 ```
+
+장면 경로 `/forklift-scene-<id>`는 `video-replay/scenes.json` 순서로 영상 원본 선택기에 나온다. 맨 앞 두 개는 영국 HSE가 공개한 실제 사고 CCTV다:
+`hse-blackpool`(지게차–보행자(배송기사) 충돌, 원본 전체)과 `hse-leggett`(탑승형 팔레트 트럭–지게차 충돌, 보행자 충돌 아님, HSE 로고 outro 제외).
+두 클립은 HSE 공개본의 1920×1080을 유지해 24fps로만 변환했고 HSE 로고·자막·강조 표시가 화면에 남아 있다. 공개본 자체가 흐리고 압축이 강하다.
+Mapper는 다른 원본과 같이 640×640 이내로 줄여 분석하며, 가림·저해상도 때문에 `UNKNOWN`·`NO_PAIR`가 나올 수 있다. 출처·편집 내역은 `video-replay/NOTICE.md`.
 
 digest를 `components/hawkeye-motion/kustomization.yaml`(`PIN_AFTER_BUILD`), `hawkeye-video-safety-v2.1.json`의 profile image(`pin-digest-after-build`),
 `components/hawkeye-video-replay/replay.yaml`에 고정한 뒤 배포하고 `python3 -I hawkeye-runtime/workflow/publish.py hawkeye-runtime/workflow/hawkeye-video-safety-v2.1.json`으로
