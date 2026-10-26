@@ -218,3 +218,14 @@ EDGEAI_DASHBOARD_PORT=<port> npx playwright test --config dashboard/playwright.p
 - 약 45초 관측: Blackpool 분석 17.26fps / 브라우저 표시 17.17fps, Leggett 분석 22.16fps / 표시 21.29fps. RTSP 원본은 1920×1080·24fps, 분석·표시는 640×360이다. Leggett에서 `NEAR_PATH`·`APPROACHING`이 관측됐으나 사고 탐지 정확도 검증을 뜻하지 않는다.
 - 근거: 로컬 `output/verification/hawkeye-hse/live-hawkeye-scene-hse-*/`의 세션·Run·프레임 관측·측정값·스크린샷. 단위 시험 11개, 관련 Playwright 10개(데스크톱/모바일), typecheck, 변경 파일 lint, release 빌드 통과.
 - 웹 이미지는 CI `40275245642`의 검증된 dashboard digest만 반영한다. 영상 카탈로그 변경과 무관한 API·Runner·MinIO·InfluxDB의 운영 이미지는 유지한다.
+
+### 2026-10-26 관측 서비스 검출 임계값 0.30
+
+- 증상: 두 HSE 영상에서 추적이 한 프레임씩 끊겼다 이어졌다(실시간 기록 Blackpool 44회, Leggett 42회). 관측 서비스가 `WarehouseDetector` 기본 임계값 0.5로
+  박스를 버려, ByteTrack(supervision 0.27.0)이 기존 추적을 잇는 데 쓰는 0.45 미만 박스가 추적기에 닿지 않았다.
+- 변경: 관측 서비스만 `edgeai_hawkeye_motion.detector.THRESHOLD = 0.3`으로 엔진을 만든다(`/health`·세션의 모델 identity `threshold`에 표시).
+  `WarehouseDetector` 기본값(0.5)과 ByteTrack 활성화 0.45·새 ID 0.55는 그대로라 약한 박스는 기존 추적만 잇고 새 ID를 만들지 않는다.
+  박스가 없는 프레임은 여전히 `visible:false`·`UNKNOWN(TRACK_LOST)`이며 시간 공백·`SCENE_CUT` 재시작도 그대로다.
+- 근거(같은 TensorRT engine, 640×360 24 fps 1,314프레임 오프라인 재생): 끊김 46→7 / 30→1, ID 수 Blackpool 그대로·Leggett 사람 6→5, 0.5 미만 박스만으로 이어진
+  최장 구간 9/14프레임. 0.15 이하는 39–69프레임까지 늘고 과대 박스가 유지돼 0.30을 골랐다. 정확도 평가가 아니다.
+  로컬 `output/verification/hawkeye-tracking/`(Git 제외), 회귀 시험 `hawkeye-runtime/motion/tests/test_detector.py`.

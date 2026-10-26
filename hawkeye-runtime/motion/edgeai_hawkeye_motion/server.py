@@ -183,13 +183,18 @@ def make_handler(service):
     return Handler
 
 
-def main():
+def make_detector():
     from forklift_detector import WarehouseDetector  # TensorRT engine of the base image (hawkeye-runtime/forklift_detector.py)
 
-    from .detector import Detector
+    from .detector import THRESHOLD, Detector
 
-    engine = WarehouseDetector(os.environ["EDGEAI_FORKLIFT_MODEL"], threads=int(os.environ.get("HAWKEYE_MOTION_THREADS", "4")))
-    service = Service(Detector(engine), os.environ.get("NODE_NAME", ""), os.environ.get("POD_NAME", ""), os.environ.get("POD_UID", ""))
+    engine = WarehouseDetector(os.environ["EDGEAI_FORKLIFT_MODEL"], threads=int(os.environ.get("HAWKEYE_MOTION_THREADS", "4")),
+                               threshold=THRESHOLD)
+    return Detector(engine)
+
+
+def main():
+    service = Service(make_detector(), os.environ.get("NODE_NAME", ""), os.environ.get("POD_NAME", ""), os.environ.get("POD_UID", ""))
     threading.Thread(target=service.warm_up, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), make_handler(service)).serve_forever()
 

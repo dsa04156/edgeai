@@ -7,7 +7,7 @@ resources:
 images:
   - name: edgeai-hawkeye-motion
     newName: 10.254.192.47:5000/edgeai/hawkeye-motion
-    digest: sha256:fd1fc399b32f7d97ab84dfec487c13f464dc9babae50ec89cef7e3c17412d22a
+    digest: sha256:7221d656ca2b6d81f4fa1ecdd34e30942f43c19e47601882a4b599d6cf6f55a4
 patches:
   - target: {kind: Deployment, name: edgeai-api}
     patch: |-

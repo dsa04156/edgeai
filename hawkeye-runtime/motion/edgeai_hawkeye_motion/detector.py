@@ -6,6 +6,14 @@ boxes in image pixels; its identity names the provider, model and engine digests
 
 from .motion import CLASSES, Detection
 
+# Confidence from which the observation service's engine reports boxes to Motion (WarehouseDetector keeps its
+# default 0.5 for other callers). ByteTrack uses boxes below its activation threshold (0.45) only to continue tracks it
+# already follows; a new ID still needs 0.55, so this admits weak boxes of established tracks without new IDs.
+# At 0.5 the 2026-10-26 HSE replays lost a track for single frames 46 and 30 times; 0.30 is the measured knee
+# (7 and 1) where no track is kept visible by sub-0.5 boxes for more than 14 frames
+# (output/verification/hawkeye-tracking). A frame without any box still leaves the track lost.
+THRESHOLD = 0.3
+
 
 class Detector:
     def __init__(self, engine):
