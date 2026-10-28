@@ -1,0 +1,1 @@
+{"pod": "c10-n1-00", "model": "Qwen2.5-0.5B-Instruct", "prompt_tokens": 70, "new_tokens": 64, "requests": 159, "start": 1793163956.0292711, "elapsed_s": 60.26, "p50_ms": 377.9, "p95_ms": 385.7, "p99_ms": 389.1, "req_per_s": 2.638, "tokens_per_s": 168.9, "torch_max_alloc_mib": 964.4, "torch_max_reserved_mib": 1018.0, "nvidia_smi_in_pod_used_total_mib": "1287, 1536"}

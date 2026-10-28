@@ -1,0 +1,25 @@
+# helm install hami hami-charts/hami --version 2.10.0 -n hami-system --create-namespace -f hami-values.yaml
+# 기존 nvidia-device-plugin(nvidia.com/gpu)과 겹치지 않도록 HAMi vGPU 리소스 이름을 분리하고,
+# 대상 노드(라벨 hami.io/vgpu-node=on)와 webhook 적용 네임스페이스(라벨 hami.io/webhook=enabled)를 한정한다.
+resourceName: "hami.io/vgpu"
+resourceMem: "nvidia.com/gpumem"
+resourceCores: "nvidia.com/gpucores"
+scheduler:
+  nodeSelector:
+    kubernetes.io/hostname: etri-ser0002-cgnmsb
+  patch:
+    nodeSelector:
+      kubernetes.io/hostname: etri-ser0002-cgnmsb
+  kubeScheduler:
+    image:
+      registry: "registry.k8s.io"
+      repository: "kube-scheduler"
+      tag: "v1.31.14"
+  admissionWebhook:
+    namespaceSelector:
+      matchLabels:
+        hami.io/webhook: enabled
+devicePlugin:
+  nvidiaNodeSelector:
+    hami.io/vgpu-node: "on"
+  deviceSplitCount: 10
