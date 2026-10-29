@@ -39,6 +39,7 @@
 | 웹 `/api/health`, `/ui/main/{scheduling-profiles,workflows,dashboards/default}`, `/api/control-plane/{workflows,nodes,workflow-runs,workflow-csrf}` | 200 |
 | 웹 `GET /api/control-plane/scheduling-profiles/{임의 UUID}` | 404 `SCHEDULING_PROFILE_NOT_FOUND` |
 | 브라우저 desktop | 사이드바 `성능 프로파일`이 `실행 · 작업 · 결과` 아래에 표시됨. 클릭하면 경로로 이동. 워크플로·DAG 버전 선택, 프로파일 ID 입력과 열기 버튼 표시 |
+| 브라우저 desktop, 실제 버전 선택 | 로드 후 `창고 지게차 영상 안전 점검 · hawkeye-video-safety`의 `1.0.0`(SERVICE BATCH, `capture → infer`)을 선택했습니다. 버전 ID `1c2ed420…`, 작업 2개와 포트(`capture` 출력 frames, `infer` 입력 frames·출력 detections)가 표시되고, 작업별 측정 노드 선택에 운영 노드 236개가 나왔습니다. 노드는 고르지 않았고 등록하지 않았습니다. JS 오류는 없었습니다 |
 | 브라우저 mobile | 같은 선택 요소 표시. 워크플로 목록에 운영 워크플로 449개 |
 | 쓰기 요청, 페이지 오류, 5xx | 0 (GET 외 요청은 차단하도록 하고 확인) |
 
