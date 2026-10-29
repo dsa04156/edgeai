@@ -74,6 +74,15 @@ patches:
                       secretKeyRef: {name: edgeai-console-platform, key: token}
                 ports:
                   - {name: http, containerPort: 13080, hostPort: 13080}
+# Stopped by user request on 2026-10-29 to free their GPUs; restore by removing this block
+# (previous desired replicas: 1 each).
+replicas:
+  - name: edgeai-hawkeye-motion
+    count: 0
+  - name: edgeai-scenario-gpu
+    count: 0
+  - name: edgeai-gpu-inference
+    count: 0
 images:
   - name: ghcr.io/dsa04156/edgeai-api
     digest: sha256:7f30dbb9654128576a0323c4b072f5f23fb228a24cd29571a2f1afc42d96da37
