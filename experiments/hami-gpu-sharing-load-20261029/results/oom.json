@@ -1,0 +1,26 @@
+{
+ "hog_log": "[HAMI-core ERROR (pid:1 thread=135926729114560 allocator.c:52)]: Device 0 OOM 2151677952 / 2147483648\n[HAMI-core ERROR (pid:1 thread=135926729114560 allocator.c:52)]: Device 0 OOM 2151677952 / 2147483648\nRESULT {\"allocated_mib\": 1664, \"error\": \"CUDA out of memory. Tried to allocate 128.00 MiB. GPU 0 has a total capacity of 2.00 GiB of which 124.00 MiB is free. Including non-PyTorch memory, this process has 1.88 GiB memory in use. Of the allocated memory 1.62 GiB is allocated by PyTorch, and 0 bytes is reserved by PyTorch but unallocated. I\"}\n",
+ "hog_status": "{\"terminated\":{\"containerID\":\"containerd://c9a0957af250f35d80cc270432f2877ab7cffb1d6c9acc7465d51b61d509cc75\",\"exitCode\":0,\"finishedAt\":\"2026-10-29T08:44:27Z\",\"reason\":\"Completed\",\"startedAt\":\"2026-10-29T08:43:36Z\"}}",
+ "victim": [
+  {
+   "server": "srv-a",
+   "offered_rps": 51.62820888241994,
+   "planned": 3098,
+   "completed": 3098,
+   "num_prompts": 3098,
+   "duration": 60.35017520503607,
+   "request_throughput": 51.333736637461826,
+   "p50_e2el_ms": 372.2,
+   "p95_e2el_ms": 400.5,
+   "p99_e2el_ms": 419.7,
+   "p95_ttft_ms": 23.4,
+   "errors": {},
+   "rc": [
+    0
+   ],
+   "restarts": "0",
+   "failed": 0
+  }
+ ],
+ "srv_restarts": "0"
+}
