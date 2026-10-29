@@ -71,6 +71,21 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
 - scaffold: `ManagementAuditRoutesTest` 1 실패 → offload-lab 5개 operation의 감사 경로 누락. `5c4f941`에서 그 5개만 추가했고 `test-unit.sh` 251/251.
 - runner-native(amd64·arm64): 두 아키텍처 모두 `runner-container` 103개를 skip 없이 실행했지만 provenance 검사가 96개를 요구. `25209d9`가 `runner/tests/test_offload_lab.py`에 시험 메서드 7개를 추가했고 삭제는 0개임을 diff로 확인해 기대값만 103으로 맞췄습니다(`d32604f`, `stream-mqtt` 118 유지). `scripts/internal/test-runner-images.py` 12/12, 96개는 이제 거절됨을 시험에 추가.
 
+## 검토 1차 수정과 이미지 준비(2026-10-30)
+
+| 항목 | 근거 |
+|---|---|
+| 근거 위조 | `ResourceProfileIntegrationTest`: KRR 177m 인용에 999m `RECOMMENDED`, p95 450000000에 999000000 `MEASURED` 모두 400, 같은 값일 때만 저장·handoff 유지 |
+| 전체 기한 | `ResourceAnalysisDeadlineIntegrationTest`(예산 1초/3초, 0.7초 워크로드·5초 장치 2개·10초 KRR 가짜): 약 2.7초에 201, 장치·KRR `UNAVAILABLE`(시간 한도), 중단된 호출이 interrupt됨, 행은 기한 안에 저장 |
+| stderr 메모리 | bridge 시험: 16 MiB stderr에서 tracemalloc 최대 1 MiB 미만. 같은 시험을 이전 코드에 돌리면 33,621,249 B로 실패 |
+| 분석 잠김·구간 조회 | Playwright: Pod 조회 대기 중 분석 성공·폼 잠김 없음, 168시간 구간에서만 보이는 Job 선택·분석. resource-profile 10/10 + scheduling 8/8(desktop·mobile) |
+| 콘솔 | `test-ui.sh` 147/147, lint·typecheck·release 빌드 |
+| Argo CD | `applications.argoproj.io/edgeai-dev`: Synced·Healthy, revision `3b74f34`, 자동 동기화·selfHeal. API·콘솔은 `10.254.192.47:5000`의 digest(`newName`) |
+| 이미지 빌드 | `edgeai-kube-arm64-rootless`에서 `linux/amd64` OCI 빌드(푸시 없음) 성공: 사용자 `10001:10001`, 기반 13개 layer가 `robustadev/krr:v1.31.1`(amd64 `sha256:10c21651…`)과 동일, 추가 파일은 `/opt/edgeai/krr_bridge.py`(소스와 같은 sha256)뿐 |
+| 실행 확인 | 위 이미지의 Python·bridge를 비root 사용자, 쓰기 금지 rootfs로 실행해 운영 Prometheus에 실제 KRR: `COMPLETED`, 393m / 530,579,456 B, 쓰기는 HOME/TMPDIR(`.cache`·`.config`·보고서)뿐 |
+| 발견·수정한 차단 요인 | 공식 이미지의 `krr version`은 `dev` → CI 검사를 사용자·읽기 전용 rootfs·기반 digest(`krrImage`) 확인으로 교체 |
+| 통합 영향 | 컴포넌트를 켜면 운영 API Deployment에 `EDGEAI_RESOURCE_PROFILING_*` 5개 env만 추가되고 삭제·변경 0, 이미지·볼륨 동일, offload-lab 설정 유지(렌더 결과와 운영 spec 비교) |
+
 ## 남은 범위
 
 - bridge 이미지는 CI에서 아직 발행되지 않았습니다. 발행 후 `enable-resource-profiling.py --digest`로 고정하고 배포는 검토 후 별도로 수행합니다.

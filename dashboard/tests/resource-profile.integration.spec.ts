@@ -199,7 +199,7 @@ test("without measurements the profile is entered manually; invalid ranges are n
   await page.getByLabel("CPU 최소", { exact: true }).fill("NaN");
   await save.click();
   await expect(page.getByRole("alert").filter({ hasText: "CPU 최소값을" })).toBeVisible();
-  expect(posts).toEqual([]);
+  expect([...posts]).toEqual([]);
   await page.getByLabel("CPU 최소", { exact: true }).fill("100m");
   await save.click();
   await expect(page.getByRole("alert").filter({ hasText: "자원 프로파일 저장소를 사용할 수 없습니다." })).toBeVisible();

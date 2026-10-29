@@ -17,7 +17,7 @@
 ## 사용 흐름
 
 1. **서비스 선택** — `실행 모듈`에 발행된 SERVICE key와 불변 버전을 고릅니다. 프로파일은 이 버전 ID에 묶입니다.
-2. **측정 대상·구간** — 서버가 허용한 네임스페이스에서 관측된 워크로드(Deployment·StatefulSet·DaemonSet·Job·CronJob·소유자 없는 Pod)와 컨테이너를 고릅니다. 필요하면 구간의 특정 Pod 실행(이름·UID·노드)으로 좁히고, 외부 실행 ID를 참조로 남깁니다. 기존 Runner는 필요하지 않습니다.
+2. **측정 대상·구간** — 서버가 허용한 네임스페이스에서 **선택한 관측 구간** 동안 관측된 워크로드(Deployment·StatefulSet·DaemonSet·Job·CronJob·소유자 없는 Pod)와 컨테이너를 고릅니다. 구간을 바꾸면 목록을 다시 조회하므로 며칠 전에 끝난 Job도 168시간 구간에서 고를 수 있습니다. 필요하면 구간의 특정 Pod 실행(이름·UID·노드)으로 좁히고, 외부 실행 ID를 참조로 남깁니다. 기존 Runner는 필요하지 않습니다.
 3. **분석** — 구간(5분–14일)의 컨테이너 사용량, 선택한 장치의 관측, KRR 추천(이력 1–336시간)을 한 번에 조회해 불변 분석 결과로 저장합니다.
 4. **확인·수정** — 표에서 실측(최소/평균/p95/최대·상태·표본·최근 시각), KRR 추천(요청/제한·실제 KRR 이력 구간), 확정할 최소·요청·최대를 비교합니다. `p95 사용`·`추천 사용`은 요청값만 채웁니다.
 5. **저장·조회** — 새 revision을 저장하고, 목록에서 revision을 열어 2-1 전달 계약 JSON을 복사·내려받습니다.
@@ -35,7 +35,7 @@
 
 - 소수·문자열·`NaN`·0·음수·순서가 맞지 않는 범위는 400 `INVALID_RESOURCE_PROFILE`이며 저장하지 않습니다. 빈 값을 0으로 채우지 않습니다.
 - 최소는 관측 최솟값이 아니라 실행에 필요한 하한입니다. 최대는 허용 상한이며 컨테이너 limit은 2-1이 정합니다.
-- **근거(basis)** 는 서버가 확인합니다. `MEASURED`는 인용 분석의 해당 자원 실측이 `AVAILABLE`일 때, `RECOMMENDED`는 인용 분석에 KRR 요청값이 있을 때만 허용됩니다. 화면은 확정 요청값이 그 값과 같을 때만 실측·추천으로 표시하고 수정하면 `MANUAL`입니다.
+- **근거(basis)** 는 확정 요청값에 대한 주장이며 서버가 확인합니다. `RECOMMENDED`는 요청값이 인용 분석의 KRR 요청값과, `MEASURED`는 인용 분석의 `AVAILABLE` 실측 p95(정수 올림)와 정확히 같을 때만 허용되고 다르면 400입니다. 화면도 같은 규칙으로 근거를 정하며 수정한 값은 `MANUAL`입니다.
 - 저장 측정 상태: 인용 분석의 CPU·메모리 실측이 모두 `AVAILABLE`이면 `MEASURED`, 하나면 `PARTIAL`, 없거나 분석이 없으면 `UNMEASURED`.
 
 ## 실측과 장치 귀속
@@ -71,7 +71,8 @@
 - KRR `simple` 기본값: CPU 요청=p95, CPU limit 없음, 메모리 요청·limit=최대+15%, 최소 100점 필요, 하한 CPU 10m·메모리 100MB. 실제 설정·버전·인자·보고서 SHA-256·실행 시각을 `provenance`에 보존합니다.
 - 추천 구간은 KRR 실행 시각 기준 `historyHours`입니다. 화면의 측정 구간과 다를 수 있어 둘을 따로 표시합니다. bare Pod는 KRR 지원 대상이 아니어서 `UNSUPPORTED`입니다.
 - bridge 실패·시간 초과(기본 120초)·미구성은 `UNAVAILABLE`과 사유로 반환하며 대체 추천을 만들지 않습니다.
-- 분석 요청의 제한 시간은 단계마다 바깥이 더 깁니다: 장치 조회 예산 40초, bridge KRR 120초 < API의 bridge 대기 130초 < 콘솔 프록시 210초 < 브라우저 220초. 그래서 브라우저가 먼저 끊긴 뒤 분석이 저장되는 경우가 없습니다. API는 외부 조회 동안 DB 트랜잭션을 열지 않습니다.
+- 분석 요청 하나에 기한 하나를 둡니다(기본값, 설정 가능): KRR은 요청 시작부터 병렬로 실행되고(bridge 120초, API의 bridge 대기 130초), 워크로드·장치 Prometheus 조회는 관측 예산 60초를 공유합니다. 예산을 넘긴 조회와 KRR 대기는 중단(interrupt)되어 `UNAVAILABLE`(시간 한도)이 됩니다. KRR 대기는 전체 기한 180초에서 저장 여유(최대 5초)를 뺀 시점까지이고, 문서 저장 직전에 전체 기한을 넘었으면 저장하지 않고 503 `RESOURCE_ANALYSIS_TIMEOUT`을 반환합니다.
+- 이 보장은 Prometheus·KRR 대기와 저장 전 확인에 대한 것입니다. 저장(INSERT) 자체의 소요 시간이나, 브라우저가 연결을 먼저 끊었을 때 서버 작업이 취소되는지는 따로 제한하지 않습니다. 기본값 180초는 콘솔 프록시 대기 210초·브라우저 220초보다 짧게 잡았습니다. API는 외부 조회 동안 DB 트랜잭션을 열지 않습니다.
 
 ## 2-1 전달 계약
 
@@ -110,18 +111,36 @@ HAMi·VPA 설치와 워커 변경은 이 웹 기능 범위가 아니며 이 저�
 | `EDGEAI_RESOURCE_PROFILING_PROMETHEUS_URL` | 비어 있음 | 비어 있으면 실측 `UNAVAILABLE` |
 | `EDGEAI_RESOURCE_PROFILING_KRR_BRIDGE_URL` | 비어 있음 | 비어 있으면 추천 `UNAVAILABLE` |
 | `EDGEAI_RESOURCE_PROFILING_KRR_TIMEOUT_SECONDS` | `130` | bridge 응답 대기(bridge 120초보다 길게) |
+| `EDGEAI_RESOURCE_PROFILING_OBSERVATION_BUDGET_SECONDS` | `60` | 워크로드·장치 Prometheus 조회가 공유하는 예산 |
+| `EDGEAI_RESOURCE_PROFILING_TOTAL_BUDGET_SECONDS` | `180` | 분석 전체 기한(최대 200, 콘솔 프록시 210초보다 짧게) |
 
 bridge(`profiling-bridge/`)는 공식 `robustadev/krr:v1.31.1` 이미지(index digest 고정) 위의 표준 라이브러리 HTTP 서버이며 동시에 한 번만 KRR을 실행합니다. 설정은 `KRR_PROMETHEUS_URL`, `KRR_ALLOWED_NAMESPACES`, `KRR_TIMEOUT_SECONDS`입니다.
 
-1. `.github/workflows/krr-bridge.yml`(main push 또는 수동 실행)이 bridge 단위 시험 → `linux/amd64` 이미지 빌드 → 이미지 안의 KRR `v1.31.1`·`/healthz`·허용 밖 요청 400·Prometheus 미연결 시 추천 없는 `FAILED`를 확인한 뒤 `ghcr.io/dsa04156/edgeai-krr-bridge:sha-<commit>`을 발행하고 digest를 job summary에 남깁니다. 새 GHCR 패키지는 기본 비공개이므로 클러스터가 받을 수 있도록 공개 여부나 pull secret을 확인합니다.
-2. 발행된 digest로 overlay를 고정합니다(파일만 수정, 클러스터 변경 없음).
+- 공식 이미지는 `USER`가 없어(root) 이 이미지는 `10001:10001`로 실행하고 `HOME`·`TMPDIR`를 `/tmp`로 둡니다. KRR은 보고서와 matplotlib·설정 캐시만 쓰므로 읽기 전용 root 파일시스템에 `/tmp` emptyDir만 쓰기 가능하면 됩니다.
+- 공식 이미지 안의 `krr version`은 `dev`를 출력합니다(버전 문자열은 릴리스 바이너리에만 주입). 그래서 bridge는 `krrVersion`과 함께 고정된 기반 이미지 `krrImage`(`robustadev/krr:v1.31.1@sha256:835bf3b6…`)를 응답·추천 provenance(`image`)에 남깁니다.
+- KRR stderr는 64 KiB 단위로 읽고 마지막 8 KiB만 진단용으로 보관합니다.
+
+**이미지 빌드·고정(둘 중 하나).** 둘 다 `FROM`+`COPY`만 있어 에뮬레이션이 필요 없습니다.
+
+1. 클러스터 rootless 빌더(현재 API·콘솔과 같은 경로, 로컬 레지스트리):
 
    ```bash
-   python3 scripts/internal/enable-resource-profiling.py --digest sha256:<발행 digest>
-   kubectl kustomize deploy/kubernetes/overlays/dev | grep -n edgeai-krr-bridge
+   docker buildx build --builder edgeai-kube-arm64-rootless --platform linux/amd64 --provenance=false \
+     --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+     -t 10.254.192.47:5000/edgeai/krr-bridge:$(git rev-parse --short HEAD) --push profiling-bridge
+   python3 scripts/internal/enable-resource-profiling.py --digest sha256:<푸시된 digest> \
+     --registry 10.254.192.47:5000/edgeai/krr-bridge
    ```
 
-3. API(V70 포함)·콘솔 이미지를 기존 CI로 발행·고정하고 Argo CD로 동기화합니다. 운영 반영은 검토 후 별도 수행합니다.
+2. GitHub Actions `.github/workflows/krr-bridge.yml`: bridge 단위 시험 → `linux/amd64` 빌드 → 사용자 `10001:10001`·읽기 전용 rootfs에서 `robusta_krr` import·`/healthz`의 `krrImage`·허용 밖 요청 400·Prometheus 미연결 시 추천 없는 `FAILED` 확인 → `ghcr.io/dsa04156/edgeai-krr-bridge:sha-<commit>` 발행. 새 GHCR 패키지는 기본 비공개이므로 공개 여부나 pull secret을 확인한 뒤 `enable-resource-profiling.py --digest sha256:<digest>`로 고정합니다.
+
+고정 후 확인과 배포:
+
+```bash
+kubectl kustomize deploy/kubernetes/overlays/dev | grep -n 'edgeai-krr-bridge\|EDGEAI_RESOURCE_PROFILING'
+```
+
+API(V70 포함)·콘솔 이미지 digest를 같은 커밋에서 갱신하고 Argo CD `edgeai-dev`(자동 동기화·selfHeal)로 반영합니다. `kubectl set image`로 바꾸면 selfHeal이 되돌리므로 overlay 커밋으로 배포합니다. 운영 반영은 검토 후 별도 수행합니다.
 
 컴포넌트는 bridge Deployment·Service, `edgeai-api`만 허용하는 NetworkPolicy, KRR 문서의 읽기 전용 규칙 일부(get/list/watch)인 ClusterRole, API 환경 변수 patch를 포함합니다. 워크로드를 변경하는 권한은 없습니다.
 
