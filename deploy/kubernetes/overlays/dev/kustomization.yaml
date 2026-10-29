@@ -6,6 +6,7 @@ resources:
   - ingress.yaml
   - ../../components/gpu-inference
 components:
+  - ../../components/resource-profiling
   - ../../components/scenario-runtimes
   - ../../components/hawkeye-safety
   - ../../components/hawkeye-video-replay
@@ -85,6 +86,9 @@ replicas:
   - name: edgeai-gpu-inference
     count: 0
 images:
+  # KRR bridge (profiling-bridge/), verified digest; see docs/guides/resource-profiling.md
+  - name: ghcr.io/dsa04156/edgeai-krr-bridge
+    digest: sha256:484af0d5232144e1d270f361c08495b8599997aa1565dd04467372d72348052f
   - name: ghcr.io/dsa04156/edgeai-api
     digest: sha256:696434c67d20bd39eeee606bb1059afc4297795f83ed6fc2ad66d5a59e73ad94
   - name: ghcr.io/dsa04156/edgeai-dashboard
