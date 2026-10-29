@@ -41,7 +41,7 @@
                 :label="item.version" /></KsSelect
           ></KsFormItem>
         </div>
-        <p v-if="workflowId && !versions.length && !busy" class="native-note">
+        <p v-if="workflowId && versionsLoaded && !versions.length" class="native-note">
           발행된 DAG 버전이 없습니다. 워크플로 화면에서 먼저 발행하세요.
         </p>
         <template v-if="version">
@@ -287,7 +287,7 @@
 </template>
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
-import { stringify } from "lossless-json";
+import { parse, stringify } from "lossless-json";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import {
   KsButton,
@@ -305,10 +305,12 @@ import {
   get,
   pretty,
   profileItems,
+  request,
   requestKey,
   time,
   useAction,
   write,
+  writeResponse,
   type Schema,
 } from "./native-api";
 import {
@@ -336,6 +338,8 @@ const loading = ref(true),
   nodes = ref<Schema["ExecutionNode"][]>([]),
   workflowId = ref(""),
   versions = ref<Schema["WorkflowVersion"][]>([]),
+  // Only a completed lookup may report that the workflow has no published version.
+  versionsLoaded = ref(false),
   version = ref<Schema["WorkflowVersion"] | null>(null),
   draft = ref<ProfileDraft>(emptyDraft([])),
   pasted = ref(""),
@@ -367,6 +371,7 @@ async function selectWorkflow(id: string, wanted?: string) {
   workflowId.value = id;
   version.value = null;
   versions.value = [];
+  versionsLoaded.value = false;
   const loaded: Schema["WorkflowVersion"][] = [];
   for (let offset = 0; ; ) {
     const page = await get<Schema["WorkflowDetail"]>(`workflows/${id}?limit=100&offset=${offset}`);
@@ -375,6 +380,7 @@ async function selectWorkflow(id: string, wanted?: string) {
     offset = page.nextOffset;
   }
   versions.value = loaded;
+  versionsLoaded.value = true;
   const match = loaded.find((v) => v.version === wanted);
   if (match) selectVersion(match.id);
 }
@@ -417,8 +423,10 @@ async function show(saved: Api["SchedulingProfile"]) {
   lookup.value = saved.id;
   await router.replace({ query: { ...route.query, profile: saved.id } });
 }
+// Profiles are read losslessly: preview must send the saved parameters exactly as stored.
+const savedProfile = async (response: Response) => parse(await response.text()) as Api["SchedulingProfile"];
 async function open(id: string) {
-  await show(await get<Api["SchedulingProfile"]>(`scheduling-profiles/${encodeURIComponent(id)}`));
+  await show(await savedProfile(await request(`scheduling-profiles/${encodeURIComponent(id)}`)));
 }
 async function submit() {
   await act(async () => {
@@ -426,7 +434,7 @@ async function submit() {
     const payload = stringify(document) ?? "";
     if (keyedPayload && payload !== keyedPayload) key.value = requestKey();
     keyedPayload = payload;
-    await show(await write<Api["SchedulingProfile"]>("scheduling-profiles", "POST", document, key.value));
+    await show(await savedProfile(await writeResponse("scheduling-profiles", "POST", document, key.value)));
     notice.value = "성능 프로파일을 등록했습니다.";
     await nextTick();
     savedHeading.value?.focus();
@@ -436,11 +444,17 @@ async function runPreview() {
   const saved = profile.value!;
   await previewAction.act(async () => {
     placement.value = null;
-    placement.value = await write<Api["PlacementPreview"]>(
-      `scheduling-profiles/${saved.id}/placement-preview`,
-      "POST",
-      { parameters: saved.parameters },
-    );
+    // A result or error only belongs to the profile that is still displayed.
+    try {
+      const result = await write<Api["PlacementPreview"]>(
+        `scheduling-profiles/${saved.id}/placement-preview`,
+        "POST",
+        { parameters: saved.parameters },
+      );
+      if (profile.value === saved) placement.value = result;
+    } catch (cause) {
+      if (profile.value === saved) throw cause;
+    }
   });
 }
 onMounted(() => {

@@ -84,11 +84,35 @@ function milliseconds(text: string, where: string, label: string) {
   }
   throw new Error(`${where}의 ${label}은 0 이상의 숫자여야 합니다.`);
 }
+const INSTANT = /^(\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?)(?:\.(\d{1,9}))?(Z|[+-]\d\d:\d\d)$/;
 function instant(text: string, label: string) {
-  const value = text.trim();
-  if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:\d\d)$/.test(value) || Number.isNaN(Date.parse(value)))
+  const value = text.trim(),
+    match = INSTANT.exec(value);
+  // A fraction needs seconds (HH:MM:SS); Instant keeps at most nanoseconds.
+  if (!match || (match[2] && match[1].length < 19) || Number.isNaN(Date.parse(match[1] + match[3])))
     throw new Error(`${label}은 시간대를 포함한 ISO 8601 시각이어야 합니다 (예: 2026-10-28T09:00:00+09:00).`);
   return value;
+}
+/** Instant order at nanosecond precision; Date.parse alone drops digits after milliseconds. */
+function epoch(value: string) {
+  const [, local, fraction = "", zone] = INSTANT.exec(value)!;
+  return [Date.parse(local + zone), fraction.padEnd(9, "0")] as const;
+}
+const after = (later: string, earlier: string) => {
+  const [a, an] = epoch(later),
+    [b, bn] = epoch(earlier);
+  return a !== b ? a > b : an > bn;
+};
+/** Profile metadata the API accepts; applied to typed and imported drafts alike. */
+function metadata(draft: ProfileDraft) {
+  const measuredAt = instant(draft.measuredAt, "측정 시각"),
+    validUntil = instant(draft.validUntil, "유효 종료 시각");
+  if (!after(validUntil, measuredAt)) throw new Error("유효 종료 시각은 측정 시각 이후여야 합니다.");
+  if (!draft.evidenceId.trim()) throw new Error("측정 증빙 ID를 입력하세요.");
+  const sampleCount = Number(draft.sampleCount);
+  if (!/^\d+$/.test(draft.sampleCount.trim()) || !Number.isSafeInteger(sampleCount) || sampleCount < 1)
+    throw new Error("표본 수는 1 이상의 정수여야 합니다.");
+  return { measuredAt, validUntil, sampleCount };
 }
 
 /** The exact POST body; missing values are errors, never 0. */
@@ -98,14 +122,7 @@ export function profileDocument(
   draft: ProfileDraft,
   nodeName: (id: string) => string,
 ) {
-  const measuredAt = instant(draft.measuredAt, "측정 시각"),
-    validUntil = instant(draft.validUntil, "유효 종료 시각");
-  if (Date.parse(validUntil) <= Date.parse(measuredAt))
-    throw new Error("유효 종료 시각은 측정 시각 이후여야 합니다.");
-  if (!draft.evidenceId.trim()) throw new Error("측정 증빙 ID를 입력하세요.");
-  const sampleCount = Number(draft.sampleCount);
-  if (!/^\d+$/.test(draft.sampleCount.trim()) || !Number.isSafeInteger(sampleCount) || sampleCount < 1)
-    throw new Error("표본 수는 1 이상의 정수여야 합니다.");
+  const { measuredAt, validUntil, sampleCount } = metadata(draft);
   const parameters = objectJson(draft.parameters);
   const body: Record<string, unknown> = {};
   for (const task of tasks) {
@@ -204,7 +221,7 @@ export function importDraft(
     }
     draftTasks[task.key] = { nodes, costs: rows };
   }
-  return {
+  const draft = {
     measuredAt: root.measuredAt,
     validUntil: root.validUntil,
     evidenceId: provenance.evidenceId,
@@ -212,4 +229,6 @@ export function importDraft(
     parameters: pretty(parameters),
     tasks: draftTasks,
   };
+  metadata(draft);
+  return draft;
 }

@@ -45,9 +45,15 @@ const preview = { profileId, profileDigest: "profile-digest", workflowVersionId:
   costModel: "sequential download+compute+upload per Task through the artifact store; no queueing, contention, Pod start or image pull",
   admission: "kube-scheduler", evaluatedAt: now };
 
-type Answer = { status: number; json: unknown } | "abort";
+// A saved profile whose parameter has more digits than a JS number keeps; served as raw JSON text.
+const preciseId = "00000000-0000-4000-8000-000000000303";
+const preciseText = JSON.stringify({ ...stored, id: preciseId, provenance: { ...stored.provenance, evidenceId: "bench-precise" } })
+  .replace('"threshold":0.5', '"threshold":0.1234567890123456789');
+type Reply = { status: number; json: unknown };
+// A function answer stays pending until the test resolves it.
+type Answer = Reply | "abort" | (() => Promise<Reply>);
 function mock(page: Page, registrations: Answer[] = [], previews: Answer[] = []) {
-  const posts: { path: string; key: string | undefined; csrf: string | undefined; body: unknown }[] = [];
+  const posts: { path: string; key: string | undefined; csrf: string | undefined; body: unknown; raw: string }[] = [];
   void page.route("**/api/control-plane/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace("/api/control-plane/", "");
     if (path === "workflow-csrf") return route.fulfill({ json: { token: "workflow-token" } });
@@ -58,12 +64,13 @@ function mock(page: Page, registrations: Answer[] = [], previews: Answer[] = [])
     const workflow = workflows.find(w => path === `workflows/${w.id}`);
     if (workflow) return route.fulfill({ json: { workflow, versions: versions[workflow.id], nextOffset: null } });
     if (request.method() === "POST") {
-      posts.push({ path, key: request.headers()["idempotency-key"], csrf: request.headers()["x-csrf-token"], body: request.postDataJSON() });
+      posts.push({ path, key: request.headers()["idempotency-key"], csrf: request.headers()["x-csrf-token"], body: request.postDataJSON(), raw: request.postData() ?? "" });
       const answer = (path === "scheduling-profiles" ? registrations : previews).shift();
       if (!answer) return route.fulfill({ status: 500, json: { message: `unexpected ${path}` } });
-      return answer === "abort" ? route.abort("connectionreset") : route.fulfill(answer);
+      return answer === "abort" ? route.abort("connectionreset") : route.fulfill(typeof answer === "function" ? await answer() : answer);
     }
     if (path === `scheduling-profiles/${profileId}`) return route.fulfill({ json: stored });
+    if (path === `scheduling-profiles/${preciseId}`) return route.fulfill({ contentType: "application/json", body: preciseText });
     return route.fulfill({ status: 404, json: { message: `unmocked ${path}` } });
   });
   return posts;
@@ -163,7 +170,7 @@ test("measured task-node costs register as the exact profile, retry keeps the ke
 });
 
 test("imported JSON fills the draft only when it is a valid profile for the selected version", async ({ page }) => {
-  const posts = mock(page);
+  const posts = mock(page, [{ status: 201, json: stored }]);
   // Entered from the selected published version on the workflow page; the source is preselected.
   await page.goto(`/ui/main/workflows?workflow=${workflowId}`);
   await page.getByRole("button", { name: "1.0.0", exact: true }).click();
@@ -184,9 +191,15 @@ test("imported JSON fills the draft only when it is a valid profile for the sele
     "detect의 계산 시간 (ms)은 0 이상의 숫자여야 합니다.");
   await reject("ports.json", JSON.stringify({ ...measured, tasks: { ...measured.tasks, detect: { ...measured.tasks.detect, uploadMs: { result: { [server]: 3 } } } } }),
     "detect의 uploadMs 포트는 log, result와 정확히 일치해야 합니다.");
+  // Metadata the API would refuse never replaces the draft either.
+  const provenance = measured.provenance;
+  await reject("samples.json", JSON.stringify({ ...measured, provenance: { ...provenance, sampleCount: 0 } }), "표본 수는 1 이상의 정수여야 합니다.");
+  await reject("time.json", JSON.stringify({ ...measured, measuredAt: "invalid" }), "측정 시각은 시간대를 포함한 ISO 8601 시각이어야 합니다");
+  await reject("order.json", JSON.stringify({ ...measured, measuredAt: measured.validUntil, validUntil: measured.measuredAt }), "유효 종료 시각은 측정 시각 이후여야 합니다.");
+  await reject("evidence.json", JSON.stringify({ ...measured, provenance: { ...provenance, evidenceId: " " } }), "측정 증빙 ID를 입력하세요.");
 
-  // Timestamps and decimal measurements are kept exactly as written in the imported document.
-  await page.getByLabel("측정 JSON 붙여넣기", { exact: true }).fill(JSON.stringify({ ...measured, measuredAt: "2026-10-28T00:00:00.123456Z" }).replace('"computeMs":{"' + server + '":80}', '"computeMs":{"' + server + '":80.250}'));
+  // Timestamps and decimal measurements are kept exactly as written; a one-microsecond validity interval is still ordered.
+  await page.getByLabel("측정 JSON 붙여넣기", { exact: true }).fill(JSON.stringify({ ...measured, measuredAt: "2026-10-28T00:00:00.123456Z", validUntil: "2026-10-28T00:00:00.123457Z" }).replace('"computeMs":{"' + server + '":80}', '"computeMs":{"' + server + '":80.250}'));
   await page.getByRole("button", { name: "붙여넣은 JSON 가져오기", exact: true }).click();
   await expect(page.getByLabel("측정 증빙 ID", { exact: true })).toHaveValue("bench-20261028");
   await expect(page.getByLabel("측정 시각", { exact: true })).toHaveValue("2026-10-28T00:00:00.123456Z");
@@ -194,6 +207,10 @@ test("imported JSON fills the draft only when it is a valid profile for the sele
   await expect(cost(page, "prepare · server-b", "출력 frames 업로드 (ms)")).toHaveValue("0");
   await expect(cost(page, "detect · server-b", "출력 log 업로드 (ms)")).toHaveValue("1");
   expect(posts).toEqual([]);
+  await register(page).click();
+  await expect(page.getByText("성능 프로파일을 등록했습니다.")).toBeVisible();
+  expect(posts[0].raw).toContain('"measuredAt":"2026-10-28T00:00:00.123456Z","validUntil":"2026-10-28T00:00:00.123457Z"');
+  expect(posts[0].raw).toContain(`"computeMs":{"${server}":80.250}`);
 });
 
 test("a profile reopens by ID, preview errors stay visible, and STREAM DAGs are refused before entry", async ({ page }, testInfo) => {
@@ -214,4 +231,35 @@ test("a profile reopens by ID, preview errors stay visible, and STREAM DAGs are 
   await expect(register(page)).toHaveCount(0);
   await shot(page, testInfo.outputPath("stream-unsupported.png"));
   expect(posts.map(p => p.path)).toEqual([`scheduling-profiles/${profileId}/placement-preview`]);
+});
+
+test("preview sends saved parameters exactly and a pending preview never lands on another profile", async ({ page }) => {
+  const gates: ((reply: Reply) => void)[] = [];
+  const pending = () => new Promise<Reply>(resolve => gates.push(resolve));
+  const posts = mock(page, [], [pending, pending]);
+  // A failed version lookup is an error, not an empty published-version list.
+  await page.route(new RegExp(`/api/control-plane/workflows/${workflowId}\\?`), route => route.fulfill({ status: 503, json: { message: "워크플로 저장소를 사용할 수 없습니다." } }));
+  await page.goto("/ui/main/scheduling-profiles");
+  await pick(page, "워크플로", "품질 판별 · quality");
+  await expect(page.getByRole("alert").filter({ hasText: "워크플로 저장소를 사용할 수 없습니다." })).toBeVisible();
+  await expect(page.getByText("발행된 DAG 버전이 없습니다.")).toHaveCount(0);
+
+  const saved = page.getByRole("region", { name: "등록된 성능 프로파일" });
+  const openProfile = async (id: string, evidence: string) => {
+    await page.getByLabel("프로파일 ID", { exact: true }).fill(id);
+    await page.getByRole("button", { name: "프로파일 열기", exact: true }).click();
+    await expect(saved).toContainText(evidence);
+  };
+  for (const reply of [{ status: 200, json: { ...preview, profileId: preciseId } }, { status: 409, json: { message: "측정 프로파일 유효기간이 지났습니다." } }]) {
+    await openProfile(preciseId, "bench-precise");
+    await saved.getByRole("button", { name: "배치 미리보기", exact: true }).click();
+    await expect.poll(() => gates.length).toBe(posts.length);
+    await openProfile(profileId, "bench-20261028");
+    gates.at(-1)!(reply);
+    await expect(saved.getByRole("button", { name: "배치 미리보기", exact: true })).toBeEnabled();
+    await expect(page.getByRole("region", { name: "배치 미리보기 결과" })).toHaveCount(0);
+    await expect(saved.getByRole("alert")).toHaveCount(0);
+  }
+  expect(posts.map(p => p.raw)).toEqual(Array(2).fill('{"parameters":{"threshold":0.1234567890123456789}}'));
+  await expect(page).toHaveURL(new RegExp(`profile=${profileId}`));
 });
