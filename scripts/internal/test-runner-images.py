@@ -30,7 +30,7 @@ def descriptor():
 def records():
     return [{'formatVersion':1,'scope':'native-runner-platform','sourceRevision':SOURCE,'platform':'linux/'+a,
         'hostMachine':m,'containerMachine':m,'imageConfigDigest':OTHER,'publishedDigest':d,
-        'tests':{'runner-container':96,'stream-mqtt':118}} for a,m,d in [('amd64','x86_64',AMD),('arm64','aarch64',ARM)]]
+        'tests':{'runner-container':103,'stream-mqtt':118}} for a,m,d in [('amd64','x86_64',AMD),('arm64','aarch64',ARM)]]
 
 
 class Images(unittest.TestCase):
@@ -101,7 +101,7 @@ class Images(unittest.TestCase):
         self.assertEqual({'linux/amd64':AMD,'linux/arm64':ARM},selected(records(),SOURCE))
         for name,value in [('sourceRevision','b'*40),('hostMachine','x86_64'),('containerMachine','x86_64'),
                 ('tests',{'runner-container':95,'stream-mqtt':118}),
-                ('tests',{'runner-container':96,'stream-mqtt':112}),
+                ('tests',{'runner-container':103,'stream-mqtt':112}),
                 ('tests',{'runner-container':111,'stream-mqtt':112}),
                 ('tests',{'runner-container':95,'stream-mqtt':107}),
                 ('publishedDigest',None),('tests',{'runner-container':95,'stream-mqtt':106}),
@@ -115,10 +115,13 @@ class Images(unittest.TestCase):
     def test_native_suite_requires_real_non_skipped_successes(self):
         with tempfile.TemporaryDirectory() as work:
             root=Path(work)
-            for name,count in [('runner-container',96),('stream-mqtt',118)]:
+            for name,count in [('runner-container',103),('stream-mqtt',118)]:
                 p=root/name;p.mkdir();(p/'result.json').write_text(json.dumps({'testId':name,'status':'PASS','exitCode':0}))
                 (p/'output.log').write_text('Ran '+str(count)+' tests in 1.5s\nOK\n')
-            self.assertEqual({'runner-container':96,'stream-mqtt':118},test_results(root))
+            self.assertEqual({'runner-container':103,'stream-mqtt':118},test_results(root))
+            p=root/'runner-container'/'output.log';p.write_text('Ran 96 tests in 1.5s\nOK\n')
+            with self.assertRaises(ValueError):test_results(root)
+            p.write_text('Ran 103 tests in 1.5s\nOK\n')
             p=root/'stream-mqtt'/'output.log';p.write_text(p.read_text()+'OK (skipped=1)\n')
             with self.assertRaises(ValueError):test_results(root)
             p.write_text('Ran 97 tests in 1.5s\nOK\n')
