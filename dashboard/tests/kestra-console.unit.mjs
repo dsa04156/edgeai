@@ -112,6 +112,11 @@ test("native console forwards revisions, stable idempotency keys and exact JSON 
       ["POST", `workflow-runs/${id}/drain`],
       ["POST", `tasks/${id}/cancel`],
       ["POST", `tasks/${id}/offload`],
+      ["POST", "offload-lab/sessions"],
+      ...["stop", "load", "load/stop"].map((action) => [
+        "POST",
+        `offload-lab/sessions/${id}/${action}`,
+      ]),
       ["POST", "managed-devices/sensor-a/properties"],
       ["POST", "device-profiles"],
       ["POST", "device-connections/test"],
@@ -235,6 +240,10 @@ test("unregistered console paths and wrong methods cannot tunnel arbitrary API w
     for (const [path, method] of [
       ["control-plane/profiles/DEVICE", "POST"],
       ["control-plane/tasks/not-a-uuid/offload", "POST"],
+      ["control-plane/offload-lab/sessions/not-a-uuid/load", "POST"],
+      [`control-plane/offload-lab/sessions/${id}/load/../../stop`, "POST"],
+      [`control-plane/offload-lab/sessions/${id}`, "DELETE"],
+      ["control-plane/offload-lab", "POST"],
       ["platform-service/workflow/save-and-push", "GET"],
       ["platform-service/workflow/status/../delete", "POST"],
       [`control-plane/tasks/${id}`, "DELETE"],

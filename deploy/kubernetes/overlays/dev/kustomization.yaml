@@ -11,6 +11,7 @@ components:
   - ../../components/hawkeye-video-replay
   - ../../components/hawkeye-video
   - ../../components/hawkeye-motion
+  - ../../components/offload-lab
   - ../../components/stream
   - ../../components/hdd-data-store
 patches:

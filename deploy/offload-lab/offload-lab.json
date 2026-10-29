@@ -1,0 +1,29 @@
+{
+  "profiles": [
+    {
+      "key": "offload-lab-digits-mlp",
+      "version": "1.0.0",
+      "spec": {
+        "apiVersion": "edgeai/v1",
+        "image": "10.254.192.47:5000/edgeai/offload-lab@sha256:94a0fc502c99dd45f47bae3e4c0ac69dbd698b8b404c2c80c411e934317a48ef",
+        "command": ["python3", "/opt/edgeai/examples/offload_lab_model.py"],
+        "args": [],
+        "resources": {"requests": {"cpu": "100m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}},
+        "platform": {"os": "linux", "architectures": ["amd64", "arm64"]},
+        "inputs": {},
+        "outputs": {"output": {"mediaType": "application/json", "maxBytes": 65536}},
+        "timeoutSeconds": 1800,
+        "qos": "Burstable",
+        "recovery": {"mode": "RESTART"}
+      }
+    }
+  ],
+  "workflow": {"key": "offload-lab", "displayName": "오프로딩 테스트 (CPU 숫자 분류 MLP)"},
+  "version": {
+    "version": "1.0.0",
+    "tasks": [
+      {"key": "model", "profile": "offload-lab-digits-mlp", "parameters": {"durationSeconds": 1500, "inferencesPerSecond": 20}}
+    ],
+    "dependencies": []
+  }
+}

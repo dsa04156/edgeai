@@ -49,9 +49,7 @@
         Remote 참조 계산 · 실장비 검증 아님
       </p>
       <details v-if="operation.decision">
-        <summary>
-          자동 판단 근거 · 측정 {{ operation.decision.samples.length }}개
-        </summary>
+        <summary>{{ decisionSummary(operation.decision) }}</summary>
         <p class="native-note">
           판단 시각: {{ time(operation.decision.evaluatedAt) }} · 제외 노드:
           {{ operation.excludedNodeNames.join(", ") || "없음" }}
@@ -72,6 +70,20 @@
           {{ operation.decision.policy.cooldownSeconds }}초 대기
         </p>
         <p v-else class="native-note">판단 정책이 보관되지 않았습니다.</p>
+        <p v-if="operation.decision.policy?.nodePlacement" class="native-note">
+          edge 과부하 기준 CPU
+          {{ percent(operation.decision.policy.nodePlacement.sourceCpuPercent) }}
+          · 메모리
+          {{
+            percent(operation.decision.policy.nodePlacement.sourceMemoryPercent)
+          }}
+          · GPU
+          {{ percent(operation.decision.policy.nodePlacement.sourceGpuPercent) }}
+          · worker 상한 CPU
+          {{ operation.decision.policy.nodePlacement.targetMaxCpuPercent }}% ·
+          메모리
+          {{ operation.decision.policy.nodePlacement.targetMaxMemoryPercent }}%
+        </p>
         <pre class="native-json">{{ pretty(operation.decision) }}</pre>
       </details>
       <details v-if="operation.members?.length">
@@ -142,7 +154,20 @@ const triggers: Record<string, string> = {
   CPU: "CPU 사용률 기준 충족",
   MEMORY: "메모리 사용률 기준 충족",
   LATENCY: "서비스 지연 기준 충족",
+  NODE_CPU: "edge 노드 CPU 과부하",
+  NODE_MEM: "edge 노드 메모리 과부하",
+  NODE_GPU: "edge 노드 GPU 과부하",
+  NODE_RETURN: "원래 edge 여유로 복귀",
 };
+type Decision = NonNullable<Schema["OffloadOperation"]["decision"]>;
+// Task telemetry decisions keep raw samples; node decisions keep source/target nodes and candidates.
+function decisionSummary(decision: Decision) {
+  return "samples" in decision
+    ? `자동 판단 근거 · 측정 ${decision.samples.length}개`
+    : `노드 기반 판단 근거 · ${decision.sourceNode.name} → ${decision.targetNode.name} · 후보 ${decision.candidates.length}개`;
+}
+const percent = (value: number | null | undefined) =>
+  value == null ? "기준 없음" : `${value}%`;
 const nodeName = (id: string) =>
   props.nodes.find((node) => node.id === id)?.name || id;
 const taskName = (id: string) =>

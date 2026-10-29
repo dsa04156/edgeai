@@ -275,6 +275,12 @@ class StreamAutomaticOffloadIntegrationTest {
             "independent",nonRestart),List.of(edge("source","sink","output","input","STREAM"))),List.of(input(a,"source","a"),input(b,"source","b")),List.of(a,b));
         var body=request(d);body.put("offload",policy(1));rejected(d,body,409);
     }
+    @Test void nodePlacementPolicyIsRejectedForStreamRunsInsteadOfIgnored()throws Exception{
+        var d=definition(false,false);var body=request(d);var p=policy(1);p.put("memoryPercent",null);
+        var n=new TreeMap<String,Object>(Map.of("strategy","EDGE_TO_WORKER","sourceCpuPercent",85,"targetMaxCpuPercent",60,"targetMaxMemoryPercent",70,"targetMaxGpuPercent",50));
+        n.put("sourceMemoryPercent",null);n.put("sourceGpuPercent",null);p.put("nodePlacement",n);body.put("offload",p);
+        assertThat(create(UUID.randomUUID().toString(),body,409)).contains("OFFLOAD_NODE_STREAM_UNSUPPORTED");
+    }
     @Test void databaseRequiresExplicitRunOptInForAutomaticStreamOperation()throws Exception{
         var f=fixture(0);var source=task(f.run(),"source");var now=clock.instant();var excluded=List.of("transfer-"+f.source());var id=UUID.randomUUID();
         var member=new OffloadMember(source.id(),attempt(f.run(),"source").id(),null,checkpoints.latest(source.id()).orElseThrow().id(),null,null,excluded);

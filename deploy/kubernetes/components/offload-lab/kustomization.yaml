@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Offload test console (docs/guides/offload-lab.md). List it AFTER components/hawkeye-video: the strategic merge
+# replaces EDGEAI_RUNTIME_WORKFLOW_KEYS by name, keeping hawkeye-video-safety and adding only offload-lab.
+# Image: runner/Dockerfile.offload-lab (COPY-only on the Runner index sha256:ed9a4c7d…), linux/amd64+arm64.
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: edgeai-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                env:
+                  - {name: EDGEAI_RUNTIME_WORKFLOW_KEYS, value: 'hawkeye-video-safety,offload-lab'}
+                  - {name: EDGEAI_OFFLOAD_LAB_LOAD_IMAGE, value: '10.254.192.47:5000/edgeai/offload-lab@sha256:94a0fc502c99dd45f47bae3e4c0ac69dbd698b8b404c2c80c411e934317a48ef'}

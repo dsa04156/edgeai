@@ -76,7 +76,7 @@ export async function writeResponse(
   const { token } = platform
     ? { token: "" }
     : await get<{ token: string }>(
-        /^(workflows|workflow-runs|scheduling-profiles|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
+        /^(workflows|workflow-runs|scheduling-profiles|tasks|operations|offload-lab)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
           path,
         )
           ? "workflow-csrf"

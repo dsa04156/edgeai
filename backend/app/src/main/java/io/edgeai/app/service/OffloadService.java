@@ -2,6 +2,7 @@ package io.edgeai.app.service;
 
 import io.edgeai.app.support.ServiceExecutionInput;
 import io.edgeai.domain.execution.*;
+import io.edgeai.domain.node.NodeMetricsSource;
 import io.edgeai.domain.repository.*;
 import java.math.BigDecimal;
 import java.time.*;
@@ -26,12 +27,13 @@ public class OffloadService {
     private final RemoteProvider remoteProvider;
     private final StreamOffloadService streamOffload;
     private final StreamRunService streams;
+    private final PlacementPolicyService placement;
     public OffloadService(OffloadRepository operations,ExecutionRepository executions,RuntimeRepository runtimes,WorkflowRepository workflows,
             ProfileRepository profiles,NodeRepository nodes,RuntimeLifecycleService lifecycle,Clock clock,TelemetryRepository telemetry,RemoteProvider remoteProvider,
-            StreamOffloadService streamOffload,StreamRunService streams) {
+            StreamOffloadService streamOffload,StreamRunService streams,PlacementPolicyService placement) {
         this.operations=operations;this.executions=executions;this.runtimes=runtimes;this.workflows=workflows;this.profiles=profiles;this.nodes=nodes;this.lifecycle=lifecycle;this.clock=clock;this.telemetry=telemetry;
         this.remoteProvider=remoteProvider;
-        this.streamOffload=streamOffload;this.streams=streams;
+        this.streamOffload=streamOffload;this.streams=streams;this.placement=placement;
     }
     @Transactional
     public Creation<OffloadOperation> request(UUID taskId,String key,String body) {
@@ -113,8 +115,11 @@ public class OffloadService {
     }
     @Transactional(readOnly=true)
     public List<UUID> automaticCandidates(String namespace){return operations.automaticCandidates(namespace,10000);}
+    @Transactional // Self-invocation bypasses the proxy, so this entry point needs its own transaction/Run lock.
+    public Optional<OffloadOperation> evaluate(UUID taskId,String namespace){return evaluate(taskId,namespace,null);}
+    /** nodeMetrics is fetched by the caller before the Run lock; only the opt-in node policy reads it. */
     @Transactional
-    public Optional<OffloadOperation> evaluate(UUID taskId,String namespace) {
+    public Optional<OffloadOperation> evaluate(UUID taskId,String namespace,NodeMetricsSource.Snapshot nodeMetrics) {
         var initial=executions.task(taskId).orElseThrow();var run=executions.run(initial.runId(),true).orElseThrow();
         var task=executions.task(taskId).orElseThrow();var now=clock.instant();
         if(task.retiredVirtualDevice() || run.offloadPolicyJson()==null || !run.state().equals("RUNNING") || !task.state().equals("RUNNING"))return Optional.empty();
@@ -127,6 +132,7 @@ public class OffloadService {
             history.stream().anyMatch(o->Set.of("DRAINING","STARTING","CANCELLING").contains(o.state())))return Optional.empty();
         var eligible=attempt.updatedAt().plusSeconds(policy.minRunningSeconds());
         for(var operation:history)if(operation.updatedAt().plusSeconds(policy.cooldownSeconds()).isAfter(eligible))eligible=operation.updatedAt().plusSeconds(policy.cooldownSeconds());
+        if(policy.nodePlacement()!=null)return evaluateNode(run,task,attempt,runtime,policy,eligible,nodeMetrics,namespace,now);
         var samples=telemetry.recent(attempt.id(),policy.consecutiveSamples());var trigger=policy.trigger(samples,now,eligible);
         if(trigger.isEmpty())return Optional.empty();
         var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
@@ -160,6 +166,65 @@ public class OffloadService {
         if(stream)streamOffload.fence(operation,now);else runtimes.offload(runtime.id(),now);
         return Optional.of(operation);
     }
+    /** EDGE_TO_WORKER: sustained source-node pressure moves a RESTART task to one explicitly selected worker via the fixed NODE path. */
+    private Optional<OffloadOperation> evaluateNode(WorkflowRun run,Task task,TaskAttempt attempt,io.edgeai.domain.runtime.RuntimeInstance runtime,OffloadPolicy policy,
+            Instant eligible,NodeMetricsSource.Snapshot nodeMetrics,String namespace,Instant now) {
+        var source=runtime.nodeUid()==null?null:nodes.find(runtime.nodeUid()).orElse(null);
+        if(source!=null && PlacementPolicyService.worker(source) && policy.nodePlacement().returnToEdge()!=null)
+            return evaluateReturn(run,task,attempt,runtime,source,policy,eligible,nodeMetrics,namespace,now);
+        if(source==null || !PlacementPolicyService.edge(source)){placement.forget(task.id());return Optional.empty();} // Without returnToEdge a worker source never moves again.
+        var trigger=placement.observe(task.id(),attempt.id(),source.name(),eligible,policy,nodeMetrics,now);
+        if(trigger.isEmpty())return Optional.empty();
+        var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
+        var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
+        if(spec.stream()!=null || !spec.recoveryMode().equals("RESTART"))return Optional.empty();
+        // Selected under the Run lock from current inventory, immediately before the source is fenced.
+        var selection=placement.select(policy,spec,source,nodeMetrics,now);
+        if(selection.isEmpty())return Optional.empty();
+        var target=selection.get().target();
+        var samples=new TreeMap<String,Object>();
+        placement.recent(task.id()).forEach((metric,values)->samples.put(metric,values.stream().map(v->Map.of("value",v.value(),"observedAt",v.observedAt().toString())).toList()));
+        var evidence=new TreeMap<String,Object>();evidence.put("policy",JSON.decode(run.offloadPolicyJson()));evidence.put("evaluatedAt",now.toString());
+        evidence.put("eligibleSince",eligible.toString());evidence.put("strategy",policy.nodePlacement().strategy());evidence.put("ranking","LOWEST_MAX_UTILIZATION");
+        evidence.put("sampling","IN_MEMORY_SINCE_API_START");
+        evidence.put("sourceNode",Map.of("nodeId",source.id().toString(),"name",source.name(),"samples",samples));
+        evidence.put("targetNode",Map.of("nodeId",target.id().toString(),"name",target.name()));evidence.put("candidates",selection.get().candidates());
+        var id=UUID.randomUUID();var operation=new OffloadOperation(id,task.id(),run.id(),attempt.id(),null,target.id(),id,
+            JSON.digest("edgeai-node-offload-v1",Map.of("sourceAttemptId",attempt.id().toString(),"evidence",evidence)),namespace,"DRAINING",null,
+            now.plusSeconds(policy.drainTimeoutSeconds()),policy.startTimeoutSeconds(),null,now,now,trigger.get(),List.of(),JSON.canonical(evidence),null,List.of());
+        if(!operations.create(operation))throw new IllegalStateException("Automatic operation identity collision");
+        runtimes.offload(runtime.id(),now);placement.forget(task.id());
+        return Optional.of(operation);
+    }
+    /**
+     * returnToEdge: the task runs on a worker; once its ORIGINAL edge stays below the lower return
+     * thresholds, restart it there through the same drain/physical-termination path. Only that edge (Task.initialNodeId) is ever a return target.
+     */
+    private Optional<OffloadOperation> evaluateReturn(WorkflowRun run,Task task,TaskAttempt attempt,io.edgeai.domain.runtime.RuntimeInstance runtime,
+            io.edgeai.domain.node.ExecutionNode source,OffloadPolicy policy,Instant eligible,NodeMetricsSource.Snapshot nodeMetrics,String namespace,Instant now) {
+        var origin=task.initialNodeId()==null?null:nodes.find(task.initialNodeId()).orElse(null); // Validated NODE edge placement at Run creation.
+        if(origin==null || origin.id().equals(source.id()) || !PlacementPolicyService.edge(origin)){placement.forget(task.id());return Optional.empty();}
+        // The window follows the ORIGINAL edge's series; the worker's own load never counts towards a return.
+        placement.observe(task.id(),attempt.id(),origin.name(),eligible,policy,nodeMetrics,now);
+        var trigger=policy.returnTrigger(placement.recent(task.id()),now,eligible,placement.requiredGpu(nodeMetrics,origin.name()));
+        if(trigger.isEmpty())return Optional.empty();
+        var definition=workflows.definitions(run.workflowVersionId()).stream().filter(d->d.id().equals(task.definitionId())).findFirst().orElseThrow();
+        var spec=ServiceExecutionInput.parseSpec(profiles.find(definition.serviceProfileVersionId()).orElseThrow().specJson());
+        if(spec.stream()!=null || !spec.recoveryMode().equals("RESTART") || PlacementPolicyService.blocker(spec,origin,now)!=null)return Optional.empty();
+        var samples=new TreeMap<String,Object>();
+        placement.recent(task.id()).forEach((metric,values)->samples.put(metric,values.stream().map(v->Map.of("value",v.value(),"observedAt",v.observedAt().toString())).toList()));
+        var evidence=new TreeMap<String,Object>();evidence.put("policy",JSON.decode(run.offloadPolicyJson()));evidence.put("evaluatedAt",now.toString());
+        evidence.put("eligibleSince",eligible.toString());evidence.put("strategy","WORKER_TO_ORIGINAL_EDGE");evidence.put("sampling","IN_MEMORY_SINCE_API_START");
+        evidence.put("sourceNode",Map.of("nodeId",source.id().toString(),"name",source.name()));
+        evidence.put("targetNode",Map.of("nodeId",origin.id().toString(),"name",origin.name(),"samples",samples));evidence.put("candidates",List.of());
+        var id=UUID.randomUUID();var operation=new OffloadOperation(id,task.id(),run.id(),attempt.id(),null,origin.id(),id,
+            JSON.digest("edgeai-node-offload-v1",Map.of("sourceAttemptId",attempt.id().toString(),"evidence",evidence)),namespace,"DRAINING",null,
+            now.plusSeconds(policy.drainTimeoutSeconds()),policy.startTimeoutSeconds(),null,now,now,trigger.get(),List.of(),JSON.canonical(evidence),null,List.of());
+        if(!operations.create(operation))throw new IllegalStateException("Automatic operation identity collision");
+        runtimes.offload(runtime.id(),now);placement.forget(task.id());
+        return Optional.of(operation);
+    }
+    public void retainNodeSamples(Collection<UUID> taskIds){placement.retain(taskIds);}
     private static Map<String,Object> measurement(io.edgeai.domain.runtime.RuntimeTelemetry s) {
         var m=new TreeMap<String,Object>();m.put("attemptId",s.attemptId().toString());m.put("sequence",s.sequence());m.put("observedAt",s.observedAt().toString());
         m.put("receivedAt",s.receivedAt().toString());m.put("intervalMillis",s.intervalMillis());m.put("cpuUsageMicros",s.cpuUsageMicros());m.put("cpuLimitMillicores",s.cpuLimitMillicores());

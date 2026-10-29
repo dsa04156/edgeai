@@ -1,4 +1,5 @@
 package io.edgeai.app.support;
+import io.edgeai.domain.execution.NodeSampleWindow;
 import io.edgeai.domain.execution.OffloadPolicy;
 import io.edgeai.domain.runtime.RuntimeTelemetry;
 import java.time.*;
@@ -48,5 +49,90 @@ class OffloadPolicyTest {
             var input=new HashMap<>(valid);input.putAll(change);assertThatThrownBy(()->WorkflowInput.offloadPolicy(input)).isInstanceOf(IllegalArgumentException.class);
         }
         valid.put("cpuPercent",null);valid.put("memoryPercent",null);assertThatThrownBy(()->WorkflowInput.offloadPolicy(valid)).isInstanceOf(IllegalArgumentException.class);
+    }
+    static Map<String,Object> nodeOffload() {
+        var p=new HashMap<String,Object>(Map.of("consecutiveSamples",3,"maxSampleAgeSeconds",120,"maxGapSeconds",60,"minRunningSeconds",10,"cooldownSeconds",60,"maxTransfers",1,"drainTimeoutSeconds",60,"startTimeoutSeconds",120));
+        p.put("cpuPercent",null);p.put("memoryPercent",null);p.put("latencyMicros",null);
+        var n=new HashMap<String,Object>(Map.of("strategy","EDGE_TO_WORKER","sourceCpuPercent",85,"targetMaxCpuPercent",60,"targetMaxMemoryPercent",70,"targetMaxGpuPercent",50));
+        n.put("sourceMemoryPercent",null);n.put("sourceGpuPercent",80);p.put("nodePlacement",n);return p;
+    }
+    @SuppressWarnings("unchecked") @Test void nodePlacementIsOptInValidatedAndCannotMixTaskThresholds() {
+        assertThat(policy().nodePlacement()).isNull();
+        var parsed=WorkflowInput.offloadPolicy(nodeOffload());
+        assertThat(parsed.nodePlacement().sourceCpuPercent()).isEqualTo(85);assertThat(parsed.maxSampleAgeSeconds()).isEqualTo(120);
+        var legacy=new HashMap<>(nodeOffload());legacy.remove("nodePlacement");legacy.put("cpuPercent",90);
+        assertThatThrownBy(()->WorkflowInput.offloadPolicy(legacy)).isInstanceOf(IllegalArgumentException.class); // Legacy sample ranges stay 10..60s.
+        var mixed=new HashMap<>(nodeOffload());mixed.put("cpuPercent",90);
+        assertThatThrownBy(()->WorkflowInput.offloadPolicy(mixed)).isInstanceOf(IllegalArgumentException.class);
+        for(var change:List.<Map<String,Object>>of(Map.of("strategy","WORKER_TO_EDGE"),Map.of("targetMaxCpuPercent",0),Map.of("targetMaxGpuPercent",101),Map.of("unknown",1))) {
+            var input=nodeOffload();var n=new HashMap<String,Object>((Map<String,Object>)input.get("nodePlacement"));n.putAll(change);input.put("nodePlacement",n);
+            assertThatThrownBy(()->WorkflowInput.offloadPolicy(input)).isInstanceOf(IllegalArgumentException.class);
+        }
+        var none=nodeOffload();var n=new HashMap<String,Object>((Map<String,Object>)none.get("nodePlacement"));n.put("sourceCpuPercent",null);n.put("sourceGpuPercent",null);none.put("nodePlacement",n);
+        assertThatThrownBy(()->WorkflowInput.offloadPolicy(none)).isInstanceOf(IllegalArgumentException.class);
+        var slow=nodeOffload();slow.put("maxSampleAgeSeconds",181);assertThatThrownBy(()->WorkflowInput.offloadPolicy(slow)).isInstanceOf(IllegalArgumentException.class);
+    }
+    @Test void nodeTriggerCountsOnlyDistinctFreshConsecutiveObservationsAfterEligibility() {
+        var policy=WorkflowInput.offloadPolicy(nodeOffload());var eligible=now.minusSeconds(200);
+        var window=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int i=0;i<3;i++)window.observe("CPU_USAGE",95,now.minusSeconds(60),true,now,policy); // One cached Prometheus sample.
+        assertThat(policy.nodeTrigger(window.recent(),now,eligible)).isEmpty();
+        window.observe("CPU_USAGE",95,now.minusSeconds(30),true,now,policy);
+        assertThat(policy.nodeTrigger(window.recent(),now,eligible)).isEmpty();
+        window.observe("CPU_USAGE",85,now,true,now,policy);assertThat(policy.nodeTrigger(window.recent(),now,eligible)).contains("NODE_CPU");
+        assertThat(policy.nodeTrigger(window.recent(),now,now.minusSeconds(45))).isEmpty(); // Samples before warmup/cooldown end.
+        assertThat(policy.nodeTrigger(window.recent(),now.plusSeconds(61),eligible)).isEmpty(); // Oldest sample stale.
+        window.observe("GPU_USAGE",80,now.minusSeconds(40),true,now,policy);window.observe("GPU_USAGE",90,now.minusSeconds(20),true,now,policy);window.observe("GPU_USAGE",99,now,true,now,policy);
+        assertThat(policy.nodeTrigger(window.recent(),now,eligible)).contains("NODE_GPU");
+        var cool=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int age:List.of(60,30,0))cool.observe("CPU_USAGE",age==30?84.9:99,now.minusSeconds(age),true,now,policy);
+        assertThat(policy.nodeTrigger(cool.recent(),now,eligible)).isEmpty();
+        var gap=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int age:List.of(110,45,0))gap.observe("CPU_USAGE",99,now.minusSeconds(age),true,now,policy);
+        assertThat(policy.nodeTrigger(gap.recent(),now,eligible)).isEmpty();
+        var unfresh=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int age:List.of(60,30,0))unfresh.observe("CPU_USAGE",99,now.minusSeconds(age),age!=30,now,policy);
+        assertThat(policy.nodeTrigger(unfresh.recent(),now,eligible)).isEmpty();
+        var future=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int age:List.of(60,30,0))future.observe("CPU_USAGE",99,now.minusSeconds(age),true,now,policy);
+        future.observe("CPU_USAGE",99,now.plusSeconds(6),true,now,policy); // Invalid current observation breaks the series.
+        assertThat(policy.nodeTrigger(future.recent(),now,eligible)).isEmpty();
+        assertThat(window.matches(attempt,"edge-a",eligible)).isTrue();assertThat(window.matches(UUID.randomUUID(),"edge-a",eligible)).isFalse();
+        assertThat(window.matches(attempt,"edge-a",now)).isFalse();
+    }
+    @SuppressWarnings("unchecked") static Map<String,Object> returning(Integer cpu,Integer memory,Integer gpu) {
+        var p=nodeOffload();var n=new HashMap<String,Object>((Map<String,Object>)p.get("nodePlacement"));
+        var r=new HashMap<String,Object>();r.put("cpuPercent",cpu);r.put("memoryPercent",memory);r.put("gpuPercent",gpu);n.put("returnToEdge",r);p.put("nodePlacement",n);return p;
+    }
+    @SuppressWarnings("unchecked") @Test void returnToEdgeIsOptionalAndMustSitStrictlyBelowEverySourceThreshold() {
+        assertThat(WorkflowInput.offloadPolicy(nodeOffload()).nodePlacement().returnToEdge()).isNull(); // Omitted: one-way policy.
+        var parsed=WorkflowInput.offloadPolicy(returning(40,null,50)).nodePlacement().returnToEdge();
+        assertThat(parsed.cpuPercent()).isEqualTo(40);assertThat(parsed.gpuPercent()).isEqualTo(50);
+        for(var invalid:List.of(returning(85,null,50),returning(90,null,50),returning(40,null,null),returning(null,null,null),returning(0,null,50),returning(40,101,50)))
+            assertThatThrownBy(()->WorkflowInput.offloadPolicy(invalid)).isInstanceOf(IllegalArgumentException.class);
+        var extra=returning(40,null,50);var n=(Map<String,Object>)extra.get("nodePlacement");((Map<String,Object>)n.get("returnToEdge")).put("unknown",1);
+        assertThatThrownBy(()->WorkflowInput.offloadPolicy(extra)).isInstanceOf(IllegalArgumentException.class);
+        var nul=returning(40,null,50);((Map<String,Object>)nul.get("nodePlacement")).put("returnToEdge",null);
+        assertThatThrownBy(()->WorkflowInput.offloadPolicy(nul)).isInstanceOf(IllegalArgumentException.class);
+    }
+    private static final Set<String> G0=Set.of("GPU_USAGE/GPU 0");
+    @Test void returnRequiresEveryConfiguredSeriesFreshAndBelowForConsecutiveObservations() {
+        var policy=WorkflowInput.offloadPolicy(returning(40,30,50));var eligible=now.minusSeconds(200);
+        java.util.function.Function<double[],NodeSampleWindow> window=values->{var w=new NodeSampleWindow(attempt,"edge-a",eligible);
+            for(int i=0;i<3;i++){var at=now.minusSeconds(60-30L*i);w.observe("CPU_USAGE",values[0],at,true,now,policy);w.observe("MEMORY_USAGE",values[1],at,true,now,policy);
+                w.observe("GPU_USAGE/GPU 0",values[2],at,true,now,policy);}return w;};
+        assertThat(policy.returnTrigger(window.apply(new double[]{10,10,10}).recent(),now,eligible,G0)).contains("NODE_RETURN");
+        assertThat(policy.returnTrigger(window.apply(new double[]{40,10,10}).recent(),now,eligible,G0)).isEmpty(); // Strictly below.
+        assertThat(policy.returnTrigger(window.apply(new double[]{10,35,10}).recent(),now,eligible,G0)).isEmpty(); // Every metric, not any.
+        assertThat(policy.returnTrigger(window.apply(new double[]{10,10,10}).recent(),now,now.minusSeconds(45),G0)).isEmpty(); // Before cooldown end.
+        assertThat(policy.returnTrigger(window.apply(new double[]{10,10,10}).recent(),now.plusSeconds(61),eligible,G0)).isEmpty(); // Stale.
+        var missingGpu=new NodeSampleWindow(attempt,"edge-a",eligible);
+        for(int i=0;i<3;i++){var at=now.minusSeconds(60-30L*i);missingGpu.observe("CPU_USAGE",1,at,true,now,policy);missingGpu.observe("MEMORY_USAGE",1,at,true,now,policy);}
+        assertThat(policy.returnTrigger(missingGpu.recent(),now,eligible,G0)).isEmpty(); // An unobserved GPU is unknown, not idle.
+        var cool=window.apply(new double[]{10,10,10});
+        assertThat(policy.returnTrigger(cool.recent(),now,eligible,Set.of("GPU_USAGE/GPU 0","GPU_USAGE/GPU 1"))).isEmpty(); // Second GPU vanished.
+        assertThat(policy.returnTrigger(cool.recent(),now,eligible,null)).isEmpty(); // Fewer GPUs observed than installed.
+        var oneWay=WorkflowInput.offloadPolicy(nodeOffload());
+        assertThat(oneWay.returnTrigger(window.apply(new double[]{1,1,1}).recent(),now,eligible,G0)).isEmpty();
     }
 }

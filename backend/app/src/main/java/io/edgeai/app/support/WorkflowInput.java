@@ -2,6 +2,7 @@ package io.edgeai.app.support;
 
 import io.edgeai.domain.workflow.Dag;
 import io.edgeai.domain.execution.RetryPolicy;
+import io.edgeai.domain.execution.NodePlacementPolicy;
 import io.edgeai.domain.execution.OffloadPolicy;
 import java.math.BigDecimal;
 import java.util.*;
@@ -56,12 +57,26 @@ public final class WorkflowInput {
     }
     public static OffloadPolicy offloadPolicy(Object value) {
         if(value==null)return null;
-        var m=object(value,"cpuPercent","memoryPercent","latencyMicros","consecutiveSamples","maxSampleAgeSeconds","maxGapSeconds",
-            "minRunningSeconds","cooldownSeconds","maxTransfers","drainTimeoutSeconds","startTimeoutSeconds");
+        var fields=new ArrayList<>(List.of("cpuPercent","memoryPercent","latencyMicros","consecutiveSamples","maxSampleAgeSeconds","maxGapSeconds",
+            "minRunningSeconds","cooldownSeconds","maxTransfers","drainTimeoutSeconds","startTimeoutSeconds"));
+        if(value instanceof Map<?,?> raw && raw.containsKey("nodePlacement"))fields.add("nodePlacement");
+        var m=object(value,fields.toArray(String[]::new));NodePlacementPolicy node=null;
+        if(m.containsKey("nodePlacement")) {
+            var nodeFields=new ArrayList<>(List.of("strategy","sourceCpuPercent","sourceMemoryPercent","sourceGpuPercent","targetMaxCpuPercent","targetMaxMemoryPercent","targetMaxGpuPercent"));
+            if(m.get("nodePlacement") instanceof Map<?,?> raw && raw.containsKey("returnToEdge"))nodeFields.add("returnToEdge"); // Optional; omitted keeps the one-way policy.
+            var n=object(m.get("nodePlacement"),nodeFields.toArray(String[]::new));NodePlacementPolicy.ReturnToEdge back=null;
+            if(n.containsKey("returnToEdge")) {
+                var r=object(n.get("returnToEdge"),"cpuPercent","memoryPercent","gpuPercent");
+                back=new NodePlacementPolicy.ReturnToEdge(optionalInteger(r.get("cpuPercent")),optionalInteger(r.get("memoryPercent")),optionalInteger(r.get("gpuPercent")));
+            }
+            node=new NodePlacementPolicy(text(n.get("strategy"),32),optionalInteger(n.get("sourceCpuPercent")),optionalInteger(n.get("sourceMemoryPercent")),
+                optionalInteger(n.get("sourceGpuPercent")),integer(n.get("targetMaxCpuPercent")),integer(n.get("targetMaxMemoryPercent")),integer(n.get("targetMaxGpuPercent")),back);
+        }
         return new OffloadPolicy(m.get("cpuPercent")==null?null:integer(m.get("cpuPercent")),m.get("memoryPercent")==null?null:integer(m.get("memoryPercent")),
             m.get("latencyMicros")==null?null:Long.valueOf(integer(m.get("latencyMicros"))),integer(m.get("consecutiveSamples")),integer(m.get("maxSampleAgeSeconds")),integer(m.get("maxGapSeconds")),
-            integer(m.get("minRunningSeconds")),integer(m.get("cooldownSeconds")),integer(m.get("maxTransfers")),integer(m.get("drainTimeoutSeconds")),integer(m.get("startTimeoutSeconds")));
+            integer(m.get("minRunningSeconds")),integer(m.get("cooldownSeconds")),integer(m.get("maxTransfers")),integer(m.get("drainTimeoutSeconds")),integer(m.get("startTimeoutSeconds")),node);
     }
+    private static Integer optionalInteger(Object value){return value==null?null:integer(value);}
     private static int integer(Object value) {
         if(!(value instanceof Number))throw new IllegalArgumentException("Integer required");
         try{return new BigDecimal(value.toString()).intValueExact();}

@@ -13,6 +13,7 @@ class WorkflowConfiguration {
     @Bean ExecutionRepository executionRepository(JdbcTemplate jdbc,RuntimeScope scope) { return new JdbcExecutionRepository(jdbc,scope); }
     @Bean RuntimeRepository runtimeRepository(JdbcTemplate jdbc,RuntimeScope scope) { return new JdbcRuntimeRepository(jdbc,scope); }
     @Bean RemoteRepository remoteRepository(JdbcTemplate jdbc) { return new JdbcRemoteRepository(jdbc); }
+    @Bean OffloadLabRepository offloadLabRepository(JdbcTemplate jdbc) { return new JdbcOffloadLabRepository(jdbc); }
     @Bean OffloadRepository offloadRepository(JdbcTemplate jdbc,RuntimeScope scope) { return new JdbcOffloadRepository(jdbc,scope); }
     @Bean TelemetryRepository telemetryRepository(JdbcTemplate jdbc) { return new JdbcTelemetryRepository(jdbc); }
     @Bean DataRouteRepository dataRouteRepository(JdbcTemplate jdbc) { return new JdbcDataRouteRepository(jdbc); }
