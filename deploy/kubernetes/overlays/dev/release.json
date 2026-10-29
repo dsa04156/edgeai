@@ -1,8 +1,8 @@
 {
-  "sourceRevision": "9b0b8779a60042fd05ca168621535d2ed459b622",
+  "sourceRevision": "1c80943a7453ab55555be7e7dbc6121e5e026f5e",
   "runnerSourceRevision": "e4b7a6a1a4e2ecbf5a6a2e24ae8179982d185a1a",
   "apiDigest": "sha256:15eb6af65b1644f11e7c7e9e78ff635101787397c18c7b4f96649680d90916e7",
-  "dashboardDigest": "sha256:3fb7e7c31804d4c4a305d30da204e7775918dc19d849a4af79cd65a68e4625c1",
+  "dashboardDigest": "sha256:d1115e2da70c412ffbe1a53b46538d17588d5c24960f40996056bc43f0c51bb0",
   "runnerDigest": "sha256:ed9a4c7dd286cf845dd4631f90af384f92d6c036f0c18d2d7b512e3a52a1c793",
   "minioDigest": "sha256:ce50e12355c3c1dfac0b84b2538160953401925c10f5e511b9517dc39c29bc41",
   "influxdbDigest": "sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82",
