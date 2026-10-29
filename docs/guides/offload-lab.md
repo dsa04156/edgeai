@@ -4,7 +4,8 @@
 실제 Pod로 보여주는 시험용 화면입니다. 새 배치 엔진이 아니라 [노드 기반 전환](node-placement-offload.md)의
 `returnToEdge` 정책과 기존 Run·전환 경로를 그대로 사용합니다.
 
-이 문서는 코드·격리 DB 시험 기준입니다. 실제 클러스터 왕복은 배포 후 별도로 확인합니다.
+2026-10-29 실제 클러스터에서 웹 버튼으로 모델 실행 → 부하 시작 → worker 이동 → 부하 중지 → 원래 edge 복귀 → 모델 중지를 검증했습니다.
+접속: `http://10.254.192.47:13080/ui/main/offload-lab`.
 
 ## 무엇이 실제로 실행되나
 
@@ -54,3 +55,14 @@
 
 `GET /api/v1/offload-lab`, `POST /api/v1/offload-lab/sessions`(Idempotency-Key), `POST .../sessions/{id}/stop`,
 `POST .../sessions/{id}/load`(Idempotency-Key), `POST .../sessions/{id}/load/stop`. 계약은 OpenAPI `OffloadLab` 태그를 따릅니다.
+
+## 실제 왕복 검증 (2026-10-29 KST)
+
+- 코드 `25209d9`, 배포 고정값 `36276aa`; Argo CD `Synced / Healthy`.
+- Run `dfa69480-ecb2-4489-94d4-a64f30b2a426`, 세션 `6c80e2d0-265e-4ced-9491-9722e12101a6`.
+- 23:43:03–23:43:10: edge CPU 64.4%, 77.8% 두 관측으로 `NODE_CPU` 성공.
+- 23:44:34–23:44:41: 부하 중지 후 CPU 3.8%, 3.2% 두 관측으로 `NODE_RETURN` 성공.
+- Pod UID: edge `310cbb60…` → worker `34a33b32…` → edge `4c79014e…`.
+  edge는 `etri-dev0006-raspi5`, worker는 `etri-ser0003-cg0ms0`. 각 전환에서 이전 Pod가 사라진 뒤 새 Pod가 관측됐습니다.
+- 복귀한 모델도 추론 지연 594–611 μs를 보고했습니다(개별 관측값이며 성능 벤치마크가 아닙니다).
+- 모델 중지 후 세션 `STOPPED`, Run `CANCELLED`, runtime 네임스페이스에 시험 Pod·Job 0개를 확인했습니다.
