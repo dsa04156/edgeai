@@ -30,12 +30,13 @@ public class ExecutionService {
     private final ManagedDeviceService managedDevices;
     private final WorkflowDataInputService dataInputs;
     private final io.edgeai.domain.runtime.RuntimeScope scope;
+    private final SchedulingService scheduling;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs,io.edgeai.domain.runtime.RuntimeScope scope) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs,io.edgeai.domain.runtime.RuntimeScope scope,SchedulingService scheduling) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;this.scope=scope;
+        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;this.scope=scope;this.scheduling=scheduling;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -60,6 +61,12 @@ public class ExecutionService {
         if(offload!=null)normalized.put("offload",JSON.decode(offloadJson));
         if(!streamInputs.isEmpty())normalized.put("streamInputs",streamInputs.stream().map(StreamRunInput::document).toList());
         if(!taskExecutions.isEmpty())normalized.put("taskExecutions",taskExecutions);
+        UUID profileId=null;
+        if(input.containsKey("scheduling")) {
+            if(input.containsKey("taskExecutions"))throw error(400,"SCHEDULING_CONFLICT","측정 기반 배치와 작업별 실행 위치는 함께 지정할 수 없습니다.");
+            profileId=uuid(object(input.get("scheduling"),"profileId").get("profileId"));
+            normalized.put("scheduling",Map.of("profileId",profileId.toString()));
+        }
         if(input.containsKey("device")) {
             var ref=io.edgeai.app.support.DeviceProfileCompiler.map(input.get("device"));
             io.edgeai.app.support.DeviceProfileCompiler.fields(ref,Set.of("id","outputs"),Set.of("id","outputs"));
@@ -71,6 +78,9 @@ public class ExecutionService {
         repository.lockRequestKey(idempotency);
         var existing=repository.byIdempotencyKey(idempotency);
         if(existing.isPresent()) return replay(existing.get(),digest);
+        // Unsupported scheduled combinations are permanent request errors, so reject them before runtime or device lookups.
+        if(profileId!=null && (!mode.equals("AUTO") || !streamInputs.isEmpty() || input.containsKey("device") || input.containsKey("camera")))
+            throw error(409,"SCHEDULING_UNSUPPORTED","측정 기반 배치는 AUTO 실행 정책의 SERVICE BATCH Run만 지원합니다.");
         // Resolve protocol-independent references only after idempotency replay checks.
         if(input.containsKey("device")) {
             var resolved=new TreeMap<String,Object>();parameters.forEach((k,v)->resolved.put((String)k,v));
@@ -83,6 +93,11 @@ public class ExecutionService {
         if(providerKey!=null && !runtimeEnabled)throw error(503,"RUNTIME_DISABLED","Remote 실행은 실행 worker와 저장소 설정을 먼저 활성화해야 합니다.");
         var dag=storedDag(version.dagJson());
         var definitions=workflows.definitions(versionId);
+        SchedulingService.Decision decision=null;
+        if(profileId!=null) {
+            // The digest keeps the user's profile choice; the server-selected NODE map becomes the immutable Run plan.
+            decision=scheduling.decide(profileId,versionId,parameters);taskExecutions=decision.taskExecutions();
+        }
         var keys=definitions.stream().map(io.edgeai.domain.workflow.TaskDefinition::key).collect(java.util.stream.Collectors.toSet());
         if(!keys.containsAll(taskExecutions.keySet()))throw error(400,"TASK_PLACEMENT_INVALID","작업별 실행 위치는 발행된 DAG의 작업 키를 참조해야 합니다.");
         for(var value:taskExecutions.values()) {
@@ -118,9 +133,10 @@ public class ExecutionService {
         var sessions=stream?streams.pin(streamInputs,mode):Map.<UUID,io.edgeai.domain.device.DeviceSession>of();
         if(runtimeEnabled)lifecycle.validateRequest(versionId,JSON.canonical(parameters),stream);
         if(offload!=null)lifecycle.validateAutomaticOffload(versionId,stream);
-        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,null,JSON.canonical(taskExecutions));
+        var now=clock.instant();var run=new WorkflowRun(UUID.randomUUID(),versionId,idempotency,digest,mode,nodeId,JSON.canonical(parameters),retry,offloadJson,"PENDING",now,now,remoteTarget,null,JSON.canonical(taskExecutions),profileId);
         if(!repository.create(run)) return replay(repository.byIdempotencyKey(idempotency).orElseThrow(),digest);
         repository.initialize(run,definitions,stream?Set.of():dag.roots(),taskRemoteTargets);
+        if(decision!=null)scheduling.record(run.id(),decision,now);
         dataInputs.subscribe(run.id(),parameters);
         if(stream)streams.configure(run,runtimeNamespace,streamInputs,sessions);
         if(runtimeEnabled)lifecycle.startRun(run.id(),runtimeNamespace);
@@ -130,6 +146,8 @@ public class ExecutionService {
         if(!run.requestDigest().equals(digest)) throw error(409,"IDEMPOTENCY_CONFLICT","같은 Idempotency-Key에 다른 실행 입력이 있습니다.");
         return new Creation<>(run,false);
     }
+    @Transactional(readOnly=true)
+    public Map<String,Object> schedulingDecision(UUID runId) { run(runId,false);return scheduling.decision(runId); }
     public List<WorkflowRun> list(int limit,int offset) { WorkflowService.page(limit,offset);return repository.runs(limit+1,offset); }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public RunSnapshot detail(UUID id) { return new RunSnapshot(run(id,false),repository.tasks(id)); }

@@ -19,5 +19,6 @@ class WorkflowConfiguration {
     @Bean StreamCheckpointRepository streamCheckpointRepository(JdbcTemplate jdbc) { return new JdbcStreamCheckpointRepository(jdbc); }
     @Bean StreamExecutionRepository streamExecutionRepository(JdbcTemplate jdbc) { return new JdbcStreamExecutionRepository(jdbc); }
     @Bean StreamRunRepository streamRunRepository(JdbcTemplate jdbc) { return new JdbcStreamRunRepository(jdbc); }
+    @Bean SchedulingRepository schedulingRepository(JdbcTemplate jdbc) { return new JdbcSchedulingRepository(jdbc); }
     @Bean ObservationFeedRepository observationFeedRepository(JdbcTemplate jdbc) { return new JdbcObservationFeedRepository(jdbc); }
 }

@@ -1001,6 +1001,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scheduling-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 측정 배치 프로파일 등록
+         * @description 발행된 SERVICE BATCH DAG 버전의 운영 artifact 저장소 경로 측정값을 불변 문서로 등록합니다. 작업별 노드 compute, 연결된 BATCH 입력 포트별 download, 모든 출력 포트별 upload(ms)를 포함하며 누락 비용을 0으로 채우지 않습니다. provenance는 호출자가 제출한 증빙이며 서버가 실측 진실성을 보장하지 않습니다. 같은 Idempotency-Key와 같은 정규화 문서는 200으로 기존 프로파일을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다. 필드·값·포트·노드 집합 오류와 미래 측정 시각은 400 SCHEDULING_PROFILE_INVALID, STREAM/비 strict SERVICE DAG는 409 SCHEDULING_UNSUPPORTED입니다.
+         */
+        post: operations["registerSchedulingProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scheduling-profiles/{profileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 측정 배치 프로파일 조회
+         * @description 등록된 불변 측정 문서와 digest를 조회합니다. 목록 조회는 제공하지 않습니다.
+         */
+        get: operations["getSchedulingProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scheduling-profiles/{profileId}/placement-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 측정 프로파일 기반 배치 미리보기
+         * @description 저장하지 않고 현재 노드 관측과 프로파일로 작업별 최초 NODE 배치를 계산합니다. 후보는 최근 READY(60초), Linux, SERVICE architecture·nodeSelector, CPU/memory/확장 자원 요청 ≤ 노드 allocatable로 거릅니다. allocatable은 노드 총량이며 잔여량·예약 보장이 아니고 taint·예약 정보는 판단하지 않습니다. 최종 admission은 kube-scheduler입니다. 작업별 download+compute+upload 합이 최소인 노드(동률은 UUID 사전순)를 고르고 DAG 순서로 commit 시각과 critical path를 예측합니다. 큐 대기·동시 경합·Pod 시작·이미지 pull은 포함하지 않는 예측값입니다.
+         */
+        post: operations["previewSchedulingPlacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflow-runs": {
         parameters: {
             query?: never;
@@ -1016,7 +1080,7 @@ export interface paths {
         put?: never;
         /**
          * 워크플로 실행 요청 생성
-         * @description 발행된 DAG를 Run과 Task로 구체화합니다. 같은 UUID Idempotency-Key와 요청은 기존 Run을 반환하고 다른 입력은409입니다. execution은 AUTO/NODE/REMOTE를 지원하며 taskExecutions로 작업별 최초 위치를 지정합니다. 생략한 작업은 기본 정책을 따릅니다. Remote 제공자 설정은 고정하며 자동 offload와 함께 사용할 수 없습니다. STREAM은 별도 실행 설정과 AUTO/NODE 배치를 요구합니다. streamInputs는 현재 장치 세션을 고정합니다. 연결된 스트림 그룹의 BATCH 선행 결과가 검증된 뒤 함께 시작하며 체크포인트·이전 실행 종료·broker 권한 회수를 확인한 후 재시도 또는 전환합니다. 완료된 Result와 불변 Attempt 이력은 보존합니다.
+         * @description 발행된 DAG를 Run과 Task로 구체화합니다. 같은 UUID Idempotency-Key와 요청은 기존 Run을 반환하고 다른 입력은409입니다. execution은 AUTO/NODE/REMOTE를 지원하며 taskExecutions로 작업별 최초 위치를 지정합니다. 생략한 작업은 기본 정책을 따릅니다. Remote 제공자 설정은 고정하며 자동 offload와 함께 사용할 수 없습니다. STREAM은 별도 실행 설정과 AUTO/NODE 배치를 요구합니다. streamInputs는 현재 장치 세션을 고정합니다. 연결된 스트림 그룹의 BATCH 선행 결과가 검증된 뒤 함께 시작하며 체크포인트·이전 실행 종료·broker 권한 회수를 확인한 후 재시도 또는 전환합니다. 완료된 Result와 불변 Attempt 이력은 보존합니다. scheduling.profileId는 측정 프로파일로 작업별 최초 NODE를 서버가 선택하며 AUTO 실행의 SERVICE BATCH만 지원합니다. taskExecutions와 함께 지정하면 400 SCHEDULING_CONFLICT, NODE/REMOTE·streamInputs·device·camera는 409 SCHEDULING_UNSUPPORTED, 다른 DAG 버전·parameters는 409 SCHEDULING_PROFILE_MISMATCH, 만료는 409 SCHEDULING_PROFILE_EXPIRED, 적합 후보 없음은 409 SCHEDULING_NO_CANDIDATE이며 이때 Run·Task·결정은 저장되지 않습니다. 멱등 digest는 사용자 요청(scheduling 포함)이므로 같은 키의 재전송은 프로파일 만료·노드 변화 이후에도 기존 Run을 반환합니다.
          */
         post: operations["createWorkflowRun"];
         delete?: never;
@@ -1061,6 +1125,28 @@ export interface paths {
          * @description Run의 모든 Task와 최신 Attempt에 속한 Runtime 관측을 조회합니다. 아직 배치되지 않은 작업은 attempt 또는 runtime이 null입니다. 요청 정책과 실제 관측 위치를 구분하며 실행 토큰·claim nonce는 포함하지 않습니다.
          */
         get: operations["getRunPlacements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workflow-runs/{runId}/scheduling-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Run의 최초 측정 기반 배치 결정 조회
+         * @description scheduling.profileId로 생성한 Run의 최초 결정입니다. effectiveTaskExecutions는 사용자 입력이 아니라 서버가 선택한 최초 배치이며 재시도·offload 이후 실제 Attempt 위치는 /placements에서 조회합니다. 측정 기반으로 생성하지 않은 Run은 404 SCHEDULING_DECISION_NOT_FOUND입니다.
+         */
+        get: operations["getRunSchedulingDecision"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2027,7 +2113,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE" | "SCHEDULING_PROFILE_INVALID" | "SCHEDULING_PROFILE_NOT_FOUND" | "SCHEDULING_PROFILE_EXPIRED" | "SCHEDULING_PROFILE_MISMATCH" | "SCHEDULING_NO_CANDIDATE" | "SCHEDULING_UNSUPPORTED" | "SCHEDULING_CONFLICT" | "SCHEDULING_DECISION_NOT_FOUND";
             message: string;
         };
         /**
@@ -2897,6 +2983,121 @@ export interface components {
         TaskExecutions: {
             [key: string]: components["schemas"]["ExecutionPolicy"];
         };
+        RunScheduling: {
+            /** Format: uuid */
+            profileId: string;
+        };
+        /** @description 노드 UUID별 측정 시간(ms). 유한한 비음수입니다. */
+        NodeCostMs: {
+            [key: string]: number;
+        };
+        PortNodeCostMs: {
+            [key: string]: components["schemas"]["NodeCostMs"];
+        };
+        /** @description computeMs는 Runner workload 시작~종료, downloadMs는 DAG BATCH 의존으로 연결된 입력 포트별 저장소→노드 다운로드, uploadMs는 SERVICE의 모든 출력 포트별 노드→저장소 업로드입니다. 연결되지 않은 선택 입력은 다운로드되지 않으므로 포함하지 않습니다. 포트별 노드 집합은 computeMs 노드 집합과 같아야 합니다. */
+        SchedulingTaskCosts: {
+            computeMs: components["schemas"]["NodeCostMs"];
+            downloadMs: components["schemas"]["PortNodeCostMs"];
+            uploadMs: components["schemas"]["PortNodeCostMs"];
+        };
+        /** @description 호출자가 제출한 측정 증빙입니다. 서버는 실측 진실성을 자동 보장하지 않습니다. */
+        SchedulingProvenance: {
+            /** @enum {string} */
+            kind: "MEASURED_BATCH_ARTIFACT";
+            evidenceId: string;
+            sampleCount: number;
+        };
+        SchedulingProfileCreate: {
+            /** Format: uuid */
+            workflowVersionId: string;
+            /**
+             * Format: date-time
+             * @description 현재 시각 이하
+             */
+            measuredAt: string;
+            /**
+             * Format: date-time
+             * @description measuredAt 이후. 이 시각부터 새 결정에 사용할 수 없습니다.
+             */
+            validUntil: string;
+            provenance: components["schemas"]["SchedulingProvenance"];
+            /** @description 측정 시 Run parameters. 미리보기·Run의 parameters와 정규화 결과가 같아야 합니다. */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /** @description 발행된 DAG의 모든 작업 키와 정확히 일치합니다. */
+            tasks: {
+                [key: string]: components["schemas"]["SchedulingTaskCosts"];
+            };
+        };
+        /** @description 저장된 요청 문서(SchedulingProfileCreate)와 서버가 부여한 id·digest·createdAt입니다. */
+        SchedulingProfile: {
+            workflowVersionId: components["schemas"]["SchedulingProfileCreate"]["workflowVersionId"];
+            measuredAt: components["schemas"]["SchedulingProfileCreate"]["measuredAt"];
+            validUntil: components["schemas"]["SchedulingProfileCreate"]["validUntil"];
+            provenance: components["schemas"]["SchedulingProvenance"];
+            parameters: components["schemas"]["SchedulingProfileCreate"]["parameters"];
+            tasks: components["schemas"]["SchedulingProfileCreate"]["tasks"];
+            /** Format: uuid */
+            id: string;
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PlacementPreviewRequest: {
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
+        SchedulingCandidate: {
+            /** Format: uuid */
+            nodeId: string;
+            eligible: boolean;
+            /** @description 측정된 노드의 download+compute+upload 합 */
+            costMs?: number;
+            reasons: ("NOT_READY" | "OS" | "ARCHITECTURE" | "NODE_SELECTOR" | "ALLOCATABLE_CPU" | "ALLOCATABLE_MEMORY" | "ALLOCATABLE_RESOURCE" | "NOT_PROFILED")[];
+        };
+        PlacementPreview: {
+            /** Format: uuid */
+            profileId: string;
+            profileDigest: string;
+            /** Format: uuid */
+            workflowVersionId: string;
+            /** @enum {string} */
+            method: "ARTIFACT_PROFILE_MIN_COST";
+            /**
+             * @description 측정값 기반 계획 예측이며 실제 실행 결과가 아닙니다.
+             * @constant
+             */
+            predicted: true;
+            predictedCriticalPathMs: number;
+            criticalPath: string[];
+            /** @description 작업별 예측 Result commit 시각(Run 시작 기준 ms) */
+            predictedCommitMs: {
+                [key: string]: number;
+            };
+            /** @description 작업 키별 선택 노드 UUID */
+            placements: {
+                [key: string]: string;
+            };
+            candidates: {
+                [key: string]: components["schemas"]["SchedulingCandidate"][];
+            };
+            costModel: string;
+            /** @enum {string} */
+            admission: "kube-scheduler";
+            /** Format: date-time */
+            evaluatedAt: string;
+        };
+        SchedulingDecision: components["schemas"]["PlacementPreview"] & {
+            /** Format: uuid */
+            runId: string;
+            /** Format: date-time */
+            decidedAt: string;
+            effectiveTaskExecutions: components["schemas"]["TaskExecutions"];
+            /** @description server-selected initial placement */
+            effectiveTaskExecutionsNote: string;
+        };
         RunCreate: {
             /** @description BATCH Run의 RTSP 카메라 입력. 접수 시 ONLINE·UID를 확인하고 서버가 parameters.cameraSource(장치·노드·Mapper 주소·설정 digest· source generation)로 고정합니다. 클라이언트가 cameraSource를 직접 넣으면 400입니다. STREAM Run에는 사용할 수 없습니다. */
             camera?: components["schemas"]["CameraReference"];
@@ -2911,6 +3112,7 @@ export interface components {
             streamInputs?: components["schemas"]["StreamRunInput"][];
             execution: components["schemas"]["ExecutionPolicy"];
             taskExecutions?: components["schemas"]["TaskExecutions"];
+            scheduling?: components["schemas"]["RunScheduling"];
             retry?: components["schemas"]["RetryPolicy"];
             offload?: components["schemas"]["OffloadPolicy"];
             parameters: {
@@ -2980,6 +3182,8 @@ export interface components {
             workflowVersionId: string;
             remoteTarget: components["schemas"]["RemoteTarget"];
             taskExecutions: components["schemas"]["HistoricalTaskExecutions"];
+            /** @description 사용자가 요청한 측정 기반 배치입니다. 이때 taskExecutions는 서버가 선택한 최초 NODE 배치입니다. */
+            scheduling: components["schemas"]["RunScheduling"] | null;
             /**
              * @description VD는 제거된 기능의 과거 이력에만 사용되는 읽기 전용 값입니다.
              * @enum {string}
@@ -6566,6 +6770,211 @@ export interface operations {
             };
         };
     };
+    registerSchedulingProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchedulingProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 Idempotency-Key·같은 문서로 이미 등록된 프로파일입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulingProfile"];
+                };
+            };
+            /** @description 불변 프로파일이 저장되었습니다. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulingProfile"];
+                };
+            };
+            /** @description 측정 문서 필드·값·포트·노드 집합 또는 측정 시각 오류(SCHEDULING_PROFILE_INVALID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DAG 버전(WORKFLOW_NOT_FOUND) 또는 노드(NODE_NOT_FOUND)가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Idempotency 충돌 또는 지원하지 않는 DAG(SCHEDULING_UNSUPPORTED) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 1 MiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getSchedulingProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 저장된 프로파일입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulingProfile"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 프로파일이 없습니다(SCHEDULING_PROFILE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    previewSchedulingPlacement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlacementPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 예측 배치입니다. 저장되지 않습니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlacementPreview"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 프로파일이 없습니다(SCHEDULING_PROFILE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 만료(SCHEDULING_PROFILE_EXPIRED), parameters 불일치(SCHEDULING_PROFILE_MISMATCH), 적합 후보 없음(SCHEDULING_NO_CANDIDATE) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     listWorkflowRuns: {
         parameters: {
             query?: {
@@ -6791,6 +7200,55 @@ export interface operations {
                 };
             };
             /** @description 대상 리소스가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRunSchedulingDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 저장된 최초 결정입니다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulingDecision"];
+                };
+            };
+            /** @description 잘못된 필드·UUID·DAG·페이지 입력 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Run 또는 결정이 없습니다. */
             404: {
                 headers: {
                     [name: string]: unknown;

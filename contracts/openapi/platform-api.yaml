@@ -1913,6 +1913,175 @@ paths:
               $ref: '#/components/schemas/WorkflowPublish'
       security:
         - csrfToken: []
+  /api/v1/scheduling-profiles:
+    post:
+      tags:
+        - Run
+      operationId: registerSchedulingProfile
+      summary: 측정 배치 프로파일 등록
+      description: >-
+        발행된 SERVICE BATCH DAG 버전의 운영 artifact 저장소 경로 측정값을 불변 문서로 등록합니다. 작업별 노드 compute, 연결된 BATCH 입력 포트별
+        download, 모든 출력 포트별 upload(ms)를 포함하며 누락 비용을 0으로 채우지 않습니다. provenance는 호출자가 제출한 증빙이며 서버가 실측 진실성을
+        보장하지 않습니다. 같은 Idempotency-Key와 같은 정규화 문서는 200으로 기존 프로파일을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다.
+        필드·값·포트·노드 집합 오류와 미래 측정 시각은 400 SCHEDULING_PROFILE_INVALID, STREAM/비 strict SERVICE DAG는 409 SCHEDULING_UNSUPPORTED입니다.
+      responses:
+        '200':
+          description: 같은 Idempotency-Key·같은 문서로 이미 등록된 프로파일입니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulingProfile'
+        '201':
+          description: 불변 프로파일이 저장되었습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulingProfile'
+        '400':
+          description: 측정 문서 필드·값·포트·노드 집합 또는 측정 시각 오류(SCHEDULING_PROFILE_INVALID)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: CSRF 토큰/쿠키가 없거나 유효하지 않습니다.
+        '404':
+          description: DAG 버전(WORKFLOW_NOT_FOUND) 또는 노드(NODE_NOT_FOUND)가 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Idempotency 충돌 또는 지원하지 않는 DAG(SCHEDULING_UNSUPPORTED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: UTF-8 JSON 요청은 1 MiB 이하여야 합니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchedulingProfileCreate'
+      security:
+        - csrfToken: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+  /api/v1/scheduling-profiles/{profileId}:
+    parameters:
+    - name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+        - Run
+      operationId: getSchedulingProfile
+      summary: 측정 배치 프로파일 조회
+      description: 등록된 불변 측정 문서와 digest를 조회합니다. 목록 조회는 제공하지 않습니다.
+      responses:
+        '200':
+          description: 저장된 프로파일입니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulingProfile'
+        '400':
+          description: 잘못된 필드·UUID·DAG·페이지 입력
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: 프로파일이 없습니다(SCHEDULING_PROFILE_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/scheduling-profiles/{profileId}/placement-preview:
+    parameters:
+    - name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      tags:
+        - Run
+      operationId: previewSchedulingPlacement
+      summary: 측정 프로파일 기반 배치 미리보기
+      description: >-
+        저장하지 않고 현재 노드 관측과 프로파일로 작업별 최초 NODE 배치를 계산합니다. 후보는 최근 READY(60초), Linux, SERVICE architecture·nodeSelector,
+        CPU/memory/확장 자원 요청 ≤ 노드 allocatable로 거릅니다. allocatable은 노드 총량이며 잔여량·예약 보장이 아니고 taint·예약 정보는 판단하지 않습니다.
+        최종 admission은 kube-scheduler입니다. 작업별 download+compute+upload 합이 최소인 노드(동률은 UUID 사전순)를 고르고 DAG 순서로
+        commit 시각과 critical path를 예측합니다. 큐 대기·동시 경합·Pod 시작·이미지 pull은 포함하지 않는 예측값입니다.
+      responses:
+        '200':
+          description: 예측 배치입니다. 저장되지 않습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementPreview'
+        '400':
+          description: 잘못된 필드·UUID·DAG·페이지 입력
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: CSRF 토큰/쿠키가 없거나 유효하지 않습니다.
+        '404':
+          description: 프로파일이 없습니다(SCHEDULING_PROFILE_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: 만료(SCHEDULING_PROFILE_EXPIRED), parameters 불일치(SCHEDULING_PROFILE_MISMATCH), 적합 후보 없음(SCHEDULING_NO_CANDIDATE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementPreviewRequest'
+      security:
+        - csrfToken: []
   /api/v1/workflow-runs:
     post:
       tags:
@@ -1923,7 +2092,11 @@ paths:
         발행된 DAG를 Run과 Task로 구체화합니다. 같은 UUID Idempotency-Key와 요청은 기존 Run을 반환하고 다른 입력은409입니다. execution은 AUTO/NODE/REMOTE를 지원하며
         taskExecutions로 작업별 최초 위치를 지정합니다. 생략한 작업은 기본 정책을 따릅니다. Remote 제공자 설정은 고정하며 자동 offload와 함께 사용할 수 없습니다. STREAM은 별도 실행 설정과
         AUTO/NODE 배치를 요구합니다. streamInputs는 현재 장치 세션을 고정합니다. 연결된 스트림 그룹의 BATCH 선행 결과가 검증된 뒤 함께 시작하며 체크포인트·이전 실행 종료·broker 권한 회수를 확인한
-        후 재시도 또는 전환합니다. 완료된 Result와 불변 Attempt 이력은 보존합니다.
+        후 재시도 또는 전환합니다. 완료된 Result와 불변 Attempt 이력은 보존합니다. scheduling.profileId는 측정 프로파일로 작업별 최초 NODE를 서버가 선택하며
+        AUTO 실행의 SERVICE BATCH만 지원합니다. taskExecutions와 함께 지정하면 400 SCHEDULING_CONFLICT, NODE/REMOTE·streamInputs·device·camera는 409
+        SCHEDULING_UNSUPPORTED, 다른 DAG 버전·parameters는 409 SCHEDULING_PROFILE_MISMATCH, 만료는 409 SCHEDULING_PROFILE_EXPIRED, 적합 후보 없음은
+        409 SCHEDULING_NO_CANDIDATE이며 이때 Run·Task·결정은 저장되지 않습니다. 멱등 digest는 사용자 요청(scheduling 포함)이므로 같은 키의 재전송은
+        프로파일 만료·노드 변화 이후에도 기존 Run을 반환합니다.
       responses:
         '200':
           description: 현재 저장 상태 또는 동일 입력 재요청 결과입니다.
@@ -2105,6 +2278,47 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: 대상 리소스가 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/workflow-runs/{runId}/scheduling-decision:
+    parameters:
+    - name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - Run
+      operationId: getRunSchedulingDecision
+      summary: Run의 최초 측정 기반 배치 결정 조회
+      description: >-
+        scheduling.profileId로 생성한 Run의 최초 결정입니다. effectiveTaskExecutions는 사용자 입력이 아니라 서버가 선택한 최초 배치이며 재시도·offload
+        이후 실제 Attempt 위치는 /placements에서 조회합니다. 측정 기반으로 생성하지 않은 Run은 404 SCHEDULING_DECISION_NOT_FOUND입니다.
+      responses:
+        '200':
+          description: 저장된 최초 결정입니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulingDecision'
+        '400':
+          description: 잘못된 필드·UUID·DAG·페이지 입력
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Run 또는 결정이 없습니다.
           content:
             application/json:
               schema:
@@ -3649,6 +3863,14 @@ components:
             - OPERATION_NOT_FOUND
             - INVALID_VIRTUAL_DEVICE
             - DEVICE_IN_USE
+            - SCHEDULING_PROFILE_INVALID
+            - SCHEDULING_PROFILE_NOT_FOUND
+            - SCHEDULING_PROFILE_EXPIRED
+            - SCHEDULING_PROFILE_MISMATCH
+            - SCHEDULING_NO_CANDIDATE
+            - SCHEDULING_UNSUPPORTED
+            - SCHEDULING_CONFLICT
+            - SCHEDULING_DECISION_NOT_FOUND
         message:
           type: string
     PlatformInfo:
@@ -5144,6 +5366,140 @@ components:
         infer:
           mode: NODE
           nodeId: 730912fc-52fb-437b-a31b-5df5c68e22ab
+    RunScheduling:
+      type: object
+      additionalProperties: false
+      required: [profileId]
+      properties:
+        profileId: {type: string, format: uuid}
+    NodeCostMs:
+      type: object
+      minProperties: 1
+      description: 노드 UUID별 측정 시간(ms). 유한한 비음수입니다.
+      propertyNames: {type: string, format: uuid}
+      additionalProperties: {type: number, minimum: 0}
+    PortNodeCostMs:
+      type: object
+      maxProperties: 16
+      propertyNames:
+        $ref: '#/components/schemas/ProfileKey'
+      additionalProperties:
+        $ref: '#/components/schemas/NodeCostMs'
+    SchedulingTaskCosts:
+      type: object
+      additionalProperties: false
+      required: [computeMs, downloadMs, uploadMs]
+      description: >-
+        computeMs는 Runner workload 시작~종료, downloadMs는 DAG BATCH 의존으로 연결된 입력 포트별 저장소→노드 다운로드, uploadMs는 SERVICE의 모든 출력 포트별
+        노드→저장소 업로드입니다. 연결되지 않은 선택 입력은 다운로드되지 않으므로 포함하지 않습니다. 포트별 노드 집합은 computeMs 노드 집합과 같아야 합니다.
+      properties:
+        computeMs: {$ref: '#/components/schemas/NodeCostMs'}
+        downloadMs: {$ref: '#/components/schemas/PortNodeCostMs'}
+        uploadMs: {$ref: '#/components/schemas/PortNodeCostMs'}
+    SchedulingProvenance:
+      type: object
+      additionalProperties: false
+      required: [kind, evidenceId, sampleCount]
+      description: 호출자가 제출한 측정 증빙입니다. 서버는 실측 진실성을 자동 보장하지 않습니다.
+      properties:
+        kind: {type: string, enum: [MEASURED_BATCH_ARTIFACT]}
+        evidenceId: {type: string, minLength: 1, maxLength: 200}
+        sampleCount: {type: integer, minimum: 1}
+    SchedulingProfileCreate:
+      type: object
+      additionalProperties: false
+      required: [workflowVersionId, measuredAt, validUntil, provenance, parameters, tasks]
+      properties:
+        workflowVersionId: {type: string, format: uuid}
+        measuredAt: {type: string, format: date-time, description: 현재 시각 이하}
+        validUntil: {type: string, format: date-time, description: measuredAt 이후. 이 시각부터 새 결정에 사용할 수 없습니다.}
+        provenance: {$ref: '#/components/schemas/SchedulingProvenance'}
+        parameters:
+          type: object
+          additionalProperties: true
+          description: 측정 시 Run parameters. 미리보기·Run의 parameters와 정규화 결과가 같아야 합니다.
+        tasks:
+          type: object
+          maxProperties: 128
+          description: 발행된 DAG의 모든 작업 키와 정확히 일치합니다.
+          propertyNames:
+            $ref: '#/components/schemas/ProfileKey'
+          additionalProperties:
+            $ref: '#/components/schemas/SchedulingTaskCosts'
+    SchedulingProfile:
+      type: object
+      additionalProperties: false
+      description: 저장된 요청 문서(SchedulingProfileCreate)와 서버가 부여한 id·digest·createdAt입니다.
+      required: [workflowVersionId, measuredAt, validUntil, provenance, parameters, tasks, id, digest, createdAt]
+      properties:
+        workflowVersionId: {$ref: '#/components/schemas/SchedulingProfileCreate/properties/workflowVersionId'}
+        measuredAt: {$ref: '#/components/schemas/SchedulingProfileCreate/properties/measuredAt'}
+        validUntil: {$ref: '#/components/schemas/SchedulingProfileCreate/properties/validUntil'}
+        provenance: {$ref: '#/components/schemas/SchedulingProvenance'}
+        parameters: {$ref: '#/components/schemas/SchedulingProfileCreate/properties/parameters'}
+        tasks: {$ref: '#/components/schemas/SchedulingProfileCreate/properties/tasks'}
+        id: {type: string, format: uuid}
+        digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        createdAt: {type: string, format: date-time}
+    PlacementPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [parameters]
+      properties:
+        parameters:
+          type: object
+          additionalProperties: true
+    SchedulingCandidate:
+      type: object
+      additionalProperties: false
+      required: [nodeId, eligible, reasons]
+      properties:
+        nodeId: {type: string, format: uuid}
+        eligible: {type: boolean}
+        costMs: {type: number, minimum: 0, description: 측정된 노드의 download+compute+upload 합}
+        reasons:
+          type: array
+          items:
+            type: string
+            enum: [NOT_READY, OS, ARCHITECTURE, NODE_SELECTOR, ALLOCATABLE_CPU, ALLOCATABLE_MEMORY, ALLOCATABLE_RESOURCE, NOT_PROFILED]
+    PlacementPreview:
+      type: object
+      required: [profileId, profileDigest, workflowVersionId, method, predicted, predictedCriticalPathMs, criticalPath, predictedCommitMs, placements, candidates, costModel, admission, evaluatedAt]
+      properties:
+        profileId: {type: string, format: uuid}
+        profileDigest: {type: string}
+        workflowVersionId: {type: string, format: uuid}
+        method: {type: string, enum: [ARTIFACT_PROFILE_MIN_COST]}
+        predicted: {type: boolean, const: true, description: 측정값 기반 계획 예측이며 실제 실행 결과가 아닙니다.}
+        predictedCriticalPathMs: {type: number, minimum: 0}
+        criticalPath: {type: array, items: {type: string}}
+        predictedCommitMs:
+          type: object
+          description: 작업별 예측 Result commit 시각(Run 시작 기준 ms)
+          additionalProperties: {type: number, minimum: 0}
+        placements:
+          type: object
+          description: 작업 키별 선택 노드 UUID
+          additionalProperties: {type: string, format: uuid}
+        candidates:
+          type: object
+          additionalProperties:
+            type: array
+            items: {$ref: '#/components/schemas/SchedulingCandidate'}
+        costModel: {type: string}
+        admission: {type: string, enum: [kube-scheduler]}
+        evaluatedAt: {type: string, format: date-time}
+    SchedulingDecision:
+      allOf:
+      - $ref: '#/components/schemas/PlacementPreview'
+      - type: object
+        required: [runId, decidedAt, effectiveTaskExecutions, effectiveTaskExecutionsNote]
+        properties:
+          runId: {type: string, format: uuid}
+          decidedAt: {type: string, format: date-time}
+          effectiveTaskExecutions:
+            $ref: '#/components/schemas/TaskExecutions'
+          effectiveTaskExecutionsNote: {type: string, description: server-selected initial placement}
     RunCreate:
       type: object
       additionalProperties: false
@@ -5180,6 +5536,8 @@ components:
           $ref: '#/components/schemas/ExecutionPolicy'
         taskExecutions:
           $ref: '#/components/schemas/TaskExecutions'
+        scheduling:
+          $ref: '#/components/schemas/RunScheduling'
         retry:
           $ref: '#/components/schemas/RetryPolicy'
         offload:
@@ -5259,6 +5617,7 @@ components:
         - createdAt
         - updatedAt
         - vdId
+        - scheduling
       properties:
         id:
           type: string
@@ -5270,6 +5629,11 @@ components:
           $ref: '#/components/schemas/RemoteTarget'
         taskExecutions:
           $ref: '#/components/schemas/HistoricalTaskExecutions'
+        scheduling:
+          description: 사용자가 요청한 측정 기반 배치입니다. 이때 taskExecutions는 서버가 선택한 최초 NODE 배치입니다.
+          oneOf:
+          - $ref: '#/components/schemas/RunScheduling'
+          - type: 'null'
         mode:
           type: string
           enum:

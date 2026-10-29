@@ -30,6 +30,8 @@ public class WorkflowRunController {
     }
     @GetMapping("/{runId}/placements")
     public java.util.List<PlacementResponse> placements(@PathVariable UUID runId) { return service.placements(runId); }
+    @GetMapping("/{runId}/scheduling-decision")
+    public java.util.Map<String,Object> schedulingDecision(@PathVariable UUID runId) { return service.schedulingDecision(runId); }
     @PostMapping(value="/{runId}/cancel",consumes="application/json")
     public WorkflowRunResponse cancel(@PathVariable UUID runId,@RequestBody String body) { return WorkflowRunResponse.from(service.cancelRun(runId,body)); }
 }

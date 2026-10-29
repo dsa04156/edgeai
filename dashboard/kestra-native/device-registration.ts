@@ -76,7 +76,7 @@ export function createDeviceRegistrationMiddleware({
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
       ).test(target) ||
       new RegExp(
-        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements)$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$|^scenarios/hawkeye-safety/video/sessions/${uuid}(/live(/frames/[0-9]{1,9})?)?$|^scenarios/hawkeye-safety/video/tasks/${uuid}/frames/[0-9]{1,9}$`,
+        `^virtual-devices/${uuid}/(execution|processing-versions|outputs(/[a-z][a-z0-9_]{0,62}/history)?)$|^workflow-runs/${uuid}/(streams|placements|scheduling-decision)$|^scheduling-profiles/${uuid}$|^tasks/${uuid}/results(/[a-z][a-z0-9_]*/content)?$|^scenarios/image-comparison/runs/${uuid}(/results)?$|^scenarios/hawkeye-safety/runs/${uuid}$|^scenarios/hawkeye-safety/video/sessions/${uuid}(/live(/frames/[0-9]{1,9})?)?$|^scenarios/hawkeye-safety/video/tasks/${uuid}/frames/[0-9]{1,9}$`,
       ).test(target);
     const cameraPreview =
       /^managed-devices\/[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?\/preview$/.test(
@@ -91,6 +91,7 @@ export function createDeviceRegistrationMiddleware({
         "virtual-devices/continuous",
         "workflows",
         "workflow-runs",
+        "scheduling-profiles",
         "device-profiles",
         "device-connections/test",
         "inference/predict",
@@ -99,7 +100,7 @@ export function createDeviceRegistrationMiddleware({
         "scenarios/hawkeye-safety/video/sessions",
       ].includes(target) ||
       new RegExp(
-        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
+        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^scheduling-profiles/${uuid}/placement-preview$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
       ).test(target);
     const coreDelete =
       (profile && target.includes("/versions/")) ||
@@ -174,12 +175,12 @@ export function createDeviceRegistrationMiddleware({
     )
       return send(403, "같은 Dashboard에서 요청하세요.");
     const workflow =
-      /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
+      /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|scheduling-profiles|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
         target,
       );
     if (
       !workflowsEnabled &&
-      (platform || /^(workflows|workflow-runs|workflow-data-sources)(\/|$)/.test(target))
+      (platform || /^(workflows|workflow-runs|workflow-data-sources|scheduling-profiles)(\/|$)/.test(target))
     )
       return send(404, "지원하지 않는 경로입니다.");
     if (platform && !platformToken)
@@ -227,12 +228,20 @@ export function createDeviceRegistrationMiddleware({
       let length = 0;
       // Only prediction carries an image (4 MiB binary ≈ 5.6 MiB base64 JSON).
       const inference = target === "inference/predict";
+      // The API accepts a measured scheduling profile up to 1 MiB.
+      const schedulingProfile = target === "scheduling-profiles";
       try {
         for await (const chunk of request) {
           length += chunk.length;
           if (
             length >
-            (platform ? 1_100_000 : inference ? 6 * 1024 * 1024 : 65536)
+            (platform
+              ? 1_100_000
+              : inference
+                ? 6 * 1024 * 1024
+                : schedulingProfile
+                  ? 1024 * 1024
+                  : 65536)
           )
             return send(
               413,
@@ -240,7 +249,9 @@ export function createDeviceRegistrationMiddleware({
                 ? "배포 정의는 1MB 이하로 입력하세요."
                 : inference
                   ? "추론 이미지는 4 MiB 이하로 선택하세요."
-                  : "JSON 규격은 64 KiB 이하로 입력하세요.",
+                  : schedulingProfile
+                    ? "측정 프로파일은 1 MiB 이하로 입력하세요."
+                    : "JSON 규격은 64 KiB 이하로 입력하세요.",
             );
           chunks.push(chunk);
         }

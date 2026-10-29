@@ -22,7 +22,7 @@ public class EnabledApiContractController {
             Map<String, Object> document = yaml.load(input);
             var paths = (Map<?, ?>) document.get("paths");
             paths.keySet().removeIf(path -> path.toString().startsWith("/api/v1/workflows")
-                || path.toString().startsWith("/api/v1/workflow-runs"));
+                || path.toString().startsWith("/api/v1/workflow-runs") || path.toString().startsWith("/api/v1/scheduling-profiles"));
             @SuppressWarnings("unchecked")
             var info = (Map<String, Object>) document.get("info");
             info.put("description", "Profile, 장치·노드, 가상 장치와 작업·결과 관리 API입니다. 워크플로 등록·실행 API는 기관 간 통합 전까지 제공하지 않습니다.");

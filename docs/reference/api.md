@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **96개**입니다.
+계약에 정의된 operation은 **100개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -135,10 +135,14 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `GET` | `/api/v1/workflows` | `listWorkflows` |
 | `GET` | `/api/v1/workflows/{workflowId}` | `getWorkflow` |
 | `POST` | `/api/v1/workflows/{workflowId}/versions` | `publishWorkflowVersion` |
+| `POST` | `/api/v1/scheduling-profiles` | `registerSchedulingProfile` |
+| `GET` | `/api/v1/scheduling-profiles/{profileId}` | `getSchedulingProfile` |
+| `POST` | `/api/v1/scheduling-profiles/{profileId}/placement-preview` | `previewSchedulingPlacement` |
 | `POST` | `/api/v1/workflow-runs` | `createWorkflowRun` |
 | `GET` | `/api/v1/workflow-runs` | `listWorkflowRuns` |
 | `GET` | `/api/v1/workflow-runs/{runId}` | `getWorkflowRun` |
 | `GET` | `/api/v1/workflow-runs/{runId}/placements` | `getRunPlacements` |
+| `GET` | `/api/v1/workflow-runs/{runId}/scheduling-decision` | `getRunSchedulingDecision` |
 | `GET` | `/api/v1/workflow-runs/{runId}/streams` | `listRunStreamRoutes` |
 | `POST` | `/api/v1/workflow-runs/{runId}/cancel` | `cancelWorkflowRun` |
 | `GET` | `/api/v1/tasks/{taskId}` | `getTask` |

@@ -370,6 +370,104 @@ test("management and workflow services keep independent sessions, CSRF and upstr
   }
 });
 
+test("scheduling profile and decision routes use the workflow session with exact methods and a 1 MiB profile limit", async () => {
+  const calls = [];
+  const upstream = (label) =>
+    createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      calls.push({
+        label,
+        method: req.method,
+        path: req.url,
+        cookie: req.headers.cookie,
+        csrf: req.headers["x-csrf-token"],
+        idempotency: req.headers["idempotency-key"],
+        length: body.length,
+      });
+      res.setHeader("Content-Type", "application/json");
+      res.statusCode = req.method === "POST" && req.url === "/api/v1/scheduling-profiles" ? 201 : 200;
+      res.end('{"id":"profile"}');
+    });
+  const management = upstream("management"),
+    workflow = upstream("workflow");
+  const listen = async (server) => {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const managementUrl = await listen(management),
+    workflowUrl = await listen(workflow);
+  const proxy = (options) => {
+    const middleware = createDeviceRegistrationMiddleware(options);
+    return createServer((req, res) =>
+      middleware(req, res, () => {
+        res.statusCode = 404;
+        res.end();
+      }),
+    );
+  };
+  const enabled = proxy({ managementUrl, workflowUrl }),
+    disabled = proxy({ managementUrl, workflowUrl, workflowsEnabled: false });
+  const url = await listen(enabled),
+    disabledUrl = await listen(disabled);
+  try {
+    const headers = {
+      Cookie: "EDGEAI_SESSION=management-session; EDGEAI_WORKFLOW_SESSION=workflow-session",
+      Origin: url,
+      "X-CSRF-TOKEN": "workflow-token",
+      "Idempotency-Key": id,
+      "Content-Type": "application/json",
+    };
+    const profile = JSON.stringify({ padding: "x".repeat(100_000) });
+    assert.equal(
+      (await fetch(`${url}/api/control-plane/scheduling-profiles`, { method: "POST", headers, body: profile })).status,
+      201,
+    );
+    assert.equal((await fetch(`${url}/api/control-plane/scheduling-profiles/${id}`, { headers })).status, 200);
+    assert.equal(
+      (await fetch(`${url}/api/control-plane/scheduling-profiles/${id}/placement-preview`, { method: "POST", headers, body: '{"parameters":{}}' })).status,
+      200,
+    );
+    assert.equal((await fetch(`${url}/api/control-plane/workflow-runs/${id}/scheduling-decision`, { headers })).status, 200);
+    assert.deepEqual(calls, [
+      { label: "workflow", method: "POST", path: "/api/v1/scheduling-profiles", cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session", csrf: "workflow-token", idempotency: id, length: profile.length },
+      { label: "workflow", method: "GET", path: `/api/v1/scheduling-profiles/${id}`, cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session", csrf: "workflow-token", idempotency: id, length: 0 },
+      { label: "workflow", method: "POST", path: `/api/v1/scheduling-profiles/${id}/placement-preview`, cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session", csrf: "workflow-token", idempotency: id, length: 17 },
+      { label: "workflow", method: "GET", path: `/api/v1/workflow-runs/${id}/scheduling-decision`, cookie: "EDGEAI_WORKFLOW_SESSION=workflow-session", csrf: "workflow-token", idempotency: id, length: 0 },
+    ]);
+    const oversized = JSON.stringify({ padding: "x".repeat(1024 * 1024) });
+    const previewOversized = JSON.stringify({ padding: "x".repeat(66_000) });
+    for (const [path, method, body, expected] of [
+      ["scheduling-profiles", "POST", oversized, 413],
+      [`scheduling-profiles/${id}/placement-preview`, "POST", previewOversized, 413],
+      ["scheduling-profiles", "GET", undefined, 405],
+      [`scheduling-profiles/${id}`, "DELETE", undefined, 405],
+      [`scheduling-profiles/${id}/placement-preview`, "GET", undefined, 405],
+      [`workflow-runs/${id}/scheduling-decision`, "POST", "{}", 405],
+    ])
+      assert.equal(
+        (await fetch(`${url}/api/control-plane/${path}`, { method, headers, body })).status,
+        expected,
+        `${method} ${path}`,
+      );
+    assert.equal(
+      (await fetch(`${url}/api/control-plane/scheduling-profiles`, { method: "POST", headers: { ...headers, Origin: "https://another.example" }, body: "{}" })).status,
+      403,
+    );
+    assert.equal(
+      (await fetch(`${disabledUrl}/api/control-plane/scheduling-profiles/${id}`, { headers: { ...headers, Origin: disabledUrl } })).status,
+      404,
+    );
+    assert.equal(calls.length, 4);
+  } finally {
+    await Promise.all(
+      [enabled, disabled, management, workflow].map(
+        (server) => new Promise((resolve) => server.close(resolve)),
+      ),
+    );
+  }
+});
+
 test("DDS without a configured token fails closed before any upstream call", async () => {
   let called = false;
   const backend = createServer((req, res) => {
