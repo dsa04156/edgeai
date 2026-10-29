@@ -57,7 +57,7 @@ const handoff = { apiVersion: "edgeai.io/resource-profile-handoff/v1", kind: "Re
     memory: { unit: "bytes", min: 268435456, request: 530579456, max: 1073741824, basis: "RECOMMENDED", kubernetes: { min: "256Mi", request: "506Mi", max: "1Gi" } }, accelerators: [] },
   mappings: { verticalPodAutoscaler: { controlledResources: ["cpu", "memory"], recommendedUpdateMode: "Off" } }, evidence: {}, limitations: [] };
 
-type Hold = { pods?: Promise<void> };
+type Hold = { pods?: Promise<void>; workloads?: Promise<void> };
 function mock(page: Page, analyses: unknown[], saves: { status: number; json: unknown }[], hold: Hold = {}) {
   const posts: { path: string; key?: string; csrf?: string; body: unknown }[] = [];
   const discoveries: number[] = [];
@@ -74,6 +74,7 @@ function mock(page: Page, analyses: unknown[], saves: { status: number; json: un
       // Discovery follows the selected observation window; a Job that ended days ago only exists in a long window.
       const hours = (Date.parse(url.searchParams.get("end")!) - Date.parse(url.searchParams.get("start")!)) / 3600_000;
       discoveries.push(Math.round(hours));
+      await hold.workloads;
       const items = [{ namespace: "edgeai", kind: "Deployment", name: "detector", containers: ["model"] }];
       if (hours > 48) items.push({ namespace: "edgeai", kind: "Job", name: "nightly-batch", containers: ["batch"] });
       return route.fulfill({ json: { items } });
@@ -255,4 +256,26 @@ test("workload discovery follows the selected window so a Job seen only days ago
   const body = posts.find((p) => p.path === "resource-profiles/analyses")!.body as { target: unknown; window: { start: string; end: string } };
   expect(body.target).toMatchObject({ kind: "Job", name: "nightly-batch", container: "batch" });
   expect((Date.parse(body.window.end) - Date.parse(body.window.start)) / 3600_000).toBe(168);
+});
+
+test("changing the window drops the chosen Pod at once, even while discovery is still pending", async ({ page }) => {
+  const hold: Hold = {};
+  const posts = mock(page, [measuredAnalysis], [], hold);
+  await page.goto("/ui/main/resource-profiles");
+  await chooseTarget(page);
+  await pick(page, "관측 구간", "최근 168시간");
+  await expect.poll(() => posts.discoveries.at(-1)).toBe(168);
+  await pick(page, "Pod 실행(선택)", "detector-7d9-abc · gpu-node-1");
+  let release!: () => void;
+  hold.workloads = new Promise<void>((resolve) => (release = resolve));
+  await pick(page, "관측 구간", "최근 1시간");
+  await expect.poll(() => posts.discoveries.at(-1)).toBe(1);
+  // Discovery for the new window has not answered yet; analysing now must not carry the old Pod/UID.
+  await page.getByRole("button", { name: "분석", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "실측·추천 확인과 요구량 확정" })).toBeVisible();
+  const body = posts.find((p) => p.path === "resource-profiles/analyses")!.body as { target: { pod: unknown; podUid: unknown }; window: { start: string; end: string } };
+  expect(body.target.pod).toBeNull();
+  expect(body.target.podUid).toBeNull();
+  expect((Date.parse(body.window.end) - Date.parse(body.window.start)) / 3600_000).toBe(1);
+  release();
 });

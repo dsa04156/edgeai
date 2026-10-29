@@ -584,6 +584,11 @@ async function loadWorkloads() {
   }
 }
 async function reloadWindow() {
+  // The listed Pods and the chosen Pod belong to the previous window: drop them and invalidate any pending Pod
+  // response before awaiting discovery, so a stale Pod UID can never be analysed with the new interval.
+  podGeneration++;
+  pods.value = [];
+  podChoice.value = "";
   await loadWorkloads();
   await loadPods();
 }

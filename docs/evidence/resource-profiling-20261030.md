@@ -79,7 +79,8 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
 | 전체 기한 | `ResourceAnalysisDeadlineIntegrationTest`(예산 1초/3초, 0.7초 워크로드·5초 장치 2개·10초 KRR 가짜): 약 2.7초에 201, 장치·KRR `UNAVAILABLE`(시간 한도), 중단된 호출이 interrupt됨, 행은 기한 안에 저장 |
 | stderr 메모리 | bridge 시험: 16 MiB stderr에서 tracemalloc 최대 1 MiB 미만. 같은 시험을 이전 코드에 돌리면 33,621,249 B로 실패 |
 | 분석 잠김·구간 조회 | Playwright: Pod 조회 대기 중 분석 성공·폼 잠김 없음, 168시간 구간에서만 보이는 Job 선택·분석. resource-profile 10/10 + scheduling 8/8(desktop·mobile) |
-| 콘솔 | `test-ui.sh` 147/147, lint·typecheck·release 빌드 |
+| 검토 2차(구간 변경 경합) | 구간을 바꾸는 즉시 Pod 목록·선택을 비우고 대기 중인 Pod 응답을 무효화. Playwright: 168시간에서 Pod 선택 → 구간 조회 지연 중 1시간으로 변경 → 분석 요청이 `pod`/`podUid` null·1시간 구간. 같은 시험을 수정 전 release에 돌리면 `pod: "detector-7d9-abc"`로 실패. resource-profile 12/12(desktop·mobile) |
+| 콘솔 | `test-ui.sh` 140/140, lint·typecheck·release 빌드 |
 | Argo CD | `applications.argoproj.io/edgeai-dev`: Synced·Healthy, revision `3b74f34`, 자동 동기화·selfHeal. API·콘솔은 `10.254.192.47:5000`의 digest(`newName`) |
 | 이미지 빌드 | `edgeai-kube-arm64-rootless`에서 `linux/amd64` OCI 빌드(푸시 없음) 성공: 사용자 `10001:10001`, 기반 13개 layer가 `robustadev/krr:v1.31.1`(amd64 `sha256:10c21651…`)과 동일, 추가 파일은 `/opt/edgeai/krr_bridge.py`(소스와 같은 sha256)뿐 |
 | 실행 확인 | 위 이미지의 Python·bridge를 비root 사용자, 쓰기 금지 rootfs로 실행해 운영 Prometheus에 실제 KRR: `COMPLETED`, 393m / 530,579,456 B, 쓰기는 HOME/TMPDIR(`.cache`·`.config`·보고서)뿐 |
