@@ -107,6 +107,13 @@
         <h2>선택한 DAG · {{ version.version }}</h2>
         <KsButton :disabled="busy" @click="dag = pretty(version!.dag)"
           >이 버전으로 편집</KsButton
+        ><RouterLink
+          :to="{
+            name: 'edgeai/scheduling-profiles',
+            params: { tenant: route.params.tenant },
+            query: { workflow: version.workflowId, version: version.version },
+          }"
+          >이 버전의 성능 프로파일 등록</RouterLink
         >
       </div>
       <p class="native-note">

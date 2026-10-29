@@ -9,6 +9,7 @@
 |---|---|
 | 코드 | 프로파일 등록·조회, 미리보기, `scheduling.profileId` Run 생성, 결정 조회 구현 |
 | 관련 시험 | 격리 PostgreSQL 통합 시험(`OperationalSchedulingIntegrationTest`)과 기존 Workflow·Retry 회귀 통과 |
+| 웹 등록 화면 | 콘솔 `성능 프로파일`(`/ui/main/scheduling-profiles`) 구현·격리 브라우저 시험 통과. 운영 콘솔 배포 전 |
 | 운영 배포 | 2026-10-29 클러스터 API·웹 콘솔에 배포(V67 적용). 웹 `http://10.254.192.47:13080/api/control-plane/...` 경로 응답 확인. 근거: [배포 기록](../evidence/operational-scheduling-deploy-20261029.md) |
 | 실측 프로파일 | 자동 profiler·부하 생성은 포함하지 않습니다. 실제 BATCH 실행에서 측정한 값만 등록합니다 |
 | 성능 효과 | 실장비 비교는 수행하지 않았습니다. 지연 개선 수치를 주장하지 않습니다 |
@@ -86,6 +87,17 @@ allocatable은 노드 전체 할당 가능량이며 남은 자원이나 예약�
 
 `GET /api/v1/scheduling-profiles/{profileId}`로 저장된 문서와 `digest`를 조회합니다.
 
+### 웹 화면에서 등록
+
+사이드바 **성능 프로파일**, 또는 워크플로 화면에서 발행 버전을 고른 뒤 **이 버전의 성능 프로파일 등록**으로 엽니다.
+
+1. 워크플로(이름 · 키)와 발행된 DAG 버전을 고릅니다. STREAM 연결·STREAM/WORKFLOW_DATA 모듈이 있으면 등록 입력 대신 지원하지 않는 이유를 표시합니다.
+2. 측정 시각·유효 종료 시각(시간대 포함 ISO 8601, 입력한 그대로 전송), 측정 증빙 ID, 표본 수, 측정 실행 매개변수 JSON을 입력합니다.
+3. 작업마다 측정한 노드를 이름으로 고르고, 노드별 계산 시간·연결된 BATCH 입력 포트별 다운로드·모든 출력 포트별 업로드(ms)를 입력합니다. 칸은 비어 있는 상태로 시작하며, 빈 칸이 있으면 해당 작업·노드·포트를 알리고 전송하지 않습니다. 측정한 0은 0으로 입력합니다.
+4. 선택: **측정 JSON 가져오기**로 위 등록 문서(파일 또는 붙여넣기, 1 MiB 이하)를 입력란에 불러옵니다. 선택한 DAG 버전의 `workflowVersionId`·작업·포트·노드 집합과 비음수 숫자가 맞아야 하며, 오류가 나면 현재 입력을 유지합니다. 가져오기는 전송하지 않습니다.
+5. **성능 프로파일 등록**. 같은 내용의 재시도는 같은 `Idempotency-Key`를 쓰고, 내용을 바꾸면 새 키를 씁니다. 실패하면 입력을 유지합니다.
+6. 등록 결과의 프로파일 ID는 주소의 `?profile=`로 남고, **등록된 프로파일 열기**에 ID를 넣어 다시 엽니다. **배치 미리보기**는 저장된 `parameters`로 계산한 작업별 선택 노드·예측 완료 시점·예측 critical path를 보여주며 Run을 만들지 않습니다. 만료·후보 없음 등 거절은 그 자리에 표시합니다.
+
 ## 배치 미리보기
 
 `POST /api/v1/scheduling-profiles/{profileId}/placement-preview`에 `{"parameters": {...}}`를 보냅니다. 저장하지 않습니다.
@@ -160,7 +172,7 @@ curl --fail-with-body -c jar -b jar "$API/api/v1/workflow-runs/$RUN_ID/schedulin
 
 ### 웹 콘솔 경유 호출
 
-배포된 웹 콘솔(13080)은 전용 화면 없이 같은 API를 워크플로 세션으로 전달합니다. 콘솔 주소를 `WEB`으로 두고 위 명령의 경로를 아래처럼 바꿉니다. 쓰기 요청에는 `Origin: $WEB` 헤더가 필요합니다. 프로파일 등록 본문은 1 MiB, 미리보기 본문은 64 KiB까지 전달합니다.
+배포된 웹 콘솔(13080)은 같은 API를 워크플로 세션으로 전달합니다. 콘솔 주소를 `WEB`으로 두고 위 명령의 경로를 아래처럼 바꿉니다. 쓰기 요청에는 `Origin: $WEB` 헤더가 필요합니다. 프로파일 등록 본문은 1 MiB, 미리보기 본문은 64 KiB까지 전달합니다.
 
 | 직접 API (`$API`) | 웹 콘솔 (`$WEB`) |
 |---|---|
@@ -174,6 +186,6 @@ curl --fail-with-body -c jar -b jar "$API/api/v1/workflow-runs/$RUN_ID/schedulin
 ## 제한
 
 - 초기 범위는 AUTO 실행의 SERVICE BATCH입니다. STREAM·Remote·device·camera·WORKFLOW_DATA 입력은 지원하지 않습니다.
-- 프로파일 목록 조회와 UI는 없습니다.
+- 프로파일 목록 조회는 없습니다. 웹 화면은 ID로 다시 엽니다. 측정 기반 Run 생성 선택은 아직 실행 요청 양식에 없습니다.
 - 예측은 측정 조건(`parameters`, 입력 크기, 노드 상태)이 같다는 가정에 기댑니다. 조건이 달라지면 다시 측정해 새 프로파일을 등록합니다.
 - 저장소 migration은 `V67__operational_scheduling.sql`입니다.
