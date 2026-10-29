@@ -38,6 +38,9 @@ Kubernetes Node API를 읽는다. bootstrap은 소유 label을 확인하고 `edg
 ClusterRole/Binding을 준비한다. 권한은 core/v1 nodes의 get/list뿐이며 다른 리소스를 읽거나
 클러스터 자원을 수정할 수 없다. ArgoCD AppProject의 clusterResourceWhitelist는 계속 비어 있다.
 Bootstrap RBAC는 `bootstrap/node-reader.json`, namespace ServiceAccount는 GitOps로 관리한다.
+자원 프로파일링 KRR bridge도 같은 분리를 사용한다. 전용 읽기 권한은
+`bootstrap/krr-bridge-rbac.yaml`을 먼저 적용하고, ServiceAccount와 나머지 리소스는
+GitOps 컴포넌트로 관리한다([설정·배포](../../docs/guides/resource-profiling.md#설정과-배포)).
 
 ## HDD 운영 데이터베이스
 

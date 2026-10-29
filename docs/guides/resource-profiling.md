@@ -142,7 +142,14 @@ kubectl kustomize deploy/kubernetes/overlays/dev | grep -n 'edgeai-krr-bridge\|E
 
 API(V70 포함)·콘솔 이미지 digest를 같은 커밋에서 갱신하고 Argo CD `edgeai-dev`(자동 동기화·selfHeal)로 반영합니다. `kubectl set image`로 바꾸면 selfHeal이 되돌리므로 overlay 커밋으로 배포합니다. 운영 반영은 검토 후 별도 수행합니다.
 
-컴포넌트는 bridge Deployment·Service, `edgeai-api`만 허용하는 NetworkPolicy, KRR 문서의 읽기 전용 규칙 일부(get/list/watch)인 ClusterRole, API 환경 변수 patch를 포함합니다. 워크로드를 변경하는 권한은 없습니다.
+컴포넌트는 ServiceAccount·bridge Deployment·Service, `edgeai-api`만 허용하는 NetworkPolicy와 API 환경 변수 patch를 포함합니다. 클러스터 범위 읽기 권한은 기존 배포 규칙에 따라 GitOps 밖의 `deploy/kubernetes/bootstrap/krr-bridge-rbac.yaml`로 준비합니다. Argo CD 프로젝트의 `clusterResourceWhitelist`는 비워 둡니다. KRR의 get/list/watch만 허용하며 워크로드를 변경하는 권한은 없습니다.
+
+컴포넌트 활성화 전에 대상 context와 같은 이름의 리소스가 없는지(있다면 EdgeAI 소유 label인지) 확인하고 bootstrap을 적용합니다. 다른 설치의 리소스는 인수하지 않습니다.
+
+```bash
+kubectl --context <대상-context> apply --dry-run=server -f deploy/kubernetes/bootstrap/krr-bridge-rbac.yaml
+kubectl --context <대상-context> apply -f deploy/kubernetes/bootstrap/krr-bridge-rbac.yaml
+```
 
 로컬 확인은 KRR 릴리스 바이너리로 bridge를 실행해 할 수 있습니다.
 

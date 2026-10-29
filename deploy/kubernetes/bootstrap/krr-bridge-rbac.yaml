@@ -1,0 +1,39 @@
+# KRR read-only bootstrap. Cluster-scoped RBAC stays outside the namespace-only Argo CD project.
+# Read-only subset of KRR's documented in-cluster rules (docs/krr-in-cluster/krr-in-cluster-job.yaml at v1.31.1):
+# workload discovery, Pods and HPAs. No write verbs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: edgeai-krr-bridge-read
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, replicationcontrollers]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, replicasets, statefulsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [cronjobs, jobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: edgeai-krr-bridge-read
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edgeai-krr-bridge-read
+subjects:
+  - kind: ServiceAccount
+    name: edgeai-krr-bridge
+    namespace: edgeai
