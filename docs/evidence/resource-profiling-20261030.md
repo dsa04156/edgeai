@@ -64,6 +64,13 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
 | Playwright(병합 release) | resource-profile 6/6 + scheduling-profile 8/8 |
 | bridge 단위 시험 | 5/5 |
 
+### main CI 회귀 정리(병합 범위)
+
+`origin/main` `3b74f34`의 CI run `40894668350`은 이미 실패 상태였습니다.
+
+- scaffold: `ManagementAuditRoutesTest` 1 실패 → offload-lab 5개 operation의 감사 경로 누락. `5c4f941`에서 그 5개만 추가했고 `test-unit.sh` 251/251.
+- runner-native(amd64·arm64): 두 아키텍처 모두 `runner-container` 103개를 skip 없이 실행했지만 provenance 검사가 96개를 요구. `25209d9`가 `runner/tests/test_offload_lab.py`에 시험 메서드 7개를 추가했고 삭제는 0개임을 diff로 확인해 기대값만 103으로 맞췄습니다(`d32604f`, `stream-mqtt` 118 유지). `scripts/internal/test-runner-images.py` 12/12, 96개는 이제 거절됨을 시험에 추가.
+
 ## 남은 범위
 
 - bridge 이미지는 CI에서 아직 발행되지 않았습니다. 발행 후 `enable-resource-profiling.py --digest`로 고정하고 배포는 검토 후 별도로 수행합니다.
