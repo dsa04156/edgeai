@@ -1,0 +1,9 @@
+{
+ "runs_rps": [
+  172.09402960806648,
+  172.25023294939777,
+  174.29657551987208
+ ],
+ "C_rps": 172.09402960806648,
+ "note": "rate=inf, 6000 prompts\ub97c 4\uac1c \ud074\ub77c\uc774\uc5b8\ud2b8 \ud504\ub85c\uc138\uc2a4\ub85c \ub3d9\uc2dc \uc804\uc1a1, A-full; C=3\ud68c \uc911 \ucd5c\uc19f\uac12"
+}

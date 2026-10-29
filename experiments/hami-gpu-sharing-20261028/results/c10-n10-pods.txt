@@ -1,0 +1,11 @@
+NAME         READY   STATUS    RESTARTS   AGE     IP            NODE                  NOMINATED NODE   READINESS GATES
+c10-n10-00   1/1     Running   0          2m10s   10.244.8.54   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-01   1/1     Running   0          2m10s   10.244.8.62   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-02   1/1     Running   0          2m10s   10.244.8.63   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-03   1/1     Running   0          2m10s   10.244.8.55   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-04   1/1     Running   0          2m10s   10.244.8.56   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-05   1/1     Running   0          2m10s   10.244.8.57   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-06   1/1     Running   0          2m10s   10.244.8.60   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-07   1/1     Running   0          2m10s   10.244.8.59   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-08   1/1     Running   0          2m10s   10.244.8.61   etri-ser0002-cgnmsb   <none>           <none>
+c10-n10-09   1/1     Running   0          2m10s   10.244.8.58   etri-ser0002-cgnmsb   <none>           <none>

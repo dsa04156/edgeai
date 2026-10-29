@@ -1,0 +1,12 @@
+# GPU 자원을 할당받지 않고 nvidia-smi로 물리 GPU 전체를 1초 간격 기록 (dcgm-exporter 갱신 주기 ~30초 보완)
+apiVersion: v1
+kind: Pod
+metadata: {name: gpu-mon, namespace: hami-bench, labels: {exp: mon}}
+spec:
+  nodeSelector: {kubernetes.io/hostname: etri-ser0002-cgnmsb}
+  containers:
+  - name: mon
+    image: docker.io/pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
+    command: ["bash", "-c", "while true; do echo \"GPU $(date +%s.%N),$(nvidia-smi --query-gpu=utilization.gpu,utilization.memory,memory.used,power.draw,clocks.sm --format=csv,noheader,nounits)\"; sleep 1; done"]
+    env: [{name: NVIDIA_VISIBLE_DEVICES, value: all}, {name: NVIDIA_DRIVER_CAPABILITIES, value: utility}]
+    resources: {requests: {cpu: 100m, memory: 64Mi}}
