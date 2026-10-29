@@ -23,7 +23,7 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
    - 장치: RTX 5080(`etri-ser0002-cgnmsb`, DCGM) `AVAILABLE`·`NODE_DEVICE_UNKNOWN_OWNER`(DCGM에 Pod 표시 없음), Hailo-8(`etri-dev0002-raspi5`) `UNSUPPORTED`.
    - `edgeai/StatefulSet/edgeai-postgres`: 실측 `NOT_FOUND`(구간에 Pod 없음), KRR `NO_DATA`(`No data`).
    - CPU·메모리를 KRR 추천으로 확정 저장 → `MEASURED` revision, `services/edgeai-api-profile/versions/1.0.0/revisions/1/handoff` 조회 일치.
-   - 새 DB에서 Flyway가 `67`(operational scheduling) 다음 `67.1`(resource profile)을 적용함을 `flyway_schema_history`로 확인.
+   - 이 실행 당시 migration 이름은 `V67_1`이었습니다. `origin/main`(`3b74f34`, V68·V69 배포)과 병합한 뒤 `V70`으로 바꾸고 새 격리 DB에서 다시 확인했습니다(아래 「병합 후 재검증」).
 3. **화면 경유(목 없음)** — release 콘솔 → 로컬 API → bridge(KRR) → Prometheus로 Playwright가 서비스 선택·`Deployment · edgeai-api`·RTX 5080 선택 → 분석(약 2.6초) → 표 확인(CPU 27.9m/140m/245.5m/391.5m, KRR 393m·제한 없음, 메모리 KRR 506 MiB, GPU "장치 전체 · 소유 미확인") → 추천 사용·범위 입력 → 저장 → 전달 계약 JSON(`MEASURED`, `basis: RECOMMENDED`, `request: 393`) 표시까지 통과했습니다.
 
 ## 자동 시험

@@ -2082,6 +2082,98 @@ paths:
               $ref: '#/components/schemas/PlacementPreviewRequest'
       security:
         - csrfToken: []
+  /api/v1/offload-lab:
+    get:
+      tags: [OffloadLab]
+      operationId: getOffloadLab
+      summary: 오프로딩 테스트 상태 (모델·노드 측정·최근 세션·Pod 관측)
+      description: >-
+        시험용 화면의 단일 조회입니다. 모든 값은 DB·노드 inventory/Prometheus·Kubernetes 관측에서 읽으며, 관측이 없거나 오래되면 null 또는 UNAVAILABLE입니다.
+        enabled는 실행 기능이 켜져 있고 실행 범위(EDGEAI_RUNTIME_WORKFLOW_KEYS)에 시험 워크플로 키가 있고, 부하 이미지(EDGEAI_OFFLOAD_LAB_LOAD_IMAGE)와
+        발행된 시험 워크플로가 있을 때 true입니다. session은 열린 세션, 없으면 가장 최근 세션입니다. 노드는 edge·worker 라벨 노드만 보입니다.
+      responses:
+        '200':
+          description: 현재 상태
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OffloadLabState'}
+  /api/v1/offload-lab/sessions:
+    post:
+      tags: [OffloadLab]
+      operationId: startOffloadLabSession
+      summary: 모델 실행 (시험 워크플로 Run을 선택한 edge에서 시작)
+      description: >-
+        시험 워크플로의 최신 발행 버전으로 일반 Run을 만들고 execution=NODE(선택한 edge), offload=요청 정책을 사용합니다. nodePlacement가 필요하며 전환·복귀는
+        일반 자동 전환 경로(drain → 원래 Pod 종료 확인 → 새 Attempt)가 수행합니다. 서버 전체에서 열린(ACTIVE·STOPPING) 세션은 1개입니다.
+        같은 Idempotency-Key와 같은 요청은 200으로 기존 세션을, 다른 요청은 409입니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OffloadLabStart'}
+      responses:
+        '200': {description: 같은 키·요청의 기존 세션, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '201': {description: 세션과 Run 생성, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '400': {description: INVALID_WORKFLOW·INVALID_IDEMPOTENCY_KEY, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '403': {description: CSRF 검증 실패}
+        '404': {description: NODE_NOT_FOUND, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '409': {description: OFFLOAD_LAB_BUSY, IDEMPOTENCY_CONFLICT, OFFLOAD_INITIAL_PLACEMENT_INVALID(READY edge 아님), content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '503': {description: OFFLOAD_LAB_RUNTIME_DISABLED, OFFLOAD_LAB_KUBERNETES_DISABLED, OFFLOAD_LAB_WORKFLOW_NOT_PUBLISHED, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/offload-lab/sessions/{sessionId}/stop:
+    post:
+      tags: [OffloadLab]
+      operationId: stopOffloadLabSession
+      summary: 모델 중지 (Run 취소·진행 중 전환 취소·부하 중지)
+      description: >-
+        ACTIVE 세션을 STOPPING으로 바꾸고 Run을 취소합니다(진행 중 전환도 취소). 부하는 원하는 상태를 STOPPED로 바꾼 뒤 Job 삭제를 요청합니다.
+        모델 Pod 종료가 관측되고 이 세션의 부하 Job·Pod가 Kubernetes에 더 이상 없을 때 STOPPED가 됩니다. 측정·워크플로·Kubernetes가 없어도 호출할 수 있습니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyObject'}}}}
+      responses:
+        '200': {description: 현재 세션, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '403': {description: CSRF 검증 실패}
+        '404': {description: OFFLOAD_LAB_NOT_FOUND, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/offload-lab/sessions/{sessionId}/load:
+    post:
+      tags: [OffloadLab]
+      operationId: startOffloadLabLoad
+      summary: 부하 시작 (세션 edge에 제한된 CPU 부하 Job)
+      description: >-
+        세션의 edge에 고정 이미지·고정 프로그램(offload_lab_load.py)의 CPU 부하 Job 하나를 만듭니다. 명령·이미지는 입력받지 않습니다. durationSeconds 뒤
+        프로그램이 스스로 끝나며 activeDeadlineSeconds(+30초)가 상한입니다. 실행 중 부하가 있으면 409, 같은 키·요청 재전송은 200입니다. 만료·세션 중지·
+        API 재시작 뒤 남은 소유 Job은 조정 루프가 삭제합니다. 합성 지표가 아니라 실제 노드 CPU 부하입니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabLoadStart'}}}}
+      responses:
+        '200': {description: 같은 키·요청의 기존 부하, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '201': {description: 부하 요청 기록 (Job 생성은 즉시 시도하고 실패하면 조정 루프가 재시도), content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '400': {description: INVALID_WORKFLOW, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '403': {description: CSRF 검증 실패}
+        '404': {description: OFFLOAD_LAB_NOT_FOUND, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '409': {description: OFFLOAD_LAB_LOAD_RUNNING, OFFLOAD_LAB_STOPPED, IDEMPOTENCY_CONFLICT, OFFLOAD_LAB_LOAD_LIMIT, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '503': {description: OFFLOAD_LAB_KUBERNETES_DISABLED, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/offload-lab/sessions/{sessionId}/load/stop:
+    post:
+      tags: [OffloadLab]
+      operationId: stopOffloadLabLoad
+      summary: 부하 중지 (이 세션의 부하 Job만 삭제)
+      description: 원하는 상태를 STOPPED로 바꾸고 이 세션 라벨의 부하 Job만 UID 조건으로 삭제합니다. 실제 종료는 pods 관측으로 확인합니다.
+      security: [{csrfToken: []}]
+      parameters:
+      - {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EmptyObject'}}}}
+      responses:
+        '200': {description: 현재 세션, content: {application/json: {schema: {$ref: '#/components/schemas/OffloadLabSessionSummary'}}}}
+        '403': {description: CSRF 검증 실패}
+        '404': {description: OFFLOAD_LAB_NOT_FOUND, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
   /api/v1/resource-profiles/capabilities:
     get:
       tags:
@@ -2167,7 +2259,7 @@ paths:
       description: >-
         등록된 SERVICE 버전과 명시한 Kubernetes 워크로드 컨테이너(선택: Pod·UID), 관측 구간(5분–14일), 선택 장치로 분석합니다.
         CPU(millicores)·메모리(working set bytes)는 cAdvisor 범위 조회로, GPU/NPU는 기존 exporter의 장치 단위 관측으로 반환하며,
-        단독 점유가 확인되지 않은 장치 값은 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을
+        장치 값은 노드의 장치 전체 관측이며 exporter의 Pod 표시가 있어도 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을
         bridge에서 실행해 정확히 같은 워크로드·컨테이너의 CPU·메모리 추천만 사용합니다. KRR 창은 KRR 실행 시각 기준 historyHours입니다.
         누락·만료·부족·미지원·귀속 불가는 상태와 이유로 반환하고 0이나 추정값으로 채우지 않습니다. 결과는 불변으로 저장되어 저장 시 근거로 인용됩니다.
       requestBody:
@@ -2465,6 +2557,33 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RunCreate'
+            examples:
+              edgeToWorker:
+                summary: edge 노드에서 시작하고 노드 과부하 시 worker로 전환(RESTART SERVICE)
+                value:
+                  workflowVersionId: 33333333-3333-4333-8333-333333333333
+                  execution: {mode: NODE, nodeId: 44444444-4444-4444-8444-444444444444}
+                  parameters: {}
+                  offload:
+                    cpuPercent: null
+                    memoryPercent: null
+                    latencyMicros: null
+                    consecutiveSamples: 3
+                    maxSampleAgeSeconds: 120
+                    maxGapSeconds: 60
+                    minRunningSeconds: 60
+                    cooldownSeconds: 300
+                    maxTransfers: 1
+                    drainTimeoutSeconds: 120
+                    startTimeoutSeconds: 300
+                    nodePlacement:
+                      strategy: EDGE_TO_WORKER
+                      sourceCpuPercent: 85
+                      sourceMemoryPercent: 90
+                      sourceGpuPercent: null
+                      targetMaxCpuPercent: 60
+                      targetMaxMemoryPercent: 70
+                      targetMaxGpuPercent: 50
       security:
         - csrfToken: []
       parameters:
@@ -4171,6 +4290,17 @@ components:
             - OFFLOAD_LIMIT
             - OFFLOAD_RECOVERY_UNSUPPORTED
             - OFFLOAD_TARGET_INVALID
+            - OFFLOAD_INITIAL_PLACEMENT_INVALID
+            - OFFLOAD_NODE_STREAM_UNSUPPORTED
+            - OFFLOAD_LAB_BUSY
+            - OFFLOAD_LAB_NOT_FOUND
+            - OFFLOAD_LAB_STOPPED
+            - OFFLOAD_LAB_LOAD_RUNNING
+            - OFFLOAD_LAB_LOAD_LIMIT
+            - OFFLOAD_LAB_RUNTIME_DISABLED
+            - OFFLOAD_LAB_KUBERNETES_DISABLED
+            - OFFLOAD_LAB_WORKFLOW_NOT_PUBLISHED
+            - INVALID_IDEMPOTENCY_KEY
             - OPERATION_NOT_FOUND
             - INVALID_VIRTUAL_DEVICE
             - DEVICE_IN_USE
@@ -5551,7 +5681,10 @@ components:
         명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는
         CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후
         AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도
-        retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+        retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다. 선택 필드 nodePlacement를 지정하면 작업 측정 대신 노드 측정 기반 EDGE_TO_WORKER 정책이 되며
+        cpuPercent·memoryPercent·latencyMicros는 모두 null이어야 합니다. 이때 모든 작업은 최근 READY인 edge 노드에 NODE로 지정해야 하고(AUTO·REMOTE·worker 지정은
+        OFFLOAD_INITIAL_PLACEMENT_INVALID), STREAM Run은 OFFLOAD_NODE_STREAM_UNSUPPORTED로 거절합니다. 표본 규칙(consecutiveSamples·maxSampleAgeSeconds·maxGapSeconds)은
+        노드 관측의 서로 다른 원본 시각에 적용하며 같은 Prometheus 표본의 반복 조회는 한 표본입니다. 노드 표본 이력은 API 메모리에 있어 API 재시작 후 다시 쌓아야 합니다.
       required:
         - cpuPercent
         - memoryPercent
@@ -5593,12 +5726,13 @@ components:
         maxSampleAgeSeconds:
           type: integer
           minimum: 10
-          maximum: 60
+          maximum: 180
+          description: 작업 측정 정책은 최대60, nodePlacement 정책은 최대180(노드 수집 주기 약30초 고려)
         maxGapSeconds:
           type: integer
           minimum: 5
-          maximum: 30
-          description: 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음
+          maximum: 120
+          description: 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음. 작업 측정 정책은 최대30, nodePlacement 정책은 최대120
         minRunningSeconds:
           type: integer
           minimum: 10
@@ -5622,19 +5756,32 @@ components:
           type: integer
           minimum: 1
           maximum: 600
-      not:
+        nodePlacement: {$ref: '#/components/schemas/NodePlacementPolicy'}
+      if:
         type: object
-        required:
-          - cpuPercent
-          - memoryPercent
-          - latencyMicros
+        required: [nodePlacement]
+      then:
         properties:
-          cpuPercent:
-            type: 'null'
-          memoryPercent:
-            type: 'null'
-          latencyMicros:
-            type: 'null'
+          cpuPercent: {type: 'null'}
+          memoryPercent: {type: 'null'}
+          latencyMicros: {type: 'null'}
+      else:
+        properties:
+          maxSampleAgeSeconds: {maximum: 60}
+          maxGapSeconds: {maximum: 30}
+        not:
+          type: object
+          required:
+            - cpuPercent
+            - memoryPercent
+            - latencyMicros
+          properties:
+            cpuPercent:
+              type: 'null'
+            memoryPercent:
+              type: 'null'
+            latencyMicros:
+              type: 'null'
       example:
         cpuPercent: 90
         memoryPercent: 90
@@ -5647,10 +5794,306 @@ components:
         maxTransfers: 1
         drainTimeoutSeconds: 60
         startTimeoutSeconds: 120
-    OffloadDecision:
-      type: [object, 'null']
+    NodePlacementPolicy:
+      type: object
       additionalProperties: false
-      description: 자동 판단 시 복사한 정책과 원시 측정. 최신 측정 보관 만료 후에도 남는 결정 근거. 수동 요청이면 null.
+      description: >-
+        EDGE_TO_WORKER 노드 기반 전환. edge 노드(node-role.kubernetes.io/edge 라벨 존재)의 CPU·메모리·GPU 사용률 중 설정한 같은 지표가 연속 표본에서 모두 source 임계값
+        이상이면, worker 라벨이 있고 edge/control-plane 라벨이 없는 최근 READY·linux·arch/nodeSelector 호환이고 SERVICE의 CPU·메모리·확장 자원 요청이 노드 전체 allocatable 이하인 노드 중 신선한 CPU·메모리(요청한 GPU 확장 자원이 있으면
+        allocatable과 모든 GPU 사용률) 관측이 target 상한 미만인 노드를 max(사용률)이 가장 낮은 순, 동률은 이름순으로 하나 고릅니다. 관측 누락은 여유로 보지 않습니다.
+        Kubernetes 자원 예약이 아니며 실제 bind는 kube-scheduler와 claim 확인이 결정합니다. worker에서 실행 중인 작업은 다른 worker로 자동 이동하지 않습니다.
+        returnToEdge를 생략하면 자동 복귀가 없고, 지정하면 Task가 처음 지정된 원래 edge(initial NODE)로만 복귀합니다.
+      required: [strategy, sourceCpuPercent, sourceMemoryPercent, sourceGpuPercent, targetMaxCpuPercent, targetMaxMemoryPercent, targetMaxGpuPercent]
+      properties:
+        strategy: {type: string, const: EDGE_TO_WORKER}
+        sourceCpuPercent: {type: [integer, 'null'], minimum: 1, maximum: 100, description: source edge 노드 CPU 사용률 임계값}
+        sourceMemoryPercent: {type: [integer, 'null'], minimum: 1, maximum: 100, description: source edge 노드 메모리 사용률 임계값}
+        sourceGpuPercent: {type: [integer, 'null'], minimum: 1, maximum: 100, description: source edge 노드 GPU 사용률 임계값. GPU마다 별도 연속 표본으로 판단하며 어느 한 GPU가 연속 초과하면 충족}
+        targetMaxCpuPercent: {type: integer, minimum: 1, maximum: 100, description: 후보 worker CPU 사용률 상한(미만이어야 함)}
+        targetMaxMemoryPercent: {type: integer, minimum: 1, maximum: 100}
+        targetMaxGpuPercent: {type: integer, minimum: 1, maximum: 100, description: SERVICE가 GPU 확장 자원을 요청할 때만 적용}
+        returnToEdge: {$ref: '#/components/schemas/NodeReturnPolicy'}
+      not:
+        type: object
+        required: [sourceCpuPercent, sourceMemoryPercent, sourceGpuPercent]
+        properties:
+          sourceCpuPercent: {type: 'null'}
+          sourceMemoryPercent: {type: 'null'}
+          sourceGpuPercent: {type: 'null'}
+      example:
+        strategy: EDGE_TO_WORKER
+        sourceCpuPercent: 85
+        sourceMemoryPercent: 90
+        sourceGpuPercent: null
+        targetMaxCpuPercent: 60
+        targetMaxMemoryPercent: 70
+        targetMaxGpuPercent: 50
+    EmptyObject: {type: object, additionalProperties: false, maxProperties: 0}
+    OffloadLabStart:
+      type: object
+      additionalProperties: false
+      required: [edgeNodeId, offload]
+      properties:
+        edgeNodeId: {type: string, format: uuid, description: 최근 READY인 edge 라벨 노드}
+        offload: {$ref: '#/components/schemas/OffloadPolicy', description: nodePlacement가 필요합니다. 기본 시험값은 GET의 defaults.offload입니다.}
+    OffloadLabLoadStart:
+      type: object
+      additionalProperties: false
+      required: [workers, durationSeconds]
+      properties:
+        workers: {type: integer, minimum: 1, maximum: 16, description: busy-loop 프로세스 수(= CPU limit 코어 수)}
+        durationSeconds: {type: integer, minimum: 30, maximum: 1800}
+    OffloadLabSessionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, state, runId, edgeNodeId, edgeNodeName, loadDesired, loadGeneration, loadExpiresAt, createdAt, stoppedAt]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [ACTIVE, STOPPING, STOPPED]}
+        runId: {type: string, format: uuid}
+        edgeNodeId: {type: string, format: uuid}
+        edgeNodeName: {type: string}
+        loadDesired: {type: string, enum: [NONE, RUNNING, STOPPED]}
+        loadGeneration: {type: integer, minimum: 0}
+        loadExpiresAt: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+        stoppedAt: {type: [string, 'null'], format: date-time}
+    OffloadLabState:
+      type: object
+      additionalProperties: false
+      required: [enabled, disabledReason, model, loadImage, metrics, nodes, defaults, session]
+      properties:
+        enabled: {type: boolean}
+        disabledReason: {type: [string, 'null'], enum: [RUNTIME_DISABLED, KUBERNETES_DISABLED, WORKFLOW_NOT_PUBLISHED, null]}
+        model:
+          description: 시험 워크플로 최신 버전의 SERVICE 선언(이미지·명령). 실제 실행 증거는 session.latency와 Run 결과입니다.
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [workflowKey, workflowVersionId, version, profileKey, profileVersion, image, command, architectures, resourceRequests, taskParameters]
+            properties:
+              workflowKey: {type: string}
+              workflowVersionId: {type: string, format: uuid}
+              version: {type: string}
+              profileKey: {type: string}
+              profileVersion: {type: string}
+              image: {type: string}
+              command: {type: array, items: {type: string}}
+              architectures: {type: array, items: {type: string}}
+              resourceRequests: {type: object, additionalProperties: {type: string}}
+              taskParameters: {type: object, additionalProperties: true}
+        loadImage: {type: [string, 'null']}
+        metrics:
+          type: object
+          additionalProperties: false
+          required: [status, fetchedAt, maxAgeSeconds]
+          properties:
+            status: {type: string}
+            fetchedAt: {type: [string, 'null'], format: date-time}
+            maxAgeSeconds: {type: integer}
+        nodes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, role, architecture, status, cpuPercent, memoryPercent, gpuPercent, observedAt]
+            properties:
+              id: {type: string, format: uuid}
+              name: {type: string}
+              role: {type: string, enum: [EDGE, WORKER]}
+              architecture: {type: string}
+              status: {type: string}
+              cpuPercent: {type: [number, 'null'], description: 신선한 관측만. 없으면 null(0이 아님)}
+              memoryPercent: {type: [number, 'null']}
+              gpuPercent: {type: [number, 'null']}
+              observedAt: {type: [string, 'null'], format: date-time}
+        defaults:
+          type: object
+          description: 시험용 기본값(시작 전 화면에서 수정). 운영 정책 기본값이 아닙니다.
+          additionalProperties: false
+          required: [offload, load]
+          properties:
+            offload: {$ref: '#/components/schemas/OffloadPolicy'}
+            load: {$ref: '#/components/schemas/OffloadLabLoadStart'}
+        session:
+          oneOf:
+          - type: 'null'
+          - {$ref: '#/components/schemas/OffloadLabSession'}
+    OffloadLabSession:
+      type: object
+      additionalProperties: false
+      required: [id, state, runId, runState, edgeNodeId, edgeNodeName, policy, createdAt, stoppedAt, taskId, taskState, currentNodeName, attempts, operations, latency, load, pods]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [ACTIVE, STOPPING, STOPPED]}
+        runId: {type: string, format: uuid}
+        runState: {type: string}
+        edgeNodeId: {type: string, format: uuid, description: 원래 edge}
+        edgeNodeName: {type: string}
+        policy: {oneOf: [{type: 'null'}, {$ref: '#/components/schemas/OffloadPolicy'}]}
+        createdAt: {type: string, format: date-time}
+        stoppedAt: {type: [string, 'null'], format: date-time}
+        taskId: {type: [string, 'null'], format: uuid}
+        taskState: {type: [string, 'null']}
+        currentNodeName: {type: [string, 'null'], description: producer가 RUNNING으로 관측된 Attempt의 노드. 없으면 null}
+        attempts:
+          type: array
+          description: 최신순. podUid/observedState는 runtime 제어기가 관측해 기록한 값입니다.
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, number, cause, state, nodeId, nodeName, jobName, podUid, desiredState, observedState, failureReason, createdAt, updatedAt]
+            properties:
+              id: {type: string, format: uuid}
+              number: {type: integer}
+              cause: {type: string}
+              state: {type: string}
+              nodeId: {type: [string, 'null'], format: uuid}
+              nodeName: {type: [string, 'null']}
+              jobName: {type: [string, 'null']}
+              podUid: {type: [string, 'null'], format: uuid}
+              desiredState: {type: [string, 'null']}
+              observedState: {type: [string, 'null']}
+              failureReason: {type: [string, 'null']}
+              createdAt: {type: string, format: date-time}
+              updatedAt: {type: string, format: date-time}
+        operations: {type: array, items: {$ref: '#/components/schemas/OffloadOperation'}}
+        latency:
+          type: array
+          description: 최신 Attempt에서 모델이 측정해 보고한 추론 1회 지연(최신 20개 중 지연이 있는 표본)
+          items:
+            type: object
+            additionalProperties: false
+            required: [attemptId, sequence, latencyMicros, observedAt]
+            properties:
+              attemptId: {type: string, format: uuid}
+              sequence: {type: integer}
+              latencyMicros: {type: [integer, 'null']}
+              observedAt: {type: [string, 'null'], format: date-time}
+        load:
+          type: object
+          additionalProperties: false
+          required: [desired, generation, workers, seconds, startedAt, expiresAt, jobUid]
+          properties:
+            desired: {type: string, enum: [NONE, RUNNING, STOPPED, EXPIRED]}
+            generation: {type: integer}
+            workers: {type: [integer, 'null']}
+            seconds: {type: [integer, 'null']}
+            startedAt: {type: [string, 'null'], format: date-time}
+            expiresAt: {type: [string, 'null'], format: date-time}
+            jobUid: {type: [string, 'null'], format: uuid, description: Job 생성이 확인되면 기록}
+        pods:
+          type: object
+          additionalProperties: false
+          required: [status, observedAt, items]
+          properties:
+            status: {type: string, enum: [OBSERVED, UNAVAILABLE]}
+            observedAt: {type: [string, 'null'], format: date-time}
+            items:
+              type: array
+              description: 지금 Kubernetes에 있는 Pod만(삭제된 Pod는 attempts 기록으로 봅니다).
+              items:
+                type: object
+                additionalProperties: false
+                required: [role, name, uid, nodeName, phase, ready, attemptId, generation, createdAt, startedAt, deletingAt, reason]
+                properties:
+                  role: {type: string, enum: [MODEL, LOAD]}
+                  name: {type: string}
+                  uid: {type: [string, 'null'], format: uuid}
+                  nodeName: {type: [string, 'null']}
+                  phase: {type: string}
+                  ready: {type: boolean}
+                  attemptId: {type: [string, 'null'], format: uuid}
+                  generation: {type: [integer, 'null']}
+                  createdAt: {type: [string, 'null'], format: date-time}
+                  startedAt: {type: [string, 'null'], format: date-time}
+                  deletingAt: {type: [string, 'null'], format: date-time, description: 종료 진행 중이면 삭제 요청 시각}
+                  reason: {type: [string, 'null']}
+    NodeReturnPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        선택. worker에서 실행 중일 때 원래 edge의 설정한 모든 지표(GPU는 모든 GPU 계열, 최소 1개)가 consecutiveSamples개 연속·신선한 서로 다른 관측에서
+        각 복귀 임계값 미만이면 원래 edge로 NODE_RETURN 전환합니다. 설정한 source 임계값마다 그보다 작은 복귀 임계값이 필요합니다(히스테리시스).
+        관측 누락·만료·조회 실패는 유휴로 보지 않으며 cooldownSeconds, READY·arch·nodeSelector·allocatable 호환을 확인합니다. worker 자신의 부하는 판단에 쓰지 않습니다.
+        maxTransfers는 왕복 모두를 셉니다(왕복 1회는 2).
+      required: [cpuPercent, memoryPercent, gpuPercent]
+      properties:
+        cpuPercent: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        memoryPercent: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        gpuPercent: {type: [integer, 'null'], minimum: 1, maximum: 100}
+      example: {cpuPercent: 20, memoryPercent: null, gpuPercent: null}
+    NodeSample:
+      type: object
+      additionalProperties: false
+      required: [value, observedAt]
+      properties:
+        value: {type: number, minimum: 0, maximum: 100}
+        observedAt: {type: string, format: date-time}
+    NodeSampleSeries:
+      type: object
+      description: 판단한 노드(EDGE_TO_WORKER는 source, 복귀는 원래 edge)의 계열(CPU_USAGE·MEMORY_USAGE·GPU_USAGE/{장치})별 최신순 서로 다른 관측. 누락·만료·미래·범위 밖 관측이나 조회 실패는 해당 계열의 연속성을 끊습니다.
+      additionalProperties:
+        type: array
+        maxItems: 6
+        items: {$ref: '#/components/schemas/NodeSample'}
+    NodePlacementCandidate:
+      type: object
+      additionalProperties: false
+      required: [nodeId, name, cpuPercent, memoryPercent, gpuPercent, reason]
+      properties:
+        nodeId: {type: string, format: uuid}
+        name: {type: string}
+        cpuPercent: {type: [number, 'null']}
+        memoryPercent: {type: [number, 'null']}
+        gpuPercent: {type: [number, 'null'], description: GPU 확장 자원을 요청한 경우에만 값}
+        score: {type: number, description: ELIGIBLE 후보의 max(사용률)}
+        reason: {type: string, enum: [ELIGIBLE, NOT_SCHEDULABLE, RESOURCE_UNAVAILABLE, UNOBSERVED, GPU_UNOBSERVED, NO_HEADROOM]}
+    NodePlacementDecision:
+      type: object
+      additionalProperties: false
+      description: >-
+        노드 기반 판단 근거. sampling=IN_MEMORY_SINCE_API_START는 API 재시작 시 표본 이력이 초기화됨을 뜻합니다. EDGE_TO_WORKER의 candidates는 평가한 worker 최대32개이며
+        선택된 worker는 항상 포함합니다. WORKER_TO_ORIGINAL_EDGE(NODE_RETURN)는 ranking 없이 candidates가 비어 있고, 표본은 targetNode(원래 edge)에 있습니다.
+      required: [policy, evaluatedAt, eligibleSince, strategy, sampling, sourceNode, targetNode, candidates]
+      properties:
+        policy: {$ref: '#/components/schemas/OffloadPolicy'}
+        evaluatedAt: {type: string, format: date-time}
+        eligibleSince: {type: string, format: date-time}
+        strategy: {type: string, enum: [EDGE_TO_WORKER, WORKER_TO_ORIGINAL_EDGE]}
+        ranking: {type: string, const: LOWEST_MAX_UTILIZATION}
+        sampling: {type: string, const: IN_MEMORY_SINCE_API_START}
+        sourceNode:
+          type: object
+          additionalProperties: false
+          required: [nodeId, name]
+          properties:
+            nodeId: {type: string, format: uuid}
+            name: {type: string}
+            samples: {$ref: '#/components/schemas/NodeSampleSeries'}
+        targetNode:
+          type: object
+          additionalProperties: false
+          required: [nodeId, name]
+          properties:
+            nodeId: {type: string, format: uuid}
+            name: {type: string}
+            samples: {$ref: '#/components/schemas/NodeSampleSeries'}
+        candidates:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/NodePlacementCandidate'}
+    OffloadDecision:
+      oneOf:
+        - {$ref: '#/components/schemas/TaskTelemetryDecision'}
+        - {$ref: '#/components/schemas/NodePlacementDecision'}
+        - {type: 'null'}
+      description: 자동 판단 시 복사한 정책과 근거. 측정 보관 만료 후에도 남습니다. 수동 요청이면 null.
+    TaskTelemetryDecision:
+      type: object
+      additionalProperties: false
+      description: 자동 판단 시 복사한 정책과 원시 측정. 최신 측정 보관 만료 후에도 남는 결정 근거.
       required: [policy, evaluatedAt, eligibleSince, samples]
       properties:
         policy: {$ref: '#/components/schemas/OffloadPolicy'}
@@ -6358,9 +6801,9 @@ components:
         taskId: {type: string, format: uuid}
         sourceAttemptId: {type: string, format: uuid}
         targetAttemptId: {type: [string, 'null'], format: uuid}
-        targetNodeId: {type: [string, 'null'], format: uuid, description: NODE 전환의 지정 노드. Remote 또는 자동 전환이면 null입니다.}
+        targetNodeId: {type: [string, 'null'], format: uuid, description: NODE 전환의 지정 노드. NODE_* 자동 전환은 선택한 worker입니다. Remote 또는 작업 측정 자동 전환이면 null입니다.}
         remoteTarget: {$ref: '#/components/schemas/RemoteTarget'}
-        trigger: {type: string, enum: [MANUAL, CPU, MEMORY, LATENCY]}
+        trigger: {type: string, enum: [MANUAL, CPU, MEMORY, LATENCY, NODE_CPU, NODE_MEM, NODE_GPU, NODE_RETURN], description: NODE_CPU·NODE_MEM·NODE_GPU는 nodePlacement 정책의 source edge 노드 지표, NODE_RETURN은 returnToEdge에 따른 원래 edge 복귀입니다.}
         excludedNodeNames:
           type: array
           maxItems: 16

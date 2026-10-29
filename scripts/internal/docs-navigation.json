@@ -94,6 +94,16 @@
       "description": "Prometheus의 CPU·메모리·GPU·NPU 지표를 연결합니다."
     },
     {
+      "source": "docs/guides/node-placement-offload.md",
+      "group": "guides",
+      "description": "edge 노드 과부하가 지속되면 호환 worker로 작업을 재시작하고 선택적으로 원래 edge로 복귀하는 정책을 설정합니다."
+    },
+    {
+      "source": "docs/guides/offload-lab.md",
+      "group": "guides",
+      "description": "모델 실행·부하로 edge→worker 이동과 원래 edge 복귀를 실제 Pod로 확인하는 시험 화면입니다."
+    },
+    {
       "source": "docs/guides/sensor-registration.md",
       "group": "guides",
       "description": "새 장치 등록과 저장 규격을 이용한 기존 장치 항목 추가·삭제를 안내합니다."

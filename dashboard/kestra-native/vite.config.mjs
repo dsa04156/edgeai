@@ -146,6 +146,7 @@ export default defineConfig(async (env) => {
                   ["scheduling-profiles", "SchedulingProfilesPage.vue"],
                   ["resource-profiles", "ResourceProfilesPage.vue"],
                   ["inference", "InferencePage.vue"],
+                  ["offload-lab", "OffloadLabPage.vue"],
                   ["scenarios", "ScenarioPage.vue"],
                   ["hawkeye", "HawkeyePage.vue", "scenarios/hawkeye"],
                   ["audit", "AuditPage.vue"],
@@ -168,6 +169,7 @@ export default defineConfig(async (env) => {
               ["scheduling-profiles", "성능 프로파일", "SpeedometerMedium"],
               ["resource-profiles", "자원 프로파일", "ChipIcon"],
               ["inference", "모델 추론", "ImageSearchOutline"],
+              ["offload-lab", "오프로딩 테스트", "SwapHorizontal"],
               // Before "scenarios": the top bar picks the first item whose path prefixes /scenarios/hawkeye.
               ["hawkeye", "창고 지게차 안전 점검", "ForkliftIcon"],
               ["scenarios", "GPU/NPU 이미지 비교", "CompareHorizontal"],
@@ -184,7 +186,7 @@ export default defineConfig(async (env) => {
             return code
               .replace(
                 'import {computed} from "vue"',
-                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"\nimport ChipIcon from "vue-material-design-icons/Chip.vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"\nimport SwapHorizontal from "vue-material-design-icons/SwapHorizontal.vue"\nimport ChipIcon from "vue-material-design-icons/Chip.vue"',
               )
               .replace(
                 /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,

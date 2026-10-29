@@ -1001,6 +1001,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/offload-lab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 오프로딩 테스트 상태 (모델·노드 측정·최근 세션·Pod 관측)
+         * @description 시험용 화면의 단일 조회입니다. 모든 값은 DB·노드 inventory/Prometheus·Kubernetes 관측에서 읽으며, 관측이 없거나 오래되면 null 또는 UNAVAILABLE입니다. enabled는 실행 기능이 켜져 있고 실행 범위(EDGEAI_RUNTIME_WORKFLOW_KEYS)에 시험 워크플로 키가 있고, 부하 이미지(EDGEAI_OFFLOAD_LAB_LOAD_IMAGE)와 발행된 시험 워크플로가 있을 때 true입니다. session은 열린 세션, 없으면 가장 최근 세션입니다. 노드는 edge·worker 라벨 노드만 보입니다.
+         */
+        get: operations["getOffloadLab"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offload-lab/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 모델 실행 (시험 워크플로 Run을 선택한 edge에서 시작)
+         * @description 시험 워크플로의 최신 발행 버전으로 일반 Run을 만들고 execution=NODE(선택한 edge), offload=요청 정책을 사용합니다. nodePlacement가 필요하며 전환·복귀는 일반 자동 전환 경로(drain → 원래 Pod 종료 확인 → 새 Attempt)가 수행합니다. 서버 전체에서 열린(ACTIVE·STOPPING) 세션은 1개입니다. 같은 Idempotency-Key와 같은 요청은 200으로 기존 세션을, 다른 요청은 409입니다.
+         */
+        post: operations["startOffloadLabSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offload-lab/sessions/{sessionId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 모델 중지 (Run 취소·진행 중 전환 취소·부하 중지)
+         * @description ACTIVE 세션을 STOPPING으로 바꾸고 Run을 취소합니다(진행 중 전환도 취소). 부하는 원하는 상태를 STOPPED로 바꾼 뒤 Job 삭제를 요청합니다. 모델 Pod 종료가 관측되고 이 세션의 부하 Job·Pod가 Kubernetes에 더 이상 없을 때 STOPPED가 됩니다. 측정·워크플로·Kubernetes가 없어도 호출할 수 있습니다.
+         */
+        post: operations["stopOffloadLabSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offload-lab/sessions/{sessionId}/load": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 부하 시작 (세션 edge에 제한된 CPU 부하 Job)
+         * @description 세션의 edge에 고정 이미지·고정 프로그램(offload_lab_load.py)의 CPU 부하 Job 하나를 만듭니다. 명령·이미지는 입력받지 않습니다. durationSeconds 뒤 프로그램이 스스로 끝나며 activeDeadlineSeconds(+30초)가 상한입니다. 실행 중 부하가 있으면 409, 같은 키·요청 재전송은 200입니다. 만료·세션 중지· API 재시작 뒤 남은 소유 Job은 조정 루프가 삭제합니다. 합성 지표가 아니라 실제 노드 CPU 부하입니다.
+         */
+        post: operations["startOffloadLabLoad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offload-lab/sessions/{sessionId}/load/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 부하 중지 (이 세션의 부하 Job만 삭제)
+         * @description 원하는 상태를 STOPPED로 바꾸고 이 세션 라벨의 부하 Job만 UID 조건으로 삭제합니다. 실제 종료는 pods 관측으로 확인합니다.
+         */
+        post: operations["stopOffloadLabLoad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflow-runs": {
         parameters: {
             query?: never;
@@ -2027,7 +2127,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
+            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OFFLOAD_INITIAL_PLACEMENT_INVALID" | "OFFLOAD_NODE_STREAM_UNSUPPORTED" | "OFFLOAD_LAB_BUSY" | "OFFLOAD_LAB_NOT_FOUND" | "OFFLOAD_LAB_STOPPED" | "OFFLOAD_LAB_LOAD_RUNNING" | "OFFLOAD_LAB_LOAD_LIMIT" | "OFFLOAD_LAB_RUNTIME_DISABLED" | "OFFLOAD_LAB_KUBERNETES_DISABLED" | "OFFLOAD_LAB_WORKFLOW_NOT_PUBLISHED" | "INVALID_IDEMPOTENCY_KEY" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE";
             message: string;
         };
         /**
@@ -2838,7 +2938,7 @@ export interface components {
             retryOn: ("WORKLOAD_FAILED" | "TIMEOUT" | "STORAGE_FAILED" | "RUNNER_FAILED" | "DISPATCH_TIMEOUT" | "RUNTIME_TIMEOUT" | "RUNTIME_LOST" | "JOB_FAILED")[];
         } & unknown;
         /**
-         * @description 명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는 CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다.
+         * @description 명시적으로 활성화하는 작업별 자동 전환. 생략/null이면 비활성입니다. Kubernetes 측정만 지원하며 REMOTE 실행 요청과 함께 지정하면409입니다. 일반 SERVICE는 RESTART, STREAM SERVICE는 CHECKPOINT 복구를 선언해야 합니다. STREAM은 현재 그룹 전체의 체크포인트·실행 신원·경로·대기 시간·전환 예산을 확인하고 전체 종료와 권한 회수 후 상태를 인계합니다. 선택된 작업의 최초 NODE 지정도 전환 후 AUTO로 바뀔 수 있으며 다른 구성원의 배치 정책은 유지합니다. 같은 지표의 최신 연속 표본이 모두 임계값 이상이어야 하며, 선택된 작업의 이전 실행 노드를 제외하고 kube-scheduler가 배치합니다. 실제 실패는 별도 retry 정책을 따릅니다. 최적 성능을 보장하는 알고리즘이 아닙니다. 선택 필드 nodePlacement를 지정하면 작업 측정 대신 노드 측정 기반 EDGE_TO_WORKER 정책이 되며 cpuPercent·memoryPercent·latencyMicros는 모두 null이어야 합니다. 이때 모든 작업은 최근 READY인 edge 노드에 NODE로 지정해야 하고(AUTO·REMOTE·worker 지정은 OFFLOAD_INITIAL_PLACEMENT_INVALID), STREAM Run은 OFFLOAD_NODE_STREAM_UNSUPPORTED로 거절합니다. 표본 규칙(consecutiveSamples·maxSampleAgeSeconds·maxGapSeconds)은 노드 관측의 서로 다른 원본 시각에 적용하며 같은 Prometheus 표본의 반복 조회는 한 표본입니다. 노드 표본 이력은 API 메모리에 있어 API 재시작 후 다시 쌓아야 합니다.
          * @example {
          *       "cpuPercent": 90,
          *       "memoryPercent": 90,
@@ -2861,8 +2961,9 @@ export interface components {
             /** @description 서비스 개별 지연의 마이크로초 임계값. p95/p99가 아님 */
             latencyMicros: number | null;
             consecutiveSamples: number;
+            /** @description 작업 측정 정책은 최대60, nodePlacement 정책은 최대180(노드 수집 주기 약30초 고려) */
             maxSampleAgeSeconds: number;
-            /** @description 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음 */
+            /** @description 인접 표본의 최대 시간 간격. 누락 sequence는 연속으로 인정하지 않음. 작업 측정 정책은 최대30, nodePlacement 정책은 최대120 */
             maxGapSeconds: number;
             /** @description 현재 Attempt 시작 후 대기. STREAM은 그룹 모두의 대기 완료 이후 표본만 사용 */
             minRunningSeconds: number;
@@ -2872,16 +2973,297 @@ export interface components {
             maxTransfers: number;
             drainTimeoutSeconds: number;
             startTimeoutSeconds: number;
+            nodePlacement?: components["schemas"]["NodePlacementPolicy"];
         } | null;
-        /** @description 자동 판단 시 복사한 정책과 원시 측정. 최신 측정 보관 만료 후에도 남는 결정 근거. 수동 요청이면 null. */
-        OffloadDecision: {
+        /**
+         * @description EDGE_TO_WORKER 노드 기반 전환. edge 노드(node-role.kubernetes.io/edge 라벨 존재)의 CPU·메모리·GPU 사용률 중 설정한 같은 지표가 연속 표본에서 모두 source 임계값 이상이면, worker 라벨이 있고 edge/control-plane 라벨이 없는 최근 READY·linux·arch/nodeSelector 호환이고 SERVICE의 CPU·메모리·확장 자원 요청이 노드 전체 allocatable 이하인 노드 중 신선한 CPU·메모리(요청한 GPU 확장 자원이 있으면 allocatable과 모든 GPU 사용률) 관측이 target 상한 미만인 노드를 max(사용률)이 가장 낮은 순, 동률은 이름순으로 하나 고릅니다. 관측 누락은 여유로 보지 않습니다. Kubernetes 자원 예약이 아니며 실제 bind는 kube-scheduler와 claim 확인이 결정합니다. worker에서 실행 중인 작업은 다른 worker로 자동 이동하지 않습니다. returnToEdge를 생략하면 자동 복귀가 없고, 지정하면 Task가 처음 지정된 원래 edge(initial NODE)로만 복귀합니다.
+         * @example {
+         *       "strategy": "EDGE_TO_WORKER",
+         *       "sourceCpuPercent": 85,
+         *       "sourceMemoryPercent": 90,
+         *       "sourceGpuPercent": null,
+         *       "targetMaxCpuPercent": 60,
+         *       "targetMaxMemoryPercent": 70,
+         *       "targetMaxGpuPercent": 50
+         *     }
+         */
+        NodePlacementPolicy: {
+            /** @constant */
+            strategy: "EDGE_TO_WORKER";
+            /** @description source edge 노드 CPU 사용률 임계값 */
+            sourceCpuPercent: number | null;
+            /** @description source edge 노드 메모리 사용률 임계값 */
+            sourceMemoryPercent: number | null;
+            /** @description source edge 노드 GPU 사용률 임계값. GPU마다 별도 연속 표본으로 판단하며 어느 한 GPU가 연속 초과하면 충족 */
+            sourceGpuPercent: number | null;
+            /** @description 후보 worker CPU 사용률 상한(미만이어야 함) */
+            targetMaxCpuPercent: number;
+            targetMaxMemoryPercent: number;
+            /** @description SERVICE가 GPU 확장 자원을 요청할 때만 적용 */
+            targetMaxGpuPercent: number;
+            returnToEdge?: components["schemas"]["NodeReturnPolicy"];
+        };
+        EmptyObject: Record<string, never>;
+        OffloadLabStart: {
+            /**
+             * Format: uuid
+             * @description 최근 READY인 edge 라벨 노드
+             */
+            edgeNodeId: string;
+            /** @description nodePlacement가 필요합니다. 기본 시험값은 GET의 defaults.offload입니다. */
+            offload: components["schemas"]["OffloadPolicy"];
+        };
+        OffloadLabLoadStart: {
+            /** @description busy-loop 프로세스 수(= CPU limit 코어 수) */
+            workers: number;
+            durationSeconds: number;
+        };
+        OffloadLabSessionSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "ACTIVE" | "STOPPING" | "STOPPED";
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            edgeNodeId: string;
+            edgeNodeName: string;
+            /** @enum {string} */
+            loadDesired: "NONE" | "RUNNING" | "STOPPED";
+            loadGeneration: number;
+            /** Format: date-time */
+            loadExpiresAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            stoppedAt: string | null;
+        };
+        OffloadLabState: {
+            enabled: boolean;
+            /** @enum {string|null} */
+            disabledReason: "RUNTIME_DISABLED" | "KUBERNETES_DISABLED" | "WORKFLOW_NOT_PUBLISHED" | null;
+            /** @description 시험 워크플로 최신 버전의 SERVICE 선언(이미지·명령). 실제 실행 증거는 session.latency와 Run 결과입니다. */
+            model: null | {
+                workflowKey: string;
+                /** Format: uuid */
+                workflowVersionId: string;
+                version: string;
+                profileKey: string;
+                profileVersion: string;
+                image: string;
+                command: string[];
+                architectures: string[];
+                resourceRequests: {
+                    [key: string]: string;
+                };
+                taskParameters: {
+                    [key: string]: unknown;
+                };
+            };
+            loadImage: string | null;
+            metrics: {
+                status: string;
+                /** Format: date-time */
+                fetchedAt: string | null;
+                maxAgeSeconds: number;
+            };
+            nodes: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /** @enum {string} */
+                role: "EDGE" | "WORKER";
+                architecture: string;
+                status: string;
+                /** @description 신선한 관측만. 없으면 null(0이 아님) */
+                cpuPercent: number | null;
+                memoryPercent: number | null;
+                gpuPercent: number | null;
+                /** Format: date-time */
+                observedAt: string | null;
+            }[];
+            /** @description 시험용 기본값(시작 전 화면에서 수정). 운영 정책 기본값이 아닙니다. */
+            defaults: {
+                offload: components["schemas"]["OffloadPolicy"];
+                load: components["schemas"]["OffloadLabLoadStart"];
+            };
+            session: null | components["schemas"]["OffloadLabSession"];
+        };
+        OffloadLabSession: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            state: "ACTIVE" | "STOPPING" | "STOPPED";
+            /** Format: uuid */
+            runId: string;
+            runState: string;
+            /**
+             * Format: uuid
+             * @description 원래 edge
+             */
+            edgeNodeId: string;
+            edgeNodeName: string;
+            policy: null | components["schemas"]["OffloadPolicy"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            stoppedAt: string | null;
+            /** Format: uuid */
+            taskId: string | null;
+            taskState: string | null;
+            /** @description producer가 RUNNING으로 관측된 Attempt의 노드. 없으면 null */
+            currentNodeName: string | null;
+            /** @description 최신순. podUid/observedState는 runtime 제어기가 관측해 기록한 값입니다. */
+            attempts: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                cause: string;
+                state: string;
+                /** Format: uuid */
+                nodeId: string | null;
+                nodeName: string | null;
+                jobName: string | null;
+                /** Format: uuid */
+                podUid: string | null;
+                desiredState: string | null;
+                observedState: string | null;
+                failureReason: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+            operations: components["schemas"]["OffloadOperation"][];
+            /** @description 최신 Attempt에서 모델이 측정해 보고한 추론 1회 지연(최신 20개 중 지연이 있는 표본) */
+            latency: {
+                /** Format: uuid */
+                attemptId: string;
+                sequence: number;
+                latencyMicros: number | null;
+                /** Format: date-time */
+                observedAt: string | null;
+            }[];
+            load: {
+                /** @enum {string} */
+                desired: "NONE" | "RUNNING" | "STOPPED" | "EXPIRED";
+                generation: number;
+                workers: number | null;
+                seconds: number | null;
+                /** Format: date-time */
+                startedAt: string | null;
+                /** Format: date-time */
+                expiresAt: string | null;
+                /**
+                 * Format: uuid
+                 * @description Job 생성이 확인되면 기록
+                 */
+                jobUid: string | null;
+            };
+            pods: {
+                /** @enum {string} */
+                status: "OBSERVED" | "UNAVAILABLE";
+                /** Format: date-time */
+                observedAt: string | null;
+                /** @description 지금 Kubernetes에 있는 Pod만(삭제된 Pod는 attempts 기록으로 봅니다). */
+                items: {
+                    /** @enum {string} */
+                    role: "MODEL" | "LOAD";
+                    name: string;
+                    /** Format: uuid */
+                    uid: string | null;
+                    nodeName: string | null;
+                    phase: string;
+                    ready: boolean;
+                    /** Format: uuid */
+                    attemptId: string | null;
+                    generation: number | null;
+                    /** Format: date-time */
+                    createdAt: string | null;
+                    /** Format: date-time */
+                    startedAt: string | null;
+                    /**
+                     * Format: date-time
+                     * @description 종료 진행 중이면 삭제 요청 시각
+                     */
+                    deletingAt: string | null;
+                    reason: string | null;
+                }[];
+            };
+        };
+        /**
+         * @description 선택. worker에서 실행 중일 때 원래 edge의 설정한 모든 지표(GPU는 모든 GPU 계열, 최소 1개)가 consecutiveSamples개 연속·신선한 서로 다른 관측에서 각 복귀 임계값 미만이면 원래 edge로 NODE_RETURN 전환합니다. 설정한 source 임계값마다 그보다 작은 복귀 임계값이 필요합니다(히스테리시스). 관측 누락·만료·조회 실패는 유휴로 보지 않으며 cooldownSeconds, READY·arch·nodeSelector·allocatable 호환을 확인합니다. worker 자신의 부하는 판단에 쓰지 않습니다. maxTransfers는 왕복 모두를 셉니다(왕복 1회는 2).
+         * @example {
+         *       "cpuPercent": 20,
+         *       "memoryPercent": null,
+         *       "gpuPercent": null
+         *     }
+         */
+        NodeReturnPolicy: {
+            cpuPercent: number | null;
+            memoryPercent: number | null;
+            gpuPercent: number | null;
+        };
+        NodeSample: {
+            value: number;
+            /** Format: date-time */
+            observedAt: string;
+        };
+        /** @description 판단한 노드(EDGE_TO_WORKER는 source, 복귀는 원래 edge)의 계열(CPU_USAGE·MEMORY_USAGE·GPU_USAGE/{장치})별 최신순 서로 다른 관측. 누락·만료·미래·범위 밖 관측이나 조회 실패는 해당 계열의 연속성을 끊습니다. */
+        NodeSampleSeries: {
+            [key: string]: components["schemas"]["NodeSample"][];
+        };
+        NodePlacementCandidate: {
+            /** Format: uuid */
+            nodeId: string;
+            name: string;
+            cpuPercent: number | null;
+            memoryPercent: number | null;
+            /** @description GPU 확장 자원을 요청한 경우에만 값 */
+            gpuPercent: number | null;
+            /** @description ELIGIBLE 후보의 max(사용률) */
+            score?: number;
+            /** @enum {string} */
+            reason: "ELIGIBLE" | "NOT_SCHEDULABLE" | "RESOURCE_UNAVAILABLE" | "UNOBSERVED" | "GPU_UNOBSERVED" | "NO_HEADROOM";
+        };
+        /** @description 노드 기반 판단 근거. sampling=IN_MEMORY_SINCE_API_START는 API 재시작 시 표본 이력이 초기화됨을 뜻합니다. EDGE_TO_WORKER의 candidates는 평가한 worker 최대32개이며 선택된 worker는 항상 포함합니다. WORKER_TO_ORIGINAL_EDGE(NODE_RETURN)는 ranking 없이 candidates가 비어 있고, 표본은 targetNode(원래 edge)에 있습니다. */
+        NodePlacementDecision: {
+            policy: components["schemas"]["OffloadPolicy"];
+            /** Format: date-time */
+            evaluatedAt: string;
+            /** Format: date-time */
+            eligibleSince: string;
+            /** @enum {string} */
+            strategy: "EDGE_TO_WORKER" | "WORKER_TO_ORIGINAL_EDGE";
+            /** @constant */
+            ranking?: "LOWEST_MAX_UTILIZATION";
+            /** @constant */
+            sampling: "IN_MEMORY_SINCE_API_START";
+            sourceNode: {
+                /** Format: uuid */
+                nodeId: string;
+                name: string;
+                samples?: components["schemas"]["NodeSampleSeries"];
+            };
+            targetNode: {
+                /** Format: uuid */
+                nodeId: string;
+                name: string;
+                samples?: components["schemas"]["NodeSampleSeries"];
+            };
+            candidates: components["schemas"]["NodePlacementCandidate"][];
+        };
+        /** @description 자동 판단 시 복사한 정책과 근거. 측정 보관 만료 후에도 남습니다. 수동 요청이면 null. */
+        OffloadDecision: components["schemas"]["TaskTelemetryDecision"] | components["schemas"]["NodePlacementDecision"] | null;
+        /** @description 자동 판단 시 복사한 정책과 원시 측정. 최신 측정 보관 만료 후에도 남는 결정 근거. */
+        TaskTelemetryDecision: {
             policy: components["schemas"]["OffloadPolicy"];
             /** Format: date-time */
             evaluatedAt: string;
             /** Format: date-time */
             eligibleSince: string;
             samples: components["schemas"]["RuntimeTelemetry"][];
-        } | null;
+        };
         /**
          * @description 작업 키별 최초 실행 위치입니다. BATCH는 AUTO/NODE/REMOTE를, STREAM은 AUTO/NODE를 지원합니다. 생략한 작업은 execution 기본값을 따르며 Remote 제공자 설정은 대기 작업에도 고정합니다.
          * @example {
@@ -3192,12 +3574,15 @@ export interface components {
             targetAttemptId: string | null;
             /**
              * Format: uuid
-             * @description NODE 전환의 지정 노드. Remote 또는 자동 전환이면 null입니다.
+             * @description NODE 전환의 지정 노드. NODE_* 자동 전환은 선택한 worker입니다. Remote 또는 작업 측정 자동 전환이면 null입니다.
              */
             targetNodeId: string | null;
             remoteTarget: components["schemas"]["RemoteTarget"];
-            /** @enum {string} */
-            trigger: "MANUAL" | "CPU" | "MEMORY" | "LATENCY";
+            /**
+             * @description NODE_CPU·NODE_MEM·NODE_GPU는 nodePlacement 정책의 source edge 노드 지표
+             * @enum {string}
+             */
+            trigger: "MANUAL" | "CPU" | "MEMORY" | "LATENCY" | "NODE_CPU" | "NODE_MEM" | "NODE_GPU" | "NODE_RETURN";
             excludedNodeNames: string[];
             decision: components["schemas"]["OffloadDecision"];
             /** @description STREAM의 고정된 그룹 구성원과 체크포인트 인계 이력. 일반 RESTART 전환은 빈 배열입니다. 같은 Operation이 각 구성원의 Task 이력에 나타납니다. */
@@ -6752,6 +7137,268 @@ export interface operations {
             };
             /** @description 저장소를 사용할 수 없습니다. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getOffloadLab: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 현재 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabState"];
+                };
+            };
+        };
+    };
+    startOffloadLabSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OffloadLabStart"];
+            };
+        };
+        responses: {
+            /** @description 같은 키·요청의 기존 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description 세션과 Run 생성 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description INVALID_WORKFLOW·INVALID_IDEMPOTENCY_KEY */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NODE_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OFFLOAD_LAB_BUSY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OFFLOAD_LAB_RUNTIME_DISABLED */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopOffloadLabSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description 현재 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OFFLOAD_LAB_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startOffloadLabLoad: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OffloadLabLoadStart"];
+            };
+        };
+        responses: {
+            /** @description 같은 키·요청의 기존 부하 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description 부하 요청 기록 (Job 생성은 즉시 시도하고 실패하면 조정 루프가 재시도) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description INVALID_WORKFLOW */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OFFLOAD_LAB_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OFFLOAD_LAB_LOAD_RUNNING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description OFFLOAD_LAB_KUBERNETES_DISABLED */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopOffloadLabLoad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description 현재 세션 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OffloadLabSessionSummary"];
+                };
+            };
+            /** @description CSRF 검증 실패 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OFFLOAD_LAB_NOT_FOUND */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

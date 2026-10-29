@@ -48,7 +48,7 @@ class RuntimeConfiguration {
     WorkflowSourceFeedWorker workflowSourceFeedWorker(WorkflowSourceFeedService feeds,Clock clock,@Value("${edgeai.recovery.inspect-only:false}") boolean inspection){return new WorkflowSourceFeedWorker(feeds,inspection,clock);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
-    OffloadWorker offloadWorker(OffloadService service,RuntimeSettings settings){return new OffloadWorker(service,settings);}
+    OffloadWorker offloadWorker(OffloadService service,RuntimeSettings settings,NodeMetricsService metrics){return new OffloadWorker(service,settings,metrics);}
     @Bean
     @ConditionalOnProperty(name="edgeai.runtime.worker-enabled",havingValue="true",matchIfMissing=true)
     RuntimeWorker runtimeWorker(RuntimeRepository runtimes,RuntimeLifecycleService lifecycle,RuntimeGateway gateway,RunnerTokenService tokens,RuntimeSettings settings,Clock clock){

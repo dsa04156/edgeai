@@ -176,6 +176,10 @@ edgeai:
     ca-file: ${EDGEAI_REMOTE_CA_FILE:}
     source-mode: ${EDGEAI_REMOTE_SOURCE_MODE:SYNTHETIC}
     timeout-seconds: ${EDGEAI_REMOTE_TIMEOUT_SECONDS:10}
+  offload-lab:
+    workflow-key: ${EDGEAI_OFFLOAD_LAB_WORKFLOW_KEY:offload-lab}
+    load-image: ${EDGEAI_OFFLOAD_LAB_LOAD_IMAGE:}
+    poll-ms: ${EDGEAI_OFFLOAD_LAB_POLL_MS:3000}
   runtime:
     enabled: ${EDGEAI_RUNTIME_ENABLED:false}
     # '*' or the only workflow keys whose Runs are dispatched; other Runs and their old runtime rows stay untouched.

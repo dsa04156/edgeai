@@ -11,6 +11,7 @@ components:
   - ../../components/hawkeye-video-replay
   - ../../components/hawkeye-video
   - ../../components/hawkeye-motion
+  - ../../components/offload-lab
   - ../../components/stream
   - ../../components/hdd-data-store
 patches:
@@ -85,9 +86,11 @@ replicas:
     count: 0
 images:
   - name: ghcr.io/dsa04156/edgeai-api
-    digest: sha256:7f30dbb9654128576a0323c4b072f5f23fb228a24cd29571a2f1afc42d96da37
+    newName: 10.254.192.47:5000/edgeai-api
+    digest: sha256:5ffe234394db2e222bda945c444f6dcac32ada5dc09f116f58e426390b859256
   - name: ghcr.io/dsa04156/edgeai-dashboard
-    digest: sha256:3c5bc38c2b3ed72a89df8e04784f29d6285d0695fe9b862b1534513935ee6a2b
+    newName: 10.254.192.47:5000/edgeai-dashboard
+    digest: sha256:184509adb604736340d1ed28a08b49468e559c6403cdaeb7ba14cb15053a2d13
   - name: ghcr.io/dsa04156/edgeai-minio
     digest: sha256:82f1f01911e6bb28e03c867bc08db010fe304a2606349a6f86df52b79df5ff97
   # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.

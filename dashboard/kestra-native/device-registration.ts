@@ -64,6 +64,7 @@ export function createDeviceRegistrationMiddleware({
         "workflow-data-sources",
         "data-store",
         "inference/models",
+        "offload-lab",
         "scenarios/image-comparison",
         "scenarios/image-comparison/runs",
         "scenarios/hawkeye-safety",
@@ -104,12 +105,13 @@ export function createDeviceRegistrationMiddleware({
         "device-profiles",
         "device-connections/test",
         "inference/predict",
+        "offload-lab/sessions",
         "scenarios/image-comparison/runs",
         "scenarios/hawkeye-safety/runs",
         "scenarios/hawkeye-safety/video/sessions",
       ].includes(target) ||
       new RegExp(
-        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^scheduling-profiles/${uuid}/placement-preview$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$`,
+        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^scheduling-profiles/${uuid}/placement-preview$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$|^offload-lab/sessions/${uuid}/(stop|load|load/stop)$`,
       ).test(target);
     const coreDelete =
       (profile && target.includes("/versions/")) ||
@@ -184,12 +186,12 @@ export function createDeviceRegistrationMiddleware({
     )
       return send(403, "같은 Dashboard에서 요청하세요.");
     const workflow =
-      /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|scheduling-profiles|tasks|operations)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
+      /^(workflow-csrf|workflow-data-sources|workflows|workflow-runs|scheduling-profiles|tasks|operations|offload-lab)(\/|$)|^profiles\/SERVICE(\/|$)/.test(
         target,
       );
     if (
       !workflowsEnabled &&
-      (platform || /^(workflows|workflow-runs|workflow-data-sources|scheduling-profiles)(\/|$)/.test(target))
+      (platform || /^(workflows|workflow-runs|workflow-data-sources|scheduling-profiles|offload-lab)(\/|$)/.test(target))
     )
       return send(404, "지원하지 않는 경로입니다.");
     if (platform && !platformToken)

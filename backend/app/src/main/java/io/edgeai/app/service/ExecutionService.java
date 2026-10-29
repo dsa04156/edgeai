@@ -31,12 +31,13 @@ public class ExecutionService {
     private final WorkflowDataInputService dataInputs;
     private final io.edgeai.domain.runtime.RuntimeScope scope;
     private final SchedulingService scheduling;
+    private final PlacementPolicyService placement;
     public ExecutionService(ExecutionRepository repository,WorkflowRepository workflows,NodeRepository nodes,RuntimeRepository runtimes,OffloadRepository offloads,TelemetryRepository telemetry,Clock clock,
-            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs,io.edgeai.domain.runtime.RuntimeScope scope,SchedulingService scheduling) {
+            RuntimeLifecycleService lifecycle,@Value("${edgeai.runtime.enabled:false}") boolean runtimeEnabled,@Value("${edgeai.runtime.namespace:edgeai-runtimes}") String runtimeNamespace,RemoteProvider remoteProvider,StreamRunService streams,ManagedDeviceService managedDevices,WorkflowDataInputService dataInputs,io.edgeai.domain.runtime.RuntimeScope scope,SchedulingService scheduling,PlacementPolicyService placement) {
         this.repository=repository;this.workflows=workflows;this.nodes=nodes;this.runtimes=runtimes;this.offloads=offloads;this.telemetry=telemetry;this.clock=clock;
         this.lifecycle=lifecycle;this.runtimeEnabled=runtimeEnabled;this.runtimeNamespace=runtimeNamespace;
         this.remoteProvider=remoteProvider;
-        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;this.scope=scope;this.scheduling=scheduling;
+        this.streams=streams;this.managedDevices=managedDevices;this.dataInputs=dataInputs;this.scope=scope;this.scheduling=scheduling;this.placement=placement;
     }
     @Transactional
     public Creation<WorkflowRun> create(String key,String body) {
@@ -106,6 +107,10 @@ public class ExecutionService {
                 throw error(404,"NODE_NOT_FOUND","작업별 실행 위치에서 참조할 노드를 찾을 수 없습니다.");
         }
         boolean stream=!streamInputs.isEmpty() || streams.streaming(dag);
+        if(offload!=null && offload.nodePlacement()!=null) {
+            if(stream)throw error(409,"OFFLOAD_NODE_STREAM_UNSUPPORTED","노드 기반 전환은 RESTART 작업만 지원합니다. STREAM은 기존 측정 기반 전환을 사용하세요.");
+            placement.validateInitial(definitions,taskExecutions,policy);
+        }
         var taskRemoteTargets=new TreeMap<String,io.edgeai.domain.remote.RemoteTarget>();
         for(var definition:definitions) {
             var placement=(Map<?,?>)taskExecutions.getOrDefault(definition.key(),policy);

@@ -7,7 +7,7 @@
 
 | 수준 | 상태 |
 |---|---|
-| API | 분석·저장·목록·조회·2-1 전달 계약 9개 operation(`ResourceProfile` 태그), Flyway `V67_1__resource_profile.sql`(V67 다음 67.1, 다른 작업의 V68·V69와 순서 충돌 없음) |
+| API | 분석·저장·목록·조회·2-1 전달 계약 9개 operation(`ResourceProfile` 태그), Flyway `V70__resource_profile.sql`(배포된 V69 다음) |
 | 실측 | 기존 Prometheus의 cAdvisor·kube-state-metrics 범위 조회(고정 PromQL). 장치는 기존 DCGM(NVIDIA GPU)·Mobilint NPU exporter만 기간 조회 |
 | 추천 | 오픈소스 [KRR](https://github.com/robusta-dev/krr) `v1.31.1`(`simple` 전략)을 전용 bridge(`profiling-bridge/`)에서 실제 실행하고 JSON 보고서를 대상 식별자로 대조 |
 | 웹 | 콘솔 `자원 프로파일`(`/ui/main/resource-profiles`) |
@@ -121,7 +121,7 @@ bridge(`profiling-bridge/`)는 공식 `robustadev/krr:v1.31.1` 이미지(index d
    kubectl kustomize deploy/kubernetes/overlays/dev | grep -n edgeai-krr-bridge
    ```
 
-3. API(V67_1 포함)·콘솔 이미지를 기존 CI로 발행·고정하고 Argo CD로 동기화합니다. 운영 반영은 검토 후 별도 수행합니다.
+3. API(V70 포함)·콘솔 이미지를 기존 CI로 발행·고정하고 Argo CD로 동기화합니다. 운영 반영은 검토 후 별도 수행합니다.
 
 컴포넌트는 bridge Deployment·Service, `edgeai-api`만 허용하는 NetworkPolicy, KRR 문서의 읽기 전용 규칙 일부(get/list/watch)인 ClusterRole, API 환경 변수 patch를 포함합니다. 워크로드를 변경하는 권한은 없습니다.
 
