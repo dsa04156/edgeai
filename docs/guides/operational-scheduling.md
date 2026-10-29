@@ -9,7 +9,7 @@
 |---|---|
 | 코드 | 프로파일 등록·조회, 미리보기, `scheduling.profileId` Run 생성, 결정 조회 구현 |
 | 관련 시험 | 격리 PostgreSQL 통합 시험(`OperationalSchedulingIntegrationTest`)과 기존 Workflow·Retry 회귀 통과 |
-| 운영 배포 | 미수행. 클러스터 API에 배포되기 전에는 이 기능을 사용할 수 없습니다 |
+| 운영 배포 | 2026-10-29 클러스터 API·웹 콘솔에 배포(V67 적용). 웹 `http://10.254.192.47:13080/api/control-plane/...` 경로 응답 확인. 근거: [배포 기록](../evidence/operational-scheduling-deploy-20261029.md) |
 | 실측 프로파일 | 자동 profiler·부하 생성은 포함하지 않습니다. 실제 BATCH 실행에서 측정한 값만 등록합니다 |
 | 성능 효과 | 실장비 비교는 수행하지 않았습니다. 지연 개선 수치를 주장하지 않습니다 |
 
