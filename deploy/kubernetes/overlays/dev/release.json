@@ -1,10 +1,10 @@
 {
-  "sourceRevision": "a7332f749de5933a08db4ae9d91078036001692f",
+  "sourceRevision": "547b8786a69d58e27f9d4f8fc4455220208dd91b",
   "runnerSourceRevision": "e4b7a6a1a4e2ecbf5a6a2e24ae8179982d185a1a",
-  "apiDigest": "sha256:97e08ef445e65969ca5e2f2ec05d2ededf91d2297ef6470e8b9479f809d91346",
-  "dashboardDigest": "sha256:71262eaeb46a86462b17057f8e45f91598a4fb0522d5270330d604fd32c189b6",
+  "apiDigest": "sha256:7f30dbb9654128576a0323c4b072f5f23fb228a24cd29571a2f1afc42d96da37",
+  "dashboardDigest": "sha256:3c5bc38c2b3ed72a89df8e04784f29d6285d0695fe9b862b1534513935ee6a2b",
   "runnerDigest": "sha256:ed9a4c7dd286cf845dd4631f90af384f92d6c036f0c18d2d7b512e3a52a1c793",
-  "minioDigest": "sha256:ce50e12355c3c1dfac0b84b2538160953401925c10f5e511b9517dc39c29bc41",
+  "minioDigest": "sha256:6cb2f96731fdd9b02267828ae897cc80aa25ecd94deb9bf7747a659d5750371d",
   "influxdbDigest": "sha256:cf2f9071f89c1fb8b18ead05861b06f3bb6e88381eabda05efbe2b7364c57f82",
   "runtimeImagePlatforms": [
     "linux/amd64",
