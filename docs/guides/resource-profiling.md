@@ -12,7 +12,7 @@
 | 추천 | 오픈소스 [KRR](https://github.com/robusta-dev/krr) `v1.31.1`(`simple` 전략)을 전용 bridge(`profiling-bridge/`)에서 실제 실행하고 JSON 보고서를 대상 식별자로 대조 |
 | 웹 | 콘솔 `자원 프로파일`(`/ui/main/resource-profiles`) |
 | 시험 | 격리 PostgreSQL 통합 시험, adapter·bridge·화면 단위/브라우저 시험, 읽기 전용 운영 Prometheus·실제 KRR 연동 확인. 근거: [시험·연동 기록](../evidence/resource-profiling-20261030.md) |
-| 배포 | 미배포. bridge 이미지 빌드와 `deploy/kubernetes/components/resource-profiling` 적용은 검토 후 별도 수행 |
+| 배포 | 2026-10-30 운영 반영. [웹 자원 프로파일](http://10.254.192.47:13080/ui/main/resource-profiles), API·콘솔·KRR bridge Ready, GitOps Synced/Healthy, V70 적용. [배포 근거](../evidence/resource-profiling-20261030.md#운영-배포-2026-10-30) |
 
 ## 사용 흐름
 
@@ -140,7 +140,7 @@ bridge(`profiling-bridge/`)는 공식 `robustadev/krr:v1.31.1` 이미지(index d
 kubectl kustomize deploy/kubernetes/overlays/dev | grep -n 'edgeai-krr-bridge\|EDGEAI_RESOURCE_PROFILING'
 ```
 
-API(V70 포함)·콘솔 이미지 digest를 같은 커밋에서 갱신하고 Argo CD `edgeai-dev`(자동 동기화·selfHeal)로 반영합니다. `kubectl set image`로 바꾸면 selfHeal이 되돌리므로 overlay 커밋으로 배포합니다. 운영 반영은 검토 후 별도 수행합니다.
+API(V70 포함)·콘솔 이미지 digest를 같은 커밋에서 갱신하고 Argo CD `edgeai-dev`(자동 동기화·selfHeal)로 반영합니다. `kubectl set image`로 바꾸면 selfHeal이 되돌리므로 overlay 커밋으로 배포합니다. 현재 운영 반영 결과는 [배포 근거](../evidence/resource-profiling-20261030.md#운영-배포-2026-10-30)에 기록했습니다.
 
 컴포넌트는 ServiceAccount·bridge Deployment·Service, `edgeai-api`만 허용하는 NetworkPolicy와 API 환경 변수 patch를 포함합니다. 클러스터 범위 읽기 권한은 기존 배포 규칙에 따라 GitOps 밖의 `deploy/kubernetes/bootstrap/krr-bridge-rbac.yaml`로 준비합니다. Argo CD 프로젝트의 `clusterResourceWhitelist`는 비워 둡니다. KRR의 get/list/watch만 허용하며 워크로드를 변경하는 권한은 없습니다.
 
@@ -172,7 +172,7 @@ EDGEAI_DASHBOARD_PORT=<port> npx playwright test --config dashboard/playwright.p
 
 ## 남은 범위
 
-- 운영 배포·운영 DB 적용은 하지 않았습니다.
+- 웹·API·KRR bridge와 V70은 운영 배포했습니다. 운영 서비스의 자원 요청값을 자동 변경하지 않습니다.
 - DCGM의 Pod 소유 정보 연결(kubelet pod-resources)이 없어 GPU 관측은 장치 전체 값입니다. 다른 장치 exporter의 기간 조회는 연결하지 않았습니다.
 - KRR은 네임스페이스·종류 단위로 스캔하므로 큰 네임스페이스에서는 실행 시간이 길어질 수 있습니다(bridge 제한 120초).
 - 실행 측 ①(HAMi·device plugin 분할)과 ③(VPA 증강)의 실제 연동 근거는 3-3 전체 완료 판단에 별도로 필요합니다.

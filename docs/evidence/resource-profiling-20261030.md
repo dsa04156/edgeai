@@ -1,6 +1,6 @@
 # 서비스 자원 프로파일 시험·연동 기록 (2026-10-30)
 
-[서비스 자원 프로파일](../guides/resource-profiling.md) 구현의 검증 근거입니다. 기준 커밋 `4b497b6`의 격리 작업 트리에서 수행했고 **운영 배포·운영 DB 적용·클러스터 변경은 하지 않았습니다.**
+[서비스 자원 프로파일](../guides/resource-profiling.md) 구현의 검증 근거입니다. 개발 시험은 기준 커밋 `4b497b6`의 격리 작업 트리에서 시작했고, 최신 main 병합·두 차례 검토 수정 후 운영에 반영했습니다. 개발 시험과 아래 [운영 배포](#운영-배포-2026-10-30) 근거를 구분합니다.
 
 ## 환경
 
@@ -87,8 +87,39 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
 | 발견·수정한 차단 요인 | 공식 이미지의 `krr version`은 `dev` → CI 검사를 사용자·읽기 전용 rootfs·기반 digest(`krrImage`) 확인으로 교체 |
 | 통합 영향 | 컴포넌트를 켜면 운영 API Deployment에 `EDGEAI_RESOURCE_PROFILING_*` 5개 env만 추가되고 삭제·변경 0, 이미지·볼륨 동일, offload-lab 설정 유지(렌더 결과와 운영 spec 비교) |
 
+## 운영 배포 (2026-10-30)
+
+- 소스 `5da347b61d221838700b1689732efb76bb1fe944`, CI 이미지 고정 `3e2497b`, bridge 활성화 `0380dd3`, bootstrap 분리 `100e313`.
+- [플랫폼 CI 40905905483](https://github.com/dsa04156/edgeai/actions/runs/40905905483) 전체 성공: 단위·계약·콘솔, 데이터/객체 저장소, amd64·arm64 Runner, 실제 DB를 연결한 빌드 이미지 시험, 이미지 발행·GitOps 고정.
+- [KRR bridge CI 40905905154](https://github.com/dsa04156/edgeai/actions/runs/40905905154) 성공: bridge 시험·이미지 빌드·비root/읽기 전용 rootfs 실행·API 제한 검증·발행. 익명 GHCR manifest 조회도 HTTP 200.
+
+| 실행 중인 Pod 이미지 | imageID의 digest |
+|---|---|
+| `ghcr.io/dsa04156/edgeai-api` | `sha256:696434c67d20bd39eeee606bb1059afc4297795f83ed6fc2ad66d5a59e73ad94` |
+| `ghcr.io/dsa04156/edgeai-dashboard` | `sha256:2fd81ffc319ac921324b3b7f5c68025693bc9efe5f41bf84b0316605fcf8ce8b` |
+| `ghcr.io/dsa04156/edgeai-krr-bridge` | `sha256:484af0d5232144e1d270f361c08495b8599997aa1565dd04467372d72348052f` |
+
+세 Pod 모두 Ready, 재시작 0을 확인했습니다. Argo CD `edgeai-dev`는 `100e313`에서 Synced/Healthy·sync Succeeded입니다.
+
+초기 bridge 동기화는 AppProject가 ClusterRole/Binding을 허용하지 않아 실패했습니다. 저장소의 기존 node-reader/runtime bootstrap 규칙에 맞춰 동일한 읽기 권한을 `deploy/kubernetes/bootstrap/krr-bridge-rbac.yaml`로 분리했습니다. 같은 이름의 기존 리소스가 없음을 확인하고 server dry-run 후 적용했습니다. GitOps 렌더에는 클러스터 RBAC가 없고 AppProject의 `clusterResourceWhitelist: []`도 유지합니다. KRR 계정은 `list deployments` yes, `create pods` no입니다.
+
+배포 전 PostgreSQL custom-format dump와 Deployment 설정을 Git 밖에 보관했습니다. DB dump 3,912,361 B, SHA-256 `512c006fde6d72954a5fc04608b9c60aa748c3732d389762cb5df75f690ca335`, `pg_restore --list` 616행 확인. 실제 복원 시험은 수행하지 않았습니다. API 기동 로그와 DB 조회에서 `70 | resource profile | success`를 확인했습니다.
+
+| 운영 확인 | 결과 |
+|---|---|
+| `/api/health`, `/ui/main/resource-profiles` | HTTP 200 |
+| 웹 capabilities | HTTP 200, `prometheus:true`, `krr:true`, `v1.31.1` |
+| 웹 자원 프로파일 목록 | HTTP 200, 0건(운영 예시 데이터 생성 없음) |
+| 웹 `workloads?namespace=edgeai&hours=1` | HTTP 200, 13개 |
+| API Pod → bridge Service `/healthz` | HTTP 200, uid 10001, 고정 KRR 기반 digest 일치 |
+| bridge Pod의 실제 KRR 실행 | `COMPLETED`, scan 10개, `edgeai-api/api` 요청 CPU 0.393 core·RAM 530579456 B. 해당 워크로드의 24시간 자료에 대한 결과이며 다른 모델의 요구량이 아님 |
+| 실제 Chromium으로 운영 화면 로드 | 서비스 선택 가능, JavaScript 오류 0·실패 HTTP 요청 0, 스크린샷 확인 |
+| 기존 `/api/control-plane/offload-lab`, Hawkeye safety | HTTP 200 |
+
+운영의 자원 요청값·오프로딩 실행·프로파일 저장은 변경하지 않았습니다. VPA/HAMi 설치는 수행하지 않았습니다.
+
 ## 남은 범위
 
-- bridge 이미지는 CI에서 아직 발행되지 않았습니다. 발행 후 `enable-resource-profiling.py --digest`로 고정하고 배포는 검토 후 별도로 수행합니다.
+- 웹·API·bridge 운영 배포는 완료했습니다. 서비스 프로파일 저장·전달 계약의 쓰기 시험은 격리 DB에서 수행했으며, 운영에는 예시 프로파일을 추가하지 않았습니다.
 - DCGM Pod 표시가 없어 GPU는 장치 전체 값만 제공합니다. Jetson·Spark·Intel·Hailo exporter의 기간 조회는 연결하지 않았습니다.
 - VPA·HAMi 설치, 워커 변경, 2-1의 YAML 생성은 범위 밖입니다.
