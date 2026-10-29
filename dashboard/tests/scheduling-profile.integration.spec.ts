@@ -197,6 +197,8 @@ test("imported JSON fills the draft only when it is a valid profile for the sele
   await reject("time.json", JSON.stringify({ ...measured, measuredAt: "invalid" }), "측정 시각은 시간대를 포함한 ISO 8601 시각이어야 합니다");
   await reject("order.json", JSON.stringify({ ...measured, measuredAt: measured.validUntil, validUntil: measured.measuredAt }), "유효 종료 시각은 측정 시각 이후여야 합니다.");
   await reject("evidence.json", JSON.stringify({ ...measured, provenance: { ...provenance, evidenceId: " " } }), "측정 증빙 ID를 입력하세요.");
+  await reject("long-evidence.json", JSON.stringify({ ...measured, provenance: { ...provenance, evidenceId: "a".repeat(201) } }), "측정 증빙 ID는 200자 이하이며 제어 문자를 포함할 수 없습니다.");
+  await reject("control-evidence.json", JSON.stringify({ ...measured, provenance: { ...provenance, evidenceId: "bench\u0000x" } }), "측정 증빙 ID는 200자 이하이며 제어 문자를 포함할 수 없습니다.");
 
   // Timestamps and decimal measurements are kept exactly as written; a one-microsecond validity interval is still ordered.
   await page.getByLabel("측정 JSON 붙여넣기", { exact: true }).fill(JSON.stringify({ ...measured, measuredAt: "2026-10-28T00:00:00.123456Z", validUntil: "2026-10-28T00:00:00.123457Z" }).replace('"computeMs":{"' + server + '":80}', '"computeMs":{"' + server + '":80.250}'));

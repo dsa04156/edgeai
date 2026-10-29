@@ -108,11 +108,19 @@ function metadata(draft: ProfileDraft) {
   const measuredAt = instant(draft.measuredAt, "측정 시각"),
     validUntil = instant(draft.validUntil, "유효 종료 시각");
   if (!after(validUntil, measuredAt)) throw new Error("유효 종료 시각은 측정 시각 이후여야 합니다.");
-  if (!draft.evidenceId.trim()) throw new Error("측정 증빙 ID를 입력하세요.");
+  const evidenceId = draft.evidenceId.trim();
+  if (!evidenceId) throw new Error("측정 증빙 ID를 입력하세요.");
+  // Same limits as the API text check: at most 200 UTF-16 units and no ISO control characters.
+  const control = [...evidenceId].some((c) => {
+    const code = c.charCodeAt(0);
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+  if (evidenceId.length > 200 || control)
+    throw new Error("측정 증빙 ID는 200자 이하이며 제어 문자를 포함할 수 없습니다.");
   const sampleCount = Number(draft.sampleCount);
   if (!/^\d+$/.test(draft.sampleCount.trim()) || !Number.isSafeInteger(sampleCount) || sampleCount < 1)
     throw new Error("표본 수는 1 이상의 정수여야 합니다.");
-  return { measuredAt, validUntil, sampleCount };
+  return { measuredAt, validUntil, evidenceId, sampleCount };
 }
 
 /** The exact POST body; missing values are errors, never 0. */
@@ -122,7 +130,7 @@ export function profileDocument(
   draft: ProfileDraft,
   nodeName: (id: string) => string,
 ) {
-  const { measuredAt, validUntil, sampleCount } = metadata(draft);
+  const { measuredAt, validUntil, evidenceId, sampleCount } = metadata(draft);
   const parameters = objectJson(draft.parameters);
   const body: Record<string, unknown> = {};
   for (const task of tasks) {
@@ -146,7 +154,7 @@ export function profileDocument(
     workflowVersionId: versionId,
     measuredAt,
     validUntil,
-    provenance: { kind: "MEASURED_BATCH_ARTIFACT", evidenceId: draft.evidenceId.trim(), sampleCount },
+    provenance: { kind: "MEASURED_BATCH_ARTIFACT", evidenceId, sampleCount },
     parameters,
     tasks: body,
   };
