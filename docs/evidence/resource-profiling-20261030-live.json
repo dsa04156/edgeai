@@ -1,5 +1,5 @@
 {
-  "publishService": 200,
+  "publishService": 201,
   "capabilities": [
     200,
     {
@@ -27,18 +27,18 @@
     {
       "items": [
         {
-          "node": "etri-ser0001-cg0msb",
           "name": "edgeai-api-7cb9fdfdb6-gr7qc",
+          "node": "etri-ser0001-cg0msb",
           "uid": "86c6813f-582c-470d-8521-281269a4dde3"
         },
         {
-          "node": "etri-ser0001-cg0msb",
           "name": "edgeai-api-847b99dc6f-fl98j",
+          "node": "etri-ser0001-cg0msb",
           "uid": "7c881b59-2121-4994-9172-80727fff6755"
         },
         {
-          "node": "etri-ser0001-cg0msb",
           "name": "edgeai-api-f545f9b7c-9xk9q",
+          "node": "etri-ser0001-cg0msb",
           "uid": "37e5d757-1568-46e1-885d-6779a69ef219"
         }
       ]
@@ -47,7 +47,7 @@
   "analysis": [
     201,
     {
-      "createdAt": "2026-10-29T15:20:16.982Z",
+      "createdAt": "2026-10-29T15:30:17.460Z",
       "devices": [
         {
           "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
@@ -57,8 +57,8 @@
           "memoryTotalBytes": 16587423744,
           "memoryUsed": {
             "average": 292552704,
-            "firstSample": "2026-10-29T14:20:14Z",
-            "lastSample": "2026-10-29T15:20:14Z",
+            "firstSample": "2026-10-29T14:30:15Z",
+            "lastSample": "2026-10-29T15:30:15Z",
             "max": 292552704,
             "min": 292552704,
             "p95": 292552704,
@@ -74,8 +74,8 @@
           "status": "AVAILABLE",
           "utilization": {
             "average": 0,
-            "firstSample": "2026-10-29T14:20:14Z",
-            "lastSample": "2026-10-29T15:20:14Z",
+            "firstSample": "2026-10-29T14:30:15Z",
+            "lastSample": "2026-10-29T15:30:15Z",
             "max": 0,
             "min": 0,
             "p95": 0,
@@ -101,7 +101,7 @@
         }
       ],
       "executionRef": null,
-      "id": "054fcbaf-d18c-455d-9b41-b19f234c500f",
+      "id": "a7363829-e1bf-483f-916f-c05852d0d869",
       "limitations": [
         "CPU는 cAdvisor container_cpu_usage_seconds_total의 rate, 메모리는 container_memory_working_set_bytes입니다. 값은 Pod당 컨테이너 기준이며 복제본을 합산하지 않습니다(perPod는 복제본별 범위). 최대값은 수집·조회 간격의 해상도로 제한됩니다.",
         "KRR 추천은 KRR 자체의 이력 구간(현재 시각 기준 historyHours)을 사용하며 측정 구간과 다를 수 있습니다. KRR은 CPU·메모리만 추천합니다.",
@@ -110,11 +110,11 @@
       "measurement": {
         "aggregation": "PER_POD_CONTAINER",
         "cpu": {
-          "average": 139.961,
-          "firstSample": "2026-10-29T14:20:14Z",
-          "lastSample": "2026-10-29T15:20:14Z",
-          "max": 405.302,
-          "min": 20.634,
+          "average": 148.025,
+          "firstSample": "2026-10-29T14:30:15Z",
+          "lastSample": "2026-10-29T15:30:15Z",
+          "max": 408.866,
+          "min": 19.832,
           "p95": 245.503,
           "reason": null,
           "samples": 251,
@@ -122,9 +122,9 @@
           "unit": "millicores"
         },
         "memory": {
-          "average": 413183014.241,
-          "firstSample": "2026-10-29T14:20:14Z",
-          "lastSample": "2026-10-29T15:20:14Z",
+          "average": 411852545.062,
+          "firstSample": "2026-10-29T14:30:15Z",
+          "lastSample": "2026-10-29T15:30:15Z",
           "max": 429096960,
           "min": 5967872,
           "p95": 428224512,
@@ -137,21 +137,21 @@
         "perPod": [
           {
             "cpuMaxMillicores": 101.784,
-            "cpuP95Millicores": 98.684,
+            "cpuP95Millicores": 99.982,
             "memoryMaxBytes": 429096960,
             "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
-            "samples": 86
+            "samples": 46
           },
           {
-            "cpuMaxMillicores": 405.302,
-            "cpuP95Millicores": 253.289,
-            "memoryMaxBytes": 419835904,
+            "cpuMaxMillicores": 408.866,
+            "cpuP95Millicores": 235.563,
+            "memoryMaxBytes": 420491264,
             "pod": "edgeai-api-847b99dc6f-fl98j",
-            "samples": 157
+            "samples": 197
           },
           {
-            "cpuMaxMillicores": 262.443,
-            "cpuP95Millicores": 262.443,
+            "cpuMaxMillicores": 267.81,
+            "cpuP95Millicores": 267.81,
             "memoryMaxBytes": 338305024,
             "pod": "edgeai-api-f545f9b7c-9xk9q",
             "samples": 9
@@ -209,14 +209,14 @@
           ],
           "bridge": "1",
           "cpuMinMillicores": 10,
-          "finishedAt": "2026-10-29T15:20:16Z",
+          "finishedAt": "2026-10-29T15:30:17Z",
           "memoryMinMegabytes": 100,
           "reportErrors": [],
-          "reportSha256": "ca95f7b06b95c8d5068ce657998e22e497f318f70e3b91759dbb76a289e35dee",
+          "reportSha256": "eb3d7b3917f1969309fa4282ba0dc308f504e5c6c151c5091c9daf433e2590ba",
           "requestedHistoryHours": 24,
           "scannedObjects": 9,
           "severity": "CRITICAL",
-          "startedAt": "2026-10-29T15:20:14Z",
+          "startedAt": "2026-10-29T15:30:15Z",
           "strategy": "simple",
           "strategySettings": {
             "allow_hpa": false,
@@ -235,18 +235,18 @@
         "status": "AVAILABLE",
         "warnings": [],
         "window": {
-          "end": "2026-10-29T15:20:16Z",
+          "end": "2026-10-29T15:30:17Z",
           "historyHours": 24,
-          "start": "2026-10-28T15:20:16Z"
+          "start": "2026-10-28T15:30:17Z"
         }
       },
       "service": {
         "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
         "key": "edgeai-api-profile",
-        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "profileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce",
         "version": "1.0.0"
       },
-      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+      "serviceProfileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce",
       "target": {
         "container": "api",
         "kind": "Deployment",
@@ -256,18 +256,18 @@
         "podUid": null
       },
       "window": {
-        "end": "2026-10-29T15:20:14Z",
-        "start": "2026-10-29T14:20:14Z"
+        "end": "2026-10-29T15:30:15Z",
+        "start": "2026-10-29T14:30:15Z"
       }
     }
   ],
   "analysisNoData": [
     201,
     {
-      "createdAt": "2026-10-29T15:20:18.876Z",
+      "createdAt": "2026-10-29T15:30:19.421Z",
       "devices": [],
       "executionRef": null,
-      "id": "26086b39-2ce0-40f8-ba69-948629235b40",
+      "id": "dc0613f5-6ff5-4562-aed9-2794f9415780",
       "limitations": [
         "CPU는 cAdvisor container_cpu_usage_seconds_total의 rate, 메모리는 container_memory_working_set_bytes입니다. 값은 Pod당 컨테이너 기준이며 복제본을 합산하지 않습니다(perPod는 복제본별 범위). 최대값은 수집·조회 간격의 해상도로 제한됩니다.",
         "KRR 추천은 KRR 자체의 이력 구간(현재 시각 기준 historyHours)을 사용하며 측정 구간과 다를 수 있습니다. KRR은 CPU·메모리만 추천합니다.",
@@ -337,14 +337,14 @@
           ],
           "bridge": "1",
           "cpuMinMillicores": 10,
-          "finishedAt": "2026-10-29T15:20:18Z",
+          "finishedAt": "2026-10-29T15:30:19Z",
           "memoryMinMegabytes": 100,
           "reportErrors": [],
-          "reportSha256": "ef459086c27d047af8fabc84b0c2ead188a4a0a49cb55fbd9cf0b8de06507a0f",
+          "reportSha256": "63cfbda188378148fb3617b8c1790baab2487c9954fc73e09b012e97d877fa99",
           "requestedHistoryHours": 24,
           "scannedObjects": 5,
           "severity": "UNKNOWN",
-          "startedAt": "2026-10-29T15:20:16Z",
+          "startedAt": "2026-10-29T15:30:17Z",
           "strategy": "simple",
           "strategySettings": {
             "allow_hpa": false,
@@ -362,22 +362,22 @@
         "reason": "KRR이 값을 계산하지 않았습니다(cpu: No data, memory: No data).",
         "status": "NO_DATA",
         "warnings": [
-          "NoPrometheusCPUMetrics",
-          "NoPrometheusMemoryMetrics"
+          "NoPrometheusMemoryMetrics",
+          "NoPrometheusCPUMetrics"
         ],
         "window": {
-          "end": "2026-10-29T15:20:18Z",
+          "end": "2026-10-29T15:30:19Z",
           "historyHours": 24,
-          "start": "2026-10-28T15:20:18Z"
+          "start": "2026-10-28T15:30:19Z"
         }
       },
       "service": {
         "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
         "key": "edgeai-api-profile",
-        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "profileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce",
         "version": "1.0.0"
       },
-      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+      "serviceProfileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce",
       "target": {
         "container": "postgres",
         "kind": "StatefulSet",
@@ -387,20 +387,20 @@
         "podUid": null
       },
       "window": {
-        "end": "2026-10-29T15:20:14Z",
-        "start": "2026-10-29T14:20:14Z"
+        "end": "2026-10-29T15:30:15Z",
+        "start": "2026-10-29T14:30:15Z"
       }
     }
   ],
   "save": [
     201,
     {
-      "id": "ebd64506-2919-4f8f-9a04-91f5eaf75fe7",
-      "revision": 4,
+      "id": "a49df518-8c19-4600-a05f-864a5a1b93ea",
+      "revision": 1,
       "measurementStatus": "MEASURED",
-      "analysisId": "054fcbaf-d18c-455d-9b41-b19f234c500f",
-      "digest": "sha256:347cab0a04f7d9ee9180633cfa57a4afb0fb17b90e5d17d37af2f1c22038d073",
-      "createdAt": "2026-10-29T15:20:18.888Z",
+      "analysisId": "a7363829-e1bf-483f-916f-c05852d0d869",
+      "digest": "sha256:91b60468223ee5e72bb1400f644112ed321602c2208bde6ac5f4eebaef09afb3",
+      "createdAt": "2026-10-29T15:30:19.444Z",
       "compatibility": {
         "architectures": [
           "amd64"
@@ -412,8 +412,8 @@
         }
       },
       "evidence": {
-        "analysisId": "054fcbaf-d18c-455d-9b41-b19f234c500f",
-        "createdAt": "2026-10-29T15:20:16.982Z",
+        "analysisId": "a7363829-e1bf-483f-916f-c05852d0d869",
+        "createdAt": "2026-10-29T15:30:17.460Z",
         "devices": [
           {
             "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
@@ -423,8 +423,8 @@
             "memoryTotalBytes": 16587423744,
             "memoryUsed": {
               "average": 292552704,
-              "firstSample": "2026-10-29T14:20:14Z",
-              "lastSample": "2026-10-29T15:20:14Z",
+              "firstSample": "2026-10-29T14:30:15Z",
+              "lastSample": "2026-10-29T15:30:15Z",
               "max": 292552704,
               "min": 292552704,
               "p95": 292552704,
@@ -440,8 +440,8 @@
             "status": "AVAILABLE",
             "utilization": {
               "average": 0,
-              "firstSample": "2026-10-29T14:20:14Z",
-              "lastSample": "2026-10-29T15:20:14Z",
+              "firstSample": "2026-10-29T14:30:15Z",
+              "lastSample": "2026-10-29T15:30:15Z",
               "max": 0,
               "min": 0,
               "p95": 0,
@@ -470,11 +470,11 @@
         "measurement": {
           "aggregation": "PER_POD_CONTAINER",
           "cpu": {
-            "average": 139.961,
-            "firstSample": "2026-10-29T14:20:14Z",
-            "lastSample": "2026-10-29T15:20:14Z",
-            "max": 405.302,
-            "min": 20.634,
+            "average": 148.025,
+            "firstSample": "2026-10-29T14:30:15Z",
+            "lastSample": "2026-10-29T15:30:15Z",
+            "max": 408.866,
+            "min": 19.832,
             "p95": 245.503,
             "reason": null,
             "samples": 251,
@@ -482,9 +482,9 @@
             "unit": "millicores"
           },
           "memory": {
-            "average": 413183014.241,
-            "firstSample": "2026-10-29T14:20:14Z",
-            "lastSample": "2026-10-29T15:20:14Z",
+            "average": 411852545.062,
+            "firstSample": "2026-10-29T14:30:15Z",
+            "lastSample": "2026-10-29T15:30:15Z",
             "max": 429096960,
             "min": 5967872,
             "p95": 428224512,
@@ -497,21 +497,21 @@
           "perPod": [
             {
               "cpuMaxMillicores": 101.784,
-              "cpuP95Millicores": 98.684,
+              "cpuP95Millicores": 99.982,
               "memoryMaxBytes": 429096960,
               "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
-              "samples": 86
+              "samples": 46
             },
             {
-              "cpuMaxMillicores": 405.302,
-              "cpuP95Millicores": 253.289,
-              "memoryMaxBytes": 419835904,
+              "cpuMaxMillicores": 408.866,
+              "cpuP95Millicores": 235.563,
+              "memoryMaxBytes": 420491264,
               "pod": "edgeai-api-847b99dc6f-fl98j",
-              "samples": 157
+              "samples": 197
             },
             {
-              "cpuMaxMillicores": 262.443,
-              "cpuP95Millicores": 262.443,
+              "cpuMaxMillicores": 267.81,
+              "cpuP95Millicores": 267.81,
               "memoryMaxBytes": 338305024,
               "pod": "edgeai-api-f545f9b7c-9xk9q",
               "samples": 9
@@ -569,14 +569,14 @@
             ],
             "bridge": "1",
             "cpuMinMillicores": 10,
-            "finishedAt": "2026-10-29T15:20:16Z",
+            "finishedAt": "2026-10-29T15:30:17Z",
             "memoryMinMegabytes": 100,
             "reportErrors": [],
-            "reportSha256": "ca95f7b06b95c8d5068ce657998e22e497f318f70e3b91759dbb76a289e35dee",
+            "reportSha256": "eb3d7b3917f1969309fa4282ba0dc308f504e5c6c151c5091c9daf433e2590ba",
             "requestedHistoryHours": 24,
             "scannedObjects": 9,
             "severity": "CRITICAL",
-            "startedAt": "2026-10-29T15:20:14Z",
+            "startedAt": "2026-10-29T15:30:15Z",
             "strategy": "simple",
             "strategySettings": {
               "allow_hpa": false,
@@ -595,9 +595,9 @@
           "status": "AVAILABLE",
           "warnings": [],
           "window": {
-            "end": "2026-10-29T15:20:16Z",
+            "end": "2026-10-29T15:30:17Z",
             "historyHours": 24,
-            "start": "2026-10-28T15:20:16Z"
+            "start": "2026-10-28T15:30:17Z"
           }
         },
         "target": {
@@ -609,8 +609,8 @@
           "podUid": null
         },
         "window": {
-          "end": "2026-10-29T15:20:14Z",
-          "start": "2026-10-29T14:20:14Z"
+          "end": "2026-10-29T15:30:15Z",
+          "start": "2026-10-29T14:30:15Z"
         }
       },
       "inputConditions": {
@@ -635,10 +635,10 @@
       "service": {
         "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
         "key": "edgeai-api-profile",
-        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "profileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce",
         "version": "1.0.0"
       },
-      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2"
+      "serviceProfileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce"
     }
   ],
   "handoff": [
@@ -647,27 +647,31 @@
       "apiVersion": "edgeai.io/resource-profile-handoff/v1",
       "kind": "ResourceProfileHandoff",
       "profile": {
-        "id": "ac52f291-395d-4c02-8fde-4b1c41a8d324",
+        "id": "a49df518-8c19-4600-a05f-864a5a1b93ea",
         "revision": 1,
-        "digest": "sha256:1ef5d9e92e541fa2b39e680733e8b4c078585fb00739ea9ce0837bb2da753ce5",
-        "createdAt": "2026-10-29T15:19:26.231Z",
+        "digest": "sha256:91b60468223ee5e72bb1400f644112ed321602c2208bde6ac5f4eebaef09afb3",
+        "createdAt": "2026-10-29T15:30:19.444Z",
         "measurementStatus": "MEASURED"
       },
       "service": {
         "key": "edgeai-api-profile",
         "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
         "version": "1.0.0",
-        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2"
+        "profileVersionId": "059d4981-a126-403f-8322-c0442d0aa8ce"
       },
       "compatibility": {
         "os": "linux",
-        "runtime": null,
+        "runtime": {
+          "name": "temurin-jre",
+          "version": "21"
+        },
         "architectures": [
-          "amd64",
-          "arm64"
+          "amd64"
         ]
       },
-      "inputConditions": {},
+      "inputConditions": {
+        "traffic": "dev cluster steady state"
+      },
       "resources": {
         "cpu": {
           "unit": "millicores",
@@ -726,7 +730,7 @@
       },
       "evidence": {
         "measurementStatus": "MEASURED",
-        "analysisId": "ff4064d3-7a96-4e54-a4a3-43e3992a275d",
+        "analysisId": "a7363829-e1bf-483f-916f-c05852d0d869",
         "target": {
           "pod": null,
           "kind": "Deployment",
@@ -736,21 +740,21 @@
           "namespace": "edgeai"
         },
         "window": {
-          "end": "2026-10-29T15:19:23Z",
-          "start": "2026-10-29T14:19:23Z"
+          "end": "2026-10-29T15:30:15Z",
+          "start": "2026-10-29T14:30:15Z"
         },
         "measurement": {
           "cpu": {
-            "max": 383.917,
-            "min": 25.448,
+            "max": 408.866,
+            "min": 19.832,
             "p95": 245.503,
             "unit": "millicores",
             "reason": null,
             "status": "AVAILABLE",
-            "average": 139.21,
-            "samples": 249,
-            "lastSample": "2026-10-29T15:19:23Z",
-            "firstSample": "2026-10-29T14:19:23Z"
+            "average": 148.025,
+            "samples": 251,
+            "lastSample": "2026-10-29T15:30:15Z",
+            "firstSample": "2026-10-29T14:30:15Z"
           },
           "pods": [
             {
@@ -772,37 +776,37 @@
           "memory": {
             "max": 429096960,
             "min": 5967872,
-            "p95": 428216320,
+            "p95": 428224512,
             "unit": "bytes",
             "reason": null,
             "status": "AVAILABLE",
-            "average": 412301456.465,
+            "average": 411852545.062,
             "samples": 241,
-            "lastSample": "2026-10-29T15:19:23Z",
-            "firstSample": "2026-10-29T14:19:23Z"
+            "lastSample": "2026-10-29T15:30:15Z",
+            "firstSample": "2026-10-29T14:30:15Z"
           },
           "method": "cadvisor per Pod container (PER_POD_CONTAINER): rate(container_cpu_usage_seconds_total[120s]) and container_memory_working_set_bytes, duplicate scrapes collapsed by cgroup id",
           "perPod": [
             {
               "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
-              "samples": 89,
+              "samples": 46,
               "memoryMaxBytes": 429096960,
               "cpuMaxMillicores": 101.784,
-              "cpuP95Millicores": 99.392
+              "cpuP95Millicores": 99.982
             },
             {
               "pod": "edgeai-api-847b99dc6f-fl98j",
-              "samples": 154,
-              "memoryMaxBytes": 419835904,
-              "cpuMaxMillicores": 383.917,
-              "cpuP95Millicores": 263.716
+              "samples": 197,
+              "memoryMaxBytes": 420491264,
+              "cpuMaxMillicores": 408.866,
+              "cpuP95Millicores": 235.563
             },
             {
               "pod": "edgeai-api-f545f9b7c-9xk9q",
-              "samples": 8,
+              "samples": 9,
               "memoryMaxBytes": 338305024,
-              "cpuMaxMillicores": 245.503,
-              "cpuP95Millicores": 245.503
+              "cpuMaxMillicores": 267.81,
+              "cpuP95Millicores": 267.81
             }
           ],
           "aggregation": "PER_POD_CONTAINER",
@@ -823,8 +827,8 @@
           "reason": null,
           "status": "AVAILABLE",
           "window": {
-            "end": "2026-10-29T15:19:25Z",
-            "start": "2026-10-28T15:19:25Z",
+            "end": "2026-10-29T15:30:17Z",
+            "start": "2026-10-28T15:30:17Z",
             "historyHours": 24
           },
           "podCount": 1,
@@ -852,10 +856,10 @@
               "--logtostderr",
               "--quiet"
             ],
-            "startedAt": "2026-10-29T15:19:23Z",
-            "finishedAt": "2026-10-29T15:19:25Z",
+            "startedAt": "2026-10-29T15:30:15Z",
+            "finishedAt": "2026-10-29T15:30:17Z",
             "reportErrors": [],
-            "reportSha256": "dfb64dc61780d72a12fe5eba546444a03aee3029b6fe6178db15aef72b7e9722",
+            "reportSha256": "eb3d7b3917f1969309fa4282ba0dc308f504e5c6c151c5091c9daf433e2590ba",
             "scannedObjects": 9,
             "cpuMinMillicores": 10,
             "strategySettings": {
@@ -890,8 +894,8 @@
               "status": "AVAILABLE",
               "average": 292552704,
               "samples": 241,
-              "lastSample": "2026-10-29T15:19:23Z",
-              "firstSample": "2026-10-29T14:19:23Z"
+              "lastSample": "2026-10-29T15:30:15Z",
+              "firstSample": "2026-10-29T14:30:15Z"
             },
             "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
             "perWorkload": false,
@@ -904,10 +908,24 @@
               "status": "AVAILABLE",
               "average": 0,
               "samples": 241,
-              "lastSample": "2026-10-29T15:19:23Z",
-              "firstSample": "2026-10-29T14:19:23Z"
+              "lastSample": "2026-10-29T15:30:15Z",
+              "firstSample": "2026-10-29T14:30:15Z"
             },
             "memoryTotalBytes": 16587423744
+          },
+          {
+            "kind": "NPU",
+            "node": "etri-dev0002-raspi5",
+            "model": null,
+            "device": "pci:0001:01:00.0",
+            "reason": "이 장치의 exporter는 기간 관측 연동을 지원하지 않습니다(지원: NVIDIA DCGM GPU, Mobilint NPU).",
+            "status": "UNSUPPORTED",
+            "exporter": null,
+            "memoryUsed": null,
+            "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+            "perWorkload": false,
+            "utilization": null,
+            "memoryTotalBytes": null
           }
         ]
       },

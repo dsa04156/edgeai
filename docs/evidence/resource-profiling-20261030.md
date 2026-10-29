@@ -49,6 +49,21 @@ KRR `v1.30.0`과 `v1.31.1` 사이 `robusta_krr/` 소스 변경은 없음을 확�
 - 앞선 1회 실행에서는 `WorkflowFullObservationVdIntegrationTest`가 로컬 PostgreSQL 연결 점검 실패(`Database recovery safety check failed`)로 한 번 실패했고 재실행에서 통과했습니다.
 - 단위 시험은 243/243(`UNIT_TEST_COUNTS`), 계약 시험 통과.
 
+## 병합 후 재검증
+
+`origin/main` `3b74f34`(offload-lab, V68·V69)와 병합(`f54a8fb`)하고 migration을 `V70`으로 바꾼 뒤 다시 확인했습니다.
+
+| 확인 | 결과 |
+|---|---|
+| 새 격리 DB의 Flyway 순서 | `67` → `68` → `69` → `70`(resource profile) 적용 |
+| 실제 KRR·Prometheus API 경유(위 2번 절차 재실행) | 동일 결과: CPU p95 245.5m, KRR 393m / 530,579,456 B, RTX 5080 `NODE_DEVICE_UNKNOWN_OWNER`, Hailo `UNSUPPORTED`, `edgeai-postgres` `NOT_FOUND`/`NO_DATA`, revision 1 `MEASURED`·handoff 일치. 원본 JSON은 이 실행으로 갱신 |
+| `test-unit.sh` | 251/251. 단, `origin/main`이 offload-lab 5개 operation을 감사 경로 없이 추가해 `ManagementAuditRoutesTest`가 main에서 이미 실패하던 것을 별도 커밋 `5c4f941`(경로 5개만 추가)로 맞췄습니다 |
+| `test-contract.sh` | 통과 |
+| `test-integration.sh` | 270개 중 `ResourceProfileIntegrationTest` 6/6 포함 268 통과. 실패 2: 위 기존 `ContinuousRegistrationIntegrationTest` 1건, `WorkflowFullObservationVdIntegrationTest` 1건(로컬 연결 점검 일시 실패, 단독 재실행 통과) |
+| `test-ui.sh` | 140/140, lint·typecheck·release 빌드 통과 |
+| Playwright(병합 release) | resource-profile 6/6 + scheduling-profile 8/8 |
+| bridge 단위 시험 | 5/5 |
+
 ## 남은 범위
 
 - bridge 이미지는 CI에서 아직 발행되지 않았습니다. 발행 후 `enable-resource-profiling.py --digest`로 고정하고 배포는 검토 후 별도로 수행합니다.
