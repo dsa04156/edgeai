@@ -168,6 +168,18 @@ class WorkflowIntegrationTest {
         var replay=json.readTree(perform(post("/api/v1/workflow-runs").header("Idempotency-Key",key).contentType("application/json").content(runBody),200));
         assertThat(replay.path("id").asText()).isEqualTo(runId.toString());assertThat(replay.path("state").asText()).isEqualTo("CANCELLED");
     }
+    @Test void publicWorkflowListIsNewestCreatedFirstWithIdTieBreakAcrossPages() throws Exception {
+        // Far-future created_at keeps these rows ahead of every other Workflow in the shared test DB.
+        var newest=workflow();var tieA=workflow();var tieB=workflow();
+        jdbc.update("UPDATE edgeai.workflow SET created_at='9000-01-02T00:00:00Z' WHERE id=?",newest.id());
+        jdbc.update("UPDATE edgeai.workflow SET created_at='9000-01-01T00:00:00Z' WHERE id IN (?,?)",tieA.id(),tieB.id());
+        var ties=List.of(tieA.id().toString(),tieB.id().toString()).stream().sorted().toList(); // canonical hex order = PostgreSQL uuid order
+        var first=json.readTree(perform(get("/api/v1/workflows?limit=2&offset=0"),200));
+        var second=json.readTree(perform(get("/api/v1/workflows?limit=2&offset=1"),200));
+        assertThat(first.path("items").valueStream().map(i->i.path("id").asText()).toList()).containsExactly(newest.id().toString(),ties.get(0));
+        assertThat(first.path("nextOffset").asInt()).isEqualTo(2);
+        assertThat(second.path("items").valueStream().map(i->i.path("id").asText()).toList()).containsExactly(ties.get(0),ties.get(1));
+    }
     @Test void concurrentPublicationAndRunCreationAreAtomicAndExactlyOnce() throws Exception {
         var workflow=workflow();String dag=dag(profile(),"1.0.0");
         var publications=parallel(i->workflows.publish(workflow.id(),dag));

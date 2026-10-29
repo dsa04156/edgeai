@@ -942,7 +942,7 @@ export interface paths {
         };
         /**
          * 워크플로 목록 조회
-         * @description 등록된 Workflow를 key 순서로 조회합니다. 실행 상태는 Run API에서 확인합니다.
+         * @description 등록된 Workflow를 최근 생성 순(createdAt 내림차순, 같으면 id 순)으로 조회합니다. 실행 상태는 Run API에서 확인합니다.
          */
         get: operations["listWorkflows"];
         put?: never;

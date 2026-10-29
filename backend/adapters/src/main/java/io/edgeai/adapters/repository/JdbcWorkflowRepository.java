@@ -17,7 +17,7 @@ public final class JdbcWorkflowRepository implements WorkflowRepository {
     }
     public Optional<Workflow> find(UUID id,boolean lock) { return jdbc.query("SELECT * FROM edgeai.workflow WHERE id=?"+(lock?" FOR UPDATE":""),WORKFLOW,id).stream().findFirst(); }
     public Optional<Workflow> findByKey(String key) { return jdbc.query("SELECT * FROM edgeai.workflow WHERE workflow_key=?",WORKFLOW,key).stream().findFirst(); }
-    public List<Workflow> list(int limit,int offset) { return jdbc.query("SELECT * FROM edgeai.workflow ORDER BY workflow_key COLLATE \"C\" LIMIT ? OFFSET ?",WORKFLOW,limit,offset); }
+    public List<Workflow> list(int limit,int offset) { return jdbc.query("SELECT * FROM edgeai.workflow ORDER BY created_at DESC,id LIMIT ? OFFSET ?",WORKFLOW,limit,offset); }
     public Optional<WorkflowVersion> version(UUID id) { return jdbc.query("SELECT * FROM edgeai.workflow_version WHERE id=? AND published",VERSION,id).stream().findFirst(); }
     public Optional<WorkflowVersion> version(UUID id,String version) { return jdbc.query("SELECT * FROM edgeai.workflow_version WHERE workflow_id=? AND version=? AND published",VERSION,id,version).stream().findFirst(); }
     public List<WorkflowVersion> versions(UUID id,int limit,int offset) { return jdbc.query("SELECT * FROM edgeai.workflow_version WHERE workflow_id=? AND published ORDER BY created_at DESC,id LIMIT ? OFFSET ?",VERSION,id,limit,offset); }
