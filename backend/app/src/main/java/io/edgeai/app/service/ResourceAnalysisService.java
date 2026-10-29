@@ -7,6 +7,7 @@ import io.edgeai.domain.repository.ResourceProfileRepository;
 import io.edgeai.domain.resourceprofile.*;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -30,7 +31,6 @@ public class ResourceAnalysisService {
     private final ObjectProvider<RecommendationSource> recommendations;
     private final ResourceProfilingSettings settings;
     private final Clock clock;
-    static final Duration OBSERVATION_BUDGET=Duration.ofSeconds(40);
     public ResourceAnalysisService(ResourceProfileRepository repository,ResourceProfileService profiles,ObjectProvider<WorkloadMetricsSource> metrics,
                                    ObjectProvider<RecommendationSource> recommendations,ResourceProfilingSettings settings,Clock clock) {
         this.repository=repository;this.profiles=profiles;this.metrics=metrics;this.recommendations=recommendations;this.settings=settings;this.clock=clock;
@@ -46,13 +46,21 @@ public class ResourceAnalysisService {
         return result;
     }
 
-    public List<WorkloadCandidate> workloads(String namespace,Integer hours) {
+    /** Discovery over the selected observation window (start/end), or the last {@code hours} when no window is given. */
+    public List<WorkloadCandidate> workloads(String namespace,Integer hours,String start,String end) {
         allowed(namespace);
-        int span=hours==null?24:hours;
-        if(span<1||span>336)throw invalid("조회 구간은 1–336시간입니다.");
-        Instant end=clock.instant();
+        Instant from,to;
+        if(start!=null||end!=null) {
+            try { from=Instant.parse(start);to=Instant.parse(end); }
+            catch(DateTimeException|NullPointerException e){throw invalid("조회 구간은 start·end를 함께 ISO 8601로 지정하세요.");}
+            window(from,to);
+        } else {
+            int span=hours==null?24:hours;
+            if(span<1||span>336)throw invalid("조회 구간은 1–336시간입니다.");
+            to=clock.instant();from=to.minus(Duration.ofHours(span));
+        }
         var source=source();
-        return observed(()->source.workloads(namespace,end.minus(Duration.ofHours(span)),end));
+        return observed(()->source.workloads(namespace,from,to));
     }
 
     public List<ObservedPod> pods(String namespace,String kind,String name,String container,String start,String end) {
@@ -68,63 +76,84 @@ public class ResourceAnalysisService {
 
     /**
      * Not transactional: Prometheus and the KRR bridge are called before the single INSERT, so no DB connection is held
-     * while waiting. Device queries stop after {@link #OBSERVATION_BUDGET}; the KRR call is bounded by its client timeout
-     * (bridge 120 s < API 130 s < console proxy 210 s < browser 220 s).
+     * while waiting. One deadline bounds the whole request: KRR runs in parallel from the start (its client times out at
+     * 130 s), every Prometheus call (workload and devices) shares the observation budget, and nothing is saved once the
+     * total budget has passed. Defaults 60 s / 180 s keep the API inside the console proxy (210 s) and browser (220 s).
      */
     public Map<String,Object> analyze(String body) {
+        long started=System.nanoTime();
+        long observationDeadline=started+settings.observationBudget().toNanos(), deadline=started+settings.totalBudget().toNanos();
+        // KRR may use the total budget minus a reserve for building and saving the document.
+        long krrDeadline=deadline-Math.min(Duration.ofSeconds(5).toNanos(),settings.totalBudget().toNanos()/10);
         ResourceProfileInput.Analyze input;
         try { input=ResourceProfileInput.analyze(body); }
         catch(IllegalArgumentException|DateTimeException e){throw invalid(e.getMessage());}
         allowed(input.target().namespace());window(input.start(),input.end());
         var service=profiles.serviceVersion(input.serviceProfileVersionId());
         var target=input.target();
-        var source=metrics.getIfAvailable();
-        WorkloadMeasurement measurement;
-        if(source==null) measurement=unavailable(input,"Prometheus 연결이 구성되지 않았습니다.");
-        else try { measurement=source.measure(target,input.start(),input.end()); }
-        catch(RuntimeException failure){LOG.warn("Resource measurement unavailable: {}",failure.getClass().getSimpleName());measurement=unavailable(input,"Prometheus 조회에 실패했습니다.");}
-        var devices=new ArrayList<Object>();
-        long deadline=System.nanoTime()+OBSERVATION_BUDGET.toNanos();
-        for(var device:input.devices()) {
-            DeviceObservation observation;
-            if(System.nanoTime()>deadline) observation=deviceUnavailable(device,"분석 시간 한도(40초) 안에 장치 지표를 조회하지 못했습니다.");
-            else if(source==null) observation=deviceUnavailable(device,"Prometheus 연결이 구성되지 않았습니다.");
-            else try { observation=source.device(device,target.namespace(),measurement.pods(),input.start(),input.end()); }
-            catch(RuntimeException failure){observation=deviceUnavailable(device,"장치 지표 조회에 실패했습니다.");}
-            devices.add(device(observation));
-        }
-        Map<String,Object> recommendation;
-        if(input.historyHours()==null) recommendation=notRequested();
-        else if(!target.kind().recommendable())
-            recommendation=recommendation(KrrRecommendation.failed(KrrRecommendation.Status.UNSUPPORTED,"KRR은 Deployment·StatefulSet·DaemonSet·Job·CronJob 컨트롤러 단위로만 추천합니다.",input.historyHours(),Map.of()));
-        else {
-            var krr=recommendations.getIfAvailable();
-            KrrRecommendation result;
-            if(krr==null) result=KrrRecommendation.failed(KrrRecommendation.Status.UNAVAILABLE,"KRR 실행 bridge가 구성되지 않았습니다.",input.historyHours(),Map.of());
-            else try { result=krr.recommend(target,input.historyHours()); }
-            catch(RuntimeException failure){
-                LOG.warn("KRR recommendation unavailable: {}",failure.getClass().getSimpleName());
-                result=KrrRecommendation.failed(KrrRecommendation.Status.UNAVAILABLE,"KRR 실행에 실패했습니다.",input.historyHours(),Map.of());
+        var krr=recommendations.getIfAvailable();
+        boolean recommend=input.historyHours()!=null&&target.kind().recommendable()&&krr!=null;
+        Future<KrrRecommendation> pending=recommend?EXECUTOR.submit(()->krr.recommend(target,input.historyHours())):null;
+        try {
+            var source=metrics.getIfAvailable();
+            String budget="분석 시간 한도("+settings.observationBudget().toSeconds()+"초) 안에 Prometheus 조회를 마치지 못했습니다.";
+            WorkloadMeasurement measurement=source==null?unavailable(input,"Prometheus 연결이 구성되지 않았습니다.")
+                : within(observationDeadline,()->source.measure(target,input.start(),input.end()),()->unavailable(input,budget),
+                    failure->{LOG.warn("Resource measurement unavailable: {}",failure.getClass().getSimpleName());return unavailable(input,"Prometheus 조회에 실패했습니다.");});
+            var devices=new ArrayList<Object>();
+            for(var device:input.devices()) {
+                DeviceObservation observation=source==null?deviceUnavailable(device,"Prometheus 연결이 구성되지 않았습니다.")
+                    : within(observationDeadline,()->source.device(device,target.namespace(),measurement.pods(),input.start(),input.end()),
+                        ()->deviceUnavailable(device,budget),failure->deviceUnavailable(device,"장치 지표 조회에 실패했습니다."));
+                devices.add(device(observation));
             }
-            recommendation=recommendation(result);
+            Map<String,Object> recommendation;
+            if(input.historyHours()==null) recommendation=notRequested();
+            else if(!target.kind().recommendable())
+                recommendation=recommendation(KrrRecommendation.failed(KrrRecommendation.Status.UNSUPPORTED,"KRR은 Deployment·StatefulSet·DaemonSet·Job·CronJob 컨트롤러 단위로만 추천합니다.",input.historyHours(),Map.of()));
+            else if(pending==null)
+                recommendation=recommendation(KrrRecommendation.failed(KrrRecommendation.Status.UNAVAILABLE,"KRR 실행 bridge가 구성되지 않았습니다.",input.historyHours(),Map.of()));
+            else recommendation=recommendation(await(pending,krrDeadline,
+                ()->KrrRecommendation.failed(KrrRecommendation.Status.UNAVAILABLE,"분석 시간 한도 안에 KRR 실행이 끝나지 않았습니다.",input.historyHours(),Map.of()),
+                failure->{LOG.warn("KRR recommendation unavailable: {}",failure.getClass().getSimpleName());
+                    return KrrRecommendation.failed(KrrRecommendation.Status.UNAVAILABLE,"KRR 실행에 실패했습니다.",input.historyHours(),Map.of());}));
+            // The caller (console proxy/browser) stops waiting after the total budget; never persist a result it cannot see.
+            if(System.nanoTime()-deadline>0)
+                throw new ControlPlaneException(503,"RESOURCE_ANALYSIS_TIMEOUT","분석이 시간 한도를 넘어 저장하지 않았습니다. 구간·장치를 줄여 다시 시도하세요.");
+            Instant now=clock.instant();
+            UUID id=UUID.randomUUID();
+            var document=new LinkedHashMap<String,Object>();
+            document.put("id",id.toString());
+            document.put("serviceProfileVersionId",service.id().toString());
+            document.put("service",service(service));
+            document.put("createdAt",now.toString());
+            document.put("target",target(target));
+            document.put("executionRef",input.executionRef());
+            document.put("window",ordered("start",input.start().toString(),"end",input.end().toString()));
+            document.put("measurement",measurement(measurement));
+            document.put("devices",devices);
+            document.put("recommendation",recommendation);
+            document.put("limitations",ANALYSIS_LIMITATIONS);
+            String canonical=JSON.canonical(document);
+            repository.createAnalysis(new ResourceAnalysis(id,service.id(),canonical,now));
+            return decoded(canonical);
+        } finally {
+            if(pending!=null)pending.cancel(true);
         }
-        Instant now=clock.instant();
-        UUID id=UUID.randomUUID();
-        var document=new LinkedHashMap<String,Object>();
-        document.put("id",id.toString());
-        document.put("serviceProfileVersionId",service.id().toString());
-        document.put("service",service(service));
-        document.put("createdAt",now.toString());
-        document.put("target",target(target));
-        document.put("executionRef",input.executionRef());
-        document.put("window",ordered("start",input.start().toString(),"end",input.end().toString()));
-        document.put("measurement",measurement(measurement));
-        document.put("devices",devices);
-        document.put("recommendation",recommendation);
-        document.put("limitations",ANALYSIS_LIMITATIONS);
-        String canonical=JSON.canonical(document);
-        repository.createAnalysis(new ResourceAnalysis(id,service.id(),canonical,now));
-        return decoded(canonical);
+    }
+
+    private static final ExecutorService EXECUTOR=Executors.newVirtualThreadPerTaskExecutor();
+    /** Runs one Prometheus call under the shared deadline; a late call is interrupted and becomes the fallback status. */
+    private static <T> T within(long deadline,Callable<T> call,java.util.function.Supplier<T> late,java.util.function.Function<Throwable,T> failed) {
+        if(System.nanoTime()-deadline>=0)return late.get();
+        return await(EXECUTOR.submit(call),deadline,late,failed);
+    }
+    /** Future.cancel(true) on an executor task interrupts it; JDK HttpClient.send aborts the request on interrupt. */
+    private static <T> T await(Future<T> future,long deadline,java.util.function.Supplier<T> late,java.util.function.Function<Throwable,T> failed) {
+        try { return future.get(Math.max(0,deadline-System.nanoTime()),TimeUnit.NANOSECONDS); }
+        catch(TimeoutException timedOut){future.cancel(true);return late.get();}
+        catch(InterruptedException interrupted){Thread.currentThread().interrupt();future.cancel(true);return late.get();}
+        catch(ExecutionException failure){return failed.apply(failure.getCause());}
     }
 
     @Transactional(readOnly=true)

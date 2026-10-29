@@ -1194,7 +1194,7 @@ export interface paths {
         };
         /**
          * 측정 가능한 워크로드·컨테이너 목록
-         * @description 허용 네임스페이스에서 최근 hours시간 동안 kube-state-metrics에 관측된 컨트롤러(Deployment·StatefulSet·DaemonSet·Job·CronJob)와 소유자 없는 Pod, 각 컨테이너 이름을 반환합니다. 관측되지 않은 워크로드는 추정해 만들지 않습니다.
+         * @description 허용 네임스페이스에서 지정한 관측 구간(start·end, 5분–14일; 생략하면 최근 hours시간) 동안 kube-state-metrics에 관측된 컨트롤러(Deployment·StatefulSet·DaemonSet·Job·CronJob)와 소유자 없는 Pod, 각 컨테이너 이름을 반환합니다. 관측되지 않은 워크로드는 추정해 만들지 않습니다.
          */
         get: operations["listResourceProfileWorkloads"];
         put?: never;
@@ -1236,7 +1236,7 @@ export interface paths {
         put?: never;
         /**
          * 서비스 자원 사용량 분석(Prometheus 실측 + KRR 추천)
-         * @description 등록된 SERVICE 버전과 명시한 Kubernetes 워크로드 컨테이너(선택: Pod·UID), 관측 구간(5분–14일), 선택 장치로 분석합니다. CPU(millicores)·메모리(working set bytes)는 cAdvisor 범위 조회로, GPU/NPU는 기존 exporter의 장치 단위 관측으로 반환하며, 장치 값은 노드의 장치 전체 관측이며 exporter의 Pod 표시가 있어도 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을 bridge에서 실행해 정확히 같은 워크로드·컨테이너의 CPU·메모리 추천만 사용합니다. KRR 창은 KRR 실행 시각 기준 historyHours입니다. 누락·만료·부족·미지원·귀속 불가는 상태와 이유로 반환하고 0이나 추정값으로 채우지 않습니다. 결과는 불변으로 저장되어 저장 시 근거로 인용됩니다.
+         * @description 등록된 SERVICE 버전과 명시한 Kubernetes 워크로드 컨테이너(선택: Pod·UID), 관측 구간(5분–14일), 선택 장치로 분석합니다. CPU(millicores)·메모리(working set bytes)는 cAdvisor 범위 조회로, GPU/NPU는 기존 exporter의 장치 단위 관측으로 반환하며, 장치 값은 노드의 장치 전체 관측이며 exporter의 Pod 표시가 있어도 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을 bridge에서 실행해 정확히 같은 워크로드·컨테이너의 CPU·메모리 추천만 사용합니다. KRR 창은 KRR 실행 시각 기준 historyHours입니다. 누락·만료·부족·미지원·귀속 불가는 상태와 이유로 반환하고 0이나 추정값으로 채우지 않습니다. 결과는 불변으로 저장되어 저장 시 근거로 인용됩니다. 하나의 기한이 전체를 제한합니다: KRR은 시작부터 병렬 실행되고 Prometheus 조회(워크로드·장치)는 관측 예산(기본 60초)을 공유하며, 제한을 넘은 단계는 UNAVAILABLE(시간 한도)입니다. 전체 기한(기본 180초)을 넘으면 저장하지 않고 503 RESOURCE_ANALYSIS_TIMEOUT입니다.
          */
         post: operations["analyzeResourceProfile"];
         delete?: never;
@@ -1279,7 +1279,7 @@ export interface paths {
         put?: never;
         /**
          * 자원 프로파일 revision 저장
-         * @description 사용자가 확정한 CPU(millicores)·메모리(bytes)의 min ≤ request ≤ max와 GPU/NPU 확장 자원 요구량을 SERVICE 버전의 다음 불변 revision으로 저장합니다. basis가 MEASURED/RECOMMENDED이면 인용한 analysisId에 AVAILABLE 실측값 또는 KRR 추천값이 있어야 합니다. 분석 없이 직접 입력한 값은 MANUAL·UNMEASURED로 저장되며 검증된 추천으로 표시하지 않습니다. deviceMemoryBytes는 장치 메모리 요구량이며 예약 가능한 자원이 아닙니다. 같은 Idempotency-Key와 같은 문서는 200으로 기존 revision을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다.
+         * @description 사용자가 확정한 CPU(millicores)·메모리(bytes)의 min ≤ request ≤ max와 GPU/NPU 확장 자원 요구량을 SERVICE 버전의 다음 불변 revision으로 저장합니다. basis가 MEASURED이면 요청값이 인용한 analysisId의 AVAILABLE 실측 p95(올림)와, RECOMMENDED이면 KRR 요청값과 정확히 같아야 합니다. 분석 없이 직접 입력한 값은 MANUAL·UNMEASURED로 저장되며 검증된 추천으로 표시하지 않습니다. deviceMemoryBytes는 장치 메모리 요구량이며 예약 가능한 자원이 아닙니다. 같은 Idempotency-Key와 같은 문서는 200으로 기존 revision을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다.
          */
         post: operations["saveResourceProfile"];
         delete?: never;
@@ -8187,6 +8187,11 @@ export interface operations {
         parameters: {
             query: {
                 namespace: string;
+                /** @description end와 함께 지정 */
+                start?: string;
+                /** @description start와 함께 지정 */
+                end?: string;
+                /** @description start·end가 없을 때만 사용 */
                 hours?: number;
             };
             header?: never;
@@ -8325,7 +8330,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description 저장소를 사용할 수 없습니다. */
+            /** @description 저장소를 사용할 수 없거나 전체 분석 기한을 넘어 저장하지 않았습니다(RESOURCE_ANALYSIS_TIMEOUT). */
             503: {
                 headers: {
                     [name: string]: unknown;

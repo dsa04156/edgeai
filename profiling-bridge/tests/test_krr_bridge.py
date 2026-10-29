@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import threading
+import tracemalloc
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -23,7 +24,8 @@ class BridgeTest(unittest.TestCase):
         os.environ.update(FAKE_KRR_ARGV=self.argv, FAKE_KRR_REPORT=str(REPORT), FAKE_KRR_MODE="ok")
         self.settings = krr_bridge.Settings({
             "KRR_PROMETHEUS_URL": "http://prometheus.example:9090/", "KRR_COMMAND": f"{sys.executable} {HERE / 'fake_krr.py'}",
-            "KRR_ALLOWED_NAMESPACES": "edgeai,lab", "KRR_TIMEOUT_SECONDS": "10", "KRR_VERSION": "v1.31.1"})
+            "KRR_ALLOWED_NAMESPACES": "edgeai,lab", "KRR_TIMEOUT_SECONDS": "10", "KRR_VERSION": "v1.31.1",
+            "KRR_IMAGE": "robustadev/krr:v1.31.1@sha256:835bf3b6fec4d8f27d96d236a36542bd87bfcb4f12f3537f8dce7f886916ed9c"})
         krr_bridge.Handler.settings = self.settings
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), krr_bridge.Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -49,6 +51,7 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual("COMPLETED", body["status"])
         self.assertEqual("v1.31.1", body["krrVersion"])
+        self.assertEqual("robustadev/krr:v1.31.1@sha256:835bf3b6fec4d8f27d96d236a36542bd87bfcb4f12f3537f8dce7f886916ed9c", body["krrImage"])
         self.assertEqual(hashlib.sha256(REPORT.read_bytes()).hexdigest(), body["reportSha256"])
         self.assertEqual("simple", body["report"]["strategy"]["name"])
         argv = json.loads(Path(self.argv).read_text())
@@ -88,6 +91,21 @@ class BridgeTest(unittest.TestCase):
             self.assertIsNone(body["report"])
         os.environ["FAKE_KRR_MODE"] = "fail"
         self.assertEqual(3, self.post(self.request)[1]["exitCode"])
+
+    def test_oversized_stderr_is_drained_with_bounded_memory(self):
+        os.environ["FAKE_KRR_MODE"] = "noisy"
+        request = krr_bridge.validate(dict(self.request), self.settings)
+        tracemalloc.start()
+        try:
+            result = krr_bridge.run(request, self.settings)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual("FAILED", result["status"])
+        self.assertEqual(1, result["exitCode"])
+        self.assertIsNone(result["report"])
+        # 16 MiB of stderr; communicate() held all of it (and a copy). The drain keeps 64 KiB chunks + an 8 KiB tail.
+        self.assertLess(peak, 1024 * 1024)
 
     def test_timeout_kills_krr(self):
         krr_bridge.Handler.settings = krr_bridge.Settings({"KRR_PROMETHEUS_URL": "http://p:9090", "KRR_COMMAND": f"{sys.executable} {HERE / 'fake_krr.py'}",

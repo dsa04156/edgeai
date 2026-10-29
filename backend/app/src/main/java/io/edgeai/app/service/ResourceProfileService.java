@@ -45,8 +45,8 @@ public class ResourceProfileService {
             if(!analysis.serviceProfileVersionId().equals(service.id()))throw invalid("분석 결과의 서비스 버전이 저장할 서비스 버전과 다릅니다.");
             evidence=evidence(analysis.id(),JSON.decode(analysis.documentJson()));
         }
-        requireBasis("CPU",input.cpu().basis(),evidence,"cpu","requestMillicores");
-        requireBasis("메모리",input.memory().basis(),evidence,"memory","requestBytes");
+        requireBasis("CPU",input.cpu().basis(),input.cpu().range().request(),evidence,"cpu","requestMillicores");
+        requireBasis("메모리",input.memory().basis(),input.memory().range().request(),evidence,"memory","requestBytes");
         var document=new LinkedHashMap<String,Object>();
         document.put("serviceProfileVersionId",service.id().toString());
         document.put("service",service(service));
@@ -128,17 +128,25 @@ public class ResourceProfileService {
         return evidence;
     }
     @SuppressWarnings("unchecked")
-    private static void requireBasis(String label,Basis basis,Map<String,Object> evidence,String resource,String requestField) {
+    /**
+     * A measured/recommended basis is a claim about the confirmed request itself: it must equal the cited KRR request,
+     * or the cited AVAILABLE p95 rounded up to whole millicores/bytes. Any edited value is the user's own (MANUAL).
+     */
+    private static void requireBasis(String label,Basis basis,long request,Map<String,Object> evidence,String resource,String requestField) {
         if(basis==Basis.MANUAL)return;
         if(evidence==null)throw invalid(label+" 근거가 측정·추천이면 분석 결과(analysisId)를 인용해야 합니다.");
         if(basis==Basis.MEASURED) {
             var usage=(Map<String,Object>)((Map<String,Object>)evidence.get("measurement")).get(resource);
-            if(!"AVAILABLE".equals(usage.get("status")))throw invalid(label+" 실측값이 유효하지 않아(미측정·만료·부족) 실측 근거로 저장할 수 없습니다.");
+            if(!"AVAILABLE".equals(usage.get("status"))||usage.get("p95")==null)throw invalid(label+" 실측값이 유효하지 않아(미측정·만료·부족) 실측 근거로 저장할 수 없습니다.");
+            long p95=new java.math.BigDecimal(usage.get("p95").toString()).setScale(0,java.math.RoundingMode.CEILING).longValueExact();
+            if(request!=p95)throw invalid(label+" 요청값이 인용한 실측 p95("+p95+")와 달라 실측 근거로 저장할 수 없습니다. 수정한 값은 사용자 지정(MANUAL)입니다.");
         } else {
             var recommendation=(Map<String,Object>)evidence.get("recommendation");
             var values=(Map<String,Object>)recommendation.get(resource);
             if(!Set.of("AVAILABLE","PARTIAL").contains(recommendation.get("status"))||values.get(requestField)==null)
                 throw invalid(label+" KRR 추천값이 없어 추천 근거로 저장할 수 없습니다.");
+            long recommended=new java.math.BigDecimal(values.get(requestField).toString()).longValueExact();
+            if(request!=recommended)throw invalid(label+" 요청값이 인용한 KRR 추천("+recommended+")과 달라 추천 근거로 저장할 수 없습니다. 수정한 값은 사용자 지정(MANUAL)입니다.");
         }
     }
     @SuppressWarnings("unchecked")

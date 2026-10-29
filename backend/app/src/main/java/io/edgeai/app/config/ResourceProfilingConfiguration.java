@@ -15,8 +15,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class ResourceProfilingConfiguration {
     @Bean ResourceProfileRepository resourceProfileRepository(JdbcTemplate jdbc) { return new JdbcResourceProfileRepository(jdbc); }
     @Bean ResourceProfilingSettings resourceProfilingSettings(@Value("${edgeai.resource-profiling.namespaces:edgeai}") String namespaces,
-                                                              @Value("${edgeai.resource-profiling.krr.version:v1.31.1}") String krrVersion) {
-        return ResourceProfilingSettings.parse(namespaces, krrVersion);
+                                                              @Value("${edgeai.resource-profiling.krr.version:v1.31.1}") String krrVersion,
+                                                              @Value("${edgeai.resource-profiling.observation-budget-seconds:60}") int observationSeconds,
+                                                              @Value("${edgeai.resource-profiling.total-budget-seconds:180}") int totalSeconds) {
+        return ResourceProfilingSettings.parse(namespaces, krrVersion, observationSeconds, totalSeconds);
     }
     /** Read-only Prometheus range queries for workload CPU/memory and existing device exporters. */
     @Bean(destroyMethod = "close")

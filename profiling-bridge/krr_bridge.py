@@ -29,6 +29,7 @@ LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
 MAX_REQUEST_BYTES = 4096
 MAX_REPORT_BYTES = 12 * 1024 * 1024
+STDERR_TAIL_BYTES = 8192
 LOG = logging.getLogger("krr-bridge")
 
 
@@ -43,6 +44,8 @@ class Settings:
         if not self.command:
             raise ValueError("KRR_COMMAND is required")
         self.version = env.get("KRR_VERSION", "v1.31.1")
+        # The upstream image reports "dev" from `krr version`; the digest-pinned base image is the real identity.
+        self.image = env.get("KRR_IMAGE", "")
         self.namespaces = tuple(n.strip() for n in env.get("KRR_ALLOWED_NAMESPACES", "edgeai").split(",") if n.strip())
         if not self.namespaces or not all(LABEL.match(n) and len(n) <= 63 for n in self.namespaces):
             raise ValueError("KRR_ALLOWED_NAMESPACES must list Kubernetes namespaces")
@@ -83,6 +86,15 @@ def arguments(request: dict, settings: Settings, output: str) -> list[str]:
             "--history_duration", str(request["historyHours"]), "--logtostderr", "--quiet"]
 
 
+def drain(stream, tail: bytearray) -> None:
+    """Read a child's stderr to EOF in fixed chunks, keeping only the last STDERR_TAIL_BYTES for diagnostics."""
+    for chunk in iter(lambda: stream.read(65536), b""):
+        tail.extend(chunk)
+        if len(tail) > STDERR_TAIL_BYTES:
+            del tail[:-STDERR_TAIL_BYTES]
+    stream.close()
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -94,20 +106,26 @@ def run(request: dict, settings: Settings) -> dict:
         args = arguments(request, settings, output)
         public = [a if a != settings.prometheus_url else "<configured-prometheus>" for a in args]
         public[public.index("--fileoutput") + 1] = "<report.json>"
-        result = {"bridgeVersion": BRIDGE_VERSION, "krrVersion": settings.version, "startedAt": started,
+        result = {"bridgeVersion": BRIDGE_VERSION, "krrVersion": settings.version, "krrImage": settings.image, "startedAt": started,
                   "arguments": public, "request": request, "exitCode": None, "report": None, "reportSha256": None}
         process = subprocess.Popen(settings.command + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.PIPE, cwd=directory, start_new_session=True)
+        # communicate() would buffer all of stderr; drain it with bounded memory while waiting.
+        tail = bytearray()
+        reader = threading.Thread(target=drain, args=(process.stderr, tail), daemon=True)
+        reader.start()
         try:
-            _, stderr = process.communicate(timeout=settings.timeout)
+            process.wait(timeout=settings.timeout)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
+            process.wait()
+            reader.join(5)
             return {**result, "status": "TIMEOUT", "finishedAt": now()}
+        reader.join(5)
         result["exitCode"] = process.returncode
         result["finishedAt"] = now()
         if process.returncode != 0:
-            LOG.warning("krr exited %s: %s", process.returncode, stderr[-2000:].decode("utf-8", "replace"))
+            LOG.warning("krr exited %s: %s", process.returncode, bytes(tail[-2000:]).decode("utf-8", "replace"))
             return {**result, "status": "FAILED"}
         try:
             size = os.path.getsize(output)
@@ -139,7 +157,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
-            self.reply(200, {"status": "ok", "krrVersion": self.settings.version, "bridgeVersion": BRIDGE_VERSION})
+            self.reply(200, {"status": "ok", "krrVersion": self.settings.version, "krrImage": self.settings.image,
+                             "bridgeVersion": BRIDGE_VERSION, "uid": os.getuid()})
         else:
             self.reply(404, {"error": "not found"})
 

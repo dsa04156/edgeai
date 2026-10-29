@@ -70,6 +70,7 @@ public final class KrrBridgeClient implements RecommendationSource, AutoCloseabl
         var provenance = new TreeMap<String, Object>();
         provenance.put("version", root.path("krrVersion").asText(""));
         provenance.put("bridge", root.path("bridgeVersion").asText(""));
+        provenance.put("image", root.path("krrImage").asText(""));
         provenance.put("requestedHistoryHours", historyHours);
         provenance.put("startedAt", root.path("startedAt").asText(""));
         provenance.put("finishedAt", root.path("finishedAt").asText(""));

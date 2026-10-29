@@ -11,6 +11,12 @@ mode = os.environ.get("FAKE_KRR_MODE", "ok")
 if mode == "fail":
     print("krr: prometheus unreachable", file=sys.stderr)
     sys.exit(3)
+if mode == "noisy":
+    block = b"x" * 1048576
+    for _ in range(16):
+        sys.stderr.buffer.write(block)
+    sys.stderr.flush()
+    sys.exit(1)
 if mode == "sleep":
     time.sleep(30)
 if mode == "noreport":

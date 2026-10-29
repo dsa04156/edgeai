@@ -44,11 +44,13 @@ jobs:
       - name: Verify the built image runs the bundled KRR and serves only the fixed API
         run: |
           set -euo pipefail
-          test "$(docker run --rm --entrypoint python "$IMAGE" /app/krr.py version)" = "v1.31.1"
-          container=$(docker run -d -p 127.0.0.1:18471:8080 -e KRR_PROMETHEUS_URL=http://127.0.0.1:9 -e KRR_ALLOWED_NAMESPACES=edgeai "$IMAGE")
+          # Upstream `krr version` prints "dev" in the image; the identity is the pinned base digest below.
+          test "$(docker inspect "$IMAGE" --format '{{.Config.User}}')" = "10001:10001"
+          docker run --rm --read-only --tmpfs /tmp --entrypoint python "$IMAGE" -c 'import os, robusta_krr; assert os.getuid() == 10001'
+          container=$(docker run -d --read-only --tmpfs /tmp -p 127.0.0.1:18471:8080 -e KRR_PROMETHEUS_URL=http://127.0.0.1:9 -e KRR_ALLOWED_NAMESPACES=edgeai "$IMAGE")
           trap 'docker logs "$container" >&2 || true; docker rm -f "$container" >/dev/null' EXIT
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18471/healthz && break; sleep 1; done
-          curl -fsS http://127.0.0.1:18471/healthz | grep -q '"krrVersion":"v1.31.1"'
+          curl -fsS http://127.0.0.1:18471/healthz | grep -q '"krrImage":"robustadev/krr:v1.31.1@sha256:835bf3b6fec4d8f27d96d236a36542bd87bfcb4f12f3537f8dce7f886916ed9c"'
           code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
             -d '{"namespace":"kube-system","kind":"Deployment","name":"x","container":"x","historyHours":1}' http://127.0.0.1:18471/v1/recommendations)
           test "$code" = 400

@@ -573,7 +573,7 @@ test("resource profile routes use the management session with exact methods, fix
     };
     const reads = [
       "resource-profiles/capabilities",
-      "resource-profiles/workloads?namespace=edgeai&hours=24",
+      "resource-profiles/workloads?namespace=edgeai&start=2026-10-22T15:00:00Z&end=2026-10-29T15:00:00Z",
       "resource-profiles/pods?namespace=edgeai&kind=Deployment&name=api&container=api&start=2026-10-29T14:00:00Z&end=2026-10-29T15:00:00Z",
       `resource-profiles?serviceProfileVersionId=${id}&limit=100`,
       `resource-profiles/${id}`,

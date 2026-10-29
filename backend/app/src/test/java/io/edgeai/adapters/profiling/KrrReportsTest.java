@@ -80,11 +80,11 @@ class KrrReportsTest {
     @Test void bridgeOutcomesMapToUnavailableWithoutAFabricatedRecommendation() throws Exception {
         var client = new KrrBridgeClient("http://127.0.0.1:1", Duration.ofSeconds(5));
         var api = target("Deployment", "edgeai-api", "api");
-        String completed = "{\"status\":\"COMPLETED\",\"krrVersion\":\"v1.31.1\",\"bridgeVersion\":\"1\",\"startedAt\":\"2026-10-29T15:09:30Z\","
+        String completed = "{\"status\":\"COMPLETED\",\"krrVersion\":\"v1.31.1\",\"krrImage\":\"robustadev/krr:v1.31.1@sha256:835b\",\"bridgeVersion\":\"1\",\"startedAt\":\"2026-10-29T15:09:30Z\","
             + "\"finishedAt\":\"2026-10-29T15:10:00Z\",\"reportSha256\":\"abc\",\"arguments\":[\"simple\"],\"exitCode\":0,\"report\":" + fixture() + "}";
         var ok = client.decode(completed.getBytes(StandardCharsets.UTF_8), api, 24);
         assertThat(ok.status()).isEqualTo(Status.AVAILABLE);
-        assertThat(ok.provenance()).containsEntry("reportSha256", "abc").containsEntry("finishedAt", "2026-10-29T15:10:00Z");
+        assertThat(ok.provenance()).containsEntry("reportSha256", "abc").containsEntry("image", "robustadev/krr:v1.31.1@sha256:835b").containsEntry("finishedAt", "2026-10-29T15:10:00Z");
         for (String body : List.of("{\"status\":\"FAILED\",\"exitCode\":1,\"report\":null}", "{\"status\":\"TIMEOUT\",\"report\":null}", "not json")) {
             var failed = client.decode(body.getBytes(StandardCharsets.UTF_8), api, 24);
             assertThat(failed.status()).isIn(Status.UNAVAILABLE, Status.INVALID_REPORT);

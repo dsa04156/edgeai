@@ -36,7 +36,9 @@ class ResourceProfileIntegrationTest {
         volatile WorkloadMeasurement measurement;
         volatile DeviceObservation.Attribution attribution=DeviceObservation.Attribution.NODE_DEVICE_UNKNOWN_OWNER;
         final List<WorkloadTarget> measured=Collections.synchronizedList(new ArrayList<>());
+        final List<Duration> discovered=Collections.synchronizedList(new ArrayList<>());
         public List<WorkloadCandidate> workloads(String namespace,Instant start,Instant end) {
+            discovered.add(Duration.between(start,end));
             return List.of(new WorkloadCandidate(namespace,WorkloadTarget.Kind.Deployment,"detector",List.of("model","sidecar")));
         }
         public List<ObservedPod> pods(WorkloadTarget target,Instant start,Instant end) {
@@ -240,7 +242,12 @@ class ResourceProfileIntegrationTest {
         var body=manual(service);body.put("analysisId",analysis.path("id").asText());
         var resources=(Map<String,Object>)body.get("resources");
         resources.put("cpu",cpu(100,177,1000,"RECOMMENDED"));
-        resources.put("memory",memory(400000000L,530579456L,1073741824L,"MEASURED"));
+        // A basis is a claim about the confirmed request itself: edited values cannot keep it.
+        resources.put("cpu",cpu(100,999,1000,"RECOMMENDED"));resources.put("memory",memory(400000000L,450000000L,1073741824L,"MEASURED"));
+        assertThat(save(body,400).path("message").asText()).contains("KRR 추천(177)");
+        resources.put("cpu",cpu(100,177,1000,"RECOMMENDED"));resources.put("memory",memory(400000000L,999000000L,1073741824L,"MEASURED"));
+        assertThat(save(body,400).path("message").asText()).contains("실측 p95(450000000)");
+        resources.put("memory",memory(400000000L,450000000L,1073741824L,"MEASURED"));
         var saved=save(body,201);
         assertThat(saved.path("measurementStatus").asText()).isEqualTo("MEASURED");
         assertThat(saved.path("evidence").path("recommendation").path("cpu").path("requestMillicores").asLong()).isEqualTo(177);
@@ -249,6 +256,9 @@ class ResourceProfileIntegrationTest {
         assertThat(handoff.path("evidence").path("analysisId").asText()).isEqualTo(analysis.path("id").asText());
         assertThat(handoff.path("evidence").path("recommendation").path("provenance").path("version").asText()).isEqualTo("v1.31.1");
         assertThat(handoff.path("resources").path("cpu").path("basis").asText()).isEqualTo("RECOMMENDED");
+        assertThat(handoff.path("resources").path("cpu").path("request").asLong()).isEqualTo(177);
+        assertThat(handoff.path("resources").path("memory").path("basis").asText()).isEqualTo("MEASURED");
+        assertThat(handoff.path("resources").path("memory").path("request").asLong()).isEqualTo(450000000L);
 
         var otherService=service();var foreign=manual(otherService);foreign.put("analysisId",analysis.path("id").asText());
         assertThat(save(foreign,400).path("code").asText()).isEqualTo("INVALID_RESOURCE_PROFILE");
@@ -301,6 +311,10 @@ class ResourceProfileIntegrationTest {
         var capabilities=perform(get("/api/v1/resource-profiles/capabilities"),200);
         assertThat(capabilities.path("namespaces")).extracting(JsonNode::asText).containsExactly("edgeai","lab");
         var workloads=perform(get("/api/v1/resource-profiles/workloads").param("namespace","edgeai"),200);
+        perform(get("/api/v1/resource-profiles/workloads").param("namespace","edgeai").param("start",NOW.minus(Duration.ofDays(7)).toString()).param("end",NOW.toString()),200);
+        assertThat(metrics.discovered).last().isEqualTo(Duration.ofDays(7));
+        perform(get("/api/v1/resource-profiles/workloads").param("namespace","edgeai").param("start",NOW.minus(Duration.ofDays(20)).toString()).param("end",NOW.toString()),400);
+        perform(get("/api/v1/resource-profiles/workloads").param("namespace","edgeai").param("start",NOW.minus(Duration.ofDays(1)).toString()),400);
         assertThat(workloads.path("items").get(0).path("containers")).extracting(JsonNode::asText).containsExactly("model","sidecar");
         perform(get("/api/v1/resource-profiles/workloads").param("namespace","kube-system"),400);
         var pods=perform(get("/api/v1/resource-profiles/pods").param("namespace","edgeai").param("kind","Deployment").param("name","detector")

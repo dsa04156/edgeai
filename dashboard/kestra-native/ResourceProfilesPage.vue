@@ -54,7 +54,7 @@
         {{ capabilities.prometheus ? "연결" : "미구성" }} · KRR {{ capabilities.krrVersion }}
         {{ capabilities.krr ? "연결" : "미구성" }}. 실행 이력이 없으면 측정하지 않고 직접 입력할 수 있습니다.
       </p>
-      <NativeFeedback :error="targetAction.error.value" />
+      <NativeFeedback :error="targetError || analyzeAction.error.value" />
       <KsForm labelPosition="top" class="native-form" @submit.prevent="analyze"
         ><div class="native-grid">
           <KsFormItem label="네임스페이스"
@@ -75,7 +75,7 @@
               :disabled="analyzing || !target.namespace"
               filterable
               aria-label="워크로드"
-              :loading="targetAction.busy.value"
+              :loading="discovering"
               @update:model-value="selectWorkload(String($event))"
               ><KsOption
                 v-for="w in workloads"
@@ -121,10 +121,10 @@
             ><KsInput v-model="executionRef" :disabled="analyzing" maxlength="128" spellcheck="false"
           /></KsFormItem>
           <KsFormItem label="구간 시작 (ISO 8601)"
-            ><KsInput v-model="period.start" :disabled="analyzing || preset !== 'custom'" spellcheck="false"
+            ><KsInput v-model="period.start" :disabled="analyzing || preset !== 'custom'" spellcheck="false" @change="reloadWindow"
           /></KsFormItem>
           <KsFormItem label="구간 종료 (ISO 8601)"
-            ><KsInput v-model="period.end" :disabled="analyzing || preset !== 'custom'" spellcheck="false"
+            ><KsInput v-model="period.end" :disabled="analyzing || preset !== 'custom'" spellcheck="false" @change="reloadWindow"
           /></KsFormItem>
           <KsFormItem label="장치 관측(선택)"
             ><KsSelect
@@ -457,7 +457,7 @@ const route = useRoute(),
   router = useRouter();
 useRouteContext(computed(() => ({ title: "자원 프로파일" })));
 const { busy, error, act } = useAction();
-const targetAction = useAction(),
+const analyzeAction = useAction(),
   saveAction = useAction(),
   listAction = useAction(),
   handoffAction = useAction();
@@ -476,7 +476,8 @@ const loading = ref(true),
   executionRef = ref(""),
   deviceChoices = ref<string[]>([]),
   historyHours = ref("24"),
-  analyzing = ref(false),
+  targetError = ref(""),
+  discovering = ref(false),
   analysis = ref<Api["ResourceAnalysis"] | null>(null),
   editing = ref(false),
   draft = ref<ProfileDraft>(emptyDraft([])),
@@ -497,6 +498,7 @@ const serviceArchitectures = computed<string[]>(() => {
   const platform = (service.value?.spec as { platform?: { architectures?: unknown } } | undefined)?.platform;
   return Array.isArray(platform?.architectures) ? platform.architectures.map(String).sort() : [];
 });
+const analyzing = computed(() => analyzeAction.busy.value);
 const workloadKey = computed(() => (target.kind ? `${target.kind}/${target.name}` : ""));
 const workload = computed(() => workloads.value.find((w) => `${w.kind}/${w.name}` === workloadKey.value) ?? null);
 const canAnalyze = computed(() => Boolean(target.namespace && target.name && target.container));
@@ -548,14 +550,42 @@ function selectVersion(id: string) {
   void router.replace({ query: { ...route.query, service: id } });
   void loadRevisions();
 }
+// Discovery and Pod lookups are independent of analysis; a generation counter drops responses for an older selection.
+let discoveryGeneration = 0,
+  podGeneration = 0;
 async function selectNamespace(namespace: string) {
   Object.assign(target, { namespace, kind: "", name: "", container: "" });
   workloads.value = [];
   pods.value = [];
   podChoice.value = "";
-  await targetAction.act(async () => {
-    workloads.value = (await get<Api["ResourceWorkloadList"]>(`resource-profiles/workloads?namespace=${encodeURIComponent(namespace)}&hours=24`)).items;
-  });
+  await loadWorkloads();
+}
+/** Workloads observed in the selected window, so a Job that ended days ago is selectable for a 168 h analysis. */
+async function loadWorkloads() {
+  if (!target.namespace) return;
+  const generation = ++discoveryGeneration;
+  const query = new URLSearchParams({ namespace: target.namespace, start: period.start, end: period.end });
+  discovering.value = true;
+  targetError.value = "";
+  try {
+    const items = (await get<Api["ResourceWorkloadList"]>(`resource-profiles/workloads?${query}`)).items;
+    if (generation !== discoveryGeneration) return;
+    workloads.value = items;
+    const kept = items.find((w) => w.kind === target.kind && w.name === target.name);
+    if (target.kind && (!kept || !kept.containers.includes(target.container))) {
+      Object.assign(target, { kind: "", name: "", container: "" });
+      pods.value = [];
+      podChoice.value = "";
+    }
+  } catch (cause) {
+    if (generation === discoveryGeneration) targetError.value = cause instanceof Error ? cause.message : "워크로드 조회 실패";
+  } finally {
+    if (generation === discoveryGeneration) discovering.value = false;
+  }
+}
+async function reloadWindow() {
+  await loadWorkloads();
+  await loadPods();
 }
 function selectWorkload(value: string) {
   const [kind, ...name] = value.split("/");
@@ -572,16 +602,20 @@ async function selectContainer(container: string) {
 function selectPreset(value: string) {
   preset.value = value;
   if (value !== "custom") Object.assign(period, windowEnding(new Date(), Number(value)));
-  void loadPods();
+  void reloadWindow();
 }
 async function loadPods() {
+  const generation = ++podGeneration;
   pods.value = [];
   podChoice.value = "";
   if (!canAnalyze.value) return;
   const query = new URLSearchParams({ ...target, start: period.start, end: period.end });
-  await targetAction.act(async () => {
-    pods.value = (await get<Api["ResourcePodList"]>(`resource-profiles/pods?${query}`)).items;
-  });
+  try {
+    const items = (await get<Api["ResourcePodList"]>(`resource-profiles/pods?${query}`)).items;
+    if (generation === podGeneration) pods.value = items;
+  } catch (cause) {
+    if (generation === podGeneration) targetError.value = cause instanceof Error ? cause.message : "Pod 조회 실패";
+  }
 }
 function toggleArchitecture(arch: string, checked: boolean) {
   const values = new Set(draft.value.architectures);
@@ -617,21 +651,17 @@ async function analyze() {
     ...(executionRef.value.trim() ? { executionRef: executionRef.value.trim() } : {}),
     ...(hours == null ? {} : { recommendation: { historyHours: hours } }),
   };
-  analyzing.value = true;
-  await targetAction.act(async () => {
-    try {
-      const { token } = await get<{ token: string }>("csrf");
-      // KRR runs synchronously on the server (bounded by the bridge timeout), so this call may take minutes.
-      const response = await request("resource-profiles/analyses", {
-        method: "POST",
-        headers: { "X-CSRF-TOKEN": token, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(220000),
-      });
-      await beginReview(await response.json());
-    } finally {
-      analyzing.value = false;
-    }
+  // Its own action: a pending discovery or Pod lookup can neither skip nor lock the analysis.
+  await analyzeAction.act(async () => {
+    const { token } = await get<{ token: string }>("csrf");
+    // The API bounds the whole analysis (default 180 s); the console proxy waits 210 s and the browser 220 s.
+    const response = await request("resource-profiles/analyses", {
+      method: "POST",
+      headers: { "X-CSRF-TOKEN": token, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(220000),
+    });
+    await beginReview(await response.json());
   });
 }
 async function save() {

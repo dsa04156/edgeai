@@ -21,8 +21,9 @@ public class ResourceProfileController {
     @GetMapping("/capabilities")
     public Map<String,Object> capabilities() { return analyses.capabilities(); }
     @GetMapping("/workloads")
-    public Map<String,Object> workloads(@RequestParam String namespace,@RequestParam(required=false) Integer hours) {
-        return Map.of("items",analyses.workloads(namespace,hours).stream().map(w->Map.of("namespace",w.namespace(),"kind",w.kind().name(),"name",w.name(),"containers",w.containers())).toList());
+    public Map<String,Object> workloads(@RequestParam String namespace,@RequestParam(required=false) Integer hours,
+                                        @RequestParam(required=false) String start,@RequestParam(required=false) String end) {
+        return Map.of("items",analyses.workloads(namespace,hours,start,end).stream().map(w->Map.of("namespace",w.namespace(),"kind",w.kind().name(),"name",w.name(),"containers",w.containers())).toList());
     }
     @GetMapping("/pods")
     public Map<String,Object> pods(@RequestParam String namespace,@RequestParam String kind,@RequestParam String name,@RequestParam String container,

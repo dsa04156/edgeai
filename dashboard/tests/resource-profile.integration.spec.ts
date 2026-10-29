@@ -57,8 +57,10 @@ const handoff = { apiVersion: "edgeai.io/resource-profile-handoff/v1", kind: "Re
     memory: { unit: "bytes", min: 268435456, request: 530579456, max: 1073741824, basis: "RECOMMENDED", kubernetes: { min: "256Mi", request: "506Mi", max: "1Gi" } }, accelerators: [] },
   mappings: { verticalPodAutoscaler: { controlledResources: ["cpu", "memory"], recommendedUpdateMode: "Off" } }, evidence: {}, limitations: [] };
 
-function mock(page: Page, analyses: unknown[], saves: { status: number; json: unknown }[]) {
+type Hold = { pods?: Promise<void> };
+function mock(page: Page, analyses: unknown[], saves: { status: number; json: unknown }[], hold: Hold = {}) {
   const posts: { path: string; key?: string; csrf?: string; body: unknown }[] = [];
+  const discoveries: number[] = [];
   const revisions: unknown[] = [];
   void page.route("**/api/control-plane/**", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace("/api/control-plane/", "");
@@ -69,9 +71,17 @@ function mock(page: Page, analyses: unknown[], saves: { status: number; json: un
     if (path === "resource-profiles/capabilities") return route.fulfill({ json: capabilities });
     if (path === "resource-profiles/workloads") {
       expect(url.searchParams.get("namespace")).toBe("edgeai");
-      return route.fulfill({ json: { items: [{ namespace: "edgeai", kind: "Deployment", name: "detector", containers: ["model"] }] } });
+      // Discovery follows the selected observation window; a Job that ended days ago only exists in a long window.
+      const hours = (Date.parse(url.searchParams.get("end")!) - Date.parse(url.searchParams.get("start")!)) / 3600_000;
+      discoveries.push(Math.round(hours));
+      const items = [{ namespace: "edgeai", kind: "Deployment", name: "detector", containers: ["model"] }];
+      if (hours > 48) items.push({ namespace: "edgeai", kind: "Job", name: "nightly-batch", containers: ["batch"] });
+      return route.fulfill({ json: { items } });
     }
-    if (path === "resource-profiles/pods") return route.fulfill({ json: { items: [{ name: "detector-7d9-abc", uid: "pod-uid", node: "gpu-node-1" }] } });
+    if (path === "resource-profiles/pods") {
+      await hold.pods;
+      return route.fulfill({ json: { items: [{ name: "detector-7d9-abc", uid: "pod-uid", node: "gpu-node-1" }] } });
+    }
     if (request.method() === "POST") {
       posts.push({ path, key: request.headers()["idempotency-key"], csrf: request.headers()["x-csrf-token"], body: request.postDataJSON() });
       if (path === "resource-profiles/analyses") return route.fulfill({ status: 201, json: analyses.shift() });
@@ -83,7 +93,7 @@ function mock(page: Page, analyses: unknown[], saves: { status: number; json: un
     if (path === `resource-profiles/${profileId}/handoff`) return route.fulfill({ json: handoff });
     return route.fulfill({ status: 404, json: { message: `unmocked ${path}` } });
   });
-  return posts;
+  return Object.assign(posts, { discoveries });
 }
 async function options(page: Page, name: string) {
   const combobox = page.getByRole("combobox", { name, exact: true });
@@ -214,4 +224,35 @@ test("missing measurements and an unavailable KRR show their reasons and offer n
   await expect(table).toContainText("KRR bridge에 연결할 수 없습니다.");
   await expect(page.getByRole("button", { name: /p95를 요청값으로 사용|KRR 추천을 요청값으로 사용/ })).toHaveCount(0);
   await expect(table.getByRole("row", { name: /CPU/ })).toContainText("사용자 지정");
+});
+
+test("Analyze works while the Pod lookup is still pending and never locks the form", async ({ page }) => {
+  let release!: () => void;
+  const posts = mock(page, [measuredAnalysis], [], { pods: new Promise<void>((resolve) => (release = resolve)) });
+  await page.goto("/ui/main/resource-profiles");
+  await chooseTarget(page);
+  // The single container is auto-selected, which starts the (held) Pod lookup; analyze before it answers.
+  await page.getByRole("button", { name: "분석", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "실측·추천 확인과 요구량 확정" })).toBeFocused();
+  expect(posts.filter((p) => p.path === "resource-profiles/analyses")).toHaveLength(1);
+  release();
+  await expect(page.getByRole("button", { name: "분석", exact: true })).toBeEnabled();
+});
+
+test("workload discovery follows the selected window so a Job seen only days ago can be analysed", async ({ page }) => {
+  const posts = mock(page, [{ ...measuredAnalysis, target: { ...target, kind: "Job", name: "nightly-batch", container: "batch" } }], []);
+  await page.goto("/ui/main/resource-profiles");
+  await pick(page, "서비스 실행 모듈", "detector");
+  await expect.poll(() => posts.discoveries.at(-1)).toBe(1);
+  const workloadOptions = await options(page, "워크로드");
+  await expect(workloadOptions.getByRole("option", { name: "Job · nightly-batch", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await pick(page, "관측 구간", "최근 168시간");
+  await expect.poll(() => posts.discoveries.at(-1)).toBe(168);
+  await pick(page, "워크로드", "Job · nightly-batch");
+  await page.getByRole("button", { name: "분석", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "실측·추천 확인과 요구량 확정" })).toBeVisible();
+  const body = posts.find((p) => p.path === "resource-profiles/analyses")!.body as { target: unknown; window: { start: string; end: string } };
+  expect(body.target).toMatchObject({ kind: "Job", name: "nightly-batch", container: "batch" });
+  expect((Date.parse(body.window.end) - Date.parse(body.window.start)) / 3600_000).toBe(168);
 });

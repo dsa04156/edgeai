@@ -56,6 +56,9 @@ edgeai:
     enabled: ${EDGEAI_RESOURCE_PROFILING_ENABLED:true}
     namespaces: ${EDGEAI_RESOURCE_PROFILING_NAMESPACES:edgeai}
     prometheus-url: ${EDGEAI_RESOURCE_PROFILING_PROMETHEUS_URL:}
+    # Shared Prometheus budget and total analysis deadline; total must stay below the console proxy wait (210 s).
+    observation-budget-seconds: ${EDGEAI_RESOURCE_PROFILING_OBSERVATION_BUDGET_SECONDS:60}
+    total-budget-seconds: ${EDGEAI_RESOURCE_PROFILING_TOTAL_BUDGET_SECONDS:180}
     krr:
       bridge-url: ${EDGEAI_RESOURCE_PROFILING_KRR_BRIDGE_URL:}
       version: ${EDGEAI_RESOURCE_PROFILING_KRR_VERSION:v1.31.1}
