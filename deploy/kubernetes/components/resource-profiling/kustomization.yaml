@@ -1,0 +1,10 @@
+# 3-3 resource profiling: recommendation-only KRR bridge plus the API settings that enable Prometheus analysis.
+# Enabled by scripts/internal/enable-resource-profiling.py, which adds this component to overlays/dev and pins the
+# digest published by .github/workflows/krr-bridge.yml (the image is never deployed by tag).
+# Read-only: KRR lists workloads/Pods and queries Prometheus; nothing here installs VPA/HAMi or mutates workloads.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - krr-bridge.yaml
+patches:
+  - path: api-patch.yaml

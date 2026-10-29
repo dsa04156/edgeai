@@ -1065,6 +1065,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resource-profiles/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 자원 프로파일 분석 범위 조회
+         * @description 서버가 허용한 분석 네임스페이스, Prometheus·KRR bridge 구성 여부, 고정 KRR 버전과 관측 구간 한도를 조회합니다. Prometheus URL·KRR 명령·PromQL은 서버 설정이며 요청으로 바꿀 수 없습니다.
+         */
+        get: operations["getResourceProfilingCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/workloads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 측정 가능한 워크로드·컨테이너 목록
+         * @description 허용 네임스페이스에서 최근 hours시간 동안 kube-state-metrics에 관측된 컨트롤러(Deployment·StatefulSet·DaemonSet·Job·CronJob)와 소유자 없는 Pod, 각 컨테이너 이름을 반환합니다. 관측되지 않은 워크로드는 추정해 만들지 않습니다.
+         */
+        get: operations["listResourceProfileWorkloads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/pods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 워크로드의 관측 구간 Pod 목록
+         * @description 관측 구간에 대상 워크로드가 소유한 Pod의 이름·UID·노드를 반환합니다. 측정을 특정 Pod 실행으로 좁힐 때 사용합니다.
+         */
+        get: operations["listResourceProfilePods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 서비스 자원 사용량 분석(Prometheus 실측 + KRR 추천)
+         * @description 등록된 SERVICE 버전과 명시한 Kubernetes 워크로드 컨테이너(선택: Pod·UID), 관측 구간(5분–14일), 선택 장치로 분석합니다. CPU(millicores)·메모리(working set bytes)는 cAdvisor 범위 조회로, GPU/NPU는 기존 exporter의 장치 단위 관측으로 반환하며, 단독 점유가 확인되지 않은 장치 값은 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을 bridge에서 실행해 정확히 같은 워크로드·컨테이너의 CPU·메모리 추천만 사용합니다. KRR 창은 KRR 실행 시각 기준 historyHours입니다. 누락·만료·부족·미지원·귀속 불가는 상태와 이유로 반환하고 0이나 추정값으로 채우지 않습니다. 결과는 불변으로 저장되어 저장 시 근거로 인용됩니다.
+         */
+        post: operations["analyzeResourceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/analyses/{analysisId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysisId: string;
+            };
+            cookie?: never;
+        };
+        /** 분석 결과 조회 */
+        get: operations["getResourceAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 자원 프로파일 revision 목록
+         * @description SERVICE 버전을 지정하면 revision 내림차순, 생략하면 최근 저장순으로 반환합니다.
+         */
+        get: operations["listResourceProfiles"];
+        put?: never;
+        /**
+         * 자원 프로파일 revision 저장
+         * @description 사용자가 확정한 CPU(millicores)·메모리(bytes)의 min ≤ request ≤ max와 GPU/NPU 확장 자원 요구량을 SERVICE 버전의 다음 불변 revision으로 저장합니다. basis가 MEASURED/RECOMMENDED이면 인용한 analysisId에 AVAILABLE 실측값 또는 KRR 추천값이 있어야 합니다. 분석 없이 직접 입력한 값은 MANUAL·UNMEASURED로 저장되며 검증된 추천으로 표시하지 않습니다. deviceMemoryBytes는 장치 메모리 요구량이며 예약 가능한 자원이 아닙니다. 같은 Idempotency-Key와 같은 문서는 200으로 기존 revision을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다.
+         */
+        post: operations["saveResourceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/{profileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        /** 자원 프로파일 revision 조회 */
+        get: operations["getResourceProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/{profileId}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 2-1 전달 계약 조회(revision ID)
+         * @description 정확한 revision의 edgeai.io/resource-profile-handoff/v1 문서입니다. Pod YAML을 생성하지 않습니다.
+         */
+        get: operations["getResourceProfileHandoff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-profiles/services/{serviceKey}/versions/{serviceVersion}/revisions/{revision}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serviceKey: string;
+                serviceVersion: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * 2-1 전달 계약 조회(SERVICE key·version·revision)
+         * @description 2-1이 SERVICE의 불변 key/version과 자원 프로파일 revision으로 정확한 계약을 조회합니다.
+         */
+        get: operations["getResourceProfileHandoffByRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflow-runs": {
         parameters: {
             query?: never;
@@ -3994,6 +4182,359 @@ export interface components {
              */
             maxAgeSeconds: number;
         }[];
+        /** @enum {string} */
+        ResourceWorkloadKind: "Deployment" | "StatefulSet" | "DaemonSet" | "Job" | "CronJob" | "Pod";
+        /**
+         * @description AVAILABLE·STALE만 값을 가집니다. 나머지 상태의 값은 null이며 0으로 채우지 않습니다.
+         * @enum {string}
+         */
+        ResourceObservationStatus: "AVAILABLE" | "NO_DATA" | "STALE" | "INSUFFICIENT" | "UNSUPPORTED" | "AMBIGUOUS" | "NOT_FOUND" | "UNAVAILABLE";
+        ResourceProfilingCapabilities: {
+            namespaces: string[];
+            /** @description 서버에 Prometheus 범위 조회가 구성되었는지 */
+            prometheus: boolean;
+            /** @description 서버에 KRR bridge가 구성되었는지 */
+            krr: boolean;
+            krrVersion: string;
+            maxWindowHours: number;
+            minWindowMinutes: number;
+            maxHistoryHours: number;
+            workloadKinds: components["schemas"]["ResourceWorkloadKind"][];
+        };
+        ResourceWorkloadList: {
+            items: {
+                namespace: string;
+                kind: components["schemas"]["ResourceWorkloadKind"];
+                name: string;
+                containers: string[];
+            }[];
+        };
+        ResourcePodList: {
+            items: {
+                name: string;
+                /** @description kube-state-metrics가 보고하지 않으면 빈 문자열 */
+                uid: string;
+                /** @description kube-state-metrics가 보고하지 않으면 빈 문자열 */
+                node: string;
+            }[];
+        };
+        ResourceWorkloadTarget: {
+            namespace: string;
+            kind: components["schemas"]["ResourceWorkloadKind"];
+            name: string;
+            container: string;
+            /** @description 측정을 이 Pod로 제한(kind=Pod이면 name과 같음) */
+            pod?: string | null;
+            /**
+             * Format: uuid
+             * @description Pod UID가 일치하지 않으면 NOT_FOUND
+             */
+            podUid?: string | null;
+        };
+        ResourceDeviceRef: {
+            node: string;
+            /** @enum {string} */
+            kind: "GPU" | "NPU";
+            /** @description 노드 인벤토리의 장치 식별자(예 pci:0000:02:00.0) */
+            device: string;
+        };
+        ResourceAnalysisRequest: {
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            target: components["schemas"]["ResourceWorkloadTarget"];
+            /** @description 외부 실행 ID 등 불투명 참조(기존 Runner에 의존하지 않음) */
+            executionRef?: string | null;
+            window: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+            };
+            devices?: components["schemas"]["ResourceDeviceRef"][];
+            recommendation?: {
+                historyHours: number;
+            } | null;
+        };
+        ResourceUsage: {
+            status: components["schemas"]["ResourceObservationStatus"];
+            /** @enum {string} */
+            unit: "millicores" | "bytes" | "percent";
+            min: number | null;
+            average: number | null;
+            p95: number | null;
+            /** @description 수집·조회 간격 해상도의 최대값이며 보장된 순간 최대가 아닙니다. */
+            max: number | null;
+            samples: number;
+            /** Format: date-time */
+            firstSample: string | null;
+            /** Format: date-time */
+            lastSample: string | null;
+            reason: string | null;
+        };
+        ResourceMeasurement: {
+            method: string;
+            /**
+             * @description 모든 복제본의 Pod별 컨테이너 표본 분포. 최대값은 가장 큰 단일 Pod이며 복제본 합계가 아닙니다.
+             * @enum {string}
+             */
+            aggregation: "PER_POD_CONTAINER";
+            stepSeconds: number;
+            pods: components["schemas"]["ResourcePodList"]["items"];
+            cpu: components["schemas"]["ResourceUsage"];
+            memory: components["schemas"]["ResourceUsage"];
+            /** @description 복제본(Pod)별 자기 컨테이너 범위 */
+            perPod: {
+                pod: string;
+                samples: number;
+                cpuP95Millicores: number | null;
+                cpuMaxMillicores: number | null;
+                memoryMaxBytes: number | null;
+            }[];
+        };
+        ResourceDeviceObservation: {
+            node: string;
+            /** @enum {string} */
+            kind: "GPU" | "NPU";
+            device: string;
+            exporter: string | null;
+            model: string | null;
+            /**
+             * @description TARGET_ASSOCIATED: exporter Pod 표시가 대상 Pod만 가리킴(연관일 뿐 단독 점유 아님). 어떤 값이든 장치 전체 관측이며 서비스별 사용량이 아닙니다.
+             * @enum {string}
+             */
+            attribution: "TARGET_ASSOCIATED" | "NODE_DEVICE_SHARED" | "NODE_DEVICE_UNKNOWN_OWNER";
+            /**
+             * @description 단독 할당을 증명하는 exporter가 없어 항상 false
+             * @enum {boolean}
+             */
+            perWorkload: false;
+            status: components["schemas"]["ResourceObservationStatus"];
+            utilization: components["schemas"]["ResourceUsage"] | null;
+            memoryUsed: components["schemas"]["ResourceUsage"] | null;
+            memoryTotalBytes: number | null;
+            reason: string | null;
+        };
+        ResourceRecommendation: {
+            /** @enum {string} */
+            engine: "KRR";
+            /** @enum {string} */
+            status: "AVAILABLE" | "PARTIAL" | "NO_DATA" | "NOT_FOUND" | "AMBIGUOUS" | "UNSUPPORTED" | "UNAVAILABLE" | "INVALID_REPORT" | "NOT_REQUESTED";
+            reason: string | null;
+            /** @description KRR 자체 이력 구간(실행 시각 기준). 측정 구간과 다를 수 있습니다. */
+            window: {
+                historyHours?: number;
+                /** Format: date-time */
+                start?: string | null;
+                /** Format: date-time */
+                end?: string | null;
+            } | null;
+            cpu: {
+                requestMillicores?: number | null;
+                /** @description simple 전략은 CPU limit을 비워 둡니다(null). */
+                limitMillicores?: number | null;
+                info?: string | null;
+            };
+            memory: {
+                requestBytes?: number | null;
+                limitBytes?: number | null;
+                info?: string | null;
+            };
+            podCount: number;
+            warnings: string[];
+            /** @description KRR 버전·전략 설정·인자·보고서 SHA-256·실행 시각 */
+            provenance: {
+                [key: string]: unknown;
+            };
+        };
+        ResourceAnalysis: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            service: components["schemas"]["ResourceServiceVersion"];
+            /** Format: date-time */
+            createdAt: string;
+            target: components["schemas"]["ResourceWorkloadTarget"];
+            executionRef: string | null;
+            window: components["schemas"]["ResourceAnalysisRequest"]["window"];
+            measurement: components["schemas"]["ResourceMeasurement"];
+            devices: components["schemas"]["ResourceDeviceObservation"][];
+            recommendation: components["schemas"]["ResourceRecommendation"];
+            limitations: string[];
+        };
+        ResourceServiceVersion: {
+            /** Format: uuid */
+            profileVersionId: string;
+            key: string;
+            version: string;
+            digest: string;
+        };
+        /**
+         * @description MEASURED: 인용 분석의 AVAILABLE 실측, RECOMMENDED: 인용 분석의 KRR 값, MANUAL: 사용자 직접 지정
+         * @enum {string}
+         */
+        ResourceBasis: "MEASURED" | "RECOMMENDED" | "MANUAL";
+        ResourceAccelerator: {
+            /** @enum {string} */
+            kind: "GPU" | "NPU";
+            /** @description vendor 도메인 확장 자원(예 nvidia.com/gpu, nvidia.com/gpumem) */
+            resourceName: string;
+            /** @enum {string} */
+            unit: "COUNT" | "MEBIBYTES" | "PERCENT";
+            min: number;
+            request: number;
+            max: number;
+            /** @description 장치 메모리 요구량. 예약 가능한 자원 필드가 아닙니다. */
+            deviceMemoryBytes?: number | null;
+            vendor?: string | null;
+            models?: string[];
+        };
+        ResourceProfileCreate: {
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            /** Format: uuid */
+            analysisId?: string | null;
+            inputConditions?: {
+                [key: string]: string;
+            };
+            compatibility?: {
+                architectures?: ("amd64" | "arm64")[];
+                runtime?: {
+                    name: string;
+                    version?: string;
+                } | null;
+            };
+            resources: {
+                cpu: {
+                    minMillicores: number;
+                    requestMillicores: number;
+                    maxMillicores: number;
+                    basis: components["schemas"]["ResourceBasis"];
+                };
+                memory: {
+                    minBytes: number;
+                    requestBytes: number;
+                    maxBytes: number;
+                    basis: components["schemas"]["ResourceBasis"];
+                };
+                accelerators?: components["schemas"]["ResourceAccelerator"][];
+            };
+            note?: string | null;
+        };
+        ResourceProfile: {
+            /** Format: uuid */
+            id: string;
+            revision: number;
+            /** @enum {string} */
+            measurementStatus: "MEASURED" | "PARTIAL" | "UNMEASURED";
+            /** Format: uuid */
+            analysisId: string | null;
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            serviceProfileVersionId: string;
+            service: components["schemas"]["ResourceServiceVersion"];
+            inputConditions: {
+                [key: string]: string;
+            };
+            compatibility: {
+                /** @enum {string} */
+                os?: "linux";
+                architectures?: string[];
+                runtime?: {
+                    [key: string]: string;
+                } | null;
+            };
+            resources: components["schemas"]["ResourceProfileCreate"]["resources"];
+            note: string | null;
+            /** @description 인용한 분석의 대상·구간·실측·장치·KRR 추천 사본 */
+            evidence: {
+                [key: string]: unknown;
+            } | null;
+        };
+        ResourceProfilePage: {
+            items: components["schemas"]["ResourceProfile"][];
+            nextOffset: number | null;
+        };
+        ResourceHandoffQuantity: {
+            /** @enum {string} */
+            unit: "millicores" | "bytes";
+            min: number;
+            request: number;
+            max: number;
+            basis: components["schemas"]["ResourceBasis"];
+            /** @description Kubernetes quantity 문자열(CPU는 m, 메모리는 정확히 나누어지면 Ki/Mi/Gi/Ti) */
+            kubernetes: {
+                min: string;
+                request: string;
+                max: string;
+            };
+        };
+        /** @description 2-1 전달 계약 edgeai.io/resource-profile-handoff/v1. 정확한 revision·digest, SERVICE 버전, 호환성과 자원 필드 대응을 제공합니다. Pod YAML·오프로딩 결정·워커 할당은 포함하지 않습니다. VPA 대응은 cpu·memory만이며 GPU/NPU는 VPA로 조정하지 않습니다. */
+        ResourceProfileHandoff: {
+            /** @enum {string} */
+            apiVersion: "edgeai.io/resource-profile-handoff/v1";
+            /** @enum {string} */
+            kind: "ResourceProfileHandoff";
+            profile: {
+                /** Format: uuid */
+                id: string;
+                revision: number;
+                digest: string;
+                /** Format: date-time */
+                createdAt: string;
+                /** @enum {string} */
+                measurementStatus: "MEASURED" | "PARTIAL" | "UNMEASURED";
+            };
+            service: components["schemas"]["ResourceServiceVersion"];
+            compatibility: {
+                [key: string]: unknown;
+            };
+            inputConditions: {
+                [key: string]: string;
+            };
+            resources: {
+                cpu: components["schemas"]["ResourceHandoffQuantity"];
+                memory: components["schemas"]["ResourceHandoffQuantity"];
+                accelerators: (components["schemas"]["ResourceAccelerator"] & {
+                    kubernetes?: {
+                        [key: string]: string;
+                    };
+                    /** @enum {boolean} */
+                    deviceMemoryReservable?: false;
+                    /** @enum {string} */
+                    verticalScaling?: "NOT_SUPPORTED";
+                    /** @enum {string} */
+                    basis?: "MANUAL";
+                })[];
+            };
+            mappings: {
+                podContainerResources?: {
+                    [key: string]: string;
+                };
+                verticalPodAutoscaler?: {
+                    controlledResources?: ("cpu" | "memory")[];
+                    minAllowed?: {
+                        [key: string]: string;
+                    };
+                    maxAllowed?: {
+                        [key: string]: string;
+                    };
+                    /** @enum {string} */
+                    recommendedUpdateMode?: "Off";
+                    compatibility?: {
+                        [key: string]: string;
+                    };
+                    /** @enum {string} */
+                    acceleratorScaling?: "NOT_SUPPORTED";
+                };
+            };
+            evidence: {
+                [key: string]: unknown;
+            };
+            limitations: string[];
+        };
     };
     responses: {
         /** @description 감사 ID의 UUID 형식 또는 페이지 범위가 잘못되었습니다. */
@@ -6966,6 +7507,434 @@ export interface operations {
             };
             /** @description 저장소를 사용할 수 없습니다. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getResourceProfilingCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 분석 범위 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfilingCapabilities"];
+                };
+            };
+        };
+    };
+    listResourceProfileWorkloads: {
+        parameters: {
+            query: {
+                namespace: string;
+                hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 관측된 워크로드 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceWorkloadList"];
+                };
+            };
+            /** @description 허용되지 않은 네임스페이스 또는 구간(INVALID_RESOURCE_ANALYSIS) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Prometheus 미구성·조회 실패(RESOURCE_METRICS_UNAVAILABLE) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listResourceProfilePods: {
+        parameters: {
+            query: {
+                namespace: string;
+                kind: components["schemas"]["ResourceWorkloadKind"];
+                name: string;
+                container: string;
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 관측된 Pod */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePodList"];
+                };
+            };
+            /** @description 잘못된 대상·구간(INVALID_RESOURCE_ANALYSIS) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Prometheus 미구성·조회 실패(RESOURCE_METRICS_UNAVAILABLE) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    analyzeResourceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description 저장된 분석 결과 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceAnalysis"];
+                };
+            };
+            /** @description 허용되지 않은 네임스페이스·잘못된 이름·구간·필드(INVALID_RESOURCE_ANALYSIS) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SERVICE 버전이 없습니다(SERVICE_VERSION_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getResourceAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysisId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 저장된 분석 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceAnalysis"];
+                };
+            };
+            /** @description 분석 결과가 없습니다(RESOURCE_ANALYSIS_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listResourceProfiles: {
+        parameters: {
+            query?: {
+                serviceProfileVersionId?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description revision 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfilePage"];
+                };
+            };
+            /** @description 잘못된 페이지·UUID(INVALID_RESOURCE_PROFILE) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveResourceProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description 같은 Idempotency-Key·같은 문서로 이미 저장된 revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfile"];
+                };
+            };
+            /** @description 새 불변 revision */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfile"];
+                };
+            };
+            /** @description 단위·정수·범위·근거·필드 오류(INVALID_RESOURCE_PROFILE) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SERVICE 버전이 없습니다(SERVICE_VERSION_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Idempotency 충돌(IDEMPOTENCY_CONFLICT) 또는 동시 저장 충돌 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소를 사용할 수 없습니다. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getResourceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 불변 revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfile"];
+                };
+            };
+            /** @description revision이 없습니다(RESOURCE_PROFILE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getResourceProfileHandoff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 전달 계약 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfileHandoff"];
+                };
+            };
+            /** @description revision이 없습니다(RESOURCE_PROFILE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getResourceProfileHandoffByRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serviceKey: string;
+                serviceVersion: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 전달 계약 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceProfileHandoff"];
+                };
+            };
+            /** @description 잘못된 key·version 형식(INVALID_RESOURCE_PROFILE) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description SERVICE 버전(SERVICE_VERSION_NOT_FOUND) 또는 revision(RESOURCE_PROFILE_NOT_FOUND)이 없습니다. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

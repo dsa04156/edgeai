@@ -126,6 +126,11 @@
       "description": "Spring DAG 버전을 발행하고 작업 결과를 조회합니다."
     },
     {
+      "source": "docs/guides/resource-profiling.md",
+      "group": "guides",
+      "description": "서비스의 CPU·메모리·GPU/NPU 요구량을 실측·KRR 추천으로 확인해 저장하고 2-1에 전달합니다."
+    },
+    {
       "source": "docs/guides/swagger-ui.md",
       "group": "guides",
       "description": "Swagger와 HTTP 클라이언트에서 API를 호출합니다."

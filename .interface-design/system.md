@@ -1,3 +1,9 @@
+## 2026-10-30 서비스 자원 프로파일
+
+- `자원 프로파일`(`/ui/main/resource-profiles`)은 대상 서비스 → 측정 대상·구간 → 실측·추천 확인과 요구량 확정 → 저장된 revision → 2-1 전달 계약 순서의 native-panel 화면이다. 원본 KsForm·KsSelect·KsInput·KsCheckbox·KsButton·NativeFeedback·NativeLoading만 쓰고 카드·지표 타일을 추가하지 않는다.
+- CPU·메모리는 한 dense 표(자원·실측 최소/평균/p95/최대·KRR 요청/제한·최소·요청·최대·근거)로 비교하고 단위를 행 머리에 둔다. 좁은 화면은 패널 안 가로 스크롤을 쓴다. 상태는 작은 원본 토큰 배지(`--ks-content-success/warning/error`)로만 구분한다.
+- 없는 값은 `—`, 근거는 확정 요청값이 KRR 추천·실측 p95와 같을 때만 추천·실측이며 수정하면 사용자 지정이다. 장치 관측은 별도 표로 귀속(장치 전체·공유·연관)을 먼저 보이고 요구량과 섞지 않는다. 복제본별 실측은 접힘으로 둔다.
+
 ## 2026-10-29 측정 성능 프로파일 등록
 
 - `성능 프로파일` 화면은 출처(워크플로 이름·키 → 발행 버전·버전 ID) → 측정 정보 → 작업별 측정값 → 등록 결과·미리보기 순서의 한 native-panel 양식이다. 원본 KsForm·KsSelect(다중 노드)·KsInput·NativeFeedback만 쓰고 카드·지표 타일을 추가하지 않는다.

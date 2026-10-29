@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - {name: EDGEAI_RESOURCE_PROFILING_ENABLED, value: 'true'}
+            - {name: EDGEAI_RESOURCE_PROFILING_NAMESPACES, value: 'edgeai'}
+            - {name: EDGEAI_RESOURCE_PROFILING_PROMETHEUS_URL, value: 'http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090'}
+            - {name: EDGEAI_RESOURCE_PROFILING_KRR_BRIDGE_URL, value: 'http://edgeai-krr-bridge.edgeai.svc:8080'}
+            - {name: EDGEAI_RESOURCE_PROFILING_KRR_VERSION, value: v1.31.1}

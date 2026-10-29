@@ -50,6 +50,16 @@ edgeai:
   prometheus:
     enabled: ${EDGEAI_PROMETHEUS_ENABLED:false}
     url: ${EDGEAI_PROMETHEUS_URL:http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090}
+  # 3-3 resource requirement profiles. Analysis reads Prometheus only when prometheus-url is set and runs KRR only
+  # through the dedicated recommendation bridge; browsers never supply URLs, commands or PromQL.
+  resource-profiling:
+    enabled: ${EDGEAI_RESOURCE_PROFILING_ENABLED:true}
+    namespaces: ${EDGEAI_RESOURCE_PROFILING_NAMESPACES:edgeai}
+    prometheus-url: ${EDGEAI_RESOURCE_PROFILING_PROMETHEUS_URL:}
+    krr:
+      bridge-url: ${EDGEAI_RESOURCE_PROFILING_KRR_BRIDGE_URL:}
+      version: ${EDGEAI_RESOURCE_PROFILING_KRR_VERSION:v1.31.1}
+      timeout-seconds: ${EDGEAI_RESOURCE_PROFILING_KRR_TIMEOUT_SECONDS:130}
   inference:
     enabled: ${EDGEAI_INFERENCE_ENABLED:false}
     model-id: ${EDGEAI_INFERENCE_MODEL_ID:}

@@ -1,0 +1,921 @@
+{
+  "publishService": 200,
+  "capabilities": [
+    200,
+    {
+      "namespaces": [
+        "edgeai"
+      ],
+      "prometheus": true,
+      "krr": true,
+      "krrVersion": "v1.31.1",
+      "maxWindowHours": 336,
+      "minWindowMinutes": 5,
+      "maxHistoryHours": 336,
+      "workloadKinds": [
+        "Deployment",
+        "StatefulSet",
+        "DaemonSet",
+        "Job",
+        "CronJob",
+        "Pod"
+      ]
+    }
+  ],
+  "pods": [
+    200,
+    {
+      "items": [
+        {
+          "node": "etri-ser0001-cg0msb",
+          "name": "edgeai-api-7cb9fdfdb6-gr7qc",
+          "uid": "86c6813f-582c-470d-8521-281269a4dde3"
+        },
+        {
+          "node": "etri-ser0001-cg0msb",
+          "name": "edgeai-api-847b99dc6f-fl98j",
+          "uid": "7c881b59-2121-4994-9172-80727fff6755"
+        },
+        {
+          "node": "etri-ser0001-cg0msb",
+          "name": "edgeai-api-f545f9b7c-9xk9q",
+          "uid": "37e5d757-1568-46e1-885d-6779a69ef219"
+        }
+      ]
+    }
+  ],
+  "analysis": [
+    201,
+    {
+      "createdAt": "2026-10-29T15:20:16.982Z",
+      "devices": [
+        {
+          "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+          "device": "pci:0000:02:00.0",
+          "exporter": "dcgm-exporter",
+          "kind": "GPU",
+          "memoryTotalBytes": 16587423744,
+          "memoryUsed": {
+            "average": 292552704,
+            "firstSample": "2026-10-29T14:20:14Z",
+            "lastSample": "2026-10-29T15:20:14Z",
+            "max": 292552704,
+            "min": 292552704,
+            "p95": 292552704,
+            "reason": null,
+            "samples": 241,
+            "status": "AVAILABLE",
+            "unit": "bytes"
+          },
+          "model": "NVIDIA GeForce RTX 5080",
+          "node": "etri-ser0002-cgnmsb",
+          "perWorkload": false,
+          "reason": "exporter가 Pod 소유 정보를 제공하지 않아 장치 전체 사용량만 표시합니다.",
+          "status": "AVAILABLE",
+          "utilization": {
+            "average": 0,
+            "firstSample": "2026-10-29T14:20:14Z",
+            "lastSample": "2026-10-29T15:20:14Z",
+            "max": 0,
+            "min": 0,
+            "p95": 0,
+            "reason": null,
+            "samples": 241,
+            "status": "AVAILABLE",
+            "unit": "percent"
+          }
+        },
+        {
+          "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+          "device": "pci:0001:01:00.0",
+          "exporter": null,
+          "kind": "NPU",
+          "memoryTotalBytes": null,
+          "memoryUsed": null,
+          "model": null,
+          "node": "etri-dev0002-raspi5",
+          "perWorkload": false,
+          "reason": "이 장치의 exporter는 기간 관측 연동을 지원하지 않습니다(지원: NVIDIA DCGM GPU, Mobilint NPU).",
+          "status": "UNSUPPORTED",
+          "utilization": null
+        }
+      ],
+      "executionRef": null,
+      "id": "054fcbaf-d18c-455d-9b41-b19f234c500f",
+      "limitations": [
+        "CPU는 cAdvisor container_cpu_usage_seconds_total의 rate, 메모리는 container_memory_working_set_bytes입니다. 값은 Pod당 컨테이너 기준이며 복제본을 합산하지 않습니다(perPod는 복제본별 범위). 최대값은 수집·조회 간격의 해상도로 제한됩니다.",
+        "KRR 추천은 KRR 자체의 이력 구간(현재 시각 기준 historyHours)을 사용하며 측정 구간과 다를 수 있습니다. KRR은 CPU·메모리만 추천합니다.",
+        "GPU/NPU 장치 지표는 노드의 장치 단위 관측이며 exporter의 Pod 표시는 연관일 뿐 단독 점유가 아닙니다. 서비스별 사용량으로 해석하지 않으며 사용률을 장치 개수로 변환하지 않습니다."
+      ],
+      "measurement": {
+        "aggregation": "PER_POD_CONTAINER",
+        "cpu": {
+          "average": 139.961,
+          "firstSample": "2026-10-29T14:20:14Z",
+          "lastSample": "2026-10-29T15:20:14Z",
+          "max": 405.302,
+          "min": 20.634,
+          "p95": 245.503,
+          "reason": null,
+          "samples": 251,
+          "status": "AVAILABLE",
+          "unit": "millicores"
+        },
+        "memory": {
+          "average": 413183014.241,
+          "firstSample": "2026-10-29T14:20:14Z",
+          "lastSample": "2026-10-29T15:20:14Z",
+          "max": 429096960,
+          "min": 5967872,
+          "p95": 428224512,
+          "reason": null,
+          "samples": 241,
+          "status": "AVAILABLE",
+          "unit": "bytes"
+        },
+        "method": "cadvisor per Pod container (PER_POD_CONTAINER): rate(container_cpu_usage_seconds_total[120s]) and container_memory_working_set_bytes, duplicate scrapes collapsed by cgroup id",
+        "perPod": [
+          {
+            "cpuMaxMillicores": 101.784,
+            "cpuP95Millicores": 98.684,
+            "memoryMaxBytes": 429096960,
+            "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
+            "samples": 86
+          },
+          {
+            "cpuMaxMillicores": 405.302,
+            "cpuP95Millicores": 253.289,
+            "memoryMaxBytes": 419835904,
+            "pod": "edgeai-api-847b99dc6f-fl98j",
+            "samples": 157
+          },
+          {
+            "cpuMaxMillicores": 262.443,
+            "cpuP95Millicores": 262.443,
+            "memoryMaxBytes": 338305024,
+            "pod": "edgeai-api-f545f9b7c-9xk9q",
+            "samples": 9
+          }
+        ],
+        "pods": [
+          {
+            "name": "edgeai-api-7cb9fdfdb6-gr7qc",
+            "node": "etri-ser0001-cg0msb",
+            "uid": "86c6813f-582c-470d-8521-281269a4dde3"
+          },
+          {
+            "name": "edgeai-api-847b99dc6f-fl98j",
+            "node": "etri-ser0001-cg0msb",
+            "uid": "7c881b59-2121-4994-9172-80727fff6755"
+          },
+          {
+            "name": "edgeai-api-f545f9b7c-9xk9q",
+            "node": "etri-ser0001-cg0msb",
+            "uid": "37e5d757-1568-46e1-885d-6779a69ef219"
+          }
+        ],
+        "stepSeconds": 15
+      },
+      "recommendation": {
+        "cpu": {
+          "info": null,
+          "limitMillicores": null,
+          "requestMillicores": 393
+        },
+        "engine": "KRR",
+        "memory": {
+          "info": null,
+          "limitBytes": 530579456,
+          "requestBytes": 530579456
+        },
+        "podCount": 1,
+        "provenance": {
+          "arguments": [
+            "simple",
+            "--prometheus-url",
+            "<configured-prometheus>",
+            "--namespace",
+            "edgeai",
+            "--resource",
+            "Deployment",
+            "--formatter",
+            "json",
+            "--fileoutput",
+            "<report.json>",
+            "--history_duration",
+            "24",
+            "--logtostderr",
+            "--quiet"
+          ],
+          "bridge": "1",
+          "cpuMinMillicores": 10,
+          "finishedAt": "2026-10-29T15:20:16Z",
+          "memoryMinMegabytes": 100,
+          "reportErrors": [],
+          "reportSha256": "ca95f7b06b95c8d5068ce657998e22e497f318f70e3b91759dbb76a289e35dee",
+          "requestedHistoryHours": 24,
+          "scannedObjects": 9,
+          "severity": "CRITICAL",
+          "startedAt": "2026-10-29T15:20:14Z",
+          "strategy": "simple",
+          "strategySettings": {
+            "allow_hpa": false,
+            "cpu_percentile": 95,
+            "history_duration": 24,
+            "memory_buffer_percentage": 15,
+            "oom_memory_buffer_percentage": 25,
+            "points_required": 100,
+            "timeframe_duration": 1.25,
+            "use_oomkill_data": false
+          },
+          "tool": "krr",
+          "version": "v1.31.1"
+        },
+        "reason": null,
+        "status": "AVAILABLE",
+        "warnings": [],
+        "window": {
+          "end": "2026-10-29T15:20:16Z",
+          "historyHours": 24,
+          "start": "2026-10-28T15:20:16Z"
+        }
+      },
+      "service": {
+        "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
+        "key": "edgeai-api-profile",
+        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "version": "1.0.0"
+      },
+      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+      "target": {
+        "container": "api",
+        "kind": "Deployment",
+        "name": "edgeai-api",
+        "namespace": "edgeai",
+        "pod": null,
+        "podUid": null
+      },
+      "window": {
+        "end": "2026-10-29T15:20:14Z",
+        "start": "2026-10-29T14:20:14Z"
+      }
+    }
+  ],
+  "analysisNoData": [
+    201,
+    {
+      "createdAt": "2026-10-29T15:20:18.876Z",
+      "devices": [],
+      "executionRef": null,
+      "id": "26086b39-2ce0-40f8-ba69-948629235b40",
+      "limitations": [
+        "CPU는 cAdvisor container_cpu_usage_seconds_total의 rate, 메모리는 container_memory_working_set_bytes입니다. 값은 Pod당 컨테이너 기준이며 복제본을 합산하지 않습니다(perPod는 복제본별 범위). 최대값은 수집·조회 간격의 해상도로 제한됩니다.",
+        "KRR 추천은 KRR 자체의 이력 구간(현재 시각 기준 historyHours)을 사용하며 측정 구간과 다를 수 있습니다. KRR은 CPU·메모리만 추천합니다.",
+        "GPU/NPU 장치 지표는 노드의 장치 단위 관측이며 exporter의 Pod 표시는 연관일 뿐 단독 점유가 아닙니다. 서비스별 사용량으로 해석하지 않으며 사용률을 장치 개수로 변환하지 않습니다."
+      ],
+      "measurement": {
+        "aggregation": "PER_POD_CONTAINER",
+        "cpu": {
+          "average": null,
+          "firstSample": null,
+          "lastSample": null,
+          "max": null,
+          "min": null,
+          "p95": null,
+          "reason": "관측 구간에서 대상 워크로드의 Pod를 찾지 못했습니다.",
+          "samples": 0,
+          "status": "NOT_FOUND",
+          "unit": "millicores"
+        },
+        "memory": {
+          "average": null,
+          "firstSample": null,
+          "lastSample": null,
+          "max": null,
+          "min": null,
+          "p95": null,
+          "reason": "관측 구간에서 대상 워크로드의 Pod를 찾지 못했습니다.",
+          "samples": 0,
+          "status": "NOT_FOUND",
+          "unit": "bytes"
+        },
+        "method": "cadvisor",
+        "perPod": [],
+        "pods": [],
+        "stepSeconds": 15
+      },
+      "recommendation": {
+        "cpu": {
+          "info": "No data",
+          "limitMillicores": null,
+          "requestMillicores": null
+        },
+        "engine": "KRR",
+        "memory": {
+          "info": "No data",
+          "limitBytes": null,
+          "requestBytes": null
+        },
+        "podCount": 0,
+        "provenance": {
+          "arguments": [
+            "simple",
+            "--prometheus-url",
+            "<configured-prometheus>",
+            "--namespace",
+            "edgeai",
+            "--resource",
+            "StatefulSet",
+            "--formatter",
+            "json",
+            "--fileoutput",
+            "<report.json>",
+            "--history_duration",
+            "24",
+            "--logtostderr",
+            "--quiet"
+          ],
+          "bridge": "1",
+          "cpuMinMillicores": 10,
+          "finishedAt": "2026-10-29T15:20:18Z",
+          "memoryMinMegabytes": 100,
+          "reportErrors": [],
+          "reportSha256": "ef459086c27d047af8fabc84b0c2ead188a4a0a49cb55fbd9cf0b8de06507a0f",
+          "requestedHistoryHours": 24,
+          "scannedObjects": 5,
+          "severity": "UNKNOWN",
+          "startedAt": "2026-10-29T15:20:16Z",
+          "strategy": "simple",
+          "strategySettings": {
+            "allow_hpa": false,
+            "cpu_percentile": 95,
+            "history_duration": 24,
+            "memory_buffer_percentage": 15,
+            "oom_memory_buffer_percentage": 25,
+            "points_required": 100,
+            "timeframe_duration": 1.25,
+            "use_oomkill_data": false
+          },
+          "tool": "krr",
+          "version": "v1.31.1"
+        },
+        "reason": "KRR이 값을 계산하지 않았습니다(cpu: No data, memory: No data).",
+        "status": "NO_DATA",
+        "warnings": [
+          "NoPrometheusCPUMetrics",
+          "NoPrometheusMemoryMetrics"
+        ],
+        "window": {
+          "end": "2026-10-29T15:20:18Z",
+          "historyHours": 24,
+          "start": "2026-10-28T15:20:18Z"
+        }
+      },
+      "service": {
+        "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
+        "key": "edgeai-api-profile",
+        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "version": "1.0.0"
+      },
+      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+      "target": {
+        "container": "postgres",
+        "kind": "StatefulSet",
+        "name": "edgeai-postgres",
+        "namespace": "edgeai",
+        "pod": null,
+        "podUid": null
+      },
+      "window": {
+        "end": "2026-10-29T15:20:14Z",
+        "start": "2026-10-29T14:20:14Z"
+      }
+    }
+  ],
+  "save": [
+    201,
+    {
+      "id": "ebd64506-2919-4f8f-9a04-91f5eaf75fe7",
+      "revision": 4,
+      "measurementStatus": "MEASURED",
+      "analysisId": "054fcbaf-d18c-455d-9b41-b19f234c500f",
+      "digest": "sha256:347cab0a04f7d9ee9180633cfa57a4afb0fb17b90e5d17d37af2f1c22038d073",
+      "createdAt": "2026-10-29T15:20:18.888Z",
+      "compatibility": {
+        "architectures": [
+          "amd64"
+        ],
+        "os": "linux",
+        "runtime": {
+          "name": "temurin-jre",
+          "version": "21"
+        }
+      },
+      "evidence": {
+        "analysisId": "054fcbaf-d18c-455d-9b41-b19f234c500f",
+        "createdAt": "2026-10-29T15:20:16.982Z",
+        "devices": [
+          {
+            "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+            "device": "pci:0000:02:00.0",
+            "exporter": "dcgm-exporter",
+            "kind": "GPU",
+            "memoryTotalBytes": 16587423744,
+            "memoryUsed": {
+              "average": 292552704,
+              "firstSample": "2026-10-29T14:20:14Z",
+              "lastSample": "2026-10-29T15:20:14Z",
+              "max": 292552704,
+              "min": 292552704,
+              "p95": 292552704,
+              "reason": null,
+              "samples": 241,
+              "status": "AVAILABLE",
+              "unit": "bytes"
+            },
+            "model": "NVIDIA GeForce RTX 5080",
+            "node": "etri-ser0002-cgnmsb",
+            "perWorkload": false,
+            "reason": "exporter가 Pod 소유 정보를 제공하지 않아 장치 전체 사용량만 표시합니다.",
+            "status": "AVAILABLE",
+            "utilization": {
+              "average": 0,
+              "firstSample": "2026-10-29T14:20:14Z",
+              "lastSample": "2026-10-29T15:20:14Z",
+              "max": 0,
+              "min": 0,
+              "p95": 0,
+              "reason": null,
+              "samples": 241,
+              "status": "AVAILABLE",
+              "unit": "percent"
+            }
+          },
+          {
+            "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+            "device": "pci:0001:01:00.0",
+            "exporter": null,
+            "kind": "NPU",
+            "memoryTotalBytes": null,
+            "memoryUsed": null,
+            "model": null,
+            "node": "etri-dev0002-raspi5",
+            "perWorkload": false,
+            "reason": "이 장치의 exporter는 기간 관측 연동을 지원하지 않습니다(지원: NVIDIA DCGM GPU, Mobilint NPU).",
+            "status": "UNSUPPORTED",
+            "utilization": null
+          }
+        ],
+        "executionRef": null,
+        "measurement": {
+          "aggregation": "PER_POD_CONTAINER",
+          "cpu": {
+            "average": 139.961,
+            "firstSample": "2026-10-29T14:20:14Z",
+            "lastSample": "2026-10-29T15:20:14Z",
+            "max": 405.302,
+            "min": 20.634,
+            "p95": 245.503,
+            "reason": null,
+            "samples": 251,
+            "status": "AVAILABLE",
+            "unit": "millicores"
+          },
+          "memory": {
+            "average": 413183014.241,
+            "firstSample": "2026-10-29T14:20:14Z",
+            "lastSample": "2026-10-29T15:20:14Z",
+            "max": 429096960,
+            "min": 5967872,
+            "p95": 428224512,
+            "reason": null,
+            "samples": 241,
+            "status": "AVAILABLE",
+            "unit": "bytes"
+          },
+          "method": "cadvisor per Pod container (PER_POD_CONTAINER): rate(container_cpu_usage_seconds_total[120s]) and container_memory_working_set_bytes, duplicate scrapes collapsed by cgroup id",
+          "perPod": [
+            {
+              "cpuMaxMillicores": 101.784,
+              "cpuP95Millicores": 98.684,
+              "memoryMaxBytes": 429096960,
+              "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
+              "samples": 86
+            },
+            {
+              "cpuMaxMillicores": 405.302,
+              "cpuP95Millicores": 253.289,
+              "memoryMaxBytes": 419835904,
+              "pod": "edgeai-api-847b99dc6f-fl98j",
+              "samples": 157
+            },
+            {
+              "cpuMaxMillicores": 262.443,
+              "cpuP95Millicores": 262.443,
+              "memoryMaxBytes": 338305024,
+              "pod": "edgeai-api-f545f9b7c-9xk9q",
+              "samples": 9
+            }
+          ],
+          "pods": [
+            {
+              "name": "edgeai-api-7cb9fdfdb6-gr7qc",
+              "node": "etri-ser0001-cg0msb",
+              "uid": "86c6813f-582c-470d-8521-281269a4dde3"
+            },
+            {
+              "name": "edgeai-api-847b99dc6f-fl98j",
+              "node": "etri-ser0001-cg0msb",
+              "uid": "7c881b59-2121-4994-9172-80727fff6755"
+            },
+            {
+              "name": "edgeai-api-f545f9b7c-9xk9q",
+              "node": "etri-ser0001-cg0msb",
+              "uid": "37e5d757-1568-46e1-885d-6779a69ef219"
+            }
+          ],
+          "stepSeconds": 15
+        },
+        "recommendation": {
+          "cpu": {
+            "info": null,
+            "limitMillicores": null,
+            "requestMillicores": 393
+          },
+          "engine": "KRR",
+          "memory": {
+            "info": null,
+            "limitBytes": 530579456,
+            "requestBytes": 530579456
+          },
+          "podCount": 1,
+          "provenance": {
+            "arguments": [
+              "simple",
+              "--prometheus-url",
+              "<configured-prometheus>",
+              "--namespace",
+              "edgeai",
+              "--resource",
+              "Deployment",
+              "--formatter",
+              "json",
+              "--fileoutput",
+              "<report.json>",
+              "--history_duration",
+              "24",
+              "--logtostderr",
+              "--quiet"
+            ],
+            "bridge": "1",
+            "cpuMinMillicores": 10,
+            "finishedAt": "2026-10-29T15:20:16Z",
+            "memoryMinMegabytes": 100,
+            "reportErrors": [],
+            "reportSha256": "ca95f7b06b95c8d5068ce657998e22e497f318f70e3b91759dbb76a289e35dee",
+            "requestedHistoryHours": 24,
+            "scannedObjects": 9,
+            "severity": "CRITICAL",
+            "startedAt": "2026-10-29T15:20:14Z",
+            "strategy": "simple",
+            "strategySettings": {
+              "allow_hpa": false,
+              "cpu_percentile": 95,
+              "history_duration": 24,
+              "memory_buffer_percentage": 15,
+              "oom_memory_buffer_percentage": 25,
+              "points_required": 100,
+              "timeframe_duration": 1.25,
+              "use_oomkill_data": false
+            },
+            "tool": "krr",
+            "version": "v1.31.1"
+          },
+          "reason": null,
+          "status": "AVAILABLE",
+          "warnings": [],
+          "window": {
+            "end": "2026-10-29T15:20:16Z",
+            "historyHours": 24,
+            "start": "2026-10-28T15:20:16Z"
+          }
+        },
+        "target": {
+          "container": "api",
+          "kind": "Deployment",
+          "name": "edgeai-api",
+          "namespace": "edgeai",
+          "pod": null,
+          "podUid": null
+        },
+        "window": {
+          "end": "2026-10-29T15:20:14Z",
+          "start": "2026-10-29T14:20:14Z"
+        }
+      },
+      "inputConditions": {
+        "traffic": "dev cluster steady state"
+      },
+      "note": null,
+      "resources": {
+        "accelerators": [],
+        "cpu": {
+          "basis": "RECOMMENDED",
+          "maxMillicores": 2000,
+          "minMillicores": 100,
+          "requestMillicores": 393
+        },
+        "memory": {
+          "basis": "RECOMMENDED",
+          "maxBytes": 1073741824,
+          "minBytes": 268435456,
+          "requestBytes": 530579456
+        }
+      },
+      "service": {
+        "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
+        "key": "edgeai-api-profile",
+        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2",
+        "version": "1.0.0"
+      },
+      "serviceProfileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2"
+    }
+  ],
+  "handoff": [
+    200,
+    {
+      "apiVersion": "edgeai.io/resource-profile-handoff/v1",
+      "kind": "ResourceProfileHandoff",
+      "profile": {
+        "id": "ac52f291-395d-4c02-8fde-4b1c41a8d324",
+        "revision": 1,
+        "digest": "sha256:1ef5d9e92e541fa2b39e680733e8b4c078585fb00739ea9ce0837bb2da753ce5",
+        "createdAt": "2026-10-29T15:19:26.231Z",
+        "measurementStatus": "MEASURED"
+      },
+      "service": {
+        "key": "edgeai-api-profile",
+        "digest": "sha256:f8894e70d2e4a5b001b68ab305b315e4ad1cb35fe24fdeebef6a15248a7e5eac",
+        "version": "1.0.0",
+        "profileVersionId": "6302edf0-2e9b-4961-a385-1375023f34a2"
+      },
+      "compatibility": {
+        "os": "linux",
+        "runtime": null,
+        "architectures": [
+          "amd64",
+          "arm64"
+        ]
+      },
+      "inputConditions": {},
+      "resources": {
+        "cpu": {
+          "unit": "millicores",
+          "min": 100,
+          "request": 393,
+          "max": 2000,
+          "basis": "RECOMMENDED",
+          "kubernetes": {
+            "min": "100m",
+            "request": "393m",
+            "max": "2000m"
+          }
+        },
+        "memory": {
+          "unit": "bytes",
+          "min": 268435456,
+          "request": 530579456,
+          "max": 1073741824,
+          "basis": "RECOMMENDED",
+          "kubernetes": {
+            "min": "256Mi",
+            "request": "506Mi",
+            "max": "1Gi"
+          }
+        },
+        "accelerators": []
+      },
+      "mappings": {
+        "podContainerResources": {
+          "requests.cpu": "resources.cpu.kubernetes.request",
+          "requests.memory": "resources.memory.kubernetes.request",
+          "requests[accelerators[].resourceName]": "resources.accelerators[].kubernetes.request",
+          "upperBound": "resources.*.kubernetes.max is the permitted maximum; 2-1 decides container limits"
+        },
+        "verticalPodAutoscaler": {
+          "controlledResources": [
+            "cpu",
+            "memory"
+          ],
+          "minAllowed": {
+            "cpu": "100m",
+            "memory": "256Mi"
+          },
+          "maxAllowed": {
+            "cpu": "2000m",
+            "memory": "1Gi"
+          },
+          "recommendedUpdateMode": "Off",
+          "compatibility": {
+            "kubernetes": "1.31",
+            "verticalPodAutoscaler": "1.5.x",
+            "kubeEdge": "UNVERIFIED"
+          },
+          "acceleratorScaling": "NOT_SUPPORTED"
+        }
+      },
+      "evidence": {
+        "measurementStatus": "MEASURED",
+        "analysisId": "ff4064d3-7a96-4e54-a4a3-43e3992a275d",
+        "target": {
+          "pod": null,
+          "kind": "Deployment",
+          "name": "edgeai-api",
+          "podUid": null,
+          "container": "api",
+          "namespace": "edgeai"
+        },
+        "window": {
+          "end": "2026-10-29T15:19:23Z",
+          "start": "2026-10-29T14:19:23Z"
+        },
+        "measurement": {
+          "cpu": {
+            "max": 383.917,
+            "min": 25.448,
+            "p95": 245.503,
+            "unit": "millicores",
+            "reason": null,
+            "status": "AVAILABLE",
+            "average": 139.21,
+            "samples": 249,
+            "lastSample": "2026-10-29T15:19:23Z",
+            "firstSample": "2026-10-29T14:19:23Z"
+          },
+          "pods": [
+            {
+              "uid": "86c6813f-582c-470d-8521-281269a4dde3",
+              "name": "edgeai-api-7cb9fdfdb6-gr7qc",
+              "node": "etri-ser0001-cg0msb"
+            },
+            {
+              "uid": "7c881b59-2121-4994-9172-80727fff6755",
+              "name": "edgeai-api-847b99dc6f-fl98j",
+              "node": "etri-ser0001-cg0msb"
+            },
+            {
+              "uid": "37e5d757-1568-46e1-885d-6779a69ef219",
+              "name": "edgeai-api-f545f9b7c-9xk9q",
+              "node": "etri-ser0001-cg0msb"
+            }
+          ],
+          "memory": {
+            "max": 429096960,
+            "min": 5967872,
+            "p95": 428216320,
+            "unit": "bytes",
+            "reason": null,
+            "status": "AVAILABLE",
+            "average": 412301456.465,
+            "samples": 241,
+            "lastSample": "2026-10-29T15:19:23Z",
+            "firstSample": "2026-10-29T14:19:23Z"
+          },
+          "method": "cadvisor per Pod container (PER_POD_CONTAINER): rate(container_cpu_usage_seconds_total[120s]) and container_memory_working_set_bytes, duplicate scrapes collapsed by cgroup id",
+          "perPod": [
+            {
+              "pod": "edgeai-api-7cb9fdfdb6-gr7qc",
+              "samples": 89,
+              "memoryMaxBytes": 429096960,
+              "cpuMaxMillicores": 101.784,
+              "cpuP95Millicores": 99.392
+            },
+            {
+              "pod": "edgeai-api-847b99dc6f-fl98j",
+              "samples": 154,
+              "memoryMaxBytes": 419835904,
+              "cpuMaxMillicores": 383.917,
+              "cpuP95Millicores": 263.716
+            },
+            {
+              "pod": "edgeai-api-f545f9b7c-9xk9q",
+              "samples": 8,
+              "memoryMaxBytes": 338305024,
+              "cpuMaxMillicores": 245.503,
+              "cpuP95Millicores": 245.503
+            }
+          ],
+          "aggregation": "PER_POD_CONTAINER",
+          "stepSeconds": 15
+        },
+        "recommendation": {
+          "cpu": {
+            "info": null,
+            "limitMillicores": null,
+            "requestMillicores": 393
+          },
+          "engine": "KRR",
+          "memory": {
+            "info": null,
+            "limitBytes": 530579456,
+            "requestBytes": 530579456
+          },
+          "reason": null,
+          "status": "AVAILABLE",
+          "window": {
+            "end": "2026-10-29T15:19:25Z",
+            "start": "2026-10-28T15:19:25Z",
+            "historyHours": 24
+          },
+          "podCount": 1,
+          "warnings": [],
+          "provenance": {
+            "tool": "krr",
+            "bridge": "1",
+            "version": "v1.31.1",
+            "severity": "CRITICAL",
+            "strategy": "simple",
+            "arguments": [
+              "simple",
+              "--prometheus-url",
+              "<configured-prometheus>",
+              "--namespace",
+              "edgeai",
+              "--resource",
+              "Deployment",
+              "--formatter",
+              "json",
+              "--fileoutput",
+              "<report.json>",
+              "--history_duration",
+              "24",
+              "--logtostderr",
+              "--quiet"
+            ],
+            "startedAt": "2026-10-29T15:19:23Z",
+            "finishedAt": "2026-10-29T15:19:25Z",
+            "reportErrors": [],
+            "reportSha256": "dfb64dc61780d72a12fe5eba546444a03aee3029b6fe6178db15aef72b7e9722",
+            "scannedObjects": 9,
+            "cpuMinMillicores": 10,
+            "strategySettings": {
+              "allow_hpa": false,
+              "cpu_percentile": 95,
+              "points_required": 100,
+              "history_duration": 24,
+              "use_oomkill_data": false,
+              "timeframe_duration": 1.25,
+              "memory_buffer_percentage": 15,
+              "oom_memory_buffer_percentage": 25
+            },
+            "memoryMinMegabytes": 100,
+            "requestedHistoryHours": 24
+          }
+        },
+        "devices": [
+          {
+            "kind": "GPU",
+            "node": "etri-ser0002-cgnmsb",
+            "model": "NVIDIA GeForce RTX 5080",
+            "device": "pci:0000:02:00.0",
+            "reason": "exporter가 Pod 소유 정보를 제공하지 않아 장치 전체 사용량만 표시합니다.",
+            "status": "AVAILABLE",
+            "exporter": "dcgm-exporter",
+            "memoryUsed": {
+              "max": 292552704,
+              "min": 292552704,
+              "p95": 292552704,
+              "unit": "bytes",
+              "reason": null,
+              "status": "AVAILABLE",
+              "average": 292552704,
+              "samples": 241,
+              "lastSample": "2026-10-29T15:19:23Z",
+              "firstSample": "2026-10-29T14:19:23Z"
+            },
+            "attribution": "NODE_DEVICE_UNKNOWN_OWNER",
+            "perWorkload": false,
+            "utilization": {
+              "max": 0,
+              "min": 0,
+              "p95": 0,
+              "unit": "percent",
+              "reason": null,
+              "status": "AVAILABLE",
+              "average": 0,
+              "samples": 241,
+              "lastSample": "2026-10-29T15:19:23Z",
+              "firstSample": "2026-10-29T14:19:23Z"
+            },
+            "memoryTotalBytes": 16587423744
+          }
+        ]
+      },
+      "limitations": [
+        "요구량·허용 범위 선언이며 실제 예약·분할·증강은 실행 측(HAMi/device plugin/VPA) 담당입니다.",
+        "deviceMemoryBytes는 모델의 장치 메모리 요구량이며 Kubernetes에서 예약 가능한 자원 필드가 아닙니다.",
+        "VPA 연계는 CPU·메모리만 해당하며 GPU/NPU는 VPA로 조정하지 않습니다. KubeEdge 환경의 VPA 동작은 검증되지 않았습니다."
+      ]
+    }
+  ]
+}

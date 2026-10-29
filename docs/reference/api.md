@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **100개**입니다.
+계약에 정의된 operation은 **110개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -138,6 +138,16 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `POST` | `/api/v1/scheduling-profiles` | `registerSchedulingProfile` |
 | `GET` | `/api/v1/scheduling-profiles/{profileId}` | `getSchedulingProfile` |
 | `POST` | `/api/v1/scheduling-profiles/{profileId}/placement-preview` | `previewSchedulingPlacement` |
+| `GET` | `/api/v1/resource-profiles/capabilities` | `getResourceProfilingCapabilities` |
+| `GET` | `/api/v1/resource-profiles/workloads` | `listResourceProfileWorkloads` |
+| `GET` | `/api/v1/resource-profiles/pods` | `listResourceProfilePods` |
+| `POST` | `/api/v1/resource-profiles/analyses` | `analyzeResourceProfile` |
+| `GET` | `/api/v1/resource-profiles/analyses/{analysisId}` | `getResourceAnalysis` |
+| `POST` | `/api/v1/resource-profiles` | `saveResourceProfile` |
+| `GET` | `/api/v1/resource-profiles` | `listResourceProfiles` |
+| `GET` | `/api/v1/resource-profiles/{profileId}` | `getResourceProfile` |
+| `GET` | `/api/v1/resource-profiles/{profileId}/handoff` | `getResourceProfileHandoff` |
+| `GET` | `/api/v1/resource-profiles/services/{serviceKey}/versions/{serviceVersion}/revisions/{revision}/handoff` | `getResourceProfileHandoffByRevision` |
 | `POST` | `/api/v1/workflow-runs` | `createWorkflowRun` |
 | `GET` | `/api/v1/workflow-runs` | `listWorkflowRuns` |
 | `GET` | `/api/v1/workflow-runs/{runId}` | `getWorkflowRun` |

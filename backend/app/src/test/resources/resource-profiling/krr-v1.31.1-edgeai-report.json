@@ -1,0 +1,388 @@
+{
+  "scans": [
+    {
+      "object": {
+        "cluster": "kubernetes-admin@kubernetes",
+        "name": "edgeai-api",
+        "container": "api",
+        "pods": [
+          {
+            "name": "edgeai-api-65954d8f6c-6fcr2",
+            "deleted": true
+          },
+          {
+            "name": "edgeai-api-f545f9b7c-9xk9q",
+            "deleted": true
+          },
+          {
+            "name": "edgeai-api-847b99dc6f-fl98j",
+            "deleted": false
+          }
+        ],
+        "hpa": null,
+        "namespace": "edgeai",
+        "kind": "Deployment",
+        "allocations": {
+          "requests": {
+            "cpu": 0.25,
+            "memory": 536870912.0
+          },
+          "limits": {
+            "cpu": 2.0,
+            "memory": 1073741824.0
+          },
+          "info": {}
+        },
+        "warnings": [],
+        "labels": {},
+        "annotations": {}
+      },
+      "recommended": {
+        "requests": {
+          "cpu": {
+            "value": 0.393,
+            "severity": "OK"
+          },
+          "memory": {
+            "value": 530579456.0,
+            "severity": "GOOD"
+          }
+        },
+        "limits": {
+          "cpu": {
+            "value": null,
+            "severity": "WARNING"
+          },
+          "memory": {
+            "value": 530579456.0,
+            "severity": "CRITICAL"
+          }
+        },
+        "info": {
+          "cpu": null,
+          "memory": null
+        }
+      },
+      "severity": "CRITICAL"
+    },
+    {
+      "object": {
+        "cluster": "kubernetes-admin@kubernetes",
+        "name": "edgeai-hawkeye-safety",
+        "container": "ollama",
+        "pods": [
+          {
+            "name": "edgeai-hawkeye-safety-fdcdcd6d7-k5b79",
+            "deleted": false
+          }
+        ],
+        "hpa": null,
+        "namespace": "edgeai",
+        "kind": "Deployment",
+        "allocations": {
+          "requests": {
+            "cpu": 2.0,
+            "memory": 4294967296.0
+          },
+          "limits": {
+            "cpu": 4.0,
+            "memory": 4294967296.0
+          },
+          "info": {}
+        },
+        "warnings": [],
+        "labels": {},
+        "annotations": {}
+      },
+      "recommended": {
+        "requests": {
+          "cpu": {
+            "value": 0.01,
+            "severity": "CRITICAL"
+          },
+          "memory": {
+            "value": 4775215104.0,
+            "severity": "WARNING"
+          }
+        },
+        "limits": {
+          "cpu": {
+            "value": null,
+            "severity": "WARNING"
+          },
+          "memory": {
+            "value": 4775215104.0,
+            "severity": "WARNING"
+          }
+        },
+        "info": {
+          "cpu": null,
+          "memory": null
+        }
+      },
+      "severity": "CRITICAL"
+    },
+    {
+      "object": {
+        "cluster": "kubernetes-admin@kubernetes",
+        "name": "edgeai-hawkeye-safety",
+        "container": "adapter",
+        "pods": [
+          {
+            "name": "edgeai-hawkeye-safety-fdcdcd6d7-k5b79",
+            "deleted": false
+          }
+        ],
+        "hpa": null,
+        "namespace": "edgeai",
+        "kind": "Deployment",
+        "allocations": {
+          "requests": {
+            "cpu": 0.1,
+            "memory": 134217728.0
+          },
+          "limits": {
+            "cpu": 0.5,
+            "memory": 268435456.0
+          },
+          "info": {}
+        },
+        "warnings": [],
+        "labels": {},
+        "annotations": {}
+      },
+      "recommended": {
+        "requests": {
+          "cpu": {
+            "value": 0.01,
+            "severity": "GOOD"
+          },
+          "memory": {
+            "value": 104857600.0,
+            "severity": "GOOD"
+          }
+        },
+        "limits": {
+          "cpu": {
+            "value": null,
+            "severity": "WARNING"
+          },
+          "memory": {
+            "value": 104857600.0,
+            "severity": "OK"
+          }
+        },
+        "info": {
+          "cpu": null,
+          "memory": null
+        }
+      },
+      "severity": "WARNING"
+    },
+    {
+      "object": {
+        "cluster": "kubernetes-admin@kubernetes",
+        "name": "edgeai-postgres",
+        "container": "postgres",
+        "pods": [],
+        "hpa": null,
+        "namespace": "edgeai",
+        "kind": "StatefulSet",
+        "allocations": {
+          "requests": {
+            "cpu": 0.1,
+            "memory": 268435456.0
+          },
+          "limits": {
+            "cpu": 1.0,
+            "memory": 1073741824.0
+          },
+          "info": {}
+        },
+        "warnings": [
+          "NoPrometheusMemoryMetrics",
+          "NoPrometheusCPUMetrics"
+        ],
+        "labels": {},
+        "annotations": {}
+      },
+      "recommended": {
+        "requests": {
+          "cpu": {
+            "value": "?",
+            "severity": "UNKNOWN"
+          },
+          "memory": {
+            "value": "?",
+            "severity": "UNKNOWN"
+          }
+        },
+        "limits": {
+          "cpu": {
+            "value": "?",
+            "severity": "UNKNOWN"
+          },
+          "memory": {
+            "value": "?",
+            "severity": "UNKNOWN"
+          }
+        },
+        "info": {
+          "cpu": "No data",
+          "memory": "No data"
+        }
+      },
+      "severity": "UNKNOWN"
+    },
+    {
+      "object": {
+        "cluster": "kubernetes-admin@kubernetes",
+        "name": "edgeai-postgres-hdd",
+        "container": "postgres",
+        "pods": [
+          {
+            "name": "edgeai-postgres-hdd-0",
+            "deleted": false
+          }
+        ],
+        "hpa": null,
+        "namespace": "edgeai",
+        "kind": "StatefulSet",
+        "allocations": {
+          "requests": {
+            "cpu": 0.25,
+            "memory": 268435456.0
+          },
+          "limits": {
+            "cpu": 1.0,
+            "memory": 1073741824.0
+          },
+          "info": {}
+        },
+        "warnings": [],
+        "labels": {},
+        "annotations": {}
+      },
+      "recommended": {
+        "requests": {
+          "cpu": {
+            "value": 0.24,
+            "severity": "GOOD"
+          },
+          "memory": {
+            "value": 230686720.0,
+            "severity": "GOOD"
+          }
+        },
+        "limits": {
+          "cpu": {
+            "value": null,
+            "severity": "WARNING"
+          },
+          "memory": {
+            "value": 230686720.0,
+            "severity": "CRITICAL"
+          }
+        },
+        "info": {
+          "cpu": null,
+          "memory": null
+        }
+      },
+      "severity": "CRITICAL"
+    }
+  ],
+  "score": 22,
+  "resources": [
+    "cpu",
+    "memory"
+  ],
+  "description": "[b]Simple Strategy[/b]\n\nCPU request: 95.0% percentile, limit: unset\nMemory request: max + 15.0%, limit: max + 15.0%\nHistory: 24.0 hours\nStep: 1.25 minutes\n\nAll parameters can be customized. For example: `krr simple --cpu_percentile=90 --memory_buffer_percentage=15 --history_duration=24 --timeframe_duration=0.5`\n\nThis strategy does not work with objects with HPA defined (Horizontal Pod Autoscaler).\nIf HPA is defined for CPU or Memory, the strategy will return \"?\" for that resource.\nYou can override this behaviour by passing the --allow-hpa flag\n\nLearn more: [underline]https://github.com/robusta-dev/krr#algorithm[/underline]",
+  "strategy": {
+    "name": "simple",
+    "settings": {
+      "history_duration": 24.0,
+      "timeframe_duration": 1.25,
+      "cpu_percentile": 95.0,
+      "memory_buffer_percentage": 15.0,
+      "points_required": 100,
+      "allow_hpa": false,
+      "use_oomkill_data": false,
+      "oom_memory_buffer_percentage": 25.0
+    }
+  },
+  "errors": [],
+  "clusterSummary": {
+    "cluster_memory": 331712196608.0,
+    "cluster_cpu": 84.0,
+    "kube_system_mem_req": 1993342976.0,
+    "kube_system_cpu_req": 2.495
+  },
+  "config": {
+    "quiet": true,
+    "verbose": false,
+    "clusters": [],
+    "kubeconfig": null,
+    "impersonate_user": null,
+    "impersonate_group": null,
+    "namespaces": [
+      "edgeai"
+    ],
+    "resources": [
+      "Deployment",
+      "StatefulSet"
+    ],
+    "selector": null,
+    "cpu_min_value": 10,
+    "memory_min_value": 100,
+    "prometheus_url": "http://10.100.231.126:9090",
+    "prometheus_auth_header": null,
+    "prometheus_other_headers": {},
+    "prometheus_ssl_enabled": false,
+    "prometheus_cluster_label": null,
+    "prometheus_label": null,
+    "eks_managed_prom": false,
+    "eks_managed_prom_profile_name": null,
+    "eks_access_key": null,
+    "eks_secret_key": null,
+    "eks_service_name": "aps",
+    "eks_managed_prom_region": null,
+    "eks_assume_role": null,
+    "coralogix_token": null,
+    "openshift": false,
+    "max_workers": 10,
+    "discovery_job_batch_size": 5000,
+    "discovery_job_max_batches": 100,
+    "job_grouping_labels": null,
+    "job_grouping_limit": 500,
+    "format": "json",
+    "show_cluster_name": false,
+    "strategy": "simple",
+    "log_to_stderr": true,
+    "width": null,
+    "show_severity": true,
+    "publish_scan_url": null,
+    "start_time": null,
+    "scan_id": null,
+    "named_sinks": [],
+    "file_output": "edgeai.json",
+    "file_output_dynamic": false,
+    "slack_output": null,
+    "slack_title": null,
+    "azureblob_output": null,
+    "teams_webhook": null,
+    "azure_subscription_id": null,
+    "azure_resource_group": null,
+    "other_args": {
+      "history_duration": "24",
+      "timeframe_duration": "1.25",
+      "cpu_percentile": "95",
+      "memory_buffer_percentage": "15",
+      "points_required": "100",
+      "allow_hpa": false,
+      "use_oomkill_data": false,
+      "oom_memory_buffer_percentage": "25"
+    },
+    "inside_cluster": false
+  }
+}

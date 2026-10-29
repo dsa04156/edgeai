@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edgeai-krr-bridge
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+---
+# Read-only subset of KRR's documented in-cluster rules (docs/krr-in-cluster/krr-in-cluster-job.yaml at v1.31.1):
+# workload discovery, Pods and HPAs. No write verbs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: edgeai-krr-bridge-read
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, replicationcontrollers]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, replicasets, statefulsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [cronjobs, jobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: edgeai-krr-bridge-read
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edgeai-krr-bridge-read
+subjects:
+  - kind: ServiceAccount
+    name: edgeai-krr-bridge
+    namespace: edgeai
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgeai-krr-bridge
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-krr-bridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: edgeai-krr-bridge
+        app.kubernetes.io/part-of: edgeai
+    spec:
+      serviceAccountName: edgeai-krr-bridge
+      nodeSelector:
+        kubernetes.io/arch: amd64 # the CI image is linux/amd64 only
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: bridge
+          image: ghcr.io/dsa04156/edgeai-krr-bridge
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - {name: KRR_PROMETHEUS_URL, value: 'http://prometheus-kube-prometheus-prometheus.kube-system.svc:9090'}
+            - {name: KRR_ALLOWED_NAMESPACES, value: 'edgeai'}
+            - {name: KRR_TIMEOUT_SECONDS, value: '120'}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgeai-krr-bridge
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+spec:
+  selector:
+    app.kubernetes.io/name: edgeai-krr-bridge
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edgeai-krr-bridge
+  labels:
+    app.kubernetes.io/name: edgeai-krr-bridge
+    app.kubernetes.io/part-of: edgeai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: edgeai-krr-bridge
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: edgeai-api
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -2082,6 +2082,317 @@ paths:
               $ref: '#/components/schemas/PlacementPreviewRequest'
       security:
         - csrfToken: []
+  /api/v1/resource-profiles/capabilities:
+    get:
+      tags:
+        - ResourceProfile
+      operationId: getResourceProfilingCapabilities
+      summary: 자원 프로파일 분석 범위 조회
+      description: >-
+        서버가 허용한 분석 네임스페이스, Prometheus·KRR bridge 구성 여부, 고정 KRR 버전과 관측 구간 한도를 조회합니다.
+        Prometheus URL·KRR 명령·PromQL은 서버 설정이며 요청으로 바꿀 수 없습니다.
+      responses:
+        '200':
+          description: 분석 범위
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceProfilingCapabilities'
+  /api/v1/resource-profiles/workloads:
+    get:
+      tags:
+        - ResourceProfile
+      operationId: listResourceProfileWorkloads
+      summary: 측정 가능한 워크로드·컨테이너 목록
+      description: >-
+        허용 네임스페이스에서 최근 hours시간 동안 kube-state-metrics에 관측된 컨트롤러(Deployment·StatefulSet·DaemonSet·Job·CronJob)와
+        소유자 없는 Pod, 각 컨테이너 이름을 반환합니다. 관측되지 않은 워크로드는 추정해 만들지 않습니다.
+      parameters:
+        - {name: namespace, in: query, required: true, schema: {type: string, maxLength: 63}}
+        - {name: hours, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 336, default: 24}}
+      responses:
+        '200':
+          description: 관측된 워크로드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceWorkloadList'
+        '400':
+          description: 허용되지 않은 네임스페이스 또는 구간(INVALID_RESOURCE_ANALYSIS)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: Prometheus 미구성·조회 실패(RESOURCE_METRICS_UNAVAILABLE)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/pods:
+    get:
+      tags:
+        - ResourceProfile
+      operationId: listResourceProfilePods
+      summary: 워크로드의 관측 구간 Pod 목록
+      description: 관측 구간에 대상 워크로드가 소유한 Pod의 이름·UID·노드를 반환합니다. 측정을 특정 Pod 실행으로 좁힐 때 사용합니다.
+      parameters:
+        - {name: namespace, in: query, required: true, schema: {type: string, maxLength: 63}}
+        - {name: kind, in: query, required: true, schema: {$ref: '#/components/schemas/ResourceWorkloadKind'}}
+        - {name: name, in: query, required: true, schema: {type: string, maxLength: 253}}
+        - {name: container, in: query, required: true, schema: {type: string, maxLength: 63}}
+        - {name: start, in: query, required: true, schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: 관측된 Pod
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourcePodList'
+        '400':
+          description: 잘못된 대상·구간(INVALID_RESOURCE_ANALYSIS)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: Prometheus 미구성·조회 실패(RESOURCE_METRICS_UNAVAILABLE)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/analyses:
+    post:
+      tags:
+        - ResourceProfile
+      operationId: analyzeResourceProfile
+      summary: 서비스 자원 사용량 분석(Prometheus 실측 + KRR 추천)
+      description: >-
+        등록된 SERVICE 버전과 명시한 Kubernetes 워크로드 컨테이너(선택: Pod·UID), 관측 구간(5분–14일), 선택 장치로 분석합니다.
+        CPU(millicores)·메모리(working set bytes)는 cAdvisor 범위 조회로, GPU/NPU는 기존 exporter의 장치 단위 관측으로 반환하며,
+        단독 점유가 확인되지 않은 장치 값은 서비스별 사용량이 아닙니다(attribution). recommendation을 주면 고정 버전 KRR(simple)을
+        bridge에서 실행해 정확히 같은 워크로드·컨테이너의 CPU·메모리 추천만 사용합니다. KRR 창은 KRR 실행 시각 기준 historyHours입니다.
+        누락·만료·부족·미지원·귀속 불가는 상태와 이유로 반환하고 0이나 추정값으로 채우지 않습니다. 결과는 불변으로 저장되어 저장 시 근거로 인용됩니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceAnalysisRequest'
+      security:
+        - csrfToken: []
+      responses:
+        '201':
+          description: 저장된 분석 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceAnalysis'
+        '400':
+          description: 허용되지 않은 네임스페이스·잘못된 이름·구간·필드(INVALID_RESOURCE_ANALYSIS)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '403':
+          description: CSRF 토큰/쿠키가 없거나 유효하지 않습니다.
+        '404':
+          description: SERVICE 버전이 없습니다(SERVICE_VERSION_NOT_FOUND).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '413':
+          description: UTF-8 JSON 요청은 64 KiB 이하여야 합니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/analyses/{analysisId}:
+    parameters:
+    - name: analysisId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+        - ResourceProfile
+      operationId: getResourceAnalysis
+      summary: 분석 결과 조회
+      responses:
+        '200':
+          description: 저장된 분석 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceAnalysis'
+        '404':
+          description: 분석 결과가 없습니다(RESOURCE_ANALYSIS_NOT_FOUND).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles:
+    post:
+      tags:
+        - ResourceProfile
+      operationId: saveResourceProfile
+      summary: 자원 프로파일 revision 저장
+      description: >-
+        사용자가 확정한 CPU(millicores)·메모리(bytes)의 min ≤ request ≤ max와 GPU/NPU 확장 자원 요구량을 SERVICE 버전의 다음 불변 revision으로 저장합니다.
+        basis가 MEASURED/RECOMMENDED이면 인용한 analysisId에 AVAILABLE 실측값 또는 KRR 추천값이 있어야 합니다. 분석 없이 직접 입력한 값은
+        MANUAL·UNMEASURED로 저장되며 검증된 추천으로 표시하지 않습니다. deviceMemoryBytes는 장치 메모리 요구량이며 예약 가능한 자원이 아닙니다.
+        같은 Idempotency-Key와 같은 문서는 200으로 기존 revision을, 다른 문서는 409 IDEMPOTENCY_CONFLICT를 반환합니다.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceProfileCreate'
+      security:
+        - csrfToken: []
+      responses:
+        '200':
+          description: 같은 Idempotency-Key·같은 문서로 이미 저장된 revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfile'}
+        '201':
+          description: 새 불변 revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfile'}
+        '400':
+          description: 단위·정수·범위·근거·필드 오류(INVALID_RESOURCE_PROFILE)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '403':
+          description: CSRF 토큰/쿠키가 없거나 유효하지 않습니다.
+        '404':
+          description: SERVICE 버전이 없습니다(SERVICE_VERSION_NOT_FOUND).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '409':
+          description: Idempotency 충돌(IDEMPOTENCY_CONFLICT) 또는 동시 저장 충돌
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '413':
+          description: UTF-8 JSON 요청은 64 KiB 이하여야 합니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '503':
+          description: 저장소를 사용할 수 없습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    get:
+      tags:
+        - ResourceProfile
+      operationId: listResourceProfiles
+      summary: 자원 프로파일 revision 목록
+      description: SERVICE 버전을 지정하면 revision 내림차순, 생략하면 최근 저장순으로 반환합니다.
+      parameters:
+        - {name: serviceProfileVersionId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}}
+      responses:
+        '200':
+          description: revision 목록
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfilePage'}
+        '400':
+          description: 잘못된 페이지·UUID(INVALID_RESOURCE_PROFILE)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/{profileId}:
+    parameters:
+    - name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+        - ResourceProfile
+      operationId: getResourceProfile
+      summary: 자원 프로파일 revision 조회
+      responses:
+        '200':
+          description: 불변 revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfile'}
+        '404':
+          description: revision이 없습니다(RESOURCE_PROFILE_NOT_FOUND).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/{profileId}/handoff:
+    parameters:
+    - name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+        - ResourceProfile
+      operationId: getResourceProfileHandoff
+      summary: 2-1 전달 계약 조회(revision ID)
+      description: 정확한 revision의 edgeai.io/resource-profile-handoff/v1 문서입니다. Pod YAML을 생성하지 않습니다.
+      responses:
+        '200':
+          description: 전달 계약
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfileHandoff'}
+        '404':
+          description: revision이 없습니다(RESOURCE_PROFILE_NOT_FOUND).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/resource-profiles/services/{serviceKey}/versions/{serviceVersion}/revisions/{revision}/handoff:
+    parameters:
+    - {name: serviceKey, in: path, required: true, schema: {type: string, maxLength: 100}}
+    - {name: serviceVersion, in: path, required: true, schema: {type: string, maxLength: 32}}
+    - {name: revision, in: path, required: true, schema: {type: integer, minimum: 1}}
+    get:
+      tags:
+        - ResourceProfile
+      operationId: getResourceProfileHandoffByRevision
+      summary: 2-1 전달 계약 조회(SERVICE key·version·revision)
+      description: 2-1이 SERVICE의 불변 key/version과 자원 프로파일 revision으로 정확한 계약을 조회합니다.
+      responses:
+        '200':
+          description: 전달 계약
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceProfileHandoff'}
+        '400':
+          description: 잘못된 key·version 형식(INVALID_RESOURCE_PROFILE)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: SERVICE 버전(SERVICE_VERSION_NOT_FOUND) 또는 revision(RESOURCE_PROFILE_NOT_FOUND)이 없습니다.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/workflow-runs:
     post:
       tags:
@@ -6828,6 +7139,384 @@ components:
           deviceId: {type: string, maxLength: 253, description: KubeEdge 센서 Device 이름}
           properties: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*$', maxLength: 63}, description: BATCH 입력으로 고정할 측정 항목. 빈 선택은 실행 전에 설정이 필요합니다.}
           maxAgeSeconds: {type: integer, minimum: 1, maximum: 300, default: 30, description: 항목별 최신 수신값의 최대 허용 경과 시간(초)}
+    ResourceWorkloadKind:
+      type: string
+      enum: [Deployment, StatefulSet, DaemonSet, Job, CronJob, Pod]
+    ResourceObservationStatus:
+      type: string
+      description: AVAILABLE·STALE만 값을 가집니다. 나머지 상태의 값은 null이며 0으로 채우지 않습니다.
+      enum: [AVAILABLE, NO_DATA, STALE, INSUFFICIENT, UNSUPPORTED, AMBIGUOUS, NOT_FOUND, UNAVAILABLE]
+    ResourceProfilingCapabilities:
+      type: object
+      additionalProperties: false
+      required: [namespaces, prometheus, krr, krrVersion, maxWindowHours, minWindowMinutes, maxHistoryHours, workloadKinds]
+      properties:
+        namespaces: {type: array, items: {type: string}}
+        prometheus: {type: boolean, description: 서버에 Prometheus 범위 조회가 구성되었는지}
+        krr: {type: boolean, description: 서버에 KRR bridge가 구성되었는지}
+        krrVersion: {type: string}
+        maxWindowHours: {type: integer}
+        minWindowMinutes: {type: integer}
+        maxHistoryHours: {type: integer}
+        workloadKinds: {type: array, items: {$ref: '#/components/schemas/ResourceWorkloadKind'}}
+    ResourceWorkloadList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [namespace, kind, name, containers]
+            properties:
+              namespace: {type: string}
+              kind: {$ref: '#/components/schemas/ResourceWorkloadKind'}
+              name: {type: string}
+              containers: {type: array, items: {type: string}}
+    ResourcePodList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, uid, node]
+            properties:
+              name: {type: string}
+              uid: {type: string, description: kube-state-metrics가 보고하지 않으면 빈 문자열}
+              node: {type: string, description: kube-state-metrics가 보고하지 않으면 빈 문자열}
+    ResourceWorkloadTarget:
+      type: object
+      additionalProperties: false
+      required: [namespace, kind, name, container]
+      properties:
+        namespace: {type: string, maxLength: 63, pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'}
+        kind: {$ref: '#/components/schemas/ResourceWorkloadKind'}
+        name: {type: string, maxLength: 253}
+        container: {type: string, maxLength: 63}
+        pod: {type: [string, 'null'], maxLength: 253, description: 측정을 이 Pod로 제한(kind=Pod이면 name과 같음)}
+        podUid: {type: [string, 'null'], format: uuid, description: Pod UID가 일치하지 않으면 NOT_FOUND}
+    ResourceDeviceRef:
+      type: object
+      additionalProperties: false
+      required: [node, kind, device]
+      properties:
+        node: {type: string, maxLength: 253}
+        kind: {type: string, enum: [GPU, NPU]}
+        device: {type: string, maxLength: 128, description: 노드 인벤토리의 장치 식별자(예 pci:0000:02:00.0)}
+    ResourceAnalysisRequest:
+      type: object
+      additionalProperties: false
+      required: [serviceProfileVersionId, target, window]
+      properties:
+        serviceProfileVersionId: {type: string, format: uuid}
+        target: {$ref: '#/components/schemas/ResourceWorkloadTarget'}
+        executionRef: {type: [string, 'null'], maxLength: 128, description: 외부 실행 ID 등 불투명 참조(기존 Runner에 의존하지 않음)}
+        window:
+          type: object
+          additionalProperties: false
+          required: [start, end]
+          properties:
+            start: {type: string, format: date-time}
+            end: {type: string, format: date-time}
+        devices: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ResourceDeviceRef'}}
+        recommendation:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [historyHours]
+          properties:
+            historyHours: {type: integer, minimum: 1, maximum: 336}
+    ResourceUsage:
+      type: object
+      additionalProperties: false
+      required: [status, unit, min, average, p95, max, samples, firstSample, lastSample, reason]
+      properties:
+        status: {$ref: '#/components/schemas/ResourceObservationStatus'}
+        unit: {type: string, enum: [millicores, bytes, percent]}
+        min: {type: [number, 'null']}
+        average: {type: [number, 'null']}
+        p95: {type: [number, 'null']}
+        max: {type: [number, 'null'], description: 수집·조회 간격 해상도의 최대값이며 보장된 순간 최대가 아닙니다.}
+        samples: {type: integer, minimum: 0}
+        firstSample: {type: [string, 'null'], format: date-time}
+        lastSample: {type: [string, 'null'], format: date-time}
+        reason: {type: [string, 'null']}
+    ResourceMeasurement:
+      type: object
+      additionalProperties: false
+      required: [method, aggregation, stepSeconds, pods, cpu, memory, perPod]
+      properties:
+        method: {type: string}
+        aggregation:
+          type: string
+          enum: [PER_POD_CONTAINER]
+          description: 모든 복제본의 Pod별 컨테이너 표본 분포. 최대값은 가장 큰 단일 Pod이며 복제본 합계가 아닙니다.
+        stepSeconds: {type: integer}
+        pods: {$ref: '#/components/schemas/ResourcePodList/properties/items'}
+        cpu: {$ref: '#/components/schemas/ResourceUsage'}
+        memory: {$ref: '#/components/schemas/ResourceUsage'}
+        perPod:
+          type: array
+          description: 복제본(Pod)별 자기 컨테이너 범위
+          items:
+            type: object
+            additionalProperties: false
+            required: [pod, samples, cpuP95Millicores, cpuMaxMillicores, memoryMaxBytes]
+            properties:
+              pod: {type: string}
+              samples: {type: integer}
+              cpuP95Millicores: {type: [number, 'null']}
+              cpuMaxMillicores: {type: [number, 'null']}
+              memoryMaxBytes: {type: [number, 'null']}
+    ResourceDeviceObservation:
+      type: object
+      additionalProperties: false
+      required: [node, kind, device, exporter, model, attribution, perWorkload, status, utilization, memoryUsed, memoryTotalBytes, reason]
+      properties:
+        node: {type: string}
+        kind: {type: string, enum: [GPU, NPU]}
+        device: {type: string}
+        exporter: {type: [string, 'null']}
+        model: {type: [string, 'null']}
+        attribution:
+          type: string
+          enum: [TARGET_ASSOCIATED, NODE_DEVICE_SHARED, NODE_DEVICE_UNKNOWN_OWNER]
+          description: 'TARGET_ASSOCIATED: exporter Pod 표시가 대상 Pod만 가리킴(연관일 뿐 단독 점유 아님). 어떤 값이든 장치 전체 관측이며 서비스별 사용량이 아닙니다.'
+        perWorkload: {type: boolean, enum: [false], description: 단독 할당을 증명하는 exporter가 없어 항상 false}
+        status: {$ref: '#/components/schemas/ResourceObservationStatus'}
+        utilization: {oneOf: [{$ref: '#/components/schemas/ResourceUsage'}, {type: 'null'}]}
+        memoryUsed: {oneOf: [{$ref: '#/components/schemas/ResourceUsage'}, {type: 'null'}]}
+        memoryTotalBytes: {type: [number, 'null']}
+        reason: {type: [string, 'null']}
+    ResourceRecommendation:
+      type: object
+      additionalProperties: false
+      required: [engine, status, reason, window, cpu, memory, podCount, warnings, provenance]
+      properties:
+        engine: {type: string, enum: [KRR]}
+        status: {type: string, enum: [AVAILABLE, PARTIAL, NO_DATA, NOT_FOUND, AMBIGUOUS, UNSUPPORTED, UNAVAILABLE, INVALID_REPORT, NOT_REQUESTED]}
+        reason: {type: [string, 'null']}
+        window:
+          type: [object, 'null']
+          description: KRR 자체 이력 구간(실행 시각 기준). 측정 구간과 다를 수 있습니다.
+          properties:
+            historyHours: {type: integer}
+            start: {type: [string, 'null'], format: date-time}
+            end: {type: [string, 'null'], format: date-time}
+        cpu:
+          type: object
+          properties:
+            requestMillicores: {type: [integer, 'null']}
+            limitMillicores: {type: [integer, 'null'], description: simple 전략은 CPU limit을 비워 둡니다(null).}
+            info: {type: [string, 'null']}
+        memory:
+          type: object
+          properties:
+            requestBytes: {type: [integer, 'null']}
+            limitBytes: {type: [integer, 'null']}
+            info: {type: [string, 'null']}
+        podCount: {type: integer}
+        warnings: {type: array, items: {type: string}}
+        provenance: {type: object, additionalProperties: true, description: KRR 버전·전략 설정·인자·보고서 SHA-256·실행 시각}
+    ResourceAnalysis:
+      type: object
+      additionalProperties: false
+      required: [id, serviceProfileVersionId, service, createdAt, target, executionRef, window, measurement, devices, recommendation, limitations]
+      properties:
+        id: {type: string, format: uuid}
+        serviceProfileVersionId: {type: string, format: uuid}
+        service: {$ref: '#/components/schemas/ResourceServiceVersion'}
+        createdAt: {type: string, format: date-time}
+        target: {$ref: '#/components/schemas/ResourceWorkloadTarget'}
+        executionRef: {type: [string, 'null']}
+        window: {$ref: '#/components/schemas/ResourceAnalysisRequest/properties/window'}
+        measurement: {$ref: '#/components/schemas/ResourceMeasurement'}
+        devices: {type: array, items: {$ref: '#/components/schemas/ResourceDeviceObservation'}}
+        recommendation: {$ref: '#/components/schemas/ResourceRecommendation'}
+        limitations: {type: array, items: {type: string}}
+    ResourceServiceVersion:
+      type: object
+      additionalProperties: false
+      required: [profileVersionId, key, version, digest]
+      properties:
+        profileVersionId: {type: string, format: uuid}
+        key: {type: string}
+        version: {type: string}
+        digest: {type: string}
+    ResourceBasis:
+      type: string
+      enum: [MEASURED, RECOMMENDED, MANUAL]
+      description: 'MEASURED: 인용 분석의 AVAILABLE 실측, RECOMMENDED: 인용 분석의 KRR 값, MANUAL: 사용자 직접 지정'
+    ResourceAccelerator:
+      type: object
+      additionalProperties: false
+      required: [kind, resourceName, unit, min, request, max]
+      properties:
+        kind: {type: string, enum: [GPU, NPU]}
+        resourceName: {type: string, maxLength: 253, description: 'vendor 도메인 확장 자원(예 nvidia.com/gpu, nvidia.com/gpumem)'}
+        unit: {type: string, enum: [COUNT, MEBIBYTES, PERCENT]}
+        min: {type: integer, minimum: 1}
+        request: {type: integer, minimum: 1}
+        max: {type: integer, minimum: 1}
+        deviceMemoryBytes: {type: [integer, 'null'], minimum: 1, description: 장치 메모리 요구량. 예약 가능한 자원 필드가 아닙니다.}
+        vendor: {type: [string, 'null'], maxLength: 100}
+        models: {type: array, maxItems: 16, items: {type: string, maxLength: 100}}
+    ResourceProfileCreate:
+      type: object
+      additionalProperties: false
+      required: [serviceProfileVersionId, resources]
+      properties:
+        serviceProfileVersionId: {type: string, format: uuid}
+        analysisId: {type: [string, 'null'], format: uuid}
+        inputConditions:
+          type: object
+          maxProperties: 32
+          additionalProperties: {type: string, maxLength: 200}
+        compatibility:
+          type: object
+          additionalProperties: false
+          properties:
+            architectures: {type: array, maxItems: 2, items: {type: string, enum: [amd64, arm64]}}
+            runtime:
+              type: [object, 'null']
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: {type: string, maxLength: 64}
+                version: {type: string, maxLength: 64}
+        resources:
+          type: object
+          additionalProperties: false
+          required: [cpu, memory]
+          properties:
+            cpu:
+              type: object
+              additionalProperties: false
+              required: [minMillicores, requestMillicores, maxMillicores, basis]
+              properties:
+                minMillicores: {type: integer, minimum: 1}
+                requestMillicores: {type: integer, minimum: 1}
+                maxMillicores: {type: integer, minimum: 1, maximum: 1000000}
+                basis: {$ref: '#/components/schemas/ResourceBasis'}
+            memory:
+              type: object
+              additionalProperties: false
+              required: [minBytes, requestBytes, maxBytes, basis]
+              properties:
+                minBytes: {type: integer, minimum: 1}
+                requestBytes: {type: integer, minimum: 1}
+                maxBytes: {type: integer, minimum: 1, maximum: 17592186044416}
+                basis: {$ref: '#/components/schemas/ResourceBasis'}
+            accelerators: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ResourceAccelerator'}}
+        note: {type: [string, 'null'], maxLength: 500}
+    ResourceProfile:
+      type: object
+      additionalProperties: false
+      required: [id, revision, measurementStatus, analysisId, digest, createdAt, serviceProfileVersionId, service, inputConditions, compatibility, resources, note, evidence]
+      properties:
+        id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        measurementStatus: {type: string, enum: [MEASURED, PARTIAL, UNMEASURED]}
+        analysisId: {type: [string, 'null'], format: uuid}
+        digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        createdAt: {type: string, format: date-time}
+        serviceProfileVersionId: {type: string, format: uuid}
+        service: {$ref: '#/components/schemas/ResourceServiceVersion'}
+        inputConditions: {type: object, additionalProperties: {type: string}}
+        compatibility:
+          type: object
+          properties:
+            os: {type: string, enum: [linux]}
+            architectures: {type: array, items: {type: string}}
+            runtime: {type: [object, 'null'], additionalProperties: {type: string}}
+        resources: {$ref: '#/components/schemas/ResourceProfileCreate/properties/resources'}
+        note: {type: [string, 'null']}
+        evidence:
+          type: [object, 'null']
+          description: 인용한 분석의 대상·구간·실측·장치·KRR 추천 사본
+          additionalProperties: true
+    ResourceProfilePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextOffset]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ResourceProfile'}}
+        nextOffset: {type: [integer, 'null'], minimum: 0}
+    ResourceHandoffQuantity:
+      type: object
+      required: [unit, min, request, max, basis, kubernetes]
+      properties:
+        unit: {type: string, enum: [millicores, bytes]}
+        min: {type: integer}
+        request: {type: integer}
+        max: {type: integer}
+        basis: {$ref: '#/components/schemas/ResourceBasis'}
+        kubernetes:
+          type: object
+          description: Kubernetes quantity 문자열(CPU는 m, 메모리는 정확히 나누어지면 Ki/Mi/Gi/Ti)
+          required: [min, request, max]
+          properties:
+            min: {type: string}
+            request: {type: string}
+            max: {type: string}
+    ResourceProfileHandoff:
+      type: object
+      description: >-
+        2-1 전달 계약 edgeai.io/resource-profile-handoff/v1. 정확한 revision·digest, SERVICE 버전, 호환성과 자원 필드 대응을 제공합니다.
+        Pod YAML·오프로딩 결정·워커 할당은 포함하지 않습니다. VPA 대응은 cpu·memory만이며 GPU/NPU는 VPA로 조정하지 않습니다.
+      required: [apiVersion, kind, profile, service, compatibility, inputConditions, resources, mappings, evidence, limitations]
+      properties:
+        apiVersion: {type: string, enum: [edgeai.io/resource-profile-handoff/v1]}
+        kind: {type: string, enum: [ResourceProfileHandoff]}
+        profile:
+          type: object
+          required: [id, revision, digest, createdAt, measurementStatus]
+          properties:
+            id: {type: string, format: uuid}
+            revision: {type: integer}
+            digest: {type: string}
+            createdAt: {type: string, format: date-time}
+            measurementStatus: {type: string, enum: [MEASURED, PARTIAL, UNMEASURED]}
+        service: {$ref: '#/components/schemas/ResourceServiceVersion'}
+        compatibility: {type: object, additionalProperties: true}
+        inputConditions: {type: object, additionalProperties: {type: string}}
+        resources:
+          type: object
+          required: [cpu, memory, accelerators]
+          properties:
+            cpu: {$ref: '#/components/schemas/ResourceHandoffQuantity'}
+            memory: {$ref: '#/components/schemas/ResourceHandoffQuantity'}
+            accelerators:
+              type: array
+              items:
+                allOf:
+                  - {$ref: '#/components/schemas/ResourceAccelerator'}
+                  - type: object
+                    properties:
+                      kubernetes: {type: object, additionalProperties: {type: string}}
+                      deviceMemoryReservable: {type: boolean, enum: [false]}
+                      verticalScaling: {type: string, enum: [NOT_SUPPORTED]}
+                      basis: {type: string, enum: [MANUAL]}
+        mappings:
+          type: object
+          properties:
+            podContainerResources: {type: object, additionalProperties: {type: string}}
+            verticalPodAutoscaler:
+              type: object
+              properties:
+                controlledResources: {type: array, items: {type: string, enum: [cpu, memory]}}
+                minAllowed: {type: object, additionalProperties: {type: string}}
+                maxAllowed: {type: object, additionalProperties: {type: string}}
+                recommendedUpdateMode: {type: string, enum: ['Off']}
+                compatibility: {type: object, additionalProperties: {type: string}}
+                acceleratorScaling: {type: string, enum: [NOT_SUPPORTED]}
+        evidence: {type: object, additionalProperties: true}
+        limitations: {type: array, items: {type: string}}
 tags:
 - name: 감사
   description: 관리 HTTP 요청의 불변 접수 기록과 관측 결과. 도메인 작업의 최종 성공과 구분합니다.
@@ -6851,6 +7540,8 @@ tags:
   description: 불변 DAG 정의·발행 버전 관리
 - name: Run
   description: 실행 요청·중복 방지·작업 상태·취소
+- name: ResourceProfile
+  description: 3-3 서비스별 CPU·메모리·GPU/NPU 요구량·허용 범위 프로파일(시간 기반 측정 배치 프로파일과 별개)과 2-1 전달 계약
 - name: Task
   description: 논리 작업 및 Attempt 이력
 - name: Result

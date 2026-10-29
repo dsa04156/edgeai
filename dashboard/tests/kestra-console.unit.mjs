@@ -534,3 +534,72 @@ test("without a separate workflow API, workflow paths use the management API ses
     ]);
   }
 });
+
+test("resource profile routes use the management session with exact methods, fixed paths and a 64 KiB limit", async () => {
+  const calls = [];
+  const upstream = (label) =>
+    createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      calls.push({ label, method: req.method, path: req.url, cookie: req.headers.cookie, csrf: req.headers["x-csrf-token"], idempotency: req.headers["idempotency-key"], length: body.length });
+      res.setHeader("Content-Type", "application/json");
+      res.statusCode = req.method === "POST" ? 201 : 200;
+      res.end("{}");
+    });
+  const management = upstream("management"),
+    workflow = upstream("workflow");
+  const listen = async (server) => {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const managementUrl = await listen(management),
+    workflowUrl = await listen(workflow);
+  const middleware = createDeviceRegistrationMiddleware({ managementUrl, workflowUrl });
+  const proxy = createServer((req, res) => middleware(req, res, () => { res.statusCode = 404; res.end(); }));
+  const url = await listen(proxy);
+  try {
+    const headers = {
+      Cookie: "EDGEAI_SESSION=management-session; EDGEAI_WORKFLOW_SESSION=workflow-session",
+      Origin: url, "X-CSRF-TOKEN": "management-token", "Idempotency-Key": id, "Content-Type": "application/json",
+    };
+    const reads = [
+      "resource-profiles/capabilities",
+      "resource-profiles/workloads?namespace=edgeai&hours=24",
+      "resource-profiles/pods?namespace=edgeai&kind=Deployment&name=api&container=api&start=2026-10-29T14:00:00Z&end=2026-10-29T15:00:00Z",
+      `resource-profiles?serviceProfileVersionId=${id}&limit=100`,
+      `resource-profiles/${id}`,
+      `resource-profiles/${id}/handoff`,
+      `resource-profiles/analyses/${id}`,
+      "resource-profiles/services/edgeai-api/versions/1.0.0/revisions/3/handoff",
+    ];
+    for (const path of reads) assert.equal((await fetch(`${url}/api/control-plane/${path}`, { headers })).status, 200, path);
+    assert.equal((await fetch(`${url}/api/control-plane/resource-profiles/analyses`, { method: "POST", headers, body: '{"a":1}' })).status, 201);
+    assert.equal((await fetch(`${url}/api/control-plane/resource-profiles`, { method: "POST", headers, body: '{"b":2}' })).status, 201);
+    assert.ok(calls.every((call) => call.label === "management" && call.cookie === "EDGEAI_SESSION=management-session"));
+    assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [
+      ...reads.map((path) => `GET /api/v1/${path}`),
+      "POST /api/v1/resource-profiles/analyses",
+      "POST /api/v1/resource-profiles",
+    ]);
+    assert.equal(calls.at(-1).idempotency, id);
+    const count = calls.length;
+    for (const [path, method, body, expected] of [
+      ["resource-profiles", "POST", JSON.stringify({ padding: "x".repeat(66_000) }), 413],
+      [`resource-profiles/${id}`, "DELETE", undefined, 405],
+      [`resource-profiles/${id}`, "PUT", "{}", 405],
+      [`resource-profiles/${id}/handoff`, "POST", "{}", 405],
+      ["resource-profiles/analyses", "GET", undefined, 405],
+      ["resource-profiles/krr/run", "POST", "{}", 404],
+      ["resource-profiles/services/Bad Key/versions/1.0.0/revisions/1/handoff", "GET", undefined, 404],
+      ["resource-profiles/services/edgeai-api/versions/1.0.0/revisions/0/handoff", "GET", undefined, 404],
+    ])
+      assert.equal((await fetch(`${url}/api/control-plane/${path}`, { method, headers, body })).status, expected, `${method} ${path}`);
+    assert.equal(
+      (await fetch(`${url}/api/control-plane/resource-profiles/analyses`, { method: "POST", headers: { ...headers, Origin: "https://another.example" }, body: "{}" })).status,
+      403,
+    );
+    assert.equal(calls.length, count);
+  } finally {
+    await Promise.all([proxy, management, workflow].map((server) => new Promise((resolve) => server.close(resolve))));
+  }
+});

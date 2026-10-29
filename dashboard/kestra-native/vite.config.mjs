@@ -144,6 +144,7 @@ export default defineConfig(async (env) => {
                   ["workflows", "WorkflowsPage.vue"],
                   ["runs", "RunsPage.vue"],
                   ["scheduling-profiles", "SchedulingProfilesPage.vue"],
+                  ["resource-profiles", "ResourceProfilesPage.vue"],
                   ["inference", "InferencePage.vue"],
                   ["scenarios", "ScenarioPage.vue"],
                   ["hawkeye", "HawkeyePage.vue", "scenarios/hawkeye"],
@@ -165,6 +166,7 @@ export default defineConfig(async (env) => {
               ["workflows", "워크플로", "FileTreeOutline"],
               ["runs", "실행 · 작업 · 결과", "PlayOutline"],
               ["scheduling-profiles", "성능 프로파일", "SpeedometerMedium"],
+              ["resource-profiles", "자원 프로파일", "ChipIcon"],
               ["inference", "모델 추론", "ImageSearchOutline"],
               // Before "scenarios": the top bar picks the first item whose path prefixes /scenarios/hawkeye.
               ["hawkeye", "창고 지게차 안전 점검", "ForkliftIcon"],
@@ -182,7 +184,7 @@ export default defineConfig(async (env) => {
             return code
               .replace(
                 'import {computed} from "vue"',
-                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"\nimport ChipIcon from "vue-material-design-icons/Chip.vue"',
               )
               .replace(
                 /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,

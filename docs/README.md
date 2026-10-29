@@ -11,6 +11,7 @@ EdgeAI는 엣지 AI 서버, 엣지 디바이스, 센서와 가상 장치를 관�
 4. 실제 장비가 있는 환경은 [인프라 연결](guides/infrastructure-inventory.md)과 [센서 등록](guides/sensor-registration.md)·[센서 사용](guides/sensor-controls-and-vd-deletion.md)으로 이어갑니다.
 
 KubeEdge 장치 실행 계층은 [Mapper 구성](../deploy/kubeedge/README.md)을 확인하세요.
+서비스를 Pod로 실행할 때의 CPU·메모리·GPU/NPU 요구량은 [서비스 자원 프로파일](guides/resource-profiling.md)에서 실측·KRR 추천으로 확인하고 2-1 전달 계약으로 제공합니다. 시간 기반 [측정 기반 DAG 배치](guides/operational-scheduling.md)와 별개입니다.
 가상 센서는 [연속 센서 계산](guides/vd-processing.md)에서 입력·계산·출력과 활성화 조건을 확인합니다. 원본 센서의 최신값, 가상 센서의 계산 결과, 일반 SERVICE 워크플로 실행은 서로 다른 기능입니다. [구형 방식 종료](guides/virtual-devices.md)는 현재 연속 VD와 과거 supervisor 기록을 구분합니다.
 
 ## 목적별 문서

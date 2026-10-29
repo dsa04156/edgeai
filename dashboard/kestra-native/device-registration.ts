@@ -70,8 +70,15 @@ export function createDeviceRegistrationMiddleware({
         "scenarios/hawkeye-safety/runs",
         "scenarios/hawkeye-safety/video",
         "scenarios/hawkeye-safety/video/sessions",
+        "resource-profiles",
+        "resource-profiles/capabilities",
+        "resource-profiles/workloads",
+        "resource-profiles/pods",
       ].includes(target) ||
       /^scenarios\/hawkeye-safety\/samples\/[a-z0-9_]{1,40}\/image$/.test(target) ||
+      new RegExp(
+        `^resource-profiles/(analyses/)?${uuid}$|^resource-profiles/${uuid}/handoff$|^resource-profiles/services/[a-z][a-z0-9._-]{0,99}/versions/[0-9]+\\.[0-9]+\\.[0-9]+/revisions/[1-9][0-9]{0,6}/handoff$`,
+      ).test(target) ||
       new RegExp(
         `^(nodes|virtual-devices|workflows|workflow-runs|tasks|operations|audit-requests)/${uuid}$`,
       ).test(target) ||
@@ -92,6 +99,8 @@ export function createDeviceRegistrationMiddleware({
         "workflows",
         "workflow-runs",
         "scheduling-profiles",
+        "resource-profiles",
+        "resource-profiles/analyses",
         "device-profiles",
         "device-connections/test",
         "inference/predict",
@@ -278,7 +287,10 @@ export function createDeviceRegistrationMiddleware({
             ? platformTarget === "workflow/build-image"
               ? 950000
               : 190000
-            : 25000,
+            : // A resource analysis waits for Prometheus (≤ 40 s budget) and the KRR run (bridge 120 s < API 130 s).
+              target === "resource-profiles/analyses"
+              ? 210000
+              : 25000,
         ),
       });
       response.statusCode = upstream.status;
