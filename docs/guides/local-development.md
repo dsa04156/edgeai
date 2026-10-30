@@ -135,12 +135,12 @@ corepack pnpm lint
 corepack pnpm typecheck
 ```
 
-Kestra 연동 운영 확인(2026-10-16): 관리 API는 ad3f239, 워크플로 API는 별도18082를 사용합니다.
-원본 API 타입 재생성은 해당 revision의 OpenAPI를 `output/`에 추출한 뒤 기존 `openapi-typescript`로
-`dashboard/kestra-native/live-api-schema.d.ts`를 생성합니다. 루트의 다른 작업용 계약을 덮어쓰지 않습니다.
+현재 dev 배포의 콘솔(13080)은 단일 Spring API에 관리·워크플로 요청을 전달하며 `EDGEAI_WORKFLOW_API_BASE_URL`은 빈 값입니다. 별도 18082 API를 사용했던 2026-10-16 구성은 과거 기록입니다.
+API 타입은 현재 소스의 OpenAPI와 맞춥니다. `corepack pnpm contract:generate`는 `dashboard/lib/api-schema.d.ts`를 생성하며, native 콘솔이 사용하는 `dashboard/kestra-native/live-api-schema.d.ts`에도 대응 변경을 반영하고 typecheck로 확인합니다. 다른 작업 트리의 계약을 덮어쓰지 않습니다.
+CPU/GPU 시험 화면은 `/ui/main/offload-lab`입니다. [부하 종류·기준·실제 전환·NPU 경계](offload-lab.md)를 확인합니다.
 
 DDS는 `PLATFORM_BUILDX_BUILDER`로 별도 rootless Kubernetes Buildx를 사용할 수 있습니다.
-현재 `edgeai-builds` namespace의 `edgeai-kube-arm64-rootless`는 ARM64만 빌드합니다.
+현재 `edgeai-builds` namespace의 `edgeai-kube-arm64-rootless`는 ARM64 빌드 노드입니다. amd64 대상 명령 실행 지원은 별도이며, `RUN` 없는 COPY 전용 이미지 패키징으로 amd64·arm64 이미지를 발행한 경로와 구분합니다.
 `PLATFORM_IMAGE_PUSH_REPOSITORY`는 **동일 registry의 빌더 접근 주소**가 배포 노드 주소와 다를 때만 지정합니다.
 빌드 응답은 배포 노드가 사용하던 `PLATFORM_IMAGE_REPOSITORY@digest`를 반환합니다.
 

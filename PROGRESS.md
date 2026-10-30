@@ -1,260 +1,45 @@
 # 현재 상태
 
-## 2026-10-22 Argo CD `edgeai-dev` GitOps 복구: main `1dcc248` 게시·자동 동기화 재개, Synced/Healthy
+**확인 기준: 2026-10-30.** 코드·배포·실장비 시험과 후속 개발을 구분합니다.
+이 환경의 제품 소스는 `.tools/kestra-publish` 작업 트리이며, 부모 checkout의 미커밋 변경을 배포 완료로 취급하지 않습니다.
+아래 상태는 실제 Kubernetes·Argo CD·오프로딩 API를 읽어 확인했습니다. 문서 갱신 중 서비스를 재배포하거나 부하 시험을 다시 실행하지 않았습니다.
 
-- feature `de327de`와 통합 main `1dcc248`을 fast-forward로 push했다(force 없음). 운영 Application에서 대시보드 replicas=0 override·Ingress ignoreDifferences·RespectIgnoreDifferences를 제거하고 `deploy/argocd/application.yaml`로 `automated{prune:false,selfHeal:true}`를 다시 켰다.
-- 결과: `Synced`, revision `1dcc248`, 조건 없음. API·콘솔·GPU 추론 이미지는 그대로이고 모두 1/1 Ready다. 13080 200, 추론 모델 `available:true`, 원본 수집 증가(20초 +452, 거부 0)를 확인했다.
-- 사고: 수동 부분 sync가 직전 operation의 source(대시보드 replicas=0)를 재사용해 콘솔이 약 24초 중단됐다(06:44:47–06:45:11Z). 같은 ReplicaSet로 즉시 복원했다. 남아 있던 `status.operationState`는 제거했고, 새 operation이 현재 spec source를 쓰는 것을 확인했다.
-- health: 처음에는 `Progressing`이었다(`Ingress edgeai`만, 주소 status 없음). 원인은 Traefik Pod가 10/19부터 엣지 노드 raspi5에 있어 Ingress provider가 시작되지 못한 것이다. 그래서 모든 Ingress 경로가 404였고 status도 쓰지 못했다. Helm release `traefik`(chart 39.0.7 그대로, `--reuse-values`)에 `deploy/traefik/values.yaml`을 적용했다(revision 6). 엣지 노드 제외 affinity, 주소 `10.254.192.47` 게시, 기존 Service(LoadBalancer+externalIPs)·대시보드 route 기록이 들어 있다. 결과: Ingress 2개 status `10.254.192.47`, edgeai 호스트 `/actuator/health`·`/api/v1/inference/models` 404→200, 13080 200, 앱 `Synced/Healthy`, edgeai Pod 변화 없음. API 문서 색인에 추론 operation 2개를 생성기로 반영했다(75→77). 근거: `output/verification/argocd-recovery/{git,publish}.md`.
+## 배포
 
-## 2026-10-22 독립 GPU 객체 검출(이미지 업로드 → 검출 결과): 운영 콘솔 13080 배포·실제 GB10 추론 확인
+- 콘솔: `http://10.254.192.47:13080/ui/main/offload-lab`. 13080은 Kubernetes `edgeai-dashboard`의 hostPort, 13083은 별도 개발 서버입니다.
+- API·콘솔: 각각 1/1 Ready. Argo CD `edgeai-dev`: main `42dc498`, Synced/Healthy(이 문서 수정 전 조회값).
+- 통합 소스 `1b8fb80`, 배포 설정 `fa5daa9`에 GPU 시험과 기존 AI 모델 관리 기능을 함께 반영했습니다. 이미지 기준은 [release.json](deploy/kubernetes/overlays/dev/release.json)입니다.
+- API imageID: `10.254.192.47:5000/edgeai-api@sha256:2850765450c4bc657dc724c7df762518d8f8cffd1fada3a6dce3471a4f98f889`.
+- 콘솔 imageID: `10.254.192.47:5000/edgeai-dashboard@sha256:bd2fdf3f6651a487522561d5de030e4ca20715c4837c601911b899a89fc35a0e`.
+- Runtime은 활성화돼 있고 실행 허용 워크플로는 `hawkeye-video-safety,offload-lab`입니다. 모든 워크플로를 무제한 실행하도록 연 것은 아닙니다.
+- GPU 객체 검출·GPU 이미지 비교·hawkeye-motion 런타임은 사용자 요청대로 replicas=0입니다. Hailo NPU 이미지 비교 런타임은 1/1 Ready입니다. 이미지 비교 전체가 현재 실행 가능하다는 뜻은 아닙니다.
 
-- 런타임 `inference/`: torchvision Faster R-CNN ResNet-50 FPN v2(COCO_V1, 80클래스)를 PyTorch 2.14.1+cu130으로 CUDA에서만 실행한다(CPU 대체 없음). `GET /health`(warm-up 후 READY), `POST /predict`(JPEG/PNG ≤4 MiB, 변 ≤4096, 동시 1건, 초과 503 BUSY). Workflow/Runner/Runtime·DB는 쓰지 않는다. API `/api/v1/inference/*`와 콘솔 `/ui/main/inference`는 같은 작업에서 추가했다(기본 비활성 `EDGEAI_INFERENCE_ENABLED=false`).
-- 시험: 런타임 단위 6/6 통과. 이미지 `10.254.192.47:5000/edgeai/gpu-inference@sha256:dfbb9376…ce9a`(arm64)를 일회용 Pod로 ser0003(NVIDIA GB10)에 띄웠다. `/health` READY, COCO val2017 사진 1장에서 cat 2·remote 2·couch를 검출했다(약 61 ms/장). 동시 요청은 503, 연속 요청 중 GPU 사용률은 63–78%였다.
-- 배포(05:22–05:26Z, kubectl 범위 적용): 런타임 Deployment/Service/NetworkPolicy `edgeai-gpu-inference`(ser0003), API `edgeai-api@sha256:06613f30…6dbc`(jar `d2ca39e2…083d`, 추론 env 7개 추가만), 콘솔 `edgeai-dashboard@sha256:0171da98…8788`. 세 Deployment Ready. 운영 `GET /api/v1/inference/models` `available:true`. `http://10.254.192.47:13080/ui/main/inference`에서 같은 COCO 사진을 실제 업로드해 콘솔 BFF(CSRF)→API→GB10으로 같은 5개 검출(62.5 ms)을 받았다(데스크톱·모바일, 가로 넘침 없음). 센서/VD 상태(연속 47/25/2)·원본 수집 증가는 배포 전과 같다.
-- 한계: 배포 당시 overlay는 미커밋이었고 Argo 자동 동기화를 05:29Z에 멈췄다. 이후 main `1dcc248` 게시와 자동 동기화 재개로 해소했다(위 GitOps 복구 항목). 정확도 평가, NPU, Workflow 연동, 부하·장기 시험은 없다. 근거: `output/verification/gpu-inference/runtime.md`, `deployment.md`.
+## 최근 구현·검증 범위
 
-## 2026-10-22 M7 WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS) 통합·API/콘솔 배포·Runner 게시
+| 기능 | 현재 상태 | 근거·남은 범위 |
+|---|---|---|
+| CPU/GPU 오프로딩 시험 | 웹·API·부하 Job 배포, 실제 edge→worker→edge 왕복 성공 | [가이드](docs/guides/offload-lab.md). GPU 시험은 99.1%·99.9% 연속 표본으로 `NODE_GPU`, 부하 중지 후 0%·0%로 `NODE_RETURN` 성공. 각 위치의 모델 Pod UID가 다름 |
+| 시험 모델 | UCI digits 손글씨 숫자 분류 MLP 64-32-10, CPU 추론 | 별도 CUDA Job이 GPU 압력을 만듦. GPU 모델 추론·상태 보존 이전·GPU 성능 평가를 입증한 시험은 아님 |
+| AI 모델 관리 | Registry 이미지 digest·플랫폼 검증, 불변 모델 등록·목록·상세, 자원 요구량 저장 배포 | [가이드](docs/guides/ai-model-catalog.md). SERVICE 자동 발행·워크플로 실행 연결·자원 예약은 후속 |
+| 서비스 자원 프로파일 | 3-3 ② 웹/API·V70·Prometheus·KRR bridge 구현·배포 | [가이드](docs/guides/resource-profiling.md), [기존 배포 근거](docs/evidence/resource-profiling-20261030.md). 자원 분할·보장·자동 증강은 별도 |
+| NPU | Hailo 자원·추론 경로, Intel·Mobilint 사용률 수집 존재 | NPU 부하 버튼·`NPU_USAGE` 전환/복귀 정책은 미구현. Hailo 사용률 계측도 별도 필요 |
 
-- 센서/VD 입력에 `delivery: ALL_OBSERVATIONS`를 추가했다. 실행 시작 이후 수락된 관측을 PostgreSQL feed(V61, 테이블3개 추가만)에 기록하고 수락 순서대로 한 번씩 전달하며, 적체·보관 초과·원본 변경은 GAP/CHANGED 오류로 멈춘다. Runner는 cursor를 출력과 같은 journal commit에 저장한다. Kestra 콘솔 입력 drawer에 `전달 방식`(최신값/모든 관측값)을 추가했다. 설계: ADR0118. 소스 `215023c`(feature branch push).
-- 시험(격리 `env -i`·임시 PostgreSQL16, 공유 DB/Influx/MQTT 쓰기 없음): FullObservation 14/14(보관 기간 회귀 포함, 이전 쿼리로는 실패), VD 1/1, LATEST STREAM 33/33, Continuous 8/8, Runner 입력5/5·단위96/96, 대시보드 단위74/74·lint·vue-tsc, Playwright desktop/mobile 2/2(API mock). Spec 리뷰1차 P2(수락 시각이 위치 순서와 달라 보관 기간 전 항목 삭제)를 고쳐2차 PASS, Standards 지적0건. 전체 백엔드 스위트는 돌리지 않았다.
-- 배포(이미지만 교체, env·volume·port·strategy 전후 동일): API `2be0be06…` → `edgeai-api@sha256:870152b4f47867d3cfe7ab6a90b310e312be2b0db184fd7b2902ef8e6499b051`(Flyway V61 적용, 0.46초), 콘솔 `f020d061…` → `edgeai-dashboard@sha256:a8a250b317757bdf647471a17fdbc9c2477d868c4af7ed0f7f9bab55158896c1`. 배포 직전 PostgreSQL 백업(pg_dump16.15, list·sha256 확인, Git 밖 비공개 경로). 이전 API 이미지가 V61 이후에도 Flyway 검증을 통과함을 임시 DB에서 확인했다. dev overlay digest를 live와 맞췄다(`release.json`은 이전 CI 고정값 그대로).
-- Runner: `edgeai/processing-runner@sha256:1faf83fea8a5f726a6ea1a9f78c98511003f304e8301b2e51e30578b8f451de0`(linux/amd64, 기존 Runner `d124054f…` 위에 `215023c` 모듈만 복사)을 게시만 했다. 기존 Profile/Workflow는 바꾸지 않았고, 사용하려면 이 digest로 새 SERVICE Profile 버전을 게시해야 한다(`docs/guides/dag-execution.md`). ARM64 Runner는 없다.
-- 실제 확인(읽기 전용): health/readiness·infrastructure·devices·workflow-data-sources·data-store 200, 배포된 openapi가 계약 파일과 동일, VD 47 RUNNING·25 입력 대기·2 STOPPED와 Run 상태 수 배포 전과 같음, 원본 수집 저장 중(거부0), 콘솔 메뉴14개 오류0, 새 옵션이 배포된 번들에 포함.
-- 한계: `EDGEAI_RUNTIME_ENABLED=false` 그대로라 실제 ALL_OBSERVATIONS Run은 운영에서 실행하지 않았다. feed 정리 worker도 runtime이 꺼져 있어 동작하지 않는다(구독이 없으면 feed 기록도 없음). 운영 UI→API 실제 Run 생성, 24h soak, 실장비 속도, collector 이전 손실은 미검증. 근거: `output/verification/m7-kestra-integration/deployment.md`.
-
-## 2026-10-21 센서 그래프 드래그·휠 조작을 그래프 안에서 처리·콘솔 재배포
-
-- `InteractiveHistoryChart.vue`: 드래그·휠·툴바 확대/이동은 그래프에서 바로 움직이고, 마지막 입력 후 300ms 조용하면 한 번만 `update:viewport`를 보낸다. 조작 시작은 `explore-start`로 알려 `sensor-history.ts`의 `pause()`가 실시간 추적과 진행 중인 그래프 요청을 멈춘다. 실시간 버튼은 그래프가 실제로 보여 주는 폭(아직 보고되지 않은 확대 포함)을 유지한다(리뷰 P2 수정). 바로 보기 구간 선택이 진행 중 조작보다 우선한다.
-- 측정(같은 fixture, 1×CPU): 드래그60회/휠20단계 동안 데이터 저장소 페이지 렌더 60/20 → **0/0**. 입력 응답 p50 약33ms는 **그대로**(ECharts 다시 그리기·CDP 비용). 프레임률 개선은 주장하지 않는다. 단위 30/30, typecheck·eslint·build 통과, 새 회귀 `live-width.mjs`는 수정 전 실패(1800s→3600s)·수정 후 통과. 독립 리뷰 2회차 PASS.
-- 배포(이미지만 교체): 콘솔 `sha256:aeba37db…` → `sha256:f020d06195e1cb7ed36bbfd732724ebceebc9d51e7378d67c9ea97845c487f14`. API `2be0be06…` 그대로, strategy(Recreate)·env·volume·port 배포 전후 같음, Ready 1/1. dev overlay digest를 live와 맞췄다.
-- 실제13080(GET 전용, 1회): `/ui/main/data-store` 200, 드래그·휠 중 페이지 렌더 0/0, 조작 중 데이터 요청 0, 드래그 입력 응답 p50 33.9ms·휠 33.2ms, long task 0, 50ms 넘는 프레임 0, 확대/휠 직후 실시간 폭 유지(1800s/1352s), JS 오류 0. 근거: `output/verification/chart-gesture-local/`(review-input.md, deployed/). 한계: 측정1회·실제 저사양 단말 미측정, 전체 수용 시험은 다시 돌리지 않았다.
-
-## 2026-10-21 센서 그래프 드래그·휠 입력 지연 수정·콘솔 재배포
-
-- 데이터 저장소 표의 `recordRows`를 computed로, `recordColumns`를 상수로 바꿔 그래프 조작 때 1000행 표를 다시 그리지 않게 했다(`DataStorePage.vue`만 변경). 기존 브라우저 수용·typecheck·build 통과. 독립 리뷰는 Guard에 막혀 **수행·통과하지 않았고**, 사용자 지시("배포하세요")로 배포했다.
-- 배포(이미지만 교체): 콘솔 `edgeai-dashboard@sha256:cf9da620…` → `sha256:aeba37dbc9e47dc8b05f21262b61b59972027d18ee519a4ec2c7a7b60d3050f0`. API `2be0be06…` 그대로, strategy(Recreate)·env·volume 배포 전후 같음, rollout Ready 1/1. dev overlay digest를 live와 맞췄다.
-- 실제13080(GET 전용, 1회): `/ui/main/data-store` 200, 드래그 입력 응답 p50 32.9ms·p95 41.5ms(수정 전 약137ms), 휠 p50 34.4ms, long task 0, 50ms 넘는 프레임 0, 조작 중 데이터 요청0, JS 오류0. 근거: `output/verification/chart-interaction/`(review-input.md, deployed/gesture-x1.json). 한계: 측정1회·CPU 제한 없음, 전체 수용 시험은 다시 돌리지 않았다.
-
-## 2026-10-21 센서 그래프 점 예산·실시간 꼬리 조회·API/콘솔 재배포
-
-- 사용자 승인(점이 많아 화면이 느림)에 따라 chart API가 화면 폭 기반 점 예산 `points`(200–2000, 기본1000, 범위 밖 400)를 받는다. 예산에 맞는 가장 좁은 UTC 정렬 시간 구간(1초–1일, 앞뒤 부분 구간 포함)별 처음·최소·최대·마지막 원본을 원래 시각 그대로 반환하고, 예산 안이면 원본 그대로 준다. 기존 원본10만 개 기준과 전 구간 pivot count+전체 읽기를 없앴다. 응답에 `pointBudget`, 실제 원본 수 `totalObservations`, 구간별 count를 담는다. 숨긴 legacy 원본은 계속 제외한다. 저장 원본은 바뀌지 않는다.
-- 콘솔: 실시간 추적은 처음 한 번만 전체 화면 구간을 읽고, 이후5초 조회는 `마지막 끝−30초`를 구간 시작으로 내린 꼬리만 같은 구간 크기로 읽어 그 구간들을 교체한다. 예산·구간·센서 변경, 10분 이상 공백, 5분마다 전체 재조회한다. 표도 최신 행−30초 이후만 읽어 그 구간을 교체하며 `원본 더보기` 커서·2000행 제한은 유지했다. 그래프 모양·드래그·휠·십자선·레이아웃은 그대로다.
-- 시험: 대시보드 단위68/68(신규 꼬리 병합14), 백엔드 격리 단위(예산4·메타데이터3·reconciliation1), 비공유 InfluxDB 2.9.1 41만 행 fixture6/6(브루트포스 처음·최소·최대·마지막 일치, legacy pivot 공유 수정 전 코드; 수정은 실제 저장소 결과 동일성으로 확인), vue-tsc·eslint·release build. 독립 리뷰1차 P2 2건 수정 후2차 통과.
-- 배포(이미지만 교체): API `edgeai-api@sha256:2be0be065c34798da35e22bc655477bd2cb94334c2bcf0eb3dc1b2c972141798`, 콘솔 `edgeai-dashboard@sha256:cf9da6202017bf6d29110d4d9149c0dfad169a9a6a1eb1ef8ef4761a60d476c5`. 처음 배포한 API `fc414b2c…`는 legacy pivot을 yield마다 반복해 실제 저장소 10.5일 구간이 Influx 요청 제한5초를 넘어 503이었다. API만 `a5bc0cb1…`로 되돌리고, pivot을 한 번만 평가해 공유하도록 고쳤다(실제 legacy 결과 동일 확인, 10.5일 legacy 5.1초→1.7초). Deployment env·volume·port·strategy는 배포 전후 같고, VD 47 RUNNING·25 입력 대기와 원본 수집은 유지됐다. dev overlay digest를 live와 맞췄다.
-- 실제13080(같은 센서·고정 구간 to=09:00Z): 1시간 3,600점·248KB → 1,114점·78KB, 1일 82,455점·5.67MB·1.3초 → 1,082점·76KB·0.3초, 7일 6.3초 → 1.6초, 30일 7.0초 → 1.8초. 1일 추적 중5초 조회는 36시간 전체(114KB·2.3초) → 약6초 꼬리(0.8KB). 브라우저 드래그·휠·십자선·실시간·7일·크기 변경·1440/1024/390 가로 넘침 없음, JS/API 오류0. 근거: `output/verification/sensor-chart-performance/README.md`.
-- 한계: 측정 이후30초보다 늦게 저장된 원본은 다음 전체 재조회(최대5분)에 반영된다. 화면 이동 중 비어 있는 구간은 여유를 둔 구간 전체를 다시 읽는다. legacy 비중이 큰 긴 구간은 pivot 때문에 여전히 1.6–1.9초다. Git commit/push는 하지 않았다.
-
-## 2026-10-21 데이터 저장소 센서 그래프 탐색 방식 변경·콘솔 재배포
-
-- 사용자 선택(선 그래프 유지 + 드래그 이동·휠 확대/축소·십자선·실시간 복귀)에 따라 데이터 저장소의 고정 기간 선택(1/6/24/168/720시간)과 기록 조회 버튼·자동 갱신 체크박스를 없앴다. 기본은 최근1시간 실시간 추적(5초 갱신)이고, 1시간·6시간·1일·7일·30일 바로가기(원본 보관 기간 이내)와 `실시간` 버튼을 둔다.
-- 그래프 축은 원본 보관 기간 전체이며 사용자가 이동·확대하면 탐색 모드로 바뀌어 자동 갱신을 멈추고 화면 구간을 그대로 둔다. 멈춘 구간(300ms 이후)이 불러온 범위를 벗어나거나, 선택 표본 구간을 충분히 확대하면 기존 chart GET(최대31일)으로 화면 구간±반폭만 다시 조회한다. 이전 요청은 취소하고, 현재 화면을 이미 덮은 데이터는 늦게 도착한 다른 구간 응답으로 바꾸지 않는다. 그래프·표 오류는 각각 표시하고 각자의 성공만 해당 오류를 지운다. 평소 측정 간격의10배(선택 표본은 구간의3배)를 넘는 빈 곳은 선을 잇지 않는다. 표는 멈춘 화면 구간의 최신순 원본이며 `원본 더보기` 고정 동작은 유지했다. 백엔드·API 계약 변경은 없다. VD 이력 그래프는 기존 슬라이더·버튼 동작을 유지하고 십자선만 추가됐다.
-- 시험: 대시보드 단위54/54(신규 viewport7·상태 조합7, 지연 응답·순서·취소 회귀 포함), typecheck·lint·release build 통과. 독립 리뷰1차 P2 2건(되돌아간 구간의 늦은 응답, 그래프 성공이 표 오류를 지움)을 고쳤고2차 통과.
-- 사용자 승인 배포: 콘솔만 `10.254.192.47:5000/edgeai-dashboard@sha256:d20cbe57d99df11b2859d96ba35e3bd002cf6e49aa5d9d64dc3c8750c396bfcd`로 이미지 교체했다(node-runtime base, `edgeai-kube-arm64-rootless`). API는 `edgeai-api@sha256:a5bc0cb1063e30d73e7c3fd5d4a52fe2cdf9eb3ef1ff3589b33e203d191a4c01` 그대로이며 두 Deployment의 env·volume·port는 배포 전후 같다. dev overlay digest를 live와 맞췄다. Git commit/push는 하지 않았다.
-- 실제13080 확인(읽기 전용): 처음1시간보다3.2시간 이전 원본 조회, 탐색 구간11초 동안 고정·추가 데이터 요청0, 휠 확대, 밀리초 시각·값·단위 십자선, 실시간 복귀 지연0.9초·약5초 갱신, 1440/1024/390 가로 넘침 없음(표는 내부 스크롤), JS/API 오류0. 센서 전환 경합과 표 오류 분리는 로컬 fixture에서 확인했다. 근거: `output/verification/sensor-chart/README.md`.
-- 한계: 탐색 중에는 새 원본을 자동으로 붙이지 않는다(`실시간`으로 복귀). 빈 구간 판단은 측정 간격 기반 추정이다. 실시간 추적 중 긴 기간(7일·30일)은5초마다 전체 구간을 다시 조회한다.
-
-## 2026-10-21 API 연동 결함 수정·클러스터 API/콘솔 재배포
-
-- 원인: 클러스터 API 이미지(10/14)가 RTSP·`workflow-data-sources`·preview/drain 이전 버전이었다. 그래서 장치 목록이 400을 반환하고 센서가 UNAVAILABLE로 표시됐다. 이 이미지는 빈 legacy 이력 표식을 읽지 못해 이력 조회가 503이었다. 백엔드가 계약의 `allocatable`을 내보내지 않아 GPU/NPU 목록도 비어 있었다. 소스에서 `allocatable`을 노출하고, 값이 없으면 null과 오류를 표시하도록 고쳤다(백엔드 65·콘솔 40 테스트 통과, Spec/Standards 리뷰 지적0건).
-- 사용자 승인으로 직접 rollout했다. API는 `10.254.192.47:5000/edgeai-api@sha256:fd5e5bf3…`(검토한 bootJar `ba65b094…`, 고정 JRE base의 amd64 사본)이고, 콘솔은 `edgeai-dashboard@sha256:70916c78…`이다. API에는 이미지만 교체했다. Flyway 60개는 검증만 했고 migration은 없었다. 콘솔에는 Platform-Service URL·토큰 secretRef를 연결했다. dev overlay에 digest와 env를 고정했고 push는 하지 않았다.
-- 원본 수집: 호스트 API가 10/21 06:05Z 재부팅으로 멈춘 뒤, 다른 쓰기 주체가 없음을 확인하고 클러스터 API를 유일한 수집기로 켰다. 새 원본이 1초 간격으로 중복 없이 저장되는 것을 확인했다. 06:05–07:11Z 구간은 비어 있으며 복구할 수 없다.
-- 연속 VD: eKuiper hostAlias가 사라진 호스트 주소 `10.77.0.1`을 가리켜 10/19부터 72개 VD가 ENGINE_LEASE_EXPIRED 상태였다. 다음과 같이 클러스터 API로 다시 연결했다.
-  - 기존 공유 credential을 edgeai namespace Secret으로 복사했다.
-  - Agent가 신뢰하는 CA를 API 18443 인증서의 stream CA로 바꿨다.
-  - hostAlias를 제거하고 Pod를 재생성했다(PVC 유지).
-  - 결과: RUNNING 47, WAITING_INPUT 25(모두 Arduino 입력), 새 결과 저장을 확인했다. 저장된 desiredRunning 의도를 따랐으며 새 등록이나 상태 변경은 하지 않았다. eKuiper 쪽 변경은 Helm 값 밖에 있다.
-- 검증 결과:
-  - infrastructure: 200, sensors AVAILABLE, 12개 노드 모두 allocatable 제공.
-  - devices: 200, RTSP 포함.
-  - workflow-data-sources: 200.
-  - 이력: 과거·최근 구간 모두 200.
-  - GPU/NPU: 6개/5개 표시. 실제 0%는 0%로 표시하고, 정보가 없는 장치는 확인 불가로 표시한다.
-  - DDS 설정: 200.
-  - Chromium 메뉴 14개: 400/503·JS 오류 0건. Arduino·RTSP는 OFFLINE으로 표시된다.
-- 재적용 보강: 다음 `helm upgrade`가 hostAlias(10.77.0.1)나 잘못된 CA를 되살리지 않도록 다음을 반영했다(live 변경 없음).
-  - eKuiper post-renderer가 `edgeai-api.*` hostAlias가 있으면 렌더링을 거부한다. 시험: 실제 release manifest로 통과하고, 이전 renderer는 실패한다.
-  - 캐시된 chart로 `helm template`을 실행해 렌더 결과를 live와 대조했다. 차이는 eKuiper resources·Service 포트뿐이다. CA 지문이 일치함도 확인했다.
-  - 절차는 `docs/guides/vd-processing.md`에 정리했다.
-  - `edgeai-workflow-api`의 Endpoint는 멈춘 호스트를 가리키지만 runtime이 꺼져 있어 쓰이지 않는다. 한계로 기록했다.
-- 남은 일: Jetson·Arduino 실장비 복구, Jetson GPU exporter 간헐 누락, eKuiper Helm revision과 live의 차이(upgrade 미실행), 24시간 soak와 실제 모델 추론 수용. 근거: `output/verification/api-repair/deployment.md`.
-
-## 2026-10-21 기존 Next.js 콘솔 소스 제거
-
-- 사용자 결정에 따라 `dashboard/app`(Next.js 화면·BFF route), Next 전용 `lib`·설정·`/docs` 사이트 packaging·Playwright 화면 시험과 next/react 계열 의존성을 저장소에서 제거했다. `dev`·`build`·`start`·`lint`·`typecheck`·`test`와 CI·`make dashboard`는 Kestra 원본 Vue 콘솔(`dashboard/kestra-native`)만 대상으로 한다. 콘솔이 쓰는 `dashboard/lib` 공용 모듈과 생성 계약 타입은 유지했다.
-- 기존 BFF의 DDS 쓰기 Origin 필수 조건을 콘솔 서버에도 적용했다(Origin 없는 DDS 쓰기 403). 기존 BFF가 전달하던 구형 `devices`·`sensors/*`·`profiles/DEVICE` 경로는 콘솔이 호출하지 않아 지원하지 않는다.
-- 2026-10-21 사용자 승인으로 Kestra 콘솔을 Kubernetes `edgeai-dashboard`에 직접 배포했다. `10.254.192.47:13080`에서 native 화면·health 200, Pod 1/1, Chromium 렌더 및 JS 오류 0건을 확인했다. API·DB는 변경하지 않았다. 센서 목록 확인 불가 경고는 남아 있다. Argo CD Application은 현재 없으며 Git push/자동 동기화 배포가 아니다. 이미지 digest는 dev overlay에 고정했다. 근거: `output/verification/deploy-kestra-13080/`.
-
-## 2026-10-20 Kubernetes 콘솔 교체 준비
-
-- 사용자 결정에 따라 Kubernetes의 `edgeai-dashboard` 이미지를 Next.js에서 Kestra v2.0.6 원본 Vue 콘솔로 교체한다. 콘솔은 클러스터 `edgeai-api`에 연결하며 이미지·Deployment·Service 이름과 CI digest/GitOps 경로는 유지한다.
-- 콘솔 서버(`dashboard/kestra-native/server.mjs`)가 Vite dev middleware와 같은 체인으로 `/ui/` 정적 bundle을 제공한다. 운영 현황은 관리·워크플로 API를 직접 조회하고 DDS는 서버 토큰으로 Platform-Service를 직접 호출해 13080 BFF 의존을 제거했다. `/api/live`·`/api/health`, SW 미등록, 문서 링크(Git `docs/`)를 정리했다.
-- Ingress에 `/api/v1/main`(콘솔 셸 API)을 추가했다. Vite config는 upstream이 고정한 vite 8.1.4를 직접 읽는다(기존 dev 서버는 남아 있던 vite 7.3.1을 우연히 사용). 공용 `continuous-presets.ts`는 `dashboard/lib/`로 옮겼다.
-- 검증: 콘솔 단위 33개·원본 Vue 타입 검사 통과. Dockerfile 빌드 단계를 빈 폴더에서 재현(새 Kestra clone·pnpm filter·npm ci·vite build)하고 node22 런타임으로 실행해 9개 메뉴를 Chromium에서 확인했다(호스트 API 읽기 전용, DDS는 토큰 미설정 503). 로컬 Docker 권한이 없어 이미지 자체는 CI `images`의 실제 DB smoke로 검증한다.
-- 서버 IP 변경 반영: 응답하지 않는 이전 주소 192.168.0.56을 현재 10.254.192.47로 바꿨다(registry 5000·Gitea 5200·Ingress 호스트·NetworkPolicy·Mapper 기본 이미지·DDS 설정·문서). registry 내용은 새 주소에서 같은 digest로 확인했다. 날짜별 과거 기록(`docs/evidence/`, `design-qa.md`, 이 파일의 이전 항목)은 당시 주소를 유지한다. 노드 containerd/docker의 registry 설정과 Traefik `externalIPs`는 저장소 밖이라 별도 반영이 필요하다.
-- CI scaffold의 기존 실패(RTSP 미리보기 `getCameraPreview` 감사 route 누락)를 고쳤다. 백엔드 테스트 191개 통과.
-- 미완료(당시): Argo CD repo-server의 엣지 노드 배치와 dashboard replicas=0 override·Ingress ignoreDifferences 문제는 2026-10-22 GitOps 복구로 해소했다. 클러스터 API(10/14 이미지)는 센서 UNAVAILABLE로 보고하며 원인 미확정이다. Next.js 소스·로컬 dev/e2e 도구 정리는 후속이다.
-
-## 2026-10-20 기술문서 Markdown 정리
-
-- TM6건과 TDP2건을 Markdown으로 정리했다. Word·쪽수 안내, 빈 행정 기입란, 페이지 나눔, 반복 설명을 제거하고 한국어 문장을 다듬었다.
-- 기술 수치·API 경로·실행 명령과 실제 시험/fixture 구분, 미완료 기능은 유지했다. 문서 링크·Markdown 구조와 Bash 명령 문법을 확인했다. 문서 종류별 기관 양식 적합성은 별도 확인 항목이다.
-
-## 2026-10-20 기술자료 등록 문서 8건
-
-- 사용자 확정 범위에 따라 DDS를 제외하고 TM6건과 TDP2건을 작성했다. 각 TM은 설계·자체 개발·기반 소프트웨어·날짜별 시험과 한계를, TDP는 소스 구성·인터페이스·설치·운영 및 인수 시험을 담는다.
-- `docs/deliverables/`에 수정용 Markdown8개와 목록을 보관한다. Word는 TM각5쪽과 TDP각8쪽, 총46쪽이며 등록번호·과제명·담당자는 기입란으로 제공한다. 소스 기준은1170c1e이며 문서 작성 중 운영 시스템의 설치·변경·장비 쓰기 시험은 수행하지 않았다.
-- 문서 링크 검사와 Word 구조·전체 페이지 렌더 검토를 통과했다. Word8개와 Markdown 원본 묶음은 Git에서 제외된 `output/technical-documents/`에 제공하며 등록 제출이나 기관의 인정 완료를 의미하지 않는다.
-
-## 2026-10-20 STREAM 경로 갱신·실행 위치 전환 이력
-
-- STREAM 경로를 펼치면 즉시 조회하고 열린 첫 페이지를3초마다 갱신한다. 실행 기록 일시정지·패널 접기·숨겨진 탭·이전 페이지에서는 자동 조회를 멈추며 최신 경로 보기로 재개한다. 오류 시 마지막 경로를 보존하고 실행 전환 뒤 지연 응답을 격리한다.
-- 작업 상세의 JSON 중심 전환 이력을 대상 노드·진행/종료 상태·실패 코드·자동 판단 기준·그룹별 체크포인트/새 실행 시도로 복원했다. 정책이 없는 과거 기록도 표시하며 시도가 없는 실패를 대기로 오인하지 않는다. 합성 원본과 Remote 참조 계산은 실장비 검증과 구별한다. 기존 API/변경 요청과 체크포인트 엔진은 유지한다.
-- 검증: 공개 UI/HTTP에서 경로 상태 미갱신과 전환 요약 누락을 먼저 재현했다. 수정 후 세대/차단 사유·오류/복구·접기/일시정지·과거 페이지/최신·실행 전환 응답 격리, 전환 상태 자동 반영·정책 없는 기록·실패 시도·그룹 체크포인트와 모바일을 확인했다. native Vue 타입 검사·기존 HTTP 경계 테스트27개·문서 검사 통과. Standards1건과 Spec1건을 수정하고 각각 재검토0건이다. 실제 API의 실행6개·작업12개에서 저장 경로6개를 읽었으며 조회한 작업의 전환 이력은0건이었다.
-- Jetson/Arduino와 합성 RTSP 데모의 연결 복구는 사용자 요청에 따라 보류했다. 실제 장비 복구 및 기존 기능 전체 동등성 완료를 의미하지 않는다.
-
-## 2026-10-19 워크플로 모듈 목록·파일 교체 복원
-
-- 기존 React 편집기의 입력/처리/출력 모듈 분류·포트 수·검색 빈 상태와 모듈 등록 링크를 원본 Vue 편집기에 복원했다.
-- 파일 불러오기는 현재 그래프나 미적용 코드가 있으면 확인 후 교체한다. 취소·검증 오류·1MB 초과·읽기 실패 시 현재 작업을 유지하며, 빈 편집기는 바로 연다. 파일 좌표는 기존 배치와 섞지 않고 교체하며 저장한 초안·발행 버전은 유지한다.
-- 검증: 공개 UI/HTTP에서 확인 전 덮어쓰기를 먼저 재현하고 수정 후 취소/동일 파일 재선택·미적용 코드 보존·잘못된 모듈/크기 초과 차단·빈 편집기 가져오기·모바일 확인 창을 확인했다. 내보낸 파일의 큰 정수9007199254740993·연결2개·좌표3개와 좌표 없는 파일의 기본 배치를 대조했다. native Vue 타입 검사·기존 그래프 단위 테스트4개·문서 검사 통과, Standards/Spec 지적0건. 실제 SERVICE 목록·등록 링크도 읽기 조회로 확인했다.
-
-## 2026-10-19 실행·감사 기록 자동 반영
-
-- 실행 목록은 상세를 선택하지 않아도 첫 페이지를3초마다 조회한다. 선택한 실행·작업을 보존하며 기존 상태·배치·결과 조회를 이어간다. 감사 목록은 첫 페이지를5초마다 조회하고 선택한 미확정 요청의 응답도 갱신한다.
-- 두 화면에 일시정지·마지막 목록 조회 시각·최신 기록 보기를 연결했다. 이전 페이지의 목록은 고정하고 선택한 상세는 자동 갱신 설정을 따른다. 실패 시 마지막 기록과 오류를 표시하며 숨겨진 탭에서는 자동 조회하지 않는다. 기존 API·변경 요청 계약을 유지한다.
-- 검증: 공개 UI/HTTP에서 자동 조회 미반영을 먼저 재현하고 수정 후 새 기록·선택 실행 상태·감사 미확정 응답·과거 페이지·일시정지·실패/복구·지연 응답 격리를 확인했다. native Vue 타입 검사·기존 단위 테스트27개·문서 검사 통과, Standards/Spec 지적0건. 실제 관리/워크플로 API의 두 목록과 자동 조회 시각 갱신도 확인했다.
-
-## 2026-10-19 기존 UI 누락 복원·라이브 기록
-
-- 이전 전체 메뉴 연결을 기능 동등성 완료로 표현한 점을 정정한다. 확인된 누락인 조합10종 간편 등록과 센서/VD 그래프 구간 탐색을 복원했다. 다른 기존 기능 전체의 대조를 완료했다는 뜻은 아니다.
-- 조합은 기존 preset 수식·입력 순서·단위·중복/숫자 검사를 재사용한다. 그래프는 기존 ECharts의 툴팁·슬라이더·확대/축소·이전/다음 구간·전체 복원과 VD 기록 누락/실행 세대 단절을 제공한다.
-- 센서/VD 기록은5초 자동 갱신과 일시정지를 제공하고 확대된 절대 시각을 유지한다. 원본 더보기 상태의 표·cursor를 고정하며 최신 기록 보기로 다시 현재 값을 따른다. 갱신 실패 시 마지막 조회 값을 유지하고 오류를 표시한다.
-- 검증: 조합10종 요청 수식·단위·순서, 잘못된 센서 차단, 센서/VD 자동 갱신·확대 유지·일시정지·갱신 실패·조회 전환 응답 격리와 모바일 화면을 공개 UI/HTTP 경계에서 확인했다. native Vue 타입 검사, 기존 native 단위 테스트27개, 문서 검사 통과. Standards에서 조회 시각 초기화1건을 수정하고 재검토0건, Spec0건. 실제 SenseHAT 원본의 새 측정 시각과 저장 수신 증가도 확인했다.
-
-## 2026-10-19 데이터 조회 로딩 표시
-
-- 원본 Kestra 로딩 표시를 운영 현황·장치·가상 장치·저장소·실행 모듈·워크플로·실행·감사·DDS에 연결했다. 초기 조회와 사용자 갱신은 상태를 표시하고 성공·실패 뒤 해제한다. 자동 polling은 별도 로딩으로 화면을 가리지 않는다. VD 실행 상세·버전·결과 기록 조회도 해당 영역에서 표시한다.
-- 지연 응답을 넣은9개 메뉴·수동 새로고침·조회 실패 해제·VD 초기/수동/버전 조회·자동 polling 분리·390px 화면을 브라우저에서 확인했다. 원본 Vue 타입·문서·기존HTTP 경계27개 검사와 Standards/Spec 리뷰(각0건)를 통과했다.
-
-## 2026-10-19 Kestra 콘솔 기능·소스 정리
-
-- 사용자 우선순위는 기능 구현과 동작 검증이다. 운영 자동 시작·기본 포트 전환은 후속 범위로 유지한다.
-- 기존 웹 일부에 스타일을 씌우는 방식에서 Kestra v2.0.6 원본 Vue 진입점·라우터·레이아웃·디자인 시스템을 사용하는 콘솔로 이행했다. 새 콘솔13083과 기존 BFF/문서13080, 관리API18080과 워크플로API18082를 구분한다.
-- 운영 현황은 서버 우선·더보기 전체 노드·CPU/메모리 막대·GPU/NPU 공통 열을 제공한다. Intel NPU는 운영 표에서 숨기고 미수집/만료/실제0을 구분한다. 장치·센서7프로토콜/연결 시험/측정 항목·RTSP 영상, SERVICE 불변 버전, eKuiper VD 등록/편집/실행/해제/저장 정책/이력, 원본 저장소와 기간 그래프, DAG 그래프/코드/입출력/발행/실행, Run/Task/Attempt/Placement/STREAM/결과/취소/위치 전환, 감사와 DDS 배포를 연결했다.
-- 워크플로별 브라우저 초안 저장·명시적 복구·삭제를 추가했다. 그래프 배치와 적용 전 코드·큰 정수를 보존하고 발행 API와 분리한다. 브라우저 새로고침/워크플로 간 분리/삭제 시 현재 편집 유지, 노드 위치의 내보내기 왕복, 저장소 한도 실패와390px 화면을 확인했다.
-- 통합 브랜치에서 frozen lockfile 의존성 설치, 원본 Vue/기존 Next.js 타입 검사, 변경 TypeScript lint, 문서·셸 검사와 원본 콘솔27개·백엔드6개·DDS14개·토큰 갱신2개 검사를 통과했다. 브라우저에서는 새로고침 복구·미적용 JSON·큰 정수·워크플로 분리·삭제·좌표 왕복·신규 생성 시 전체 편집 상태 인계·저장 한도 실패·390px 화면을 확인했다. 이번 브라우저 회귀는 mock HTTP 경계이며 실제 Runner 검증은 아래2026-10-16 기록이다. Standards/Spec 리뷰 잔여 지적은 각각0건이다.
-- 이전 소스가 남은 루트 작업 폴더 전체를 덮어 커밋하지 않고 실제 관리API 기준ad3f239와 워크플로 후속CI 수정b60e358을 기반으로 새 콘솔과 검증된 저장·DDS 변경을 통합했다. 임시 로그·자격 증명·release JAR·브라우저 산출물은 Git에 포함하지 않는다.
-
-## 2026-10-16 실제 API·Runner·DDS 통합 검증
-
-- 새 콘솔의 관리·워크플로 독립 세션/CSRF·멱등 키·감사 ID·lossless JSON을 연결했다. 공개 VD/DEVICE 신규 발행과 구형 Runner VD를 다시 열지 않았다.
-- 실제 NODE SERVICE 실행에서 입력[2,3]·가중치[4,5]·bias1의 결과24를 확인했다. 센서 입력60건과 VD 입력8건의 연속 전달·입력 종료 후 정상 완료·결과VALID를 확인했다. 마지막 센서Run은 source60/처리60/VALID/종료 표시 일치였다. RTSP 실제 JPEG도 확인했다.
-- DDS는 rootless ARM64 Buildx→동일 registry의 빌더 접근 주소→Gitea→Argo CD→3개 컨테이너 통신을 확인하고 검증용 배포를 삭제했다. 이는 ARM64 검증이며 모든 플랫폼 이미지를 확인한 결과는 아니다.
-- InfluxDB2.9.1 DELETE/TSI 대기로 원본 수집이 멎는 문제를 확인했다. 수집 경로의 동기DELETE를 논리 tombstone/archive_visible로 대체하고 수신64·공정 잠금·저장 완료FIFO ACK·최근4096개 완료 digest로 수집을 회복했다. HDD WAL fsync10ms 후 내구 저장 승인을 사용했다. 짧은 실제 구간에서COLLECTING/rejected0/지연약0.65–1.02초를 확인했으며24시간 수용은 아니다. upstream DELETE 결함과 보관 기한까지 남는 물리 필드는 별도 제약이다.
-- 당시 원본 콘솔 API 경계27개·플랫폼14개/프록시1개·토큰 갱신2개·백엔드 대상 단위6개·실제 Influx4개와 브라우저/타입 검사를 통과했다. 실제 실행 검증과 mock API 경계 검증을 구분한다.
-- REMOTE 외부 제공자는 구성되지 않았다. GPU/NPU 자원 표시는 실제 모델 실행 수용을 의미하지 않는다. 전량 관측 feed·상태형 checkpoint 복원·identity/RBAC·장기 부하/종합 복구도 남는다.
-
-## 2026-10-14 새 워크플로의 실시간 입력 선택 — 구현·실제 실행 완료
-
-- 사용자 요구: 기존 워크플로를 보존하고 새 워크플로에서 센서 값과 가상디바이스 계산 결과를 선택하며 같은 실행에서 계속 처리한다. 입력 변경은 새 불변 버전·새 실행에 적용한다.
-- 명시적WORKFLOW_DATA source Profile/Runner 계약, Run별 원본 신원 pin, 현재Attempt·Pod에 한정한 reader, 최신값1초 polling/중복 제거, EXTERNAL journal/checkpoint 복원과 END·ACK·FINALIZE 정상 종료를 연결했다. 원본·가상 실행 세대가 바뀌면 차단하고 오래된 값은 기다린다. 중간 관측 전량 전달은 보장하지 않는다.
-- 센서는 현재 NanoMQ 수집 archive, 가상디바이스는 current VALID 결과를 사용한다. UI 두 선택에서 후속 처리·연결선을 유지하고 조회/종료 실패를 재시도한다. 예제 처리기는 표본 수·마지막 값·숫자 통계를 최종 파일로 저장한다.
-- 실제 새 워크플로 `live-input-switch`를 만들었다. 센서 버전2.0.0은 Arduino 가속도 원본39건, 가상 입력 버전2.1.0은 eKuiper 온도 계산85건을 같은 처리기로 전달했다. 두Run/각2Task가 SUCCEEDED이고 source/처리 건수·마지막 값·END와 숫자 통계가 일치했다. MinIO의 고정 objectVersion4개를 독립 TLS 조회해 크기·SHA256과 공개 결과 내용을 대조했다. 웹에서 입력만 교체·발행하며 후속 작업/연결을 보존하는 동작도 실제 API로 확인했다.
-- 실제 PostgreSQL 공개 Run/typed pin/재요청/Scoped Reader·만료·가상 generation 변경, TLS MQTT/HTTPS/EXTERNAL source·중복·볼륨 복원·연속 계산3개, SDK 전체115개(종료 시간 수정 전)와 수정 후 완료/응답 유실/취소/기한/복구29개, Runner unit96개, Backend unit183개가 통과했다. 관련 UI PC/모바일·proxy·등록·결과·배치24개, 별도 전환/Remote/측정 회귀와 lint/build·문서·계약 검사도 통과했다. Standards/Spec 잔여 지적은 각0건이다.
-- 기존 수집 API와 같은 DB를 쓰는 실행용 API를 별도 namespace/authority 범위로 운영하며 웹의 workflow session도 분리했다. 실제 Runner는 검증한 amd64 개발 이미지이며 ARM64 공식 새 release 수용으로 확대하지 않는다. 센서17 UID/설정, 등록VD74 revision/정의, NanoMQ2·eKuiper·Mapper의 Pod UID/재시작 수를 보존했다.
-- 배포 검증 중 기존 Influx의 TSI 상대 cleanup 경로가 읽기 전용 cwd에서 shard-open을 막는 문제를 확인해 기존 writable `/tmp`를 workingDir로 지정했다. 같은 PVC와 root 읽기 전용 설정을 유지하며 COLLECTING/최신 원본 저장을 재확인했다. 이 설정은 upstream orphan cleanup 결함의 우회이며 실제 orphan 삭제/24시간 부하·전량 관측 전달을 검증한 것은 아니다. 느린 완료 승인에 대한1초 HTTP 제한도15초로 수정하고 실제 HTTPS 회귀의 실패→통과를 확인했다.
-
-## 2026-10-14 M6 조합형 가상디바이스 간편 등록
-
-- 등록창에서 통합 온도·온도 편차·3축 회전/가속도·회전/가속도 XY/XZ/YZ 평면 제곱합10종을 선택하고 센서를 고르면 입력 별칭·수식·단위를 자동 구성한다. 조합값 그대로·최근 평균·최소·최대와 기존1초·창5개·전체 결과7일 보관 및 사용자 조정을 지원한다.
-- 같은 단위의 서로 다른 숫자 측정 항목·역할·축을 선택하며 누락·catalog 변경 후 호환 실패 시 등록을 막고 선택을 유지한다. 현재 catalog의 단위를 사용하고 원시값의 raw²를 보존한다. 실패 시 생성 키·입력·포커스·모달 초안과 직접 설정 전환을 유지하며 기존 단일 센서·임계값·직접 식·여러 출력·저장 정책도 보존한다.
-- 실패 테스트→구현 순서로 조합 등록·벡터 정의·catalog 갱신 단위 계약을 검증했다. 관련 PC·모바일84개, lint·타입·빌드·문서 검사와 Standards/Spec 리뷰(각0건)가 통과했다. 최종 화면은 기존 UniFi 모달·native controls를 쓰며 데스크톱 축 선택은 한 줄, 모바일은 세로다.
-- 호스트 웹만 소스60cb8028885f로 갱신했다. 실제 센서17개의 catalog로 PC·모바일에서 조합10종 선택·직접 설정 전환·취소를 쓰기 요청0건으로 확인했고 등록74개를 보존했다. API jar/PID, NanoMQ/eKuiper Pod UID·재시작 수와 센서 UID/spec는 동일하다. 기존 계산/저장 계약을 재사용하며 실제 운영 신규 등록은 수행하지 않았다.
-- PLAN의M6 등록 편의를 완료로 표시하고 다음 기능을M7 새Mapper 일반STREAM 자동 연결로 이동했다. 장기 부하·종합 복구·전체 기능 수용은 별도 잔여다.
-
-## 2026-10-14 가상디바이스 삭제 버튼
-
-- 관리 열에 삭제 버튼과 확인 모달을 추가했다. 기존 공개 DELETE API의 등록 해제 동작으로 계산 중지·원본 연결 종료를 요청하고 등록된 목록에서 제거하며, 원본 센서와 저장된 결과 이력은 보존한다. 설정 안의 숨겨진 해제 동작은 제거했다.
-- 요청 중 중복·닫기를 막고 실패 시 확인창과 재시도를 유지한다. 삭제 성공 후 목록 조회 실패는 별도로 알리며 마지막 행 삭제 시 이전 페이지로 이동한다. 등록 해제 이력은 활성 목록에 표시하지 않는다.
-- 관련 PC·모바일 브라우저68개, lint·타입·빌드·문서 검사와 Standards/Spec 리뷰(각0건)가 통과했다. 호스트13080의 PC·모바일에서 삭제 확인·취소·설정·그래프를 쓰기 요청0건으로 확인했고 등록74개는 보존했다. 기존100개 구성 뒤 사용자 등록1개가 추가된 상태다.
-- 호스트 웹만 소스4564998df459로 갱신했다. API jar/PID, NanoMQ/eKuiper Pod UID·재시작 수와 센서 UID/spec는 동일하다. 실제 장치를 삭제하는 운영 검증은 수행하지 않았다.
-
-## 2026-10-14 NanoMQ 원본 저장 경로 복구
-
-- 센서 노드의 NanoMQ0.25.6을 유지하면서 MQTT subscriber 수신 상한을256, 원본 저장 작업자를16, 전체 저장 수용 상한을64로 조정했다. 저장 완료 후 연결별 FIFO 순서로 QoS1 ACK를 보내며 중복 패킷과 연결 세대를 구분한다.
-- 수신 상한만 높인 단계에서는 원본 누락이 남아 최종 작업자·수용 한도 조합으로 검증했다. 호스트API 적용 후 실센서3분3055건의 발행/저장과 내용 일치를 확인했다. NanoMQ/EKuiper/센서 UID·재시작 수는 보존했다. 이 결과는 당시 구간의 검증이며24시간 무손실·복구 수용을 대신하지 않는다.
-- 연결 확인은 TCP 접속/즉시 종료 대신 프로세스·LISTEN 상태를 관측해 브로커의 불필요한 핸드셰이크 경고를 줄였다. NanoMQ context-pressure WARN은 간헐적으로 남으며 위 검증 구간에서는 저장 누락이 관측되지 않았다. 현재 노드별 운영 probe/브로커 설정은 호스트·클러스터 적용 상태이고 main 병합만으로 재적용되지 않는다.
-- 영속 회귀 검사는 명시적 격리NanoMQ endpoint를 요구하는 Gradle nanoMqIntegrationTest다. 작업용 두 브로커 주소를 하드코딩한 일회성 backlog probe는 제품 scripts에서 제거했다.
-
-## 2026-10-14 최종 UniFi 콘솔 정리
-
-- 최종 콘솔은 아이콘 탐색·인프라 종류/개수 리소스 영역·목록 본문으로 구성하고 운영 현황은 상태별 숫자와 자원 사용 막대를 사용한다. 이전 도넛·NEXUS 현황 설계 기록을 대체하며 값의 미수집/만료와 실제0을 구분한다.
-- 등록·설정·그래프 모달, 전체 값 펼침, 좁은 화면의 상세·요약 표시를 보존했다. 최종 화면 소스는0a83e96이며 최신 통합 검증의PC·모바일 등록/인프라/계산/그래프/상태/일반 서비스84개가 통과했다.
-
-## 2026-10-14 실센서 기반 인프라100개 구성
-
-- 사용자 요청으로 기존 가상디바이스2개를 보존하고71개를 추가해 가상디바이스73개·서버4개·엣지 디바이스6개·센서 측정 항목17개, 화면의 전체 등록 합계100개를 구성했다. 원본 센서의 UID/spec와 NanoMQ·eKuiper Pod UID·재시작 수는 보존했다.
-- 신규 구성은 단일 센서의 최근 평균/최소/최대49개, 통합 온도·온도 편차·3축 회전/가속도 원시 제곱합과 각 최근 평균/최소/최대16개, 회전/가속도 원시 XY/XZ/YZ 평면 제곱합6개다. 기존 검증 장치의 온도 평균·최대 출력2개는 중복 생성하지 않고 재사용했다. 기존 test 설정은 보존했다.
-- 공개 등록·시작 API와 CSRF·생성 키·실행 멱등 키를 사용했다. 새 장치는1초 계산·집계5개 유효 계산값·전체 결과7일 보관이다. 각도 평균은 산술평균, Arduino 값은 raw 및 제곱합 raw²로 이름·단위를 표시했다.
-- 신규71개 입력 연결/정의 일치, 전체73개 RUNNING/HEALTHY 및76개 출력 VALID/STORED를 확인했다. 고정20초 구간의 결과 이력1520건을 읽었고, 조합10종은 기록된 원본 시각·설정에 맞는 값으로 독립 재계산해 일치를 확인했다. PC/모바일에서4페이지73개와 개수·그래프·기존2개 보존, 화면 오류0을 확인했다.
-- InfluxDB READY·원본 collector COLLECTING/rejected0, 관측한eKuiper CPU약0.326코어/65MiB·Agent약0.168코어/15MiB다. 이는 구성 직후 제한된 구간의 관측이며 장기 연속 부하·최대 용량 수용 완료는 아니다. 제품 코드 수정·웹/API/브로커 재배포는 없었다.
-
-## 2026-10-14 인프라 통합·개수와 메뉴 정리
-
-- 인프라 관리에 서버·엣지 디바이스·센서·가상디바이스 목록을 통합했다. 상단 네 개 버튼은 검색·페이지와 별도로 전체 등록 개수를 표시한다. 가상디바이스는 해제 이력을 제외하며 조회 실패·만료는 —, 확인된 빈 목록은0개다.
-- 사용자 표시 명칭을 가상디바이스로 통일하고 별도 메뉴를 제거했다. 관리 메뉴는 프로젝트 문서만 남겼다. 기존 직접 등록 URL·등록/설정/그래프 모달·관리의 시작/중지를 유지한다.
-- 관련 PC·모바일 브라우저82개, 변경 영역 lint·타입·빌드와 두 축 리뷰(각0건)가 통과했다. 호스트13080 실제 화면과 API의 서버4/엣지6/센서17/가상디바이스2를 대조했고 쓰기 요청 없이 모달·이전URL·메뉴를 확인했다.
-- 호스트 웹만 갱신하고 기존 API jar/PID, NanoMQ/eKuiper Pod UID·재시작 수, 센서 UID/spec를 대조해 보존을 확인했다. 실제 검증용 가상디바이스는 RUNNING/HEALTHY와4개 출력 VALID/STORED다. 전체 UI suite의 기존 다른 영역 실패는 이번 검증 범위에서 해결하지 않았다.
-
-## 2026-10-14 운영 현황 상태 도넛
-
-- 서버·디바이스·센서·가상 디바이스4개 자원 요약을 전체 수·상태별 수 도넛 카드로 통일한다. 현재 노드 준비·센서 연결·가상 계산 실행 상태를 별도 실제 API로 조회한다.
-- 가상 목록 전체 페이지·4개 동시 세부 조회·미확인/빈 목록 구분과10초 갱신을 유지한다. 각 제목으로 해당 관리 목록에 이동한다. 기존 노드 자원/워크플로 화면은 유지한다.
-- apple-design의 시각 계층·여백·반응형 배치 원칙을 적용했다. 도넛 카드는 기존 NEXUS 숫자 카드 grid에서 분리해 제목·원·범례 겹침을 제거하고4열/2열/모바일1열로 배치한다. 가상 상태의 느린 조회는 기존 현황 갱신과 분리하고 센서의 최초 로딩을 미확인으로 표시하지 않는다.
-- 여백 피드백에 따라 모든 카드에서88px 원과 한 열 범례를 좌우로 배치해 높이를약240px로 줄였다. GPU/NPU 장착 정보는 있지만 사용률이 없으면 사용률 미수집·일부 미수집으로 구분하고 CPU만 정상이라고 전체 수집 정상으로 표시하지 않는다.
-
-## 2026-10-14 실제 센서 평균 표시 제거
-
-- 센서 그래프·데이터 저장소 chart API는 실제 원본 시각·값을 반환한다. 평균·참 비율·범위 보조선은 제거했다. 원본100000개까지는 모두 표시하고 더 큰 기간은 실제 최초·최저·최고·마지막 원본 측정값을 선택하며 이를 명시한다.
-- 선택 기간 전체와 원본 표 분리는 유지하며, 가상 장치 계산 결과·수집/보관 정책은 기존 동작을 유지한다.
-
-## 2026-10-14 센서 그래프 기간 전체 조회
-
-- 센서 모달·데이터 저장소는 새 chart API로 선택 기간 전체를 구간 평균·최솟값·최댓값·표본 수로 조회한다. 서버는 최대 약600개 구간으로 집계하며 원본 저장 주기·보관 정책은 유지한다.
-- history API의 최신1000개·이전 페이지·2000개 표시 한도는 원본 표에만 적용한다. 기간 변경 시 확대를 전체 구간으로 초기화하고 자동 갱신에서는 확대 비율을 유지한다. 기존 최신1000개만 그리던 기간 그래프를 대체한다.
-
-# 2026-10-14 당시 상태
-
-2026-10-14 확인. 실제 센서17개와 중앙 eKuiper 기반 가상디바이스73개 구성의 출력76개 계산·저장을 확인했습니다. 이후 사용자 등록1개가 추가돼 최신 삭제 UI 확인 시 등록된 가상디바이스는74개입니다. 신규 등록의 실행·저장 상태는 위73개 구성 검증에 포함되지 않습니다.
-날짜별 구현·검증 구간은 위 기록을 따릅니다. 장기 부하·종합 복구와 전체 플랫폼의 실모델·성능 수용은 완료되지 않았습니다. 다음 게이트는 [PLAN.md](PLAN.md)를 확인합니다.
-
-## 2026-10-14 구현 기준
-
-- **센서 관리:** Device Manager가 측정 항목마다 별도의 Device·DeviceStatus CRD를 구성합니다. 노드·프로토콜별 Mapper는 공유하며 Modbus TCP, OPC-UA, MQTT 입력, HTTP Virtual, Serial JSON, Sense HAT v1을 지원합니다.
-- **관측과 원본 데이터:** 최신값·시각·heartbeat는 DeviceStatus/DMI로 조회하고 매 수집 데이터는 MQTT로 발행합니다. 원본 collector와 InfluxDB 저장·UID별 이력 조회 API를 제공합니다. 원본 저장과 최신 Twin 조회를 구분하며 일반 DAG의 센서 입력은 Run 접수 시 최신값을 고정합니다.
-- **연속 가상 센서:** 내부 `edgeai.vd/v3 / CONTINUOUS_EKUIPER` 설정으로 여러 측정 센서를 조합합니다. 계산식·이동 평균·최솟값·최댓값·임계값·필터와 출력별 최신값·그래프·보관 이력 API를 구현했습니다. 센서 등록만으로 VD가 생기지 않으며 입력·계산을 명시적으로 등록합니다. VD마다 별도 SERVICE·supervisor·Pod를 만들지 않습니다.
-- **등록 화면:** 센서·측정 항목 추가·가상 장치·실행 모듈·워크플로·DAG 발행은 모달을 사용합니다. 긴 폼은 모달 안에서 스크롤하고 오류 시 입력을 유지합니다.
-- **그래프 조회:** 센서 이름·가상 장치 이름으로 그래프 모달을 엽니다. 센서 원본·데이터 저장소·가상 장치 결과는 Apache ECharts6.1.0을 사용하며 시각·값·단위 툴팁, 슬라이더와 버튼으로 구간을 확대합니다. 센서는 UID별 InfluxDB 원본 이력을 기간·기록 표로 확인하며 가상 장치는 출력별 저장 이력을 조회합니다. 센서 모달은 최근5분·큰 추이 그래프를 기본으로 하며 수집 설명과 원본 표는 아래에 접어둡니다. 자동 갱신 시 확대 상태를 유지합니다. 센서 그래프는 선택 기간 전체의 원본을 조회하며,100000개 초과 시 실제 원본 표본을 선택해 표시합니다. 원본 표는 이전 기록으로 이어서 조회합니다. 센서 원본은 조회된 값을 시간순으로 연결하며, 가상 장치 결과의 기록 누락·연결 변경 구간은 선을 끊습니다. 페이지를 닫아도 저장된 센서 기록은 유지됩니다. 가상 장치 설정은 별도 버튼을 사용합니다.
-- **일반 서비스:** SERVICE 실행 모듈과 Spring DAG, AUTO/NODE/REMOTE 정책을 유지합니다. DDS·Buildx·Gitea·Argo CD는 별도 배포 경로입니다. DEVICE 신규 발행과 구형 VD 프로필·BATCH·supervisor 경로는 종료됐습니다.
-
-## 2026-10-14 운영 관측
-
-- 호스트 웹/API는 기존 13080/18080을 사용합니다. 실제 센서 17개가 ONLINE으로 조회됩니다.
-- 호스트 InfluxDB 원본 저장소는 READY, collector는 COLLECTING이며17개 센서 원본 계열과 UID별 이력 조회를 확인했습니다. 보관 기간은30일이며 현재 이전 Mapper의 원본은 UNVERIFIED로 표시합니다.
-- 센서용 NanoMQ는 Jetson·Pi의 노드 로컬 broker입니다. `ekuiper` namespace의 `my-ekuiper-0`은 worker `etri-ser0004-cgnms0`에서 eKuiper2.4.2를 실행합니다. `edgeai-mqtt-0` Mosquitto는 일반 STREAM용 별도 broker입니다.
-- 호스트 운영 API는 `EDGEAI_CONTINUOUS_ENABLED=true`이며 processing Agent의 엔진 lease·규칙·qualified 입력·출력76개 VALID/STORED를 확인했습니다. Kubernetes 관리 API의 별도 DB·배포 설정과 호스트 활성 상태를 구분합니다. 장기 부하·전체 복구·보안 수용은 남아 있습니다.
-- 과거 구형 등록233개와 연결된 VD 프로필·실행 데이터 정리는 별도 검증 후 수행했습니다. 당시 보존한 시험 등록 수는 현재 개수가 아닙니다. 인프라100개 구성 당시 가상디바이스73개와 기존2개 보존은 위2026-10-14 기록을 따릅니다. 일반 워크플로·SERVICE·센서·노드·감사 데이터와 migration은 보존했습니다.
+GPU 시험의 정책은 시작 전에 선택한 값으로 Run에 고정되며 새로고침 후에도 유지됩니다.
+기본 시험값은 과부하 50%, 복귀 20%, 연속 2개, 최소 실행 20초, 전환 후 대기 30초, 최대 전환 2회입니다.
+운영 정책 기본값과 구분합니다. 상세 실장비 기록은 가이드에 있고, 해당 검증 세션은 모델·부하를 모두 중지하고 Job·Pod 정리를 확인했습니다.
 
 ## 검증과 한계
 
-구형 데이터 정리는 전체 DB 백업을 별도 DB에 복원해 먼저 실행했고, 실제 적용 시 삭제 대상 외 행의 동일성과 FK·trigger 복구를 확인했습니다. 당시 백엔드 단위180개와 빌드가 통과했습니다. ECharts 최초 교체 시점의 그래프·원본 저장소·등록 모달·연속 결과·처리 버전 기능은 PC·모바일 Chromium48개로 검증했습니다. 일부 센서 선 표시·UI 정리는 배포 빌드와 실제 화면으로 확인했고, 이후 등록/설정/인프라 작업의 관련 회귀 검증은 위 날짜별 기록을 따릅니다. ECharts의 실제 확대·복원, 툴팁·표의 수치 정밀도, 갱신 중 확대 유지, 모바일 툴팁 가림도 확인했습니다. 이번 그래프 작업은 기존 이력 조회 API와 저장 구현을 사용합니다. 날짜별 로그·스크린샷·일회성 결과는 Git에서 제외한 `output/verification/`에 보관합니다.
+- GPU 기능의 기존 검증: Runner 12/12, gateway 5/5, 격리 DB 통합 11/11, UI 24/24, typecheck·lint·계약·문서 검사 통과.
+- AI 모델 관리와 병합한 최종 소스: gateway 시험·bootJar·native typecheck·OpenAPI 생성물 일치·콘솔 release 빌드 통과. 변경하지 않은 통합 시험은 기존 근거를 재사용했습니다.
+- 실제 웹에서 GPU 선택·새로고침 유지·부하 시작/중지·모델 왕복·최종 중지 확인, 브라우저 오류 0건. 이는 지정 장비의 기능 시험이며 전체 모델·장치·규모·장기 안정성 수용이 아닙니다.
+- 별도 Astra 리뷰 워커는 `agent-update-prompt`로 실행되지 않았습니다. 프로젝트 지침에 따라 조정자가 실제 diff·시험 결과를 검토했고, 이전 CPU 시험이 GPU로 잘못 표시되던 결함은 Claude가 수정했습니다.
+- ALL_OBSERVATIONS와 기존 센서/VD·STREAM의 이전 통합 기록은 기능별 문서와 Git 이력을 따릅니다. 이번 CPU/GPU 시험을 해당 경로의 전체 운영 수용 근거로 확대하지 않습니다.
 
-실제 브로커·eKuiper를 사용하는 개발 시험은 운영 센서의 24시간 연속 처리·저장·부하 수용과 구분합니다. 새 Mapper 경로의 자동 STREAM 연결, 실제 학습 모델·외부 API 전체 계약, 운영 identity/RBAC·종합 복구·합의 성능 기준은 남아 있습니다. 원본 이력의 운영 보관·복구 수용은 collector 연결과 조회 가능 여부만으로 완료를 주장하지 않습니다.
+## 다음 개발
 
-사용 방법은 [센서 등록](docs/guides/sensor-registration.md), [연속 가상 센서](docs/guides/vd-processing.md), [지원 범위](docs/reference/support.md)를 확인합니다. 다음 게이트는 [PLAN.md](PLAN.md), 구형 방식의 종료·데이터 정리 원칙은 [제거 결정](docs/adr/0115-retire-legacy-virtual-devices.md)을 따릅니다.
-## 2026-10-14 콘솔 전체 디자인 정리
+[PLAN.md](PLAN.md)의 2-1·3-3 범위에 따라 NPU 계측·부하·전환, 모델 예약/우선순위/이상 롤백, 등록 모델의 실행 연결을 각각 다룹니다.
+UI 디자인·구현 담당은 전역 `~/.codex/AGENTS.md`의 Claude Code / Opus이며 Codex는 조정·검증·배포를 맡습니다.
 
-- 운영 현황·인프라·센서·가상 장치·실행 모듈·저장소·실행/워크플로와 등록 모달을 실제 화면으로 확인했다. 정상 상태와 조작색을 구분하고10px 수준의 노드 표·보조 정보를12–14px로 키웠으며 패널·도구·표의 여백과 정렬을 통일했다.
-- 도넛은 실제 존재하는 상태를 중심으로 요약하고 가속기 모델/사용률을 같은 줄로 정렬한다. 가상 장치 목록·등록을 먼저 배치하며 구조 설명은 하단에서 펼친다. 간편 등록 모달만640px로 좁히고 전체 설정·그래프는 기존 폭을 유지한다.
-- 데이터·수집·계산·등록 API와 실제 센서 원본 그래프의 의미는 유지한다.
+과거 날짜별 작업 내역은 [이전 PROGRESS의 Git 이력](https://github.com/dsa04156/edgeai/blob/42dc4988b63ad34e431c4f4b5e86f48cc1a2e227/PROGRESS.md)에서 확인합니다.
+과거 digest·장비 수·활성화 상태를 현재 상태로 해석하지 않습니다.

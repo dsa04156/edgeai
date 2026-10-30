@@ -6,6 +6,17 @@
 모듈별 작업 지침의 차이는 하위 `AGENTS.md`에서 설명한다.
 에이전트 셸은 `rtk`, 미지원 명령·원시 검증은 `rtk proxy`를 사용한다.
 
+## 현재 소스와 역할
+
+이 개발 환경의 제품 기준 작업 트리는 `/home/jinuk/codex-work/edgeai/.tools/kestra-publish`입니다.
+부모 `edgeai` checkout의 미커밋 작업과 혼합하지 않습니다. 일반 checkout에서는 현재 브랜치와
+`deploy/kubernetes/overlays/dev/release.json`, 실제 Deployment imageID를 대조합니다.
+[현재 상태](PROGRESS.md)는 최신 배포 범위, [개발 단계](PLAN.md)는 남은 작업의 기준입니다.
+
+UI 디자인·구현은 전역 `~/.codex/AGENTS.md`에 따라 Claude Code / Opus가 담당합니다.
+Codex는 요구사항·기술 설계·수용 기준, 작업 조정·검증·배포를 담당하며 모델을 임의 대체하지 않습니다.
+문서만 바꾸면 링크·색인 검사를 실행하고, 코드·입력이 그대로인 빌드나 실장비 시험은 반복하지 않습니다.
+
 ## 작업 순서
 
 1. 전체 설계도 → API 정의서 → ERD → implementation-contract → verification-matrix 순서로 읽는다.
@@ -40,6 +51,6 @@
 `make test`다. 통합 검증은 변경 범위에 맞는 `scripts/test/` 명령을 선택한다.
 전체 scaffold 검증은 `bash scripts/test/verify-all.sh scaffold`로 별도 실행한다.
 실 DB는 `test-integration.sh`, 전체 health 경로는 `test-health.sh`로 검증한다.
-공유/운영 클러스터 mutation, 실제 구동기 제어, 권한 확대는 승인 없이 수행하지 않는다.
-Git push는 해당 작업에서 사용자가 명시적으로 승인한 범위만 수행한다.
+공유/운영 클러스터 변경·실제 구동기 제어·권한 확대는 사용자가 승인한 범위에서 수행한다.
+사용자가 전달·배포를 요청했다면 필요한 commit·push·배포를 다시 승인받지 않고 진행한다. 클라우드 relay/tunnel은 별도 명시 요청이 필요하다.
 무한 retry, `git reset --hard`, `git clean`, 비테스트 DB/PV 삭제를 사용하지 않는다.

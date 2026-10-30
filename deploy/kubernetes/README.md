@@ -4,13 +4,15 @@
 Dashboard(`edgeai-dashboard`)는 Kestra v2.0.6 원본 Vue 콘솔이며 관리 API를 직접 호출한다. 기존 Next.js 대시보드는
 배포하지 않으며 소스도 제거했다. Ingress의 `/api/v1/main`은 콘솔 셸 API, 나머지 `/api/v1`은 API로 보낸다.
 `overlays/dev`는 콘솔을 `etri-ser0001-cg0msb`의 hostPort 13080(`10.254.192.47:13080`)으로 열고 Recreate로 교체한다.
-전환 전에 같은 서버에 남아 있는 호스트 Next.js 13080 프로세스를 내린다(기존 release 실행 중지는 배포 작업 범위).
+기존 호스트 Next.js에서 Kubernetes 콘솔로의 전환은 완료했다. 재배포 시 hostPort 13080을 점유하는 다른 프로세스가 없는지 확인한다.
 `overlays/dev`의 API는 원본 수집(`EDGEAI_RAW_HISTORY_ENABLED`)의 유일한 쓰기 주체이고, 중앙 eKuiper Agent가 호출하는 연속 VD 엔진(`EDGEAI_CONTINUOUS_ENABLED`)도 맡는다.
 Secret `edgeai-processing-agent`(키 `credential`)는 `ekuiper` namespace의 기존 공유 credential을 복사해 만든 것이며 Git에 넣지 않는다.
 Agent는 클러스터 DNS로 API에 연결하며, Agent Secret의 `ca.crt`는 stream CA다. eKuiper `helm upgrade` 전에 [VD 처리 문서의 재적용 절차](../../docs/guides/vd-processing.md#현재-dev-클러스터-재적용-2026-10-21-기준)로 렌더링과 CA를 확인한다.
-selector 없는 Service `edgeai-workflow-api`의 Endpoint는 멈춘 호스트(`10.77.0.1:18447`)를 가리킨다. 이 Service는 저장소 밖에서 수동으로 만든 것이다. 콘솔(`EDGEAI_WORKFLOW_API_BASE_URL=""`)과 API(`EDGEAI_RUNTIME_CONTROL_PLANE_URL`)는 이 Service를 쓰지 않는다. runtime을 켜기 전에 이 Service를 정리하거나 다시 연결한다.
+과거 구성의 selector 없는 Service `edgeai-workflow-api`는 멈춘 호스트(`10.77.0.1:18447`)를 가리켰으며 저장소 밖에서 수동으로 만든 리소스다. 콘솔(`EDGEAI_WORKFLOW_API_BASE_URL=""`)과 API(`EDGEAI_RUNTIME_CONTROL_PLANE_URL`)는 이 Service를 쓰지 않는다. 현재 runtime은 클러스터 API로 직접 연결하므로 이 과거 Service를 경유하지 않는다. 새 연결에 사용하려면 Endpoint를 별도로 검증한다.
 `overlays/dev`는 `components/gpu-inference`(ser0003 GB10 객체 검출 런타임, edgeai-api만 접근)를 포함하고 API에 `EDGEAI_INFERENCE_*`를 설정한다([런타임](../../inference/README.md)).
-`components/scenario-runtimes`(GPU/NPU 이미지 비교 런타임)는 이미지 빌드·배포 승인 전이라 `overlays/dev`에 포함하지 않는다([시나리오 문서](../../docs/scenarios/gpu-npu-image-comparison.md)).
+`components/scenario-runtimes`(GPU/NPU 이미지 비교)는 `overlays/dev`에 포함돼 있다([시나리오 문서](../../docs/scenarios/gpu-npu-image-comparison.md)). 2026-10-30 조회 기준 NPU 런타임은 1/1 Ready이며, `edgeai-scenario-gpu`, `edgeai-gpu-inference`, `edgeai-hawkeye-motion`은 사용자 요청에 따른 replicas=0을 유지한다. 구성 파일 존재와 현재 서비스 가용성을 구분한다.
+`components/offload-lab`은 CPU/GPU 부하 이미지와 `offload-lab` 실행 허용을 설정한다. 실제 GPU 왕복·NPU 미지원 경계는 [시험 화면 가이드](../../docs/guides/offload-lab.md)를 따른다. AI 모델 관리의 Registry 연결 설정과 자원 프로파일링 컴포넌트도 dev overlay에 포함돼 있다.
+현재 API·콘솔 이미지 원본은 `overlays/dev/release.json`과 `kustomization.yaml`을 대조하고, 실제 배포는 Deployment imageID·Ready 및 Argo CD revision으로 확인한다. [현재 상태](../../PROGRESS.md)에 최근 확인 범위를 정리한다.
 ArgoCD는 `overlays/dev`를 감시한다. 초기 연결·검증·롤백은 [CI/CD 문서](../../docs/operations/cicd.md)를 따른다.
 
 ```bash
@@ -31,7 +33,7 @@ OFFLOADING 상태를 모르는 구버전 writer가 겹치지 않도록 하며, �
 V7 적용 후에는 V7 미지원 이미지로 단순 롤백하지 않는다. 무중단/다중 replica는 M9 검증 범위다.
 base의 PostgreSQL PVC 5 GiB는 기본 StorageClass를 사용한다. 현재 overlay의 운영 DB는 아래 HDD 구성으로 대체한다.
 자동 prune과 cascade deletion은 사용하지 않는다.
-MinIO는 M4 결과 파일 저장에 사용한다. MQTT/STREAM 데이터 경로는 후속 M7 범위다.
+MinIO는 M4 결과 파일 저장에 사용한다. MQTT/STREAM 컴포넌트는 dev overlay에 포함되며, 일반 STREAM 사용 조건과 전체 수용 범위는 아래 구성·검증 절차와 구분한다.
 
 M2 API는 전용 `edgeai-control-plane` ServiceAccount와 마운트된 CA/토큰으로
 Kubernetes Node API를 읽는다. bootstrap은 소유 label을 확인하고 `edgeai-node-reader`
