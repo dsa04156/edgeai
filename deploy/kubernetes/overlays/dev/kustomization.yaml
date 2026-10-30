@@ -7,6 +7,7 @@ resources:
   - ../../components/gpu-inference
 components:
   - ../../components/resource-profiling
+  - ../../components/model-profiling
   - ../../components/scenario-runtimes
   - ../../components/hawkeye-safety
   - ../../components/hawkeye-video-replay
@@ -98,10 +99,10 @@ images:
     digest: sha256:484af0d5232144e1d270f361c08495b8599997aa1565dd04467372d72348052f
   - name: ghcr.io/dsa04156/edgeai-api
     newName: 10.254.192.47:5000/edgeai-api
-    digest: sha256:2850765450c4bc657dc724c7df762518d8f8cffd1fada3a6dce3471a4f98f889
+    digest: sha256:3c6e37c69f07d34e97efcd7e2e75955c606fde8301a321deecc4b50354a4d3f9
   - name: ghcr.io/dsa04156/edgeai-dashboard
     newName: 10.254.192.47:5000/edgeai-dashboard
-    digest: sha256:bd2fdf3f6651a487522561d5de030e4ca20715c4837c601911b899a89fc35a0e
+    digest: sha256:98480c4c14b4107193450b3c1085ebb9fe113384e3ee89f0e510cdeba49a6e49
   - name: ghcr.io/dsa04156/edgeai-minio
     digest: sha256:fd92ade7dfdebfbcc51337c9370d31b2f09d1f5411d2427d3195d34e7fa3b050
   # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.
