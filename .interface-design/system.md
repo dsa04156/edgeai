@@ -2,6 +2,7 @@
 
 - `오프로딩 테스트`는 상태 줄(시험 상태 태그·원래 엣지·모델 위치·조회 시각, 긴 시험 조건은 접힘) → 제어(엣지 선택 먼저, 모델[실행 primary·중지]·부하[프로세스·시간·시작·중지] fieldset) → 모델 위치 lane → 진행 기록 → 접힌 정책·원본 기록·실행 선언 순서다. 이 화면만 패널 padding·간격 16px.
 - lane은 흰 station(엣지·워커) 사이 방향 화살표(→ 전환, ← 복귀, 모바일은 세로 회전)와 최신 전환 상태 색(진행 amber·완료 green·실패 red)을 둔다. 노드 이름이 CPU보다 앞서고, CPU는 6px 막대에 고정 정책 임계값 눈금만 둔다. 현재 모델 위치는 focus 보라 테두리+green 태그다. 열린 세션만 lane을 차지하며 종료 세션은 "직전 시험"으로만 표시한다. 전환 수는 SUCCEEDED 전환만 센다.
+- 부하 종류(CPU/GPU)는 제어 첫 항목의 segmented이며 열린 세션에서는 저장된 정책 값으로 잠긴다. GPU 모드는 GPU 자원 없는 edge 옵션을 비활성화하고, 프로세스 수·권장 부하·CPU 추정치를 숨기며, edge 막대는 GPU 사용률·GPU 임계값·GPU 관측 시각을 쓴다(worker는 CPU 유지).
 - 진행 기록은 실제 사건 시각(createdAt·stoppedAt·현재 부하 회차 startedAt·Pod deletingAt)만 쓰고 updatedAt·expiresAt을 사건으로 만들지 않는다. 전체 Pod 이름·UID는 원본 기록 접힘에 둔다. 접힘 summary는 원본 marker 대신 토큰색 chevron과 focus ring을 쓴다.
 
 ## 2026-10-30 서비스 자원 프로파일

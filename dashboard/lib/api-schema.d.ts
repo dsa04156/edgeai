@@ -1135,8 +1135,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 부하 시작 (세션 edge에 제한된 CPU 부하 Job)
-         * @description 세션의 edge에 고정 이미지·고정 프로그램(offload_lab_load.py)의 CPU 부하 Job 하나를 만듭니다. 명령·이미지는 입력받지 않습니다. durationSeconds 뒤 프로그램이 스스로 끝나며 activeDeadlineSeconds(+30초)가 상한입니다. 실행 중 부하가 있으면 409, 같은 키·요청 재전송은 200입니다. 만료·세션 중지· API 재시작 뒤 남은 소유 Job은 조정 루프가 삭제합니다. 합성 지표가 아니라 실제 노드 CPU 부하입니다.
+         * 부하 시작 (세션 edge에 제한된 CPU 또는 GPU 부하 Job)
+         * @description 세션의 edge에 고정 이미지·고정 프로그램의 부하 Job 하나를 만듭니다. 명령·이미지·자원 이름은 입력받지 않습니다. 부하 종류는 세션 Run의 offload 정책에서 정해집니다: CPU 시험은 offload_lab_load.py, GPU 시험은 offload_lab_gpu_load.py(CUDA 커널, edge inventory의 nvidia.com/gpu.shared 또는 nvidia.com/gpu 1개 요청, workers=1)입니다. edge inventory에 해당 자원이 없으면 Job을 만들기 전에 409입니다. durationSeconds 뒤 프로그램이 스스로 끝나며 activeDeadlineSeconds(+30초)가 상한입니다. 실행 중 부하가 있으면 409, 같은 키·요청 재전송은 200입니다. 만료·세션 중지· API 재시작 뒤 남은 소유 Job은 조정 루프가 삭제합니다. 합성 지표가 아니라 실제 노드 CPU·GPU 부하이며, GPU 부하는 모델 GPU 추론이 아닙니다.
          */
         post: operations["startOffloadLabLoad"];
         delete?: never;
@@ -2401,7 +2401,7 @@ export interface components {
         };
         ApiError: {
             /** @enum {string} */
-            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OFFLOAD_INITIAL_PLACEMENT_INVALID" | "OFFLOAD_NODE_STREAM_UNSUPPORTED" | "OFFLOAD_LAB_BUSY" | "OFFLOAD_LAB_NOT_FOUND" | "OFFLOAD_LAB_STOPPED" | "OFFLOAD_LAB_LOAD_RUNNING" | "OFFLOAD_LAB_RUN_FINISHED" | "OFFLOAD_LAB_LOAD_LIMIT" | "OFFLOAD_LAB_RUNTIME_DISABLED" | "OFFLOAD_LAB_KUBERNETES_DISABLED" | "OFFLOAD_LAB_WORKFLOW_NOT_PUBLISHED" | "INVALID_IDEMPOTENCY_KEY" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE" | "SCHEDULING_PROFILE_INVALID" | "SCHEDULING_PROFILE_NOT_FOUND" | "SCHEDULING_PROFILE_EXPIRED" | "SCHEDULING_PROFILE_MISMATCH" | "SCHEDULING_NO_CANDIDATE" | "SCHEDULING_UNSUPPORTED" | "SCHEDULING_CONFLICT" | "SCHEDULING_DECISION_NOT_FOUND";
+            code: "INVALID_PROFILE" | "DEVICE_PROFILE_RETIRED" | "PROFILE_CONFLICT" | "PROFILE_NOT_FOUND" | "PROFILE_STORE_UNAVAILABLE" | "PAYLOAD_TOO_LARGE" | "INVALID_DEVICE" | "DEVICE_CONFLICT" | "DEVICE_NOT_FOUND" | "NODE_NOT_FOUND" | "NODE_NOT_READY" | "DEVICE_RELEASED" | "STALE_SESSION" | "OBSERVATION_CONFLICT" | "DEVICE_STORE_UNAVAILABLE" | "INVALID_WORKFLOW" | "WORKFLOW_NOT_FOUND" | "WORKFLOW_CONFLICT" | "RUN_NOT_FOUND" | "TASK_NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "CANNOT_CANCEL" | "STREAM_NOT_IMPLEMENTED" | "STREAM_EXECUTION_POLICY_UNSUPPORTED" | "STREAM_RECOVERY_UNSUPPORTED" | "STREAM_SOURCE_INACTIVE" | "WORKFLOW_STORE_UNAVAILABLE" | "INVALID_TASK_ID" | "RESULT_STORE_UNAVAILABLE" | "RESULT_NOT_FOUND" | "RESULT_PREVIEW_UNSUPPORTED" | "RESULT_PREVIEW_BUSY" | "RESULT_JSON_INVALID" | "RESULT_VERIFICATION_FAILED" | "RUNTIME_DISABLED" | "REMOTE_DISABLED" | "REMOTE_PROVIDER_NOT_FOUND" | "REMOTE_CONFIGURATION_CHANGED" | "REMOTE_TELEMETRY_UNSUPPORTED" | "OFFLOAD_SOURCE_CHANGED" | "OFFLOAD_LIMIT" | "OFFLOAD_RECOVERY_UNSUPPORTED" | "OFFLOAD_TARGET_INVALID" | "OFFLOAD_INITIAL_PLACEMENT_INVALID" | "OFFLOAD_NODE_STREAM_UNSUPPORTED" | "OFFLOAD_LAB_BUSY" | "OFFLOAD_LAB_NOT_FOUND" | "OFFLOAD_LAB_STOPPED" | "OFFLOAD_LAB_LOAD_RUNNING" | "OFFLOAD_LAB_RUN_FINISHED" | "OFFLOAD_LAB_GPU_UNSUPPORTED" | "OFFLOAD_LAB_MODE_UNSUPPORTED" | "OFFLOAD_LAB_LOAD_LIMIT" | "OFFLOAD_LAB_RUNTIME_DISABLED" | "OFFLOAD_LAB_KUBERNETES_DISABLED" | "OFFLOAD_LAB_WORKFLOW_NOT_PUBLISHED" | "INVALID_IDEMPOTENCY_KEY" | "OPERATION_NOT_FOUND" | "INVALID_VIRTUAL_DEVICE" | "DEVICE_IN_USE" | "SCHEDULING_PROFILE_INVALID" | "SCHEDULING_PROFILE_NOT_FOUND" | "SCHEDULING_PROFILE_EXPIRED" | "SCHEDULING_PROFILE_MISMATCH" | "SCHEDULING_NO_CANDIDATE" | "SCHEDULING_UNSUPPORTED" | "SCHEDULING_CONFLICT" | "SCHEDULING_DECISION_NOT_FOUND";
             message: string;
         };
         /**
@@ -3284,11 +3284,11 @@ export interface components {
              * @description 최근 READY인 edge 라벨 노드
              */
             edgeNodeId: string;
-            /** @description nodePlacement가 필요합니다. 기본 시험값은 GET의 defaults.offload입니다. */
+            /** @description nodePlacement가 필요합니다. 기본 시험값은 GET의 defaults.offload입니다. 부하 종류는 이 정책에서 정해집니다: GPU 기준(sourceGpuPercent·returnToEdge.gpuPercent)만 있으면 GPU 부하, GPU 기준이 없으면 CPU 부하, 혼합은 400. */
             offload: components["schemas"]["OffloadPolicy"];
         };
         OffloadLabLoadStart: {
-            /** @description busy-loop 프로세스 수(= CPU limit 코어 수) */
+            /** @description CPU 부하: busy-loop 프로세스 수(= CPU limit 코어 수). GPU 부하: 1만 허용(CUDA 커널 1개 프로세스, nvidia GPU 자원 1개). */
             workers: number;
             durationSeconds: number;
         };
@@ -3352,9 +3352,23 @@ export interface components {
                 /** @description 신선한 관측만. 없으면 null(0이 아님) */
                 cpuPercent: number | null;
                 memoryPercent: number | null;
+                /** @description 가장 바쁜 신선한 GPU 관측. 없으면 null(0이 아님) */
                 gpuPercent: number | null;
-                /** Format: date-time */
+                /**
+                 * Format: date-time
+                 * @description cpuPercent 관측 시각(CPU 없으면 memoryPercent)
+                 */
                 observedAt: string | null;
+                /**
+                 * Format: date-time
+                 * @description gpuPercent 관측 시각
+                 */
+                gpuObservedAt: string | null;
+                /**
+                 * @description 노드 inventory allocatable의 GPU 부하용 NVIDIA 자원. null이면 GPU 시험 불가
+                 * @enum {string|null}
+                 */
+                gpuLoadResource: "nvidia.com/gpu.shared" | "nvidia.com/gpu" | null;
             }[];
             /** @description 시험용 기본값(시작 전 화면에서 수정). 운영 정책 기본값이 아닙니다. */
             defaults: {
@@ -7954,7 +7968,7 @@ export interface operations {
                     "application/json": components["schemas"]["OffloadLabSessionSummary"];
                 };
             };
-            /** @description INVALID_WORKFLOW·INVALID_IDEMPOTENCY_KEY */
+            /** @description INVALID_WORKFLOW·INVALID_IDEMPOTENCY_KEY·OFFLOAD_LAB_MODE_UNSUPPORTED(GPU 기준과 CPU·메모리 기준 혼합) */
             400: {
                 headers: {
                     [name: string]: unknown;

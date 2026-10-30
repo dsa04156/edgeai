@@ -4,11 +4,16 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Offload test console access to the runtime namespace: one fixed CPU load program per session generation and read-only Pod
- * observation. Never accepts an image or command from callers and never touches objects without the session/run labels.
+ * Offload test console access to the runtime namespace: one fixed CPU or CUDA GPU load program per session generation and
+ * read-only Pod observation. Never accepts an image or command from callers and never touches objects without the session/run labels.
  */
 public interface OffloadLabGateway {
-    record Load(UUID sessionId,int generation,String nodeName,int workers,int seconds) {}
+    /** NVIDIA extended resources a CUDA load may request, in preference order; the device plugin supplies device and driver. */
+    List<String> GPU_RESOURCES=List.of("nvidia.com/gpu.shared","nvidia.com/gpu");
+    /** gpuResource: the node's advertised GPU extended resource (server inventory) for a GPU load, null for a CPU load. */
+    record Load(UUID sessionId,int generation,String nodeName,int workers,int seconds,String gpuResource) {
+        public Load(UUID sessionId,int generation,String nodeName,int workers,int seconds){this(sessionId,generation,nodeName,workers,seconds,null);}
+    }
     /** role MODEL (runtime Job Pod of the Run) or LOAD; deletingAt is set once Kubernetes started terminating it. */
     record Pod(String role,String name,UUID uid,String nodeName,String phase,boolean ready,UUID attemptId,Integer generation,
             Instant createdAt,Instant startedAt,Instant deletingAt,String reason) {}

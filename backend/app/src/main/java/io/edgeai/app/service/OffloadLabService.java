@@ -21,7 +21,8 @@ import static io.edgeai.app.support.WorkflowInput.*;
 
 /**
  * Offload test console: one ordinary Run of the configured lab workflow on a chosen edge (the node policy moves it, not this
- * service), plus one owned, bounded CPU load Job generation on that edge. Kubernetes calls happen after the database commit;
+ * service), plus one owned, bounded CPU or GPU load Job generation on that edge. The load kind follows the Run's immutable
+ * offload policy: a GPU-only node trigger means a CUDA load on the edge's inventory-advertised NVIDIA resource, otherwise CPU. Kubernetes calls happen after the database commit;
  * the reconciler repeats them, expires load and finishes stops, so a reload or API restart never leaves a running burner.
  */
 @Service
@@ -81,12 +82,14 @@ public class OffloadLabService {
         UUID edge=uuid(input.get("edgeNodeId"));
         var policy=offloadPolicy(input.get("offload"));
         if(policy.nodePlacement()==null)throw new IllegalArgumentException("nodePlacement required");
+        boolean gpu=gpuMode(policy);
         String digest=JSON.digest("edgeai-offload-lab-session-v1",Map.of("edgeNodeId",edge.toString(),"offload",input.get("offload")));
         var previous=sessions.byKey(idempotency);if(previous.isPresent())return replay(previous.get(),digest);
         String reason=disabledReason();
         if(reason!=null)throw error(503,"OFFLOAD_LAB_"+reason,"오프로딩 테스트를 실행할 수 없습니다 ("+reason+").");
         var version=latestVersion().orElseThrow();
         var node=nodes.find(edge).orElseThrow(()->error(404,"NODE_NOT_FOUND","edge 노드를 찾을 수 없습니다."));
+        if(gpu && gpuResource(node)==null)throw gpuUnsupported(node.name());
         var created=transactions.execute(status->{
             var open=sessions.latest().filter(s->!s.state().equals("STOPPED"));
             if(open.isPresent())throw error(409,"OFFLOAD_LAB_BUSY","진행 중인 오프로딩 테스트가 있습니다. 모델 중지 후 다시 시작하세요.");
@@ -144,12 +147,39 @@ public class OffloadLabService {
                 throw error(409,"OFFLOAD_LAB_RUN_FINISHED","모델 실행이 이미 끝났습니다. 모델 중지 후 새 시험을 시작하세요.");
             if(session.loadRunning(now))throw error(409,"OFFLOAD_LAB_LOAD_RUNNING","이 시험의 부하가 이미 실행 중입니다. 부하 중지 후 다시 시작하세요.");
             if(gateway.isEmpty())throw error(503,"OFFLOAD_LAB_KUBERNETES_DISABLED","부하 Job을 만들 Kubernetes 연결이 없습니다.");
+            if(gpuMode(session)) {
+                if(workers!=1)throw new IllegalArgumentException("GPU load uses exactly one worker");
+                if(nodes.find(session.edgeNodeId()).map(OffloadLabService::gpuResource).isEmpty())throw gpuUnsupported(session.edgeNodeName());
+            }
             if(session.loadGeneration()>=1000)throw error(409,"OFFLOAD_LAB_LOAD_LIMIT","시험당 부하 시작 한도를 넘었습니다.");
             sessions.startLoad(id,session.loadGeneration()+1,idempotency,digest,workers,seconds,now);
             return new Creation<>(sessions.find(id,false).orElseThrow(),true);
         });
         if(result.created())submit(result.value());
         return new Creation<>(sessions.find(id,false).orElseThrow(),result.created());
+    }
+    /**
+     * GPU mode is a GPU-only edge trigger with a GPU-only return; a policy without any GPU threshold is CPU mode. Any mix is
+     * rejected so a GPU choice never silently becomes a CPU load (or a CPU load waits for a GPU trigger).
+     */
+    static boolean gpuMode(io.edgeai.domain.execution.OffloadPolicy policy) {
+        var n=policy.nodePlacement();var back=n.returnToEdge();
+        if(n.sourceGpuPercent()==null && (back==null || back.gpuPercent()==null))return false;
+        if(n.sourceGpuPercent()!=null && n.sourceCpuPercent()==null && n.sourceMemoryPercent()==null
+                && back!=null && back.gpuPercent()!=null && back.cpuPercent()==null && back.memoryPercent()==null)return true;
+        throw error(400,"OFFLOAD_LAB_MODE_UNSUPPORTED","GPU 시험은 GPU 과부하·복귀 기준만 사용합니다. CPU·메모리 기준과 함께 쓸 수 없습니다.");
+    }
+    private boolean gpuMode(OffloadLabSession session) {
+        return gpuMode(offloadPolicy(JSON.decode(runs.run(session.runId(),false).orElseThrow().offloadPolicyJson())));
+    }
+    /** The NVIDIA resource the node's inventory advertises (at least one unit), or null; never a caller-supplied name. */
+    static String gpuResource(io.edgeai.domain.node.ExecutionNode node) {
+        Map<?,?> allocatable;
+        try{allocatable=parameters(JSON.decode(node.allocatableJson()));}catch(RuntimeException e){return null;}
+        return OffloadLabGateway.GPU_RESOURCES.stream().filter(r->allocatable.get(r) instanceof String q && q.matches("[1-9][0-9]{0,5}")).findFirst().orElse(null);
+    }
+    private static ControlPlaneException gpuUnsupported(String node) {
+        return error(409,"OFFLOAD_LAB_GPU_UNSUPPORTED","edge "+node+"에 GPU 부하에 쓸 NVIDIA GPU 자원(nvidia.com/gpu.shared 또는 nvidia.com/gpu)이 없습니다.");
     }
     private static int bounded(Object value,int min,int max) {
         if(!(value instanceof Number n) || n.doubleValue()!=Math.rint(n.doubleValue()) || n.doubleValue()<min || n.doubleValue()>max)
@@ -172,7 +202,8 @@ public class OffloadLabService {
     private void submit(OffloadLabSession s) {
         if(gateway.isEmpty() || s.loadJobUid()!=null)return;
         try {
-            var uid=gateway.get().ensureLoad(new OffloadLabGateway.Load(s.id(),s.loadGeneration(),s.edgeNodeName(),s.loadWorkers(),s.loadSeconds()));
+            String gpu=gpuMode(s)?nodes.find(s.edgeNodeId()).map(OffloadLabService::gpuResource).orElseThrow(()->gpuUnsupported(s.edgeNodeName())):null;
+            var uid=gateway.get().ensureLoad(new OffloadLabGateway.Load(s.id(),s.loadGeneration(),s.edgeNodeName(),s.loadWorkers(),s.loadSeconds(),gpu));
             sessions.loadSubmitted(s.id(),s.loadGeneration(),uid);
             var current=sessions.find(s.id(),false).orElseThrow();
             if(current.loadGeneration()!=s.loadGeneration() || !current.loadRunning(clock.instant()))release(s.id(),s.loadGeneration());
@@ -243,7 +274,8 @@ public class OffloadLabService {
                 var m=snapshot==null || !snapshot.status().equals("AVAILABLE")?null:snapshot.items().stream().filter(i->i.nodeName().equals(node.name())).findFirst().orElse(null);
                 var cpu=measurement(m,"CPU_USAGE",false);var memory=measurement(m,"MEMORY_USAGE",false);var gpu=measurement(m,"GPU_USAGE",true);
                 Instant observed=cpu==null?memory==null?null:memory.observedAt():cpu.observedAt();
-                nodeViews.add(new OffloadLabResponse.NodeView(node.id(),node.name(),role,node.architecture(),node.status(now),value(cpu),value(memory),value(gpu),observed));
+                nodeViews.add(new OffloadLabResponse.NodeView(node.id(),node.name(),role,node.architecture(),node.status(now),value(cpu),value(memory),value(gpu),observed,
+                    gpu==null?null:gpu.observedAt(),gpuResource(node)));
             }
             if(page.size()<1000)break;
         }

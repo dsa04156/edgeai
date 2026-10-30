@@ -18,13 +18,14 @@
         <span v-if="observedAt" class="native-note">조회 {{ time(observedAt) }}</span>
       </div>
       <p class="native-note">
-        선택한 엣지에서 숫자 분류 모델을 실행하고 CPU 부하를 걸어, 모델이 워커로 옮겨졌다가 돌아오는지 확인합니다.
+        선택한 엣지에서 숫자 분류 모델을 실행하고 CPU 또는 GPU 부하를 걸어, 모델이 워커로 옮겨졌다가 돌아오는지 확인합니다.
       </p>
       <details class="lab-about">
         <summary>시험 조건</summary>
         <p class="native-note">
-          모델은 손글씨 숫자 분류 MLP(UCI digits로 학습, 64-32-10)를 CPU에서 실제로 추론하고, 부하는 선택한 엣지에 제한
-          시간이 있는 CPU 부하 Job을 실행합니다. GPU 추론이나 성능 측정이 아닙니다. 노드 사용률·Pod는 Prometheus와
+          모델은 손글씨 숫자 분류 MLP(UCI digits로 학습, 64-32-10)를 CPU에서 실제로 추론합니다. CPU 부하는 선택한 엣지에 제한
+          시간이 있는 CPU 부하 Job을, GPU 부하는 같은 엣지의 NVIDIA GPU 1개에 CUDA 연산 Job을 실행합니다. GPU 부하는 엣지 GPU
+          사용률로 이동·복귀하는지 보는 시험이며 모델의 GPU 추론이나 GPU 성능 측정이 아닙니다. 노드 사용률·Pod는 Prometheus와
           Kubernetes의 실제 관측이며, 관측이 없으면 —로 표시합니다.
         </p>
       </details>
@@ -50,16 +51,30 @@
     <section v-if="lab" class="native-panel lab-controls" aria-label="시험 제어">
       <KsForm labelPosition="top" @submit.prevent
         ><div class="lab-edge">
+          <KsFormItem label="부하 종류"
+            ><KsSegmented
+              v-model="form.mode"
+              :options="modes"
+              :disabled="locked"
+              aria-label="부하 종류"
+          /></KsFormItem>
           <KsFormItem label="엣지 노드"
             ><KsSelect v-model="form.edgeNodeId" :disabled="locked" placeholder="엣지 노드 선택"
               ><KsOption
                 v-for="node in edges"
                 :key="node.id"
                 :value="node.id"
-                :disabled="node.status !== 'READY'"
-                :label="`${node.name} · ${node.architecture} · ${node.status} · CPU ${percent(node.cpuPercent)}`" /></KsSelect
+                :disabled="node.status !== 'READY' || (gpuMode && !node.gpuLoadResource)"
+                :label="edgeLabel(node)" /></KsSelect
           ></KsFormItem>
-          <p class="native-note">
+          <p v-if="gpuMode" class="native-note">
+            <template v-if="edgeNode?.gpuLoadResource"
+              >GPU 자원 {{ edgeNode.gpuLoadResource }} 1개 · CUDA 1프로세스 · GPU {{ percent(edgeNode.gpuPercent) }}
+              (관측 {{ time(edgeNode.gpuObservedAt) }}) · 과부하 기준 {{ threshold }}%</template
+            >
+            <template v-else>NVIDIA GPU 자원이 있는 엣지만 선택할 수 있습니다.</template>
+          </p>
+          <p v-else class="native-note">
             {{ edgeCores == null ? "코어 수 알 수 없음" : `${edgeCores}코어` }}
             <template v-if="estimate">
               · 부하 {{ form.workers }}프로세스 ≈ CPU +{{ estimate.added.toFixed(0) }}%p · 예상
@@ -80,7 +95,7 @@
           <fieldset class="lab-group">
             <legend>부하</legend>
             <div class="native-toolbar">
-              <KsFormItem v-for="field in loadFields" :key="field.key" :label="field.label"
+              <KsFormItem v-for="field in loadFields.filter((f) => !gpuMode || f.key !== 'workers')" :key="field.key" :label="field.label"
                 ><KsInputNumber
                   v-model="form[field.key]"
                   :min="field.min"
@@ -96,11 +111,11 @@
         </div></KsForm
       >
       <p v-if="formProblem && (can.start || can.loadStart)" class="native-note">{{ formProblem }}</p>
-      <p v-if="estimate?.insufficient && !loadRunning(session)" class="native-note lab-warning" role="alert">
+      <p v-if="!gpuMode && estimate?.insufficient && !loadRunning(session)" class="native-note lab-warning" role="alert">
         부하가 부족합니다: 예상 {{ estimate.expected.toFixed(0) }}%가 과부하 기준 {{ threshold }}%보다 낮아 모델이 워커로 이동하지 않을 수 있습니다.
         부하 프로세스를 {{ recommended }}개 이상으로 늘리거나 기준을 낮추세요.
       </p>
-      <KsButton v-if="!locked || session?.state === 'ACTIVE'" v-show="form.workers !== recommended" size="small" :disabled="busy || loadRunning(session)" @click="applyPreset">
+      <KsButton v-if="!gpuMode && (!locked || session?.state === 'ACTIVE')" v-show="form.workers !== recommended" size="small" :disabled="busy || loadRunning(session)" @click="applyPreset">
         이 엣지 권장 부하 적용 ({{ recommended }}프로세스)
       </KsButton>
       <NativeFeedback :error="actionError" :notice="notice" />
@@ -129,9 +144,9 @@
           <strong class="lab-node-name">{{ side.node?.name ?? side.empty }}</strong>
           <template v-if="side.node">
             <div class="lab-cpu">
-              <span>CPU <strong>{{ percent(side.node.cpuPercent) }}</strong></span>
+              <span>{{ side.metric.label }} <strong>{{ percent(side.metric.value) }}</strong></span>
               <span class="lab-bar" aria-hidden="true"
-                ><span v-if="side.node.cpuPercent != null" class="lab-fill" :style="{ width: `${Math.min(100, side.node.cpuPercent)}%` }" /><span
+                ><span v-if="side.metric.value != null" class="lab-fill" :style="{ width: `${Math.min(100, side.metric.value)}%` }" /><span
                   v-for="mark in side.marks"
                   :key="mark.label"
                   class="lab-mark"
@@ -139,15 +154,19 @@
               /></span>
               <span class="native-note">{{ side.marks.map((m) => `${m.label} ${m.value}%`).join(" · ") }}</span>
             </div>
-            <span class="native-note">메모리 {{ percent(side.node.memoryPercent) }} · 관측 {{ time(side.node.observedAt) }}</span>
+            <span v-if="side.metric.label === 'GPU'" class="native-note"
+              >GPU 관측 {{ time(side.metric.observedAt) }} · CPU {{ percent(side.node.cpuPercent) }} · 메모리 {{ percent(side.node.memoryPercent) }} · 관측
+              {{ time(side.node.observedAt) }}</span
+            >
+            <span v-else class="native-note">메모리 {{ percent(side.node.memoryPercent) }} · 관측 {{ time(side.node.observedAt) }}</span>
           </template>
           <ul v-if="open" class="lab-pods">
             <li v-for="pod in side.pods" :key="pod.name">
               <span>{{ pod.role === "MODEL" ? "모델" : "부하" }}</span>
               <code :title="pod.name">{{ pod.name }}</code>
               <span class="native-note">UID {{ shortId(pod.uid) }}</span>
-              <KsTag size="small" :type="pod.deletingAt ? 'warning' : pod.ready ? 'success' : 'info'">{{
-                pod.deletingAt ? `종료 중 (${pod.phase})` : pod.phase
+              <KsTag size="small" :type="pod.deletingAt ? 'warning' : pod.phase === 'Failed' ? 'danger' : pod.ready ? 'success' : 'info'">{{
+                pod.deletingAt ? `종료 중 (${pod.phase})` : pod.reason && pod.phase !== 'Running' ? `${pod.phase} · ${pod.reason}` : pod.phase
               }}</KsTag>
             </li>
             <li v-if="!side.pods.length" class="native-note">관측된 Pod 없음</li>
@@ -197,7 +216,7 @@
 
     <details v-if="lab" class="native-panel lab-more">
       <summary>
-        자동 전환 정책 <span class="native-note">과부하 {{ form.sourceCpuPercent }}% · 복귀 {{ form.returnCpuPercent }}% · 최대 전환
+        자동 전환 정책 <span class="native-note">{{ form.mode }} 과부하 {{ threshold }}% · 복귀 {{ returnThreshold }}% · 최대 전환
           {{ form.maxTransfers }}회{{ locked ? " · 실행 중 고정" : "" }}</span>
       </summary>
       <p class="native-note">
@@ -207,7 +226,7 @@
       </p>
       <KsForm labelPosition="top" @submit.prevent
         ><div class="native-grid lab-policy">
-          <KsFormItem v-for="field in policyFields" :key="field.key" :label="field.label"
+          <KsFormItem v-for="field in policyFields.filter((f) => !f.mode || f.mode === form.mode)" :key="field.key" :label="field.label"
             ><KsInputNumber
               v-model="form[field.key]"
               :min="field.min"
@@ -290,11 +309,11 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { KsAlert, KsButton, KsForm, KsFormItem, KsInputNumber, KsOption, KsSelect, KsTag } from "@kestra-io/design-system";
+import { KsAlert, KsButton, KsForm, KsFormItem, KsInputNumber, KsOption, KsSegmented, KsSelect, KsTag } from "@kestra-io/design-system";
 import TopNavBar from "kestra-original/components/layout/TopNavBar.vue";
 import useRouteContext from "kestra-original/composables/useRouteContext";
 import { all, get, pretty, requestKey, time, useAction, usePoll, write, type Schema } from "./native-api";
-import { actionKeys, controls, cores, formFrom, lockedFields, loadEstimate, presetWorkers, loadRunning, modelFailure, runFinished, percent, placement, policyFrom, problem, route, sessionStatus, shortId, stateLabel, timeline, transfers, transition, triggerLabel, type Lab, type LabForm, type NumericField, type OffloadPolicy, type Tone } from "./offload-lab";
+import { actionKeys, controls, cores, formFrom, lockedFields, loadBody, loadEstimate, loadMode, metric, presetWorkers, loadRunning, modelFailure, runFinished, percent, placement, policyFrom, problem, route, sessionStatus, shortId, stateLabel, timeline, transfers, transition, triggerLabel, type Lab, type LabForm, type LabNode, type LoadMode, type NumericField, type OffloadPolicy, type Tone } from "./offload-lab";
 import NativeFeedback from "./NativeFeedback.vue";
 import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
@@ -311,18 +330,36 @@ const keys = actionKeys(requestKey);
 const session = computed(() => lab.value?.session ?? null);
 const can = computed(() => controls(lab.value));
 const locked = computed(() => busy.value || (session.value != null && session.value.state !== "STOPPED"));
-const formProblem = computed(() => (lab.value ? problem(form.value) : ""));
+const formProblem = computed(() => (lab.value ? problem(form.value, lab.value.nodes) : ""));
+// The form mode equals the open session's stored policy (lockedFields), so it is the session's mode while one is open.
+const gpuMode = computed(() => form.value.mode === "GPU");
+const modes: { value: LoadMode; label: string }[] = [
+  { value: "CPU", label: "CPU 부하" },
+  { value: "GPU", label: "GPU 부하" },
+];
 // Core counts come from the node inventory API (Kubernetes capacity); unknown stays unknown.
 const inventory = ref<Schema["ExecutionNode"][]>([]);
 const open = computed(() => session.value != null && session.value.state !== "STOPPED");
 const edgeId = computed(() => (open.value ? session.value!.edgeNodeId : form.value.edgeNodeId));
-const edgeCpu = computed(() => lab.value?.nodes.find((n) => n.id === edgeId.value)?.cpuPercent ?? null);
+const edgeNode = computed(() => lab.value?.nodes.find((n) => n.id === edgeId.value) ?? null);
+const edgeCpu = computed(() => edgeNode.value?.cpuPercent ?? null);
+const edgeLabel = (node: LabNode) =>
+  gpuMode.value
+    ? `${node.name} · ${node.architecture} · ${node.status} · ${node.gpuLoadResource ? `GPU ${percent(node.gpuPercent)}` : "GPU 없음"}`
+    : `${node.name} · ${node.architecture} · ${node.status} · CPU ${percent(node.cpuPercent)}`;
 const edgeCores = computed(() => cores(inventory.value.find((n) => n.id === edgeId.value)?.cpu));
 // A running session keeps its own fixed policy thresholds; the form shows the same values once locked.
 const fixed = computed(() => (open.value ? (session.value!.policy as OffloadPolicy | null)?.nodePlacement : null));
-const threshold = computed(() => fixed.value?.sourceCpuPercent ?? form.value.sourceCpuPercent);
-const recommended = computed(() => presetWorkers(edgeCores.value, threshold.value));
-const estimate = computed(() => (edgeId.value ? loadEstimate(form.value.workers, edgeCores.value, edgeCpu.value, threshold.value) : null));
+const threshold = computed(() =>
+  gpuMode.value ? (fixed.value?.sourceGpuPercent ?? form.value.sourceGpuPercent) : (fixed.value?.sourceCpuPercent ?? form.value.sourceCpuPercent),
+);
+const returnThreshold = computed(() =>
+  gpuMode.value
+    ? (fixed.value?.returnToEdge?.gpuPercent ?? form.value.returnGpuPercent)
+    : (fixed.value?.returnToEdge?.cpuPercent ?? form.value.returnCpuPercent),
+);
+const recommended = computed(() => presetWorkers(edgeCores.value, fixed.value?.sourceCpuPercent ?? form.value.sourceCpuPercent));
+const estimate = computed(() => (edgeId.value && !gpuMode.value ? loadEstimate(form.value.workers, edgeCores.value, edgeCpu.value, threshold.value) : null));
 // The load preset follows the chosen edge only while the user has not typed their own value.
 let presetApplied: number | null = null;
 watch(recommended, (next) => {
@@ -354,9 +391,11 @@ const status = computed<{ text: string; tone: Tone }>(() => {
   const text = `시험 ${sessionStatus(s)}`;
   return { text, tone: s.runState === "FAILED" ? "danger" : s.state === "ACTIVE" && !runFinished(s) ? "success" : "warning" };
 });
-const fields: { key: NumericField; label: string; min: number; max: number; load?: boolean }[] = [
-  { key: "sourceCpuPercent", label: "엣지 과부하 CPU (%) 이상", min: 1, max: 100 },
-  { key: "returnCpuPercent", label: "복귀 CPU (%) 미만", min: 1, max: 100 },
+const fields: { key: NumericField; label: string; min: number; max: number; load?: boolean; mode?: LoadMode }[] = [
+  { key: "sourceCpuPercent", label: "엣지 과부하 CPU (%) 이상", min: 1, max: 100, mode: "CPU" },
+  { key: "returnCpuPercent", label: "복귀 CPU (%) 미만", min: 1, max: 100, mode: "CPU" },
+  { key: "sourceGpuPercent", label: "엣지 과부하 GPU (%) 이상", min: 1, max: 100, mode: "GPU" },
+  { key: "returnGpuPercent", label: "복귀 GPU (%) 미만", min: 1, max: 100, mode: "GPU" },
   { key: "targetMaxCpuPercent", label: "워커 CPU 상한 (%)", min: 1, max: 100 },
   { key: "targetMaxMemoryPercent", label: "워커 메모리 상한 (%)", min: 1, max: 100 },
   { key: "consecutiveSamples", label: "연속 표본 수", min: 2, max: 6 },
@@ -384,11 +423,14 @@ const sides = computed(() => {
     {
       role: "EDGE", title: open.value ? "원래 엣지" : "선택한 엣지", node: edge, empty: "엣지를 선택하세요",
       pods: pods.filter((p) => edge && p.nodeName === edge.name),
-      marks: [{ label: "복귀", value: policy?.returnToEdge?.cpuPercent ?? form.value.returnCpuPercent }, { label: "과부하", value: threshold.value }],
+      // The edge shows the metric its trigger and return use; the worker keeps CPU, which its headroom check uses.
+      metric: metric(edge, form.value.mode),
+      marks: [{ label: "복귀", value: returnThreshold.value }, { label: "과부하", value: threshold.value }],
     },
     {
       role: "WORKER", title: "워커", node: worker, empty: s ? "아직 이동하지 않음" : "—",
       pods: pods.filter((p) => worker && p.nodeName === worker.name),
+      metric: metric(worker, "CPU"),
       marks: [{ label: "수용 상한", value: policy?.targetMaxCpuPercent ?? form.value.targetMaxCpuPercent }],
     },
   ];
@@ -396,9 +438,13 @@ const sides = computed(() => {
 const loadText = computed(() => {
   const load = session.value?.load;
   if (!load || load.desired === "NONE") return "시작 안 함";
-  const what = `${load.workers}프로세스 · ${load.seconds}초 (${load.generation}회차)`;
+  // The session's own stored policy decides, not the editable choice for the next test.
+  const gpuLoad = loadMode(session.value!.policy as OffloadPolicy | null) === "GPU";
+  const what = `${gpuLoad ? "GPU 1개 (CUDA)" : `${load.workers}프로세스`} · ${load.seconds}초 (${load.generation}회차)`;
   const pods = session.value!.pods.items.filter((p) => p.role === "LOAD" && p.generation === load.generation);
-  const physical = session.value!.pods.status !== "OBSERVED" ? "Pod 알 수 없음" : pods.length ? `Pod ${pods.map((p) => (p.deletingAt ? "종료 중" : p.phase)).join(", ")}` : "Pod 없음";
+  // A failed load Pod (e.g. CUDA unavailable) shows its phase and reason; a requested load is not reported as running.
+  const phase = (p: (typeof pods)[number]) => (p.deletingAt ? "종료 중" : p.reason && p.phase !== "Running" ? `${p.phase} (${p.reason})` : p.phase);
+  const physical = session.value!.pods.status !== "OBSERVED" ? "Pod 알 수 없음" : pods.length ? `Pod ${pods.map(phase).join(", ")}` : "Pod 없음";
   const desired = { RUNNING: `실행 요청 · ${time(load.expiresAt)}까지`, STOPPED: "중지 요청", EXPIRED: "시간 만료" }[load.desired] ?? load.desired;
   return `${desired} · ${what} · ${physical}${load.jobUid ? "" : load.desired === "RUNNING" ? " · Job 생성 확인 전" : ""}`;
 });
@@ -456,7 +502,7 @@ function stopModel() {
 function startLoad() {
   const id = session.value?.id;
   if (!id) return;
-  const body = { workers: form.value.workers, durationSeconds: form.value.durationSeconds };
+  const body = loadBody(form.value);
   const name = `load:${id}:${body.workers}:${body.durationSeconds}`;
   run("load", name, () => write(`offload-lab/sessions/${id}/load`, "POST", body, keys.key(name)), "부하 Job 생성을 요청했습니다.");
 }

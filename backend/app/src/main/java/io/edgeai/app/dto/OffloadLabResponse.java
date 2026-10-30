@@ -9,8 +9,9 @@ public record OffloadLabResponse(boolean enabled,String disabledReason,Model mod
     public record Model(String workflowKey,UUID workflowVersionId,String version,String profileKey,String profileVersion,String image,
             List<String> command,List<String> architectures,Map<String,String> resourceRequests,Map<String,Object> taskParameters) {}
     public record Metrics(String status,Instant fetchedAt,int maxAgeSeconds) {}
+    /** observedAt belongs to cpuPercent (memory when CPU is absent), gpuObservedAt to gpuPercent; gpuLoadResource from inventory. */
     public record NodeView(UUID id,String name,String role,String architecture,String status,Double cpuPercent,Double memoryPercent,
-            Double gpuPercent,Instant observedAt) {}
+            Double gpuPercent,Instant observedAt,Instant gpuObservedAt,String gpuLoadResource) {}
     public record Session(UUID id,String state,UUID runId,String runState,UUID edgeNodeId,String edgeNodeName,Object policy,
             Instant createdAt,Instant stoppedAt,UUID taskId,String taskState,String currentNodeName,List<Attempt> attempts,
             List<OffloadOperationResponse> operations,List<Latency> latency,Load load,Pods pods) {}

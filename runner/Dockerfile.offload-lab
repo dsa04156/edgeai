@@ -1,7 +1,7 @@
 # Offload test console workloads on top of the released multi-arch Runner index (COPY only, no RUN; both platforms).
-# Provenance: base = Runner index built by CI from main; added files = runner/examples/offload_lab_*.py and the pinned model artifact.
+# Provenance: base = Runner index built by CI from main; added files = runner/examples/offload_lab_*.py (model, CPU load, GPU load) and the pinned model artifact.
 FROM ghcr.io/dsa04156/edgeai-runner@sha256:ed9a4c7dd286cf845dd4631f90af384f92d6c036f0c18d2d7b512e3a52a1c793
 LABEL org.opencontainers.image.source=https://github.com/dsa04156/edgeai
-LABEL org.opencontainers.image.description="EdgeAI Runner + offload test console model (digits MLP, CPU) and bounded CPU load"
-COPY --chown=10001:10001 runner/examples/offload_lab_model.py runner/examples/offload_lab_load.py /opt/edgeai/examples/
+LABEL org.opencontainers.image.description="EdgeAI Runner + offload test console model (digits MLP, CPU), bounded CPU load and bounded CUDA GPU load"
+COPY --chown=10001:10001 runner/examples/offload_lab_model.py runner/examples/offload_lab_load.py runner/examples/offload_lab_gpu_load.py /opt/edgeai/examples/
 COPY --chown=10001:10001 runner/examples/models/digits-mlp-v1.json /opt/edgeai/examples/models/digits-mlp-v1.json

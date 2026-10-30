@@ -10,8 +10,8 @@ import tools.jackson.databind.json.JsonMapper;
 import static io.edgeai.domain.runtime.RuntimeGatewayException.Reason.*;
 
 /**
- * Offload test console objects in the owned runtime namespace. The load Job always runs the fixed program of the configured,
- * digest-pinned image; every list/delete is scoped by the managed-by and session labels and deletes carry UID preconditions.
+ * Offload test console objects in the owned runtime namespace. The load Job always runs the fixed CPU or GPU program of the
+ * configured, digest-pinned image (a GPU load requests exactly one unit of the inventory-advertised NVIDIA resource); every list/delete is scoped by the managed-by and session labels and deletes carry UID preconditions.
  */
 public final class KubernetesOffloadLabGateway implements OffloadLabGateway {
     static final String MANAGED_BY="edgeai-offload-lab",SESSION="edgeai.io/offload-lab-session",GENERATION="edgeai.io/offload-lab-generation";
@@ -42,11 +42,19 @@ public final class KubernetesOffloadLabGateway implements OffloadLabGateway {
     Map<String,Object> job(Load load) {
         RuntimeNames.dns(load.nodeName(),253);
         if(load.workers()<1 || load.workers()>16 || load.seconds()<30 || load.seconds()>1800 || load.generation()<1)throw new IllegalArgumentException("Load out of range");
+        boolean gpu=load.gpuResource()!=null;
+        if(gpu && (!GPU_RESOURCES.contains(load.gpuResource()) || load.workers()!=1))throw new IllegalArgumentException("GPU load needs one NVIDIA GPU resource and one worker");
         var container=new LinkedHashMap<String,Object>();
         container.put("name","load");container.put("image",image);container.put("imagePullPolicy","IfNotPresent");
-        container.put("command",List.of("python3","/opt/edgeai/examples/offload_lab_load.py"));
-        container.put("args",List.of("--workers",Integer.toString(load.workers()),"--seconds",Integer.toString(load.seconds())));
-        container.put("resources",Map.of("requests",Map.of("cpu","100m","memory","32Mi"),"limits",Map.of("cpu",Integer.toString(load.workers()),"memory","128Mi")));
+        if(gpu) {
+            container.put("command",List.of("python3","/opt/edgeai/examples/offload_lab_gpu_load.py"));
+            container.put("args",List.of("--seconds",Integer.toString(load.seconds())));
+            container.put("resources",Map.of("requests",Map.of("cpu","100m","memory","64Mi",load.gpuResource(),"1"),"limits",Map.of("cpu","1","memory","512Mi",load.gpuResource(),"1")));
+        } else {
+            container.put("command",List.of("python3","/opt/edgeai/examples/offload_lab_load.py"));
+            container.put("args",List.of("--workers",Integer.toString(load.workers()),"--seconds",Integer.toString(load.seconds())));
+            container.put("resources",Map.of("requests",Map.of("cpu","100m","memory","32Mi"),"limits",Map.of("cpu",Integer.toString(load.workers()),"memory","128Mi")));
+        }
         container.put("securityContext",Map.of("allowPrivilegeEscalation",false,"readOnlyRootFilesystem",true,"capabilities",Map.of("drop",List.of("ALL"))));
         container.put("env",List.of(Map.of("name","PYTHONDONTWRITEBYTECODE","value","1")));
         var pod=new LinkedHashMap<String,Object>();

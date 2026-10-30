@@ -1,7 +1,7 @@
 # 오프로딩 테스트 화면
 
 콘솔 **오프로딩 테스트**(`/ui/main/offload-lab`)는 edge 과부하 → worker 이동 → 부하 해제 후 원래 edge 복귀를
-실제 Pod로 보여주는 시험용 화면입니다. 새 배치 엔진이 아니라 [노드 기반 전환](node-placement-offload.md)의
+실제 Pod로 보여주는 시험용 화면입니다. 부하 종류는 모델 실행 전에 **CPU 부하** 또는 **GPU 부하**로 고르며 시험 중에는 고정됩니다. 새 배치 엔진이 아니라 [노드 기반 전환](node-placement-offload.md)의
 `returnToEdge` 정책과 기존 Run·전환 경로를 그대로 사용합니다.
 
 2026-10-29 실제 클러스터에서 웹 버튼으로 모델 실행 → 부하 시작 → worker 이동 → 부하 중지 → 원래 edge 복귀 → 모델 중지를 검증했습니다.
@@ -13,11 +13,17 @@
 |---|---|
 | 모델 | `runner/examples/offload_lab_model.py`. UCI 손글씨 숫자(scikit-learn `load_digits`, CC BY 4.0)로 학습한 MLP 64-32-10을 CPU 순수 Python으로 추론합니다. 가중치·검증 표본은 `runner/examples/models/digits-mlp-v1.json`(sha256 `7a88a173…f5469`, 학습 시 검증 정확도 0.969)이며 실행 시 digest를 확인합니다. 초당 약 20회 추론하고 1회 지연(μs)을 Runner 측정으로 보고하며, 종료 시 추론 수·검증 표본 정확도를 결과로 저장합니다. GPU 추론·성능 측정이 아닙니다. |
 | 학습 | `runner/examples/models/train_digits_mlp.py`(scikit-learn 1.5.2, random_state=0, 80/20 층화 분할)로 재현합니다. 이미지 안에서는 학습하지 않습니다. |
-| 부하 | `runner/examples/offload_lab_load.py`. 세션 edge 하나에 고정 프로그램 Job(프로세스 1–16개, 30–1800초)을 만들어 실제 노드 CPU를 사용합니다. 화면은 이미지·명령을 보내지 않습니다. |
-| 판단 | Prometheus 노드 CPU 관측(약 30초 수집)과 노드 inventory. 관측이 없거나 오래되면 판단하지 않습니다. |
+| CPU 부하 | `runner/examples/offload_lab_load.py`. 세션 edge 하나에 고정 프로그램 Job(프로세스 1–16개, 30–1800초)을 만들어 실제 노드 CPU를 사용합니다. 화면은 이미지·명령을 보내지 않습니다. |
+| GPU 부하 | `runner/examples/offload_lab_gpu_load.py`. ctypes CUDA Driver API로 고정 PTX 연산 커널을 짧게(약 50ms) 반복 실행해 edge GPU를 사용하고, 실행 사이마다 SIGTERM·시간을 확인합니다(30–1800초). 프로세스 1개, Job은 edge inventory `allocatable`의 `nvidia.com/gpu.shared`(없으면 `nvidia.com/gpu`) 1개와 CPU 1·메모리 512Mi limit을 요청하며 runtimeClass·privileged·hostPath를 쓰지 않습니다. CUDA 드라이버·장치가 없으면 `gpu-load-failed`를 출력하고 1로 끝나 부하 Pod가 Failed로 보이며 CPU로 대체하지 않습니다. 모델은 계속 CPU 모델이므로 **GPU 사용률 기준 이동·복귀 시험이지 GPU 추론·성능 측정이 아닙니다.** |
+| 판단 | Prometheus 노드 CPU·GPU 관측(약 30초 수집)과 노드 inventory. 관측이 없거나 오래되면 판단하지 않습니다. 화면의 CPU·GPU 값은 각자의 관측 시각과 함께 표시하고 없으면 —(0% 아님)입니다. |
 
 ## 사용 순서
 
+0. 부하 종류를 고릅니다. **GPU 부하**는 정책을 GPU 기준만으로 보냅니다(과부하 GPU 50%, 복귀 GPU 20%, CPU 기준 없음, 나머지 시험값 동일).
+   inventory에 NVIDIA GPU 자원이 없는 edge(예: Raspberry Pi)는 선택할 수 없고, API도 Run을 만들기 전에 409
+   `OFFLOAD_LAB_GPU_UNSUPPORTED`로 거절합니다. CPU·GPU 기준을 섞은 정책은 400 `OFFLOAD_LAB_MODE_UNSUPPORTED`입니다.
+   부하 종류는 별도 저장 없이 세션 Run의 고정 정책(`sourceGpuPercent` 유무)에서 정해지므로 새로고침해도 유지됩니다.
+   GPU 부하는 프로세스 수 입력·권장 부하·CPU 추정치를 표시하지 않고 항상 1개(`workers=1`)로 요청합니다.
 1. edge 노드와 시험값(과부하 CPU %, 복귀 CPU %, worker 상한, 연속 표본, 대기 시간, 최대 전환 횟수)을 확인합니다.
    기본값은 시험용(과부하 50%, 복귀 20%, 연속 2개, 시작 후 20초·전환 후 30초 대기, 최대 2회, 부하 3프로세스·300초)이며
    운영 정책 기본값이 아닙니다.
@@ -31,6 +37,10 @@
 
 서버 전체에서 열린 시험은 1개입니다. 새로고침·다른 브라우저는 같은 시험을 다시 보여줍니다. 같은 버튼 재시도는
 같은 Idempotency-Key로 재전송되어 두 번째 Run·부하를 만들지 않고, 실행 중 부하가 있으면 새 부하 시작은 409입니다.
+
+GPU 부하의 worker 이동 조건(`NODE_GPU`)과 복귀 조건(`NODE_RETURN`, 원래 edge의 관측된 모든 GPU가 복귀 기준 미만)은 기존
+[노드 기반 전환](node-placement-offload.md) 정책을 그대로 사용합니다. 모델은 GPU를 요청하지 않으므로 worker의 GPU 여유는
+이동 조건이 아니며, 화면의 worker는 CPU 사용률을 표시합니다. 실제 장비에서 GPU 왕복 검증 결과는 아직 기록되지 않았습니다.
 
 ## 정리 보장
 

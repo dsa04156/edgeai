@@ -57,6 +57,29 @@ class KubernetesOffloadLabGatewayTest {
         assertThatThrownBy(()->new KubernetesOffloadLabGateway("http://127.0.0.1:1","","","edgeai-runtimes","edgeai-runner","registry.test/runner:latest"))
             .isInstanceOf(IllegalArgumentException.class);
     }
+    @SuppressWarnings("unchecked") @Test void gpuLoadJobRunsTheFixedCudaProgramWithExactlyOneInventoryGpu() {
+        var job=gateway.job(new Load(session,1,"etri-dev0001-jetorn",1,300,"nvidia.com/gpu.shared"));
+        var spec=(Map<String,Object>)job.get("spec");var pod=(Map<String,Object>)((Map<String,Object>)spec.get("template")).get("spec");
+        var container=(Map<String,Object>)((List<?>)pod.get("containers")).getFirst();
+        assertThat(container.get("image")).isEqualTo(IMAGE);
+        assertThat(container.get("command")).isEqualTo(List.of("python3","/opt/edgeai/examples/offload_lab_gpu_load.py"));
+        assertThat(container.get("args")).isEqualTo(List.of("--seconds","300"));
+        assertThat(container.get("resources")).isEqualTo(Map.of("requests",Map.of("cpu","100m","memory","64Mi","nvidia.com/gpu.shared","1"),
+            "limits",Map.of("cpu","1","memory","512Mi","nvidia.com/gpu.shared","1")));
+        assertThat(spec.get("activeDeadlineSeconds")).isEqualTo(330);
+        // No runtime class, privilege, host path or all-devices access: the device plugin supplies the one allocated GPU.
+        assertThat(pod).doesNotContainKeys("volumes","hostNetwork","hostPID","runtimeClassName");
+        assertThat(json.writeValueAsString(container)).doesNotContain("privileged","NVIDIA_VISIBLE_DEVICES");
+        assertThat(json.writeValueAsString(container.get("securityContext"))).contains("\"allowPrivilegeEscalation\":false","ALL");
+        assertThat(json.writeValueAsString(pod.get("affinity"))).contains("etri-dev0001-jetorn");
+        // CPU load keeps its program and requests no GPU.
+        var cpu=(Map<String,Object>)((List<?>)((Map<String,Object>)((Map<String,Object>)((Map<String,Object>)gateway.job(new Load(session,1,"n",3,300)).get("spec"))
+            .get("template")).get("spec")).get("containers")).getFirst();
+        assertThat(json.writeValueAsString(cpu.get("resources"))).doesNotContain("nvidia");
+        for(var invalid:List.of(new Load(session,1,"n",2,300,"nvidia.com/gpu.shared"),new Load(session,1,"n",1,300,"mobilint.com/npu"),
+                new Load(session,1,"n",1,300,"cpu"),new Load(session,1,"n",1,29,"nvidia.com/gpu")))
+            assertThatThrownBy(()->gateway.job(invalid)).isInstanceOf(IllegalArgumentException.class);
+    }
     @Test void ensureRejectsAnExistingJobOfAnotherOwnerOrImage() {
         var name="edgeai-lab-load-"+session+"-1";
         responses.put("GET /apis/batch/v1/namespaces/edgeai-runtimes/jobs/"+name,Map.of("metadata",Map.of("name",name,"namespace","edgeai-runtimes","uid",UUID.randomUUID().toString(),

@@ -97,15 +97,17 @@ class OffloadLabIntegrationTest {
     @MockitoBean io.edgeai.adapters.storage.S3ArtifactStore storage;
     @MockitoBean io.edgeai.domain.device.DeviceResourceGateway devices;
     private final JsonDocuments json=new JsonDocuments();
-    private ExecutionNode edge;
+    private ExecutionNode edge,gpuEdge,worker;
 
     @SuppressWarnings("unchecked") @BeforeEach void setUp() throws Exception {
         // Single open session per lab: earlier tests' sessions are closed directly, never through Kubernetes.
         jdbc.update("UPDATE edgeai.offload_lab_session SET load_desired=CASE WHEN load_desired='RUNNING' THEN 'STOPPED' ELSE load_desired END,state='STOPPED',stopped_at=now() WHERE state<>'STOPPED' OR load_desired='RUNNING'");
         gateway.broken=false;gateway.beforeDelete=null;gateway.jobs.clear();gateway.terminating.clear();gateway.ensured.clear();gateway.deleted.clear();
         var id=UUID.randomUUID();edge=new ExecutionNode(id,"lab-edge-"+id,"arm64","linux","READY","4","4Gi","{\"node-role.kubernetes.io/edge\":\"\"}",clock.instant(),"{\"cpu\":\"4\",\"memory\":\"4Gi\"}");
-        var worker=new ExecutionNode(UUID.randomUUID(),"lab-worker-"+id,"arm64","linux","READY","8","8Gi","{\"node-role.kubernetes.io/worker\":\"\"}",clock.instant(),"{\"cpu\":\"8\",\"memory\":\"8Gi\"}");
-        nodes.recordSnapshot(List.of(edge,worker),clock.instant());
+        worker=new ExecutionNode(UUID.randomUUID(),"lab-worker-"+id,"arm64","linux","READY","8","8Gi","{\"node-role.kubernetes.io/worker\":\"\"}",clock.instant(),"{\"cpu\":\"8\",\"memory\":\"8Gi\"}");
+        gpuEdge=new ExecutionNode(UUID.randomUUID(),"lab-jetson-"+id,"arm64","linux","READY","6","8Gi","{\"node-role.kubernetes.io/edge\":\"\"}",clock.instant(),
+            "{\"cpu\":\"6\",\"memory\":\"8Gi\",\"nvidia.com/gpu.shared\":\"2\"}");
+        nodes.recordSnapshot(List.of(edge,gpuEdge,worker),clock.instant());
         if(workflows.list(100,0).stream().noneMatch(w->w.key().equals(KEY))) {
             var spec=(Map<String,Object>)json.decode(Files.readString(Path.of("../../contracts/profiles/service-execution.example.json")));
             spec.put("inputs",Map.of());spec.put("timeoutSeconds",1800);spec.put("recovery",Map.of("mode","RESTART"));
@@ -118,6 +120,13 @@ class OffloadLabIntegrationTest {
     @SuppressWarnings("unchecked") private Map<String,Object> offload() {
         return (Map<String,Object>)((Map<String,Object>)json.decode(json.canonical(lab.view().defaults()))).get("offload");
     }
+    /** The console's GPU choice: GPU-only trigger 50% and return 20%, every other lab value unchanged. */
+    @SuppressWarnings("unchecked") private Map<String,Object> gpuOffload() {
+        var offload=offload();var node=(Map<String,Object>)offload.get("nodePlacement");var back=(Map<String,Object>)node.get("returnToEdge");
+        node.put("sourceCpuPercent",null);node.put("sourceGpuPercent",50);back.put("cpuPercent",null);back.put("gpuPercent",20);
+        return offload;
+    }
+    private String gpuStart(UUID edgeId){return json.canonical(Map.of("edgeNodeId",edgeId.toString(),"offload",gpuOffload()));}
     private String start(UUID edgeId){return json.canonical(Map.of("edgeNodeId",edgeId.toString(),"offload",offload()));}
     private static String load(int workers,int seconds){return "{\"workers\":"+workers+",\"durationSeconds\":"+seconds+"}";}
     /** The runtime worker's observation that the model Pod terminated (no Kubernetes here). */
@@ -162,6 +171,35 @@ class OffloadLabIntegrationTest {
         assertThat(gateway.deleted).contains(session.id());
         var second=lab.startLoad(session.id(),UUID.randomUUID().toString(),load(2,60));
         assertThat(second.value().loadGeneration()).isEqualTo(2);assertThat(gateway.ensured.getLast().generation()).isEqualTo(2);
+    }
+    @SuppressWarnings("unchecked") @Test void gpuSessionRunsOneCudaLoadOnTheEdgesInventoryGpuAndRejectsEdgesWithout() {
+        long before=jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run",Long.class);
+        rejected(()->lab.start(UUID.randomUUID().toString(),gpuStart(edge.id())),"OFFLOAD_LAB_GPU_UNSUPPORTED"); // Pi-like edge: no NVIDIA resource.
+        // A CPU and GPU mix (either direction) is no lab mode: never a silent CPU load.
+        var mixed=gpuOffload();var node=(Map<String,Object>)mixed.get("nodePlacement");node.put("sourceCpuPercent",50);((Map<String,Object>)node.get("returnToEdge")).put("cpuPercent",20);
+        rejected(()->lab.start(UUID.randomUUID().toString(),json.canonical(Map.of("edgeNodeId",gpuEdge.id().toString(),"offload",mixed))),"OFFLOAD_LAB_MODE_UNSUPPORTED");
+        var cpuReturningOnGpu=offload();((Map<String,Object>)((Map<String,Object>)cpuReturningOnGpu.get("nodePlacement")).get("returnToEdge")).put("gpuPercent",20);
+        rejected(()->lab.start(UUID.randomUUID().toString(),json.canonical(Map.of("edgeNodeId",gpuEdge.id().toString(),"offload",cpuReturningOnGpu))),"OFFLOAD_LAB_MODE_UNSUPPORTED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edgeai.workflow_run",Long.class)).isEqualTo(before);
+
+        var session=lab.start(UUID.randomUUID().toString(),gpuStart(gpuEdge.id())).value();
+        var policy=(Map<String,Object>)((Map<String,Object>)lab.view().session().policy()).get("nodePlacement");
+        assertThat(((Number)policy.get("sourceGpuPercent")).intValue()).isEqualTo(50);assertThat(policy).containsEntry("sourceCpuPercent",null); // Mode survives reload from the Run.
+        assertThatThrownBy(()->lab.startLoad(session.id(),UUID.randomUUID().toString(),load(3,300))).isInstanceOf(IllegalArgumentException.class);
+        assertThat(lab.startLoad(session.id(),UUID.randomUUID().toString(),load(1,300)).created()).isTrue();
+        assertThat(gateway.ensured).containsExactly(new OffloadLabGateway.Load(session.id(),1,gpuEdge.name(),1,300,"nvidia.com/gpu.shared"));
+        var nodesView=lab.view().nodes();
+        assertThat(nodesView).filteredOn(n->n.id().equals(gpuEdge.id())).singleElement().satisfies(n->{
+            assertThat(n.gpuLoadResource()).isEqualTo("nvidia.com/gpu.shared");
+            assertThat(n.gpuPercent()).isNull();assertThat(n.gpuObservedAt()).isNull(); // No observation is unknown, not 0%.
+        });
+        assertThat(nodesView).filteredOn(n->n.id().equals(edge.id())).singleElement().satisfies(n->assertThat(n.gpuLoadResource()).isNull());
+        // The GPU disappears from inventory: the next load is refused before any Job is requested.
+        lab.stopLoad(session.id(),"{}");
+        nodes.recordSnapshot(List.of(edge,worker,new ExecutionNode(gpuEdge.id(),gpuEdge.name(),"arm64","linux","READY","6","8Gi",gpuEdge.labelsJson(),clock.instant(),
+            "{\"cpu\":\"6\",\"memory\":\"8Gi\"}")),clock.instant());
+        rejected(()->lab.startLoad(session.id(),UUID.randomUUID().toString(),load(1,300)),"OFFLOAD_LAB_GPU_UNSUPPORTED");
+        assertThat(gateway.ensured).hasSize(1);
     }
     @Test void submissionFailureIsRetriedAndExpiredLoadIsRemovedByTheReconciler() {
         var session=lab.start(UUID.randomUUID().toString(),start(edge.id())).value();

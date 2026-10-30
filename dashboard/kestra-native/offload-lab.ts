@@ -4,13 +4,19 @@ type Schema = components["schemas"];
 export type Lab = Schema["OffloadLabState"];
 export type LabSession = Schema["OffloadLabSession"];
 export type OffloadPolicy = NonNullable<Schema["OffloadPolicy"]>;
+export type LabNode = Lab["nodes"][number];
+/** What the load stresses on the edge. Not stored separately: the session's fixed policy decides (GPU-only trigger = GPU). */
+export type LoadMode = "CPU" | "GPU";
 
 /** Editable test preset; every field is sent as entered, nothing is filled in silently. */
-export type NumericField = Exclude<keyof LabForm, "edgeNodeId">;
+export type NumericField = Exclude<keyof LabForm, "edgeNodeId" | "mode">;
 export interface LabForm {
   edgeNodeId: string;
+  mode: LoadMode;
   sourceCpuPercent: number;
   returnCpuPercent: number;
+  sourceGpuPercent: number;
+  returnGpuPercent: number;
   targetMaxCpuPercent: number;
   targetMaxMemoryPercent: number;
   consecutiveSamples: number;
@@ -23,12 +29,21 @@ export interface LabForm {
   durationSeconds: number;
 }
 
+/** GPU when the policy triggers on GPU; null without a node policy. The server rejects mixed CPU/GPU policies. */
+export function loadMode(offload: OffloadPolicy | null | undefined): LoadMode | null {
+  const node = offload?.nodePlacement;
+  return node ? (node.sourceGpuPercent != null ? "GPU" : "CPU") : null;
+}
+
 /** Displayed values of a policy (the session's fixed one, or the preset). */
 function policyFields(offload: OffloadPolicy) {
   const node = offload.nodePlacement!;
   return {
+    mode: loadMode(offload)!,
     sourceCpuPercent: node.sourceCpuPercent ?? 50,
     returnCpuPercent: node.returnToEdge?.cpuPercent ?? 20,
+    sourceGpuPercent: node.sourceGpuPercent ?? 50,
+    returnGpuPercent: node.returnToEdge?.gpuPercent ?? 20,
     targetMaxCpuPercent: node.targetMaxCpuPercent,
     targetMaxMemoryPercent: node.targetMaxMemoryPercent,
     consecutiveSamples: offload.consecutiveSamples,
@@ -87,9 +102,11 @@ export function actionKeys(create: () => string) {
   };
 }
 
-const ranges: [NumericField, string, number, number][] = [
-  ["sourceCpuPercent", "엣지 과부하 CPU", 1, 100],
-  ["returnCpuPercent", "복귀 CPU", 1, 100],
+const ranges: [NumericField, string, number, number, LoadMode?][] = [
+  ["sourceCpuPercent", "엣지 과부하 CPU", 1, 100, "CPU"],
+  ["returnCpuPercent", "복귀 CPU", 1, 100, "CPU"],
+  ["sourceGpuPercent", "엣지 과부하 GPU", 1, 100, "GPU"],
+  ["returnGpuPercent", "복귀 GPU", 1, 100, "GPU"],
   ["targetMaxCpuPercent", "워커 CPU 상한", 1, 100],
   ["targetMaxMemoryPercent", "워커 메모리 상한", 1, 100],
   ["consecutiveSamples", "연속 표본 수", 2, 6],
@@ -98,20 +115,25 @@ const ranges: [NumericField, string, number, number][] = [
   ["minRunningSeconds", "최소 실행 시간", 10, 3600],
   ["cooldownSeconds", "전환 후 대기", 10, 3600],
   ["maxTransfers", "최대 전환 횟수", 1, 8],
-  ["workers", "부하 프로세스 수", 1, 16],
+  ["workers", "부하 프로세스 수", 1, 16, "CPU"],
   ["durationSeconds", "부하 시간", 30, 1800],
 ];
 
-/** The same bounds the API enforces, reported before sending. */
-export function problem(form: LabForm): string {
+/** The same bounds the API enforces, reported before sending; only the chosen mode's thresholds apply. */
+export function problem(form: LabForm, nodes: LabNode[] = []): string {
   if (!form.edgeNodeId) return "엣지 노드를 선택하세요.";
-  for (const [key, label, min, max] of ranges) {
+  if (form.mode === "GPU" && !nodes.find((n) => n.id === form.edgeNodeId)?.gpuLoadResource)
+    return "GPU 시험은 노드 inventory에 NVIDIA GPU 자원이 있는 엣지에서만 할 수 있습니다.";
+  for (const [key, label, min, max, mode] of ranges) {
+    if (mode && mode !== form.mode) continue;
     const value = form[key];
     if (!Number.isInteger(value) || value < min || value > max)
       return `${label}은 ${min}–${max} 사이 정수로 입력하세요.`;
   }
-  if (form.returnCpuPercent >= form.sourceCpuPercent)
+  if (form.mode === "CPU" && form.returnCpuPercent >= form.sourceCpuPercent)
     return "복귀 CPU는 엣지 과부하 CPU보다 낮아야 합니다 (흔들림 방지).";
+  if (form.mode === "GPU" && form.returnGpuPercent >= form.sourceGpuPercent)
+    return "복귀 GPU는 엣지 과부하 GPU보다 낮아야 합니다 (흔들림 방지).";
   if (form.maxTransfers < 2)
     return "왕복(이동 후 복귀)을 보려면 최대 전환 횟수를 2 이상으로 두세요.";
   return "";
@@ -129,12 +151,30 @@ export function policyFrom(lab: Lab, form: LabForm): OffloadPolicy {
     maxTransfers: form.maxTransfers,
     nodePlacement: {
       ...base.nodePlacement!,
-      sourceCpuPercent: form.sourceCpuPercent,
       targetMaxCpuPercent: form.targetMaxCpuPercent,
       targetMaxMemoryPercent: form.targetMaxMemoryPercent,
-      returnToEdge: { cpuPercent: form.returnCpuPercent, memoryPercent: null, gpuPercent: null },
+      ...(form.mode === "GPU"
+        ? {
+            sourceCpuPercent: null,
+            sourceGpuPercent: form.sourceGpuPercent,
+            returnToEdge: { cpuPercent: null, memoryPercent: null, gpuPercent: form.returnGpuPercent },
+          }
+        : {
+            sourceCpuPercent: form.sourceCpuPercent,
+            returnToEdge: { cpuPercent: form.returnCpuPercent, memoryPercent: null, gpuPercent: null },
+          }),
     },
   };
+}
+
+/** Load request body; the server picks the program and GPU resource from the session. A GPU load is one CUDA process. */
+export const loadBody = (form: LabForm) => ({ workers: form.mode === "GPU" ? 1 : form.workers, durationSeconds: form.durationSeconds });
+
+/** The mode's own utilisation and the time that value was observed; null stays unknown (never 0). */
+export function metric(node: LabNode | null | undefined, mode: LoadMode) {
+  return mode === "GPU"
+    ? { label: "GPU", value: node?.gpuPercent ?? null, observedAt: node?.gpuObservedAt ?? null }
+    : { label: "CPU", value: node?.cpuPercent ?? null, observedAt: node?.observedAt ?? null };
 }
 
 export const loadRunning = (session: LabSession | null | undefined) =>
@@ -263,11 +303,12 @@ export function timeline(session: LabSession | null | undefined): LabEvent[] {
       tone: operationTone(op.state),
     });
   const load = session.load;
+  const gpu = loadMode(session.policy as OffloadPolicy | null) === "GPU";
   if (load.desired !== "NONE" && load.startedAt)
     events.push({
       at: load.startedAt,
-      text: `부하 시작 (${load.generation}회차)`,
-      detail: `${load.workers}프로세스 · ${load.seconds}초 · 현재 ${loadDesired[load.desired] ?? load.desired}`,
+      text: `${gpu ? "GPU 부하" : "부하"} 시작 (${load.generation}회차)`,
+      detail: `${gpu ? "GPU 1개" : `${load.workers}프로세스`} · ${load.seconds}초 · 현재 ${loadDesired[load.desired] ?? load.desired}`,
       tone: "warning",
     });
   for (const pod of session.pods.items) {

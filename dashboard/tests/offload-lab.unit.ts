@@ -170,3 +170,67 @@ test("the timeline uses only event timestamps, newest first, and never turns upd
   assert.match(events.find((e) => e.text.startsWith("부하"))!.detail, /현재 시간 만료/);
   assert.ok(!events.some((e) => ["2026-10-30T04:51:30Z", "2026-10-30T04:47:22Z", "2026-10-30T04:47:30Z"].includes(e.at)));
 });
+
+const gpuNodes = [
+  { id: "jetson", name: "etri-dev0001-jetorn", role: "EDGE", status: "READY", cpuPercent: 12, gpuPercent: 64.5, observedAt: "2026-10-30T05:00:00Z", gpuObservedAt: "2026-10-30T05:00:20Z", gpuLoadResource: "nvidia.com/gpu.shared" },
+  { id: "pi", name: "etri-dev0006-raspi5", role: "EDGE", status: "READY", cpuPercent: 5, gpuPercent: null, observedAt: "2026-10-30T05:00:00Z", gpuObservedAt: null, gpuLoadResource: null },
+] as unknown as Lab["nodes"];
+
+test("the GPU choice becomes a GPU-only policy (no CPU threshold) and the CPU choice stays as before", async () => {
+  const { loadBody } = await import("../kestra-native/offload-lab.ts");
+  const l = lab(null);
+  const form = { ...formFrom(l), edgeNodeId: "jetson" };
+  assert.equal(form.mode, "CPU");
+  const gpu = policyFrom(l, { ...form, mode: "GPU" });
+  assert.equal(gpu.nodePlacement?.sourceGpuPercent, 50);
+  assert.equal(gpu.nodePlacement?.sourceCpuPercent, null);
+  assert.deepEqual(gpu.nodePlacement?.returnToEdge, { cpuPercent: null, memoryPercent: null, gpuPercent: 20 });
+  assert.deepEqual([gpu.consecutiveSamples, gpu.minRunningSeconds, gpu.cooldownSeconds, gpu.maxTransfers], [2, 20, 30, 2]);
+  const cpu = policyFrom(l, form);
+  assert.equal(cpu.nodePlacement?.sourceGpuPercent, null);
+  assert.deepEqual(cpu.nodePlacement?.returnToEdge, { cpuPercent: 20, memoryPercent: null, gpuPercent: null });
+  // The load request never carries a mode, image, resource or command; GPU load is always one worker.
+  assert.deepEqual(loadBody({ ...form, mode: "GPU", workers: 7, durationSeconds: 120 }), { workers: 1, durationSeconds: 120 });
+  assert.deepEqual(loadBody({ ...form, workers: 7, durationSeconds: 120 }), { workers: 7, durationSeconds: 120 });
+});
+
+test("GPU mode needs an edge with an inventory GPU and its own hysteresis; CPU-only fields are not checked", () => {
+  const form = { ...formFrom(lab(null)), mode: "GPU" as const, edgeNodeId: "jetson" };
+  assert.equal(problem(form, gpuNodes), "");
+  assert.equal(problem({ ...form, workers: 99, sourceCpuPercent: 10, returnCpuPercent: 90 }, gpuNodes), "");
+  assert.match(problem({ ...form, edgeNodeId: "pi" }, gpuNodes), /NVIDIA GPU/);
+  assert.match(problem({ ...form, edgeNodeId: "unknown" }, gpuNodes), /NVIDIA GPU/);
+  assert.match(problem({ ...form, returnGpuPercent: 50 }, gpuNodes), /복귀 GPU.*낮아야/);
+  assert.match(problem({ ...form, sourceGpuPercent: 0 }, gpuNodes), /1–100/);
+  // CPU mode on a Pi edge is unchanged.
+  assert.equal(problem({ ...form, mode: "CPU", edgeNodeId: "pi" }, gpuNodes), "");
+});
+
+test("a reloaded GPU session restores the GPU choice from its stored policy", async () => {
+  const { lockedFields, loadMode } = await import("../kestra-native/offload-lab.ts");
+  const saved = { ...offload, nodePlacement: { ...offload.nodePlacement, sourceCpuPercent: null, sourceGpuPercent: 60, returnToEdge: { cpuPercent: null, memoryPercent: null, gpuPercent: 15 } } };
+  const open = lab(session({ edgeNodeId: "jetson", policy: saved, load: { desired: "RUNNING", workers: 1, seconds: 600 } } as Partial<LabSession>));
+  const form = formFrom(open);
+  assert.equal(form.mode, "GPU");
+  assert.equal(form.sourceGpuPercent, 60);
+  assert.equal(form.returnGpuPercent, 15);
+  assert.equal(form.edgeNodeId, "jetson");
+  assert.equal(loadMode(saved), "GPU");
+  assert.equal(loadMode(offload), "CPU");
+  assert.equal(loadMode(null), null);
+  assert.equal(lockedFields(lab(session({ state: "STOPPED", policy: saved }))).mode, undefined);
+});
+
+test("the edge metric is the chosen mode's own value and observation time; absent is unknown, never 0", async () => {
+  const { metric, timeline } = await import("../kestra-native/offload-lab.ts");
+  assert.deepEqual(metric(gpuNodes[0], "GPU"), { label: "GPU", value: 64.5, observedAt: "2026-10-30T05:00:20Z" });
+  assert.deepEqual(metric(gpuNodes[0], "CPU"), { label: "CPU", value: 12, observedAt: "2026-10-30T05:00:00Z" });
+  assert.deepEqual(metric(gpuNodes[1], "GPU"), { label: "GPU", value: null, observedAt: null });
+  const gpuPolicy = { ...offload, nodePlacement: { ...offload.nodePlacement, sourceCpuPercent: null, sourceGpuPercent: 50, returnToEdge: { cpuPercent: null, memoryPercent: null, gpuPercent: 20 } } };
+  const events = timeline(session({
+    createdAt: "2026-10-30T05:00:00Z", stoppedAt: null, runState: "RUNNING", attempts: [], operations: [], policy: gpuPolicy,
+    load: { desired: "RUNNING", generation: 1, workers: 1, seconds: 300, startedAt: "2026-10-30T05:01:00Z", expiresAt: "2026-10-30T05:06:00Z" },
+    pods: { status: "OBSERVED", items: [] },
+  } as unknown as Partial<LabSession>));
+  assert.match(events.find((e) => e.text.startsWith("GPU 부하"))!.detail, /^GPU 1개 · 300초/);
+});
