@@ -1,6 +1,6 @@
 # AI 모델 관리 시험 기록 (2026-10-30)
 
-기준 커밋 `3419303`(origin/main) 위 작업 트리 `ai-model-catalog`의 미커밋 변경. 운영 배포·운영 DB 등록·push는 하지 않았습니다. 가이드: [AI 모델 관리](../guides/ai-model-catalog.md).
+구현 `f2c71f2`, 검토 보완 `b56927f`, 최신 오프로딩 화면 변경을 보존한 병합 소스 `ea88b51`. 아래 시험은 격리 DB 및 로컬 API에서 수행했습니다. 운영 반영 결과는 후속 배포 기록에 구분합니다. 가이드: [AI 모델 관리](../guides/ai-model-catalog.md).
 
 ## 환경
 
@@ -64,6 +64,15 @@
 
 ## 남은 사항
 
-- 운영 반영(API 이미지·콘솔·V71 적용·dev overlay의 `EDGEAI_AI_MODELS_REGISTRY_URL`)은 하지 않았습니다.
+- 운영 반영은 아래 이미지 고정 및 GitOps 동기화 뒤 검증합니다. 운영 DB에 시험 모델을 등록하지 않습니다.
 - 워크플로 연동, SERVICE 발행, 실행·측정은 후속입니다. 이 기능은 3-3 전체 완료가 아닙니다.
 - Bearer 토큰 방식 Registry 인증은 지원하지 않습니다(현재 Registry는 인증 없음, Basic만 선택 지원).
+
+## 최종 통합 검토·패키징
+
+- 별도 Codex 리뷰어는 `agent-update-prompt`로 시작하지 못했습니다. 프로젝트 AGENTS의 예외에 따라 조정자가 요구사항 충족과 코드 품질·회귀 위험을 실제 diff와 시험 결과로 직접 검토했습니다. 발견한 세 결함은 위 1차 수정에서 해결했으며, 수정 diff를 다시 검토했습니다. 훅 신뢰나 도구 설정은 변경하지 않았습니다.
+- 병합 소스 `ea88b51`: UI 단위 시험 148/148, typecheck·lint·콘솔 release 빌드 통과, backend bootJar 성공. 다른 작업의 오프로딩 화면·기존 이미지 고정 설정을 보존했습니다.
+- 원본 Dockerfile과 같은 고정 JRE/Node 최종 기반 이미지에 검증한 로컬 JAR·콘솔 release를 COPY하여 linux/amd64 이미지를 패키징했습니다. 빌드 중 RUN 또는 아키텍처 에뮬레이션은 없습니다. 이미지 revision label은 `ea88b5170a8171a304c61da718082a08e8ae2854`입니다.
+- api: `10.254.192.47:5000/edgeai-api@sha256:d8562c314a36f44dbd65c61e546906b5ee244b8a2efb23ccbc89966153d62d0b`
+- dashboard: `10.254.192.47:5000/edgeai-dashboard@sha256:37f126ef2302699a6d6bef76bc8ede8ed9aeab4020104e4a28ed870237f3cbb9`
+- 배포 직전 PostgreSQL custom dump SHA256: `aec5dfc6248c27cd8bbd59fd9eb18d37ebffffde4849f07f72959d7a8560bd1b`. 비공개 로컬 백업과 직전 Deployment 명세를 보존합니다.
