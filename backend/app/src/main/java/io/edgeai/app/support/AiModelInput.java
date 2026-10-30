@@ -32,16 +32,19 @@ public final class AiModelInput {
             map.put("execution", AiModelDocuments.ordered("command", command, "args", args));
             map.put("inputConditions", inputConditions);
             map.put("runtime", runtime);
-            map.put("resources", AiModelDocuments.resources(cpu, memory, accelerators));
+            // Omitted requirements stay null (measured later); a request that has them fingerprints exactly as before.
+            map.put("resources", declared() ? AiModelDocuments.resources(cpu, memory, accelerators) : null);
             map.put("resourceProfileId", resourceProfileId == null ? null : resourceProfileId.toString());
             return map;
         }
         public String fingerprint() { return JSON.digest(FINGERPRINT_SCOPE, normalized()); }
+        /** False when the registration declares no requirements: they are measured and confirmed later. */
+        public boolean declared() { return cpu != null; }
     }
 
     public static Register register(String body) {
-        var map = fields(JSON.parse(body, MAX_BYTES), Set.of("modelKey", "displayName", "modelVersion", "image", "resources"),
-            Set.of("description", "configName", "execution", "inputConditions", "runtime", "resourceProfileId"));
+        var map = fields(JSON.parse(body, MAX_BYTES), Set.of("modelKey", "displayName", "modelVersion", "image"),
+            Set.of("description", "configName", "execution", "inputConditions", "runtime", "resourceProfileId", "resources"));
         JSON.boundedCanonical(map, MAX_BYTES);
         String key = text(map.get("modelKey"), 100);
         if (!key.matches(AiModelExecution.KEY)) throw new IllegalArgumentException("모델 키는 소문자로 시작하는 영문 소문자·숫자·._- 100자 이하입니다.");
@@ -65,11 +68,16 @@ public final class AiModelInput {
             command = strings(e.get("command"), "command");
             args = strings(e.get("args"), "args");
         }
+        UUID resourceProfileId = map.get("resourceProfileId") == null ? null : WorkflowInput.uuid(map.get("resourceProfileId"));
+        if (map.get("resources") == null) {
+            if (resourceProfileId != null) throw new IllegalArgumentException("자원 프로파일 근거를 인용하려면 그 요구량(resources)도 함께 보내야 합니다.");
+            return new Register(key, display, version, description, config, image, command, args,
+                inputConditions(map.get("inputConditions")), runtime(map.get("runtime")), null, null, List.of(), null);
+        }
         var resources = fields(map.get("resources"), Set.of("cpu", "memory"), Set.of("accelerators"));
         return new Register(key, display, version, description, config, image, command, args,
             inputConditions(map.get("inputConditions")), runtime(map.get("runtime")),
-            cpu(resources.get("cpu")), memory(resources.get("memory")), accelerators(resources.get("accelerators")),
-            map.get("resourceProfileId") == null ? null : WorkflowInput.uuid(map.get("resourceProfileId")));
+            cpu(resources.get("cpu")), memory(resources.get("memory")), accelerators(resources.get("accelerators")), resourceProfileId);
     }
 
     /** Optional exec form; an empty list is normalised to "not specified" so both spellings fingerprint alike. */

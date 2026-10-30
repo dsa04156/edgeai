@@ -612,3 +612,59 @@ test("resource profile routes use the management session with exact methods, fix
     await Promise.all([proxy, management, workflow].map((server) => new Promise((resolve) => server.close(resolve))));
   }
 });
+
+test("model profiling routes are fixed paths under one model with exact methods and the management session", async () => {
+  const calls = [];
+  const management = createServer(async (req, res) => {
+    for await (const chunk of req) void chunk;
+    calls.push({ method: req.method, path: req.url, cookie: req.headers.cookie, idempotency: req.headers["idempotency-key"] });
+    res.setHeader("Content-Type", "application/json");
+    res.statusCode = req.method === "POST" ? 201 : 200;
+    res.end("{}");
+  });
+  const workflow = createServer((req, res) => { res.statusCode = 500; res.end(); });
+  const listen = async (server) => {
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const middleware = createDeviceRegistrationMiddleware({ managementUrl: await listen(management), workflowUrl: await listen(workflow) });
+  const proxy = createServer((req, res) => middleware(req, res, () => { res.statusCode = 404; res.end(); }));
+  const url = await listen(proxy);
+  const model = "00000000-0000-4000-8000-0000000000d1", run = "00000000-0000-4000-8000-0000000000e1";
+  try {
+    const headers = {
+      Cookie: "EDGEAI_SESSION=management-session; EDGEAI_WORKFLOW_SESSION=workflow-session",
+      Origin: url, "X-CSRF-TOKEN": "management-token", "Idempotency-Key": run, "Content-Type": "application/json",
+    };
+    const reads = [
+      `ai-models/${model}/profiling/options`,
+      `ai-models/${model}/profiling-runs?limit=20`,
+      `ai-models/${model}/profiling-runs/${run}`,
+      `ai-models/${model}/resource-profiles`,
+      `ai-models/${model}/resource-profiles/${run}`,
+    ];
+    for (const path of reads) assert.equal((await fetch(`${url}/api/control-plane/${path}`, { headers })).status, 200, path);
+    const posts = [`ai-models/${model}/profiling-runs`, `ai-models/${model}/profiling-runs/${run}/cancel`, `ai-models/${model}/resource-profiles`];
+    for (const path of posts) assert.equal((await fetch(`${url}/api/control-plane/${path}`, { method: "POST", headers, body: "{}" })).status, 201, path);
+    assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [...reads.map((path) => `GET /api/v1/${path}`), ...posts.map((path) => `POST /api/v1/${path}`)]);
+    assert.ok(calls.every((call) => call.cookie === "EDGEAI_SESSION=management-session"));
+    assert.equal(calls.at(-1).idempotency, run);
+    // A 64 KiB sample body still fits once JSON-escaped; anything far larger is refused before the API.
+    const sample = JSON.stringify({ load: { type: "HTTP", body: '"'.repeat(65536) } });
+    assert.equal((await fetch(`${url}/api/control-plane/ai-models/${model}/profiling-runs`, { method: "POST", headers, body: sample })).status, 201);
+    assert.equal((await fetch(`${url}/api/control-plane/ai-models/${model}/profiling-runs`, { method: "POST", headers, body: "x".repeat(600 * 1024) })).status, 413);
+    assert.equal((await fetch(`${url}/api/control-plane/ai-models/${model}/resource-profiles`, { method: "POST", headers, body: "x".repeat(70_000) })).status, 413);
+    const count = calls.length;
+    for (const [path, method, expected] of [
+      [`ai-models/${model}/profiling-runs/${run}`, "DELETE", 405],
+      [`ai-models/${model}/profiling-runs/${run}/cancel`, "GET", 405],
+      [`ai-models/${model}/profiling/options`, "POST", 405],
+      [`ai-models/${model}/profiling-runs/not-a-uuid`, "GET", 404],
+      [`ai-models/${model}/profiling-runs/${run}/logs`, "GET", 404],
+    ])
+      assert.equal((await fetch(`${url}/api/control-plane/${path}`, { method, headers, body: method === "GET" || method === "DELETE" ? undefined : "{}" })).status, expected, `${method} ${path}`);
+    assert.equal(calls.length, count);
+  } finally {
+    await Promise.all([proxy, management, workflow].map((server) => new Promise((resolve) => server.close(resolve))));
+  }
+});

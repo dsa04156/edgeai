@@ -1,0 +1,16 @@
+{
+  "apiVersion": "v1", "kind": "List", "items": [
+    {"apiVersion":"v1","kind":"Namespace","metadata":{"name":"edgeai-model-profiling","labels":{"app.kubernetes.io/part-of":"edgeai","app.kubernetes.io/managed-by":"edgeai-bootstrap",
+      "pod-security.kubernetes.io/enforce":"restricted","pod-security.kubernetes.io/enforce-version":"latest"}}},
+    {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"edgeai-model-profiler","namespace":"edgeai-model-profiling","labels":{"app.kubernetes.io/part-of":"edgeai","app.kubernetes.io/managed-by":"edgeai-bootstrap"}},"automountServiceAccountToken":false},
+    {"apiVersion":"v1","kind":"ResourceQuota","metadata":{"name":"edgeai-model-profiling","namespace":"edgeai-model-profiling","labels":{"app.kubernetes.io/part-of":"edgeai","app.kubernetes.io/managed-by":"edgeai-bootstrap"}},
+      "spec":{"hard":{"count/jobs.batch":"4","pods":"4","limits.cpu":"32","limits.memory":"64Gi","limits.ephemeral-storage":"8Gi"}}},
+    {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"name":"edgeai-model-profiling-controller","namespace":"edgeai-model-profiling","labels":{"app.kubernetes.io/part-of":"edgeai","app.kubernetes.io/managed-by":"edgeai-bootstrap"}},"rules":[
+      {"apiGroups":["batch"],"resources":["jobs"],"verbs":["get","list","create","patch","delete"]},
+      {"apiGroups":[""],"resources":["pods"],"verbs":["get","list"]}
+    ]},
+    {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"RoleBinding","metadata":{"name":"edgeai-model-profiling-controller","namespace":"edgeai-model-profiling","labels":{"app.kubernetes.io/part-of":"edgeai","app.kubernetes.io/managed-by":"edgeai-bootstrap"}},
+      "roleRef":{"apiGroup":"rbac.authorization.k8s.io","kind":"Role","name":"edgeai-model-profiling-controller"},
+      "subjects":[{"kind":"ServiceAccount","name":"edgeai-control-plane","namespace":"edgeai"}]}
+  ]
+}

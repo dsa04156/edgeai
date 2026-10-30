@@ -1,17 +1,19 @@
 # AI 모델 관리
 
-AI 서비스는 전체 워크플로이며, 이 화면은 그 안에서 쓸 **AI 모델의 실행 이미지와 자원 요구량**을 모델 버전·실행 구성별로 등록·조회합니다.
-콘솔 `AI 모델 관리`(`/ui/main/ai-models`)와 `AiModel` API 7개 operation을 제공합니다.
+AI 서비스는 전체 워크플로이며, 이 화면은 그 안에서 쓸 **AI 모델의 실행 이미지와 실행 조건**을 모델 버전·실행 구성별로 등록·조회하고,
+등록 이미지로 띄운 임시 측정 Pod에서 자원 요구량을 측정·확정합니다. 흐름은 `모델 등록 → 측정 → 요구량 확정 → 사용 가능`입니다.
+콘솔 `AI 모델 관리`(`/ui/main/ai-models`)와 `AiModel` API를 제공하며, 측정은 [AI 모델 자원 측정](ai-model-profiling.md)에 정리합니다.
 
 ## 범위
 
 | 지금 제공 | 후속(이번 범위 아님) |
 |---|---|
 | 기존 Registry 이미지 검색·선택·digest 검증, 모델 등록·목록 검색/페이지·상세 | 워크플로 노드 선택·추가, `resources` 자동 주입, Pod YAML 생성, 오프로딩 |
-| CPU·메모리·GPU/NPU 요구량(수동 입력 또는 기존 자원 프로파일 재사용) | 모델 실행·측정, 기존 `모델 추론`(inference/models) 교체 |
+| 임시 측정 Pod(소유 Job 1개, 유한 시간)의 실제 추론 부하 측정과 요구량 확정·사용 가능 판정([측정](ai-model-profiling.md)) | 서비스 운영 실행, 기존 `모델 추론`(inference/models) 교체 |
+| 등록 시 요구량 선언(선택, 수동 입력 또는 기존 자원 프로파일 재사용) | 시험 중 자동 자원 조절(VPA/HPA), 장치 분할(HAMi) |
 | 불변 등록·중복 방지·재전송(Idempotency-Key) | 웹 이미지 업로드(tar)·외부 이미지 복사·이미지 빌드·새 Registry 설치 |
 
-- 등록은 SERVICE 실행 모듈을 발행하지 않으며 기존 워크플로에서 자동으로 보이지 않습니다. 실행·자원 예약·HAMi/VPA·워커 설치도 하지 않습니다.
+- 등록은 SERVICE 실행 모듈을 발행하지 않으며 기존 워크플로에서 자동으로 보이지 않습니다. 측정 Pod 외의 실행·자원 예약·HAMi/VPA·워커 설치는 하지 않습니다.
 - 요구량 선언은 자원 보장이 아니며, 이 기능은 과제 3-3 전체 완료를 뜻하지 않습니다. 3-3 범위는 [PLAN](../../PLAN.md#3-3-자원-프로파일링-계획)을 따릅니다.
 
 ## 이미지 준비: 기존 Registry로 push
@@ -34,7 +36,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t 10.254.192.47:5000/edg
 1. **모델 등록** — 목록 화면에서 `모델 등록`을 열고 모델 키(`^[a-z][a-z0-9._-]{0,99}$`), 표시 이름, 모델 버전, 실행 구성명(기본 `default`)을 입력합니다. 같은 모델·버전에 장치·이미지·입력 조건이 다른 구성은 실행 구성명을 바꿔 추가합니다.
 2. **실행 이미지** — 저장소를 목록(`_catalog`, `저장소 더 보기`)에서 고르거나 직접 입력하고, 태그를 고르거나 태그·digest를 입력한 뒤 `이미지 확인`을 누릅니다. 서버가 manifest를 읽어 digest와 플랫폼을 보여 줍니다. index는 실제 선언된 플랫폼만, 단일 이미지는 config의 OS·아키텍처를 보여 주며 linux/amd64·linux/arm64만 등록할 수 있습니다.
 3. **실행 구성** — 실행 명령·인자(선택, 비우면 이미지 기본값), 입력 조건(`key=value`), 런타임을 입력합니다.
-4. **자원 요구량** — 비어 있는 칸에 CPU(`250m`·`0.25`)·메모리(`512Mi`·bytes) 최소/요청/최대와 GPU/NPU 요구량을 입력합니다. 단위·범위 규칙은 [서비스 자원 프로파일](resource-profiling.md#값과-단위)과 같습니다. 직접 입력한 값은 **사용자 지정(MANUAL)·미측정(UNMEASURED)** 이며 자동 산정이 아닙니다.
+4. **자원 요구량(선택)** — 비워 두면 요구량 없이 등록하고 상세에서 측정·확정합니다(`requirements: null`). 선언하려면 비어 있는 칸에 CPU(`250m`·`0.25`)·메모리(`512Mi`·bytes) 최소/요청/최대와 GPU/NPU 요구량을 입력합니다. 단위·범위 규칙은 [서비스 자원 프로파일](resource-profiling.md#값과-단위)과 같습니다. 직접 입력한 값은 **사용자 지정(MANUAL)·미측정(UNMEASURED)** 이며 자동 산정이 아니고, 사용 가능(READY) 판정에 쓰지 않습니다.
 5. **등록** — 성공하면 목록을 다시 조회하고 저장된 상세를 엽니다. 실패하면 입력을 유지합니다. 같은 내용을 다시 등록하면 같은 요청 키를 써 중복되지 않습니다.
 
 ### 기존 자원 프로파일 재사용(선택)
@@ -73,6 +75,8 @@ index를 등록하면 `image.digest`는 index digest, `image.platformManifestDig
 | `registerAiModel` | `POST /api/v1/ai-models`(`Idempotency-Key`, CSRF) |
 | `listAiModels` | `GET /api/v1/ai-models?q&limit&offset` |
 | `getAiModel` | `GET /api/v1/ai-models/{modelId}` |
+
+모델 응답에는 서버가 판단한 `availability`(READY/NOT_READY)가 붙습니다. 측정·확정 operation 8개는 [측정 가이드](ai-model-profiling.md#api)에 있습니다.
 
 - 같은 (모델 키, 버전, 실행 구성명)은 409 `AI_MODEL_VERSION_EXISTS`. 같은 Idempotency-Key·같은 정규화 입력은 Registry 상태와 무관하게 저장된 결과를 200으로, 다른 입력은 409 `IDEMPOTENCY_CONFLICT`. 동시 등록은 advisory lock과 유니크 제약으로 하나만 저장됩니다.
 - 저장소: Flyway `V71__ai_model_catalog.sql`의 `edgeai.ai_model_execution`(불변 trigger, 요청 fingerprint·문서 digest, 선택 `resource_profile_id` FK).

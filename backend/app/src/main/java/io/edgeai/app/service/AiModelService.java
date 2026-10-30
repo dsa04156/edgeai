@@ -22,7 +22,8 @@ import static io.edgeai.app.support.AiModelDocuments.ordered;
 import static io.edgeai.app.support.WorkflowInput.JSON;
 
 /**
- * Registers immutable AI model execution entries. The image is verified against the configured registry outside
+ * Registers immutable AI model execution entries. Resource requirements are optional: an entry registered without them is
+ * measured afterwards ({@link ModelProfilingService}) and becomes usable only through a confirmed profile. The image is verified against the configured registry outside
  * any DB transaction; the insert runs in one transaction under advisory locks so replays, conflicting keys and
  * concurrent registrations of the same (model, version, configuration) resolve consistently. A replay of an
  * already stored request is answered from the stored fingerprint without contacting the registry.
@@ -86,8 +87,12 @@ public class AiModelService {
         document.put("execution",ordered("command",input.command(),"args",input.args()));
         document.put("inputConditions",input.inputConditions());
         document.put("runtime",input.runtime());
-        var requirements=ordered("source",requirement.source().name(),"measurementStatus",requirement.status());
-        requirements.put("resources",AiModelDocuments.resources(input.cpu(),input.memory(),input.accelerators()));
+        // Without declared requirements the entry is registered first and measured later (requirements: null).
+        Map<String,Object> requirements=null;
+        if(input.declared()) {
+            requirements=ordered("source",requirement.source().name(),"measurementStatus",requirement.status());
+            requirements.put("resources",AiModelDocuments.resources(input.cpu(),input.memory(),input.accelerators()));
+        }
         document.put("requirements",requirements);
         document.put("resourceProfile",requirement.profile());
         document.put("evidence",requirement.evidence());
@@ -128,6 +133,7 @@ public class AiModelService {
      */
     @SuppressWarnings("unchecked")
     private Requirement requirement(AiModelInput.Register input,String host,VerifiedImage verified) {
+        if(!input.declared())return new Requirement(Source.MANUAL,"UNMEASURED",null,null);
         if(input.resourceProfileId()==null) {
             requireManual(input,"분석·프로파일 근거 없이 직접 입력한 요구량은 사용자 지정(MANUAL)이어야 합니다.");
             return new Requirement(Source.MANUAL,"UNMEASURED",null,null);

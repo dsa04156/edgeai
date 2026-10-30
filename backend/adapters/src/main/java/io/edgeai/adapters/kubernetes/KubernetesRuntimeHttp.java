@@ -32,17 +32,25 @@ final class KubernetesRuntimeHttp implements AutoCloseable {
         if(origin.getScheme().equals("http"))builder.version(HttpClient.Version.HTTP_1_1);
         if(!caFile.isBlank())builder.sslContext(tls(caFile));client=builder.build();
     }
-    Reply request(String method,String path,Object body,Duration timeout) {
+    Reply request(String method,String path,Object body,Duration timeout) { return request(method,path,body,timeout,"application/json"); }
+    /**
+     * {@code timeout} bounds the whole exchange, response body included: {@link HttpRequest#timeout} alone ends at the
+     * response headers, so a server that sends headers and then stalls the body would otherwise block the caller forever.
+     */
+    Reply request(String method,String path,Object body,Duration timeout,String contentType) {
+        CompletableFuture<HttpResponse<byte[]>> future=null;
         try {
             var request=HttpRequest.newBuilder(origin.resolve(path)).timeout(timeout).header("Accept","application/json");
             if(!tokenFile.isBlank())request.header("Authorization","Bearer "+Files.readString(Path.of(tokenFile)).trim());
             var data=body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body));
-            if(body!=null)request.header("Content-Type","application/json");
-            var response=client.send(request.method(method,data).build(),info->new LimitedBody());
+            if(body!=null)request.header("Content-Type",contentType);
+            future=client.sendAsync(request.method(method,data).build(),info->new LimitedBody());
+            var response=future.get(timeout.toNanos(),TimeUnit.NANOSECONDS);
             return new Reply(response.statusCode(),response.body());
-        } catch(InterruptedException e) { Thread.currentThread().interrupt();throw new RuntimeGatewayException(UNAVAILABLE); }
-          catch(Exception e) { throw new RuntimeGatewayException(UNAVAILABLE); }
+        } catch(InterruptedException e) { cancel(future);Thread.currentThread().interrupt();throw new RuntimeGatewayException(UNAVAILABLE); }
+          catch(Exception e) { cancel(future);throw new RuntimeGatewayException(UNAVAILABLE); }
     }
+    private static void cancel(CompletableFuture<?> future){if(future!=null)future.cancel(true);} // aborts the exchange and its connection
     private static SSLContext tls(String file) {
         try(var stream=Files.newInputStream(Path.of(file))) {
             var store=KeyStore.getInstance(KeyStore.getDefaultType());store.load(null,null);int i=0;
@@ -52,7 +60,11 @@ final class KubernetesRuntimeHttp implements AutoCloseable {
             var context=SSLContext.getInstance("TLS");context.init(null,trust.getTrustManagers(),null);return context;
         } catch(Exception e) { throw new IllegalArgumentException("Cannot configure Kubernetes CA"); }
     }
-    public void close() { client.close(); }
+    /** Aborts exchanges still in flight and waits briefly; never blocks on a stalled server (unlike {@link HttpClient#close}). */
+    public void close() {
+        client.shutdownNow();
+        try{client.awaitTermination(Duration.ofSeconds(2));}catch(InterruptedException e){Thread.currentThread().interrupt();}
+    }
     private static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final HttpResponse.BodySubscriber<byte[]> delegate=HttpResponse.BodySubscribers.ofByteArray();
         private Flow.Subscription subscription;private long size;

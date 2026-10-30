@@ -42,7 +42,7 @@ Kestra 원본 Vue 콘솔, Spring Boot와 PostgreSQL을 기반으로 Kubernetes·
 - [첫 프로필 등록](docs/getting-started/first-profile.md): 등록·조회·정리 실습
 - [연속 가상 센서](docs/guides/vd-processing.md): 입력·계산·출력 등록과 운영 활성화 조건
 - [서비스 자원 프로파일](docs/guides/resource-profiling.md): 3-3 CPU·메모리·GPU/NPU 요구량 분석·저장과 2-1 전달 계약
-- [AI 모델 관리](docs/guides/ai-model-catalog.md): 기존 Registry 이미지 digest·플랫폼과 자원 요구량의 모델 버전별 등록·목록(워크플로 연동은 후속)
+- [AI 모델 관리](docs/guides/ai-model-catalog.md): 기존 Registry 이미지 digest·플랫폼의 모델 버전별 등록·목록과 [임시 측정 Pod 자원 측정·요구량 확정](docs/guides/ai-model-profiling.md)(워크플로 연동은 후속)
 - [문서 안내](docs/README.md): 개념·사용·운영·API·기여 문서
 
 Kestra 원본 콘솔은 `bash scripts/dev/dev-kestra-native.sh`로 실행하며

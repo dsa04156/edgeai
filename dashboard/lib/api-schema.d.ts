@@ -1260,7 +1260,7 @@ export interface paths {
         put?: never;
         /**
          * AI 모델 실행 구성 등록
-         * @description 모델 키·버전·실행 구성명(기본 default)마다 하나의 불변 항목을 저장합니다. 이미지는 저장소와 사용자가 확인한 sha256 digest·플랫폼으로 지정하며, 서버가 Registry에서 manifest·선택 플랫폼 manifest·config blob을 다시 읽어 검증한 뒤 저장합니다(tag는 출처 기록). 자원 요구량은 자원 프로파일과 같은 단위·범위 규칙이며, resourceProfileId 없이 입력한 값은 MANUAL·UNMEASURED입니다. resourceProfileId를 지정하면 그 SERVICE 이미지가 같은 repository@digest(또는 선택 플랫폼 manifest digest)이고 호환 아키텍처에 선택 플랫폼이 있어야 하며, 실행 명령·입력 조건·런타임·요구량이 원본과 같을 때만 원본의 근거(evidence)와 측정 상태를 유지합니다. 수정한 값은 MANUAL이어야 합니다. 같은 Idempotency-Key와 같은 입력은 Registry 상태와 무관하게 200으로 기존 항목을, 다른 입력은 409를 반환합니다. 등록은 SERVICE 실행 모듈 발행·워크플로 연결·실행·자원 예약을 하지 않습니다.
+         * @description 모델 키·버전·실행 구성명(기본 default)마다 하나의 불변 항목을 저장합니다. 이미지는 저장소와 사용자가 확인한 sha256 digest·플랫폼으로 지정하며, 서버가 Registry에서 manifest·선택 플랫폼 manifest·config blob을 다시 읽어 검증한 뒤 저장합니다(tag는 출처 기록). 자원 요구량(resources)은 선택이며 생략하면 등록 후 모델 상세에서 임시 측정 Pod로 측정·확정합니다(availability). 입력하면 자원 프로파일과 같은 단위·범위 규칙이며, resourceProfileId 없이 입력한 값은 MANUAL·UNMEASURED입니다(사용 가능 판정에는 쓰지 않음). resourceProfileId를 지정하면 그 SERVICE 이미지가 같은 repository@digest(또는 선택 플랫폼 manifest digest)이고 호환 아키텍처에 선택 플랫폼이 있어야 하며, 실행 명령·입력 조건·런타임·요구량이 원본과 같을 때만 원본의 근거(evidence)와 측정 상태를 유지합니다. 수정한 값은 MANUAL이어야 합니다. 같은 Idempotency-Key와 같은 입력은 Registry 상태와 무관하게 200으로 기존 항목을, 다른 입력은 409를 반환합니다. 등록은 SERVICE 실행 모듈 발행·워크플로 연결·실행·자원 예약을 하지 않습니다.
          */
         post: operations["registerAiModel"];
         delete?: never;
@@ -1280,6 +1280,143 @@ export interface paths {
         };
         /** AI 모델 실행 구성 조회 */
         get: operations["getAiModel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/profiling/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 모델 자원 측정 선택지
+         * @description 측정 가능 여부(서버 설정), 고정 이미지·실행 조건, 입력 한도, 이미지 플랫폼과 맞는 인벤토리 노드를 반환합니다. accelerators[].allocatableCount는 노드 allocatable(용량)이며 현재 미할당 가용량이 아닙니다. 서버 allowlist에 있는 자원만 보입니다.
+         */
+        get: operations["getAiModelProfilingOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/profiling-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 모델 자원 측정 기록
+         * @description 최신순입니다. 실패·취소한 측정도 이력으로 남습니다.
+         */
+        get: operations["listAiModelProfilingRuns"];
+        put?: never;
+        /**
+         * 모델 자원 측정 시작
+         * @description 등록한 플랫폼 이미지(digest 고정)로 전용 namespace에 소유 Job 하나를 만들고 실제 추론 부하를 건 뒤 해당 Pod·구간의 Prometheus 사용량을 저장합니다. HTTP는 API가 소유 Pod IP의 지정 port/path로만 샘플 요청을 보내고(redirect 금지, 응답 1 MiB 제한), COMMAND는 이미지 내부 벤치마크 명령이 요청 시간 이상 실행 후 exit 0으로 끝나야 합니다. 무부하 기동·실패 응답·OOM·짧은 실행·표본 부족은 SUCCEEDED가 되지 않습니다. Job 생성 등 외부 호출은 응답 후 서버가 수행합니다. 이전 측정의 Pod 회수가 끝나기 전에는 같은 모델·노드의 새 측정을 시작할 수 없습니다.
+         */
+        post: operations["startAiModelProfilingRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/profiling-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        /** 모델 자원 측정 조회 */
+        get: operations["getAiModelProfilingRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/profiling-runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 모델 자원 측정 취소
+         * @description 멱등입니다. 진행 중이면 즉시 CANCELLED가 되고 서버가 Job·Pod가 사라질 때까지 회수합니다(cleanup). 끝난 측정은 그대로 반환합니다.
+         */
+        post: operations["cancelAiModelProfilingRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/resource-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 확정 자원 프로파일 revision 목록
+         * @description 최신 revision 순입니다. 첫 항목이 현재 유효 프로파일입니다.
+         */
+        get: operations["listAiModelResourceProfiles"];
+        put?: never;
+        /**
+         * 측정 결과로 요구량 확정
+         * @description 같은 모델의 SUCCEEDED 측정만 근거로 불변 revision을 저장합니다. request는 필수, minimum/maximum은 선택(null=미지정)이며 서버가 만들지 않습니다. RECOMMENDED는 측정 추천값(request·maximum, minimum 없음)과 정확히 같을 때만, 그 외 값은 MANUAL(미검증)입니다. 가속기는 시험 할당 자원명·수와 정확히 같아야 하며(TEST_ALLOCATION), 다른 구성은 ACCELERATOR_NOT_TESTED로 거부합니다. 확정 revision이 있으면 모델 availability가 READY가 됩니다(scope 범위 안에서만 의미).
+         */
+        post: operations["confirmAiModelResourceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}/resource-profiles/{profileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        /** 확정 자원 프로파일 revision 조회 */
+        get: operations["getAiModelResourceProfile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4964,10 +5101,11 @@ export interface components {
                 name: string;
                 version?: string;
             } | null;
-            resources: components["schemas"]["ResourceProfileCreate"]["resources"];
+            /** @description 선택. 생략하면 요구량 없이 등록하고 모델 상세에서 측정·확정합니다(requirements null). 기존 선언형 등록과 호환됩니다. */
+            resources?: components["schemas"]["ResourceProfileCreate"]["resources"];
             /**
              * Format: uuid
-             * @description 요구량·근거를 재사용할 기존 불변 자원 프로파일
+             * @description 요구량·근거를 재사용할 기존 불변 자원 프로파일(resources와 함께만)
              */
             resourceProfileId?: string | null;
         };
@@ -5020,13 +5158,14 @@ export interface components {
             runtime: {
                 [key: string]: string;
             } | null;
+            /** @description 등록 시 선언한 요구량(legacy). 요구량 없이 등록하면 null이며, 사용 가능 판정은 availability(측정·확정)만 따릅니다. */
             requirements: {
                 /** @enum {string} */
                 source: "MANUAL" | "RESOURCE_PROFILE" | "MANUAL_FROM_RESOURCE_PROFILE";
                 /** @enum {string} */
                 measurementStatus: "MEASURED" | "PARTIAL" | "UNMEASURED";
                 resources: components["schemas"]["ResourceProfileCreate"]["resources"];
-            };
+            } | null;
             /** @description 원본 자원 프로파일 revision(서버가 불러온 불변 사본) */
             resourceProfile: {
                 /** Format: uuid */
@@ -5043,10 +5182,376 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             limitations: string[];
+            availability: components["schemas"]["AiModelAvailability"];
         };
         AiModelPage: {
             items: components["schemas"]["AiModelExecution"][];
             nextOffset: number | null;
+        };
+        /** @description 서버가 판단한 사용 가능 여부. READY는 같은 모델의 SUCCEEDED 측정을 근거로 사용자가 확정한 revision이 있을 때만이며, profile.scope(이미지·실행 명령·부하·시험 노드·가속기 구성) 범위에서만 의미가 있습니다. 진행 중·실패한 새 측정은 READY를 바꾸지 않습니다. */
+        AiModelAvailability: {
+            /** @enum {string} */
+            status: "READY" | "NOT_READY";
+            /** @enum {string|null} */
+            reason: "NO_MEASUREMENT" | "MEASURING" | "MEASUREMENT_FAILED" | "AWAITING_CONFIRMATION" | null;
+            /** Format: uuid */
+            activeRunId: string | null;
+            /** Format: uuid */
+            latestRunId: string | null;
+            profile: null | {
+                /** Format: uuid */
+                id: string;
+                revision: number;
+                /** Format: uuid */
+                runId: string;
+                /** Format: date-time */
+                createdAt: string;
+                requirements: components["schemas"]["AiModelRequirements"];
+                scope: components["schemas"]["AiModelProfileScope"];
+            };
+        };
+        AiModelProfilingRange: {
+            min: number;
+            default: number;
+            max: number;
+        };
+        AiModelProfilingOptions: {
+            enabled: boolean;
+            /** @enum {string|null} */
+            disabledReason: "PROFILING_DISABLED" | "KUBERNETES_DISABLED" | "PROMETHEUS_DISABLED" | "PLATFORM_NOT_RUNNABLE" | null;
+            image: {
+                /** @description 측정 Pod가 쓰는 플랫폼 manifest 고정 참조(host/repository@sha256:…) */
+                reference: string;
+                platform: string;
+            };
+            execution: {
+                command: string[] | null;
+                args: string[] | null;
+            };
+            limits: {
+                durationSeconds: components["schemas"]["AiModelProfilingRange"];
+                concurrency: components["schemas"]["AiModelProfilingRange"];
+                requestTimeoutSeconds: components["schemas"]["AiModelProfilingRange"];
+                readinessTimeoutSeconds: components["schemas"]["AiModelProfilingRange"];
+                bodyMaxBytes: number;
+                responseMaxBytes: number;
+                methods: ("GET" | "POST")[];
+                contentTypes: string[];
+                cpuMillicores: {
+                    min: number;
+                    max: number;
+                };
+                memoryBytes: {
+                    min: number;
+                    max: number;
+                };
+                acceleratorCount: {
+                    min: number;
+                    max: number;
+                };
+                minSuccessRatio: number;
+                minSuccessfulRequests: number;
+                minSamples: number;
+                loadTypes: ("HTTP" | "COMMAND")[];
+                maxActiveRuns: number;
+            };
+            nodes: {
+                name: string;
+                architecture: string | null;
+                status: string;
+                compatible: boolean;
+                /** @enum {string|null} */
+                incompatibleReason: "OS_MISMATCH" | "ARCHITECTURE_MISMATCH" | "NOT_READY" | null;
+                allocatable: {
+                    cpuMillicores: number | null;
+                    memoryBytes: number | null;
+                };
+                accelerators: {
+                    resourceName: string;
+                    /** @description 노드 allocatable(용량)이며 현재 미할당 가용량이 아닙니다. */
+                    allocatableCount: number;
+                }[];
+                /** @description 이 노드에서 진행 중이거나 회수 중인 측정이 있음 */
+                busy: boolean;
+            }[];
+        };
+        /** @description 측정 Pod의 시험 할당량(request=limit). 측정 후 확정할 요구량과 별개입니다. */
+        AiModelProfilingAllocation: {
+            cpuMillicores: number;
+            memoryBytes: number;
+            accelerator?: null | {
+                resourceName: string;
+                count: number;
+            };
+        };
+        AiModelProfilingLoad: {
+            /** @enum {string} */
+            type: "HTTP";
+            port: number;
+            path: string;
+            /** @enum {string} */
+            method: "GET" | "POST";
+            /** @enum {string|null} */
+            contentType?: "application/json" | "text/plain" | "application/octet-stream" | null;
+            /** @description UTF-8 64 KiB 이하 */
+            body?: string | null;
+            /** @description application/octet-stream 본문(디코딩 후 64 KiB 이하) */
+            bodyBase64?: string | null;
+            /** @default 2 */
+            concurrency: number;
+            /** @default 10 */
+            requestTimeoutSeconds: number;
+            /** @default 300 */
+            readinessTimeoutSeconds: number;
+        } | {
+            /** @enum {string} */
+            type: "COMMAND";
+            command: string[];
+            args?: string[] | null;
+            /** @default 300 */
+            readinessTimeoutSeconds: number;
+        };
+        AiModelProfilingRunRequest: {
+            nodeName: string;
+            allocation: components["schemas"]["AiModelProfilingAllocation"];
+            /** @default 300 */
+            durationSeconds: number;
+            load: components["schemas"]["AiModelProfilingLoad"];
+        };
+        AiModelProfilingRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            modelId: string;
+            /** @enum {string} */
+            state: "PENDING" | "STARTING" | "WARMING_UP" | "MEASURING" | "COLLECTING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+            message: string | null;
+            nodeName: string;
+            nodeArchitecture: string;
+            allocation: components["schemas"]["AiModelProfilingAllocation"];
+            durationSeconds: number;
+            /** @description 요청한 부하 정의. 샘플 본문은 응답에 넣지 않고 bodyBytes·bodyDigest만 보입니다. */
+            load: {
+                /** @enum {string} */
+                type: "HTTP" | "COMMAND";
+                readinessTimeoutSeconds: number;
+                port?: number | null;
+                path?: string | null;
+                method?: string | null;
+                contentType?: string | null;
+                concurrency?: number | null;
+                requestTimeoutSeconds?: number | null;
+                bodyBytes?: number;
+                bodyDigest?: string;
+                command?: string[] | null;
+                args?: string[] | null;
+            } & {
+                [key: string]: unknown;
+            };
+            /** @description 측정 Pod가 실제로 실행한 command/args(null이면 이미지 기본값) */
+            execution: {
+                command: string[] | null;
+                args: string[] | null;
+            };
+            kubernetes: {
+                namespace: string;
+                jobName: string;
+                /** Format: uuid */
+                jobUid: string | null;
+                podName: string | null;
+                /** Format: uuid */
+                podUid: string | null;
+                image: string;
+            };
+            window: {
+                /** Format: date-time */
+                start: string | null;
+                /** Format: date-time */
+                end: string | null;
+            };
+            /** @description 진행 중 부하 집계(HTTP)나 준비 확인 결과. 종단 후에는 null이며 result.loadEvidence를 봅니다. */
+            progress: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** Format: date-time */
+            cancelRequestedAt: string | null;
+            /** @description 측정 상태와 별개인 Job·Pod 회수 상태. DONE 전에는 모델·노드·전체 측정 슬롯을 계속 점유합니다. */
+            cleanup: {
+                /** @enum {string} */
+                state: "NOT_STARTED" | "PENDING" | "DONE";
+                /** Format: date-time */
+                completedAt: string | null;
+            };
+            failure: null | {
+                /** @enum {string} */
+                code: "UNSCHEDULABLE" | "IMAGE_PULL_FAILED" | "IMAGE_MISMATCH" | "CONTAINER_CONFIG_ERROR" | "CONTAINER_EXITED" | "OOM_KILLED" | "RESTARTED" | "DEADLINE_EXCEEDED" | "READINESS_TIMEOUT" | "DRIVER_UNREACHABLE" | "LOAD_FAILED" | "TOO_SHORT" | "COMMAND_FAILED" | "DRIVER_INTERRUPTED" | "INSUFFICIENT_SAMPLES" | "METRICS_UNAVAILABLE" | "KUBERNETES_UNAVAILABLE" | "OWNERSHIP_CONFLICT" | "JOB_MISSING";
+                message: string;
+            };
+            result: null | components["schemas"]["AiModelProfilingResult"];
+        };
+        /** @description SUCCEEDED면 모든 항목, FAILED면 얻은 근거(loadEvidence 등)만 있습니다. measurement는 측정 Pod UID·구간·model 컨테이너로 한정한 실측이며, recommendation은 고정 정책의 추천(최소값 없음), 확정 요구량은 별도 API입니다. */
+        AiModelProfilingResult: {
+            loadEvidence?: {
+                /** @enum {string} */
+                type: "HTTP" | "COMMAND";
+                requests?: number;
+                succeeded?: number;
+                failed?: number;
+                connectionFailures?: number;
+                statusCounts?: {
+                    [key: string]: number;
+                };
+                latencyMillis?: {
+                    p50?: number | null;
+                    p95?: number | null;
+                    max?: number | null;
+                    approximation?: string;
+                };
+                successRatio?: number | null;
+                throughputPerSecond?: number | null;
+                exitCode?: number | null;
+                reason?: string | null;
+                runSeconds?: number;
+                note?: string;
+            } & {
+                [key: string]: unknown;
+            };
+            target?: {
+                namespace: string;
+                jobName: string;
+                container: string;
+                podName: string;
+                /** Format: uuid */
+                podUid: string;
+                window: {
+                    /** Format: date-time */
+                    start: string;
+                    /** Format: date-time */
+                    end: string;
+                };
+            };
+            measurement?: components["schemas"]["ResourceMeasurement"];
+            devices?: components["schemas"]["ResourceDeviceObservation"][];
+            deviceStatus?: {
+                /** @enum {string} */
+                status: "NOT_REQUESTED" | "UNSUPPORTED" | "OBSERVED";
+                reason: string;
+            };
+            recommendation?: components["schemas"]["AiModelProfilingRecommendation"];
+            /** @description 시험 할당량에 근접해 재측정이 필요할 수 있다는 안내 */
+            notices?: string[];
+            limitations?: string[];
+        };
+        AiModelProfilingRecommendation: {
+            /** @enum {string} */
+            policy: "edgeai-model-profiling-recommendation-v1";
+            cpu: {
+                requestMillicores: number;
+                maximumMillicores: number;
+            };
+            memory: {
+                requestBytes: number;
+                maximumBytes: number;
+            };
+            accelerators: components["schemas"]["AiModelTestedAccelerator"][];
+            rationale: string[];
+        };
+        AiModelTestedAccelerator: {
+            resourceName: string;
+            count: number;
+            /**
+             * @description 시험 할당 자원명·수 그대로이며 사용률로 산정하지 않았습니다.
+             * @enum {string}
+             */
+            basis: "TEST_ALLOCATION";
+        };
+        /**
+         * @description RECOMMENDED는 측정 추천값과 정확히 같을 때만, MANUAL은 사용자 지정(시험으로 검증되지 않음). 실측값 자체는 요구량 출처가 아닙니다.
+         * @enum {string}
+         */
+        AiModelRequirementBasis: "RECOMMENDED" | "MANUAL";
+        /** @description minimum/maximum은 선택이며 null은 미지정입니다. 서버가 만들지 않습니다. 있으면 minimum ≤ request ≤ maximum. */
+        AiModelCpuRequirement: {
+            minimumMillicores?: number | null;
+            requestMillicores: number;
+            maximumMillicores?: number | null;
+            basis: components["schemas"]["AiModelRequirementBasis"];
+        };
+        /** @description minimum/maximum은 선택이며 null은 미지정입니다. 서버가 만들지 않습니다. 있으면 minimum ≤ request ≤ maximum. */
+        AiModelMemoryRequirement: {
+            minimumBytes?: number | null;
+            requestBytes: number;
+            maximumBytes?: number | null;
+            basis: components["schemas"]["AiModelRequirementBasis"];
+        };
+        AiModelResourceProfileRequest: {
+            /**
+             * Format: uuid
+             * @description 같은 모델의 SUCCEEDED 측정
+             */
+            runId: string;
+            cpu: components["schemas"]["AiModelCpuRequirement"];
+            memory: components["schemas"]["AiModelMemoryRequirement"];
+            /** @description 시험 할당과 정확히 같아야 합니다. 가속기 없이 시험했다면 빈 배열. */
+            accelerators?: components["schemas"]["AiModelTestedAccelerator"][];
+            note?: string | null;
+        };
+        AiModelRequirements: {
+            cpu: WithRequired<components["schemas"]["AiModelCpuRequirement"], "minimumMillicores" | "maximumMillicores">;
+            memory: WithRequired<components["schemas"]["AiModelMemoryRequirement"], "minimumBytes" | "maximumBytes">;
+            accelerators: components["schemas"]["AiModelTestedAccelerator"][];
+        };
+        /** @description 이 revision이 의미 있는 범위. 다른 노드·가속기·이미지·실행 명령·부하에서는 시험되지 않았습니다. */
+        AiModelProfileScope: {
+            image: string;
+            imageDigest: string;
+            platform: string;
+            execution: {
+                command: string[] | null;
+                args: string[] | null;
+            };
+            /** @enum {string} */
+            loadType: "HTTP" | "COMMAND";
+            loadDigest: string;
+            nodeName: string;
+            nodeArchitecture: string;
+            allocation: components["schemas"]["AiModelProfilingAllocation"];
+            durationSeconds: number;
+            window: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+            };
+        };
+        AiModelResourceProfile: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            modelId: string;
+            revision: number;
+            /** Format: uuid */
+            runId: string;
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+            modelKey: string;
+            modelVersion: string;
+            configName: string;
+            requirements: components["schemas"]["AiModelRequirements"];
+            scope: components["schemas"]["AiModelProfileScope"];
+            /** @description 확정 근거인 측정 결과 사본(측정 run의 result에서 서버가 복사) */
+            evidence: {
+                [key: string]: unknown;
+            };
+            note: string | null;
+            limitations: string[];
         };
         /**
          * @description MEASURED: 인용 분석의 AVAILABLE 실측, RECOMMENDED: 인용 분석의 KRR 값, MANUAL: 사용자 직접 지정
@@ -8861,6 +9366,401 @@ export interface operations {
             };
         };
     };
+    getAiModelProfilingOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 측정 선택지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelProfilingOptions"];
+                };
+            };
+            /** @description 모델이 없습니다(AI_MODEL_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAiModelProfilingRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 측정 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AiModelProfilingRun"][];
+                        nextOffset: number | null;
+                    };
+                };
+            };
+            /** @description 잘못된 페이지(INVALID_PROFILING_RUN) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 모델이 없습니다(AI_MODEL_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startAiModelProfilingRun: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelProfilingRunRequest"];
+            };
+        };
+        responses: {
+            /** @description 같은 Idempotency-Key·같은 입력으로 이미 시작한 측정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelProfilingRun"];
+                };
+            };
+            /** @description 새 측정(PENDING) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelProfilingRun"];
+                };
+            };
+            /** @description 입력 오류(INVALID_PROFILING_RUN, INVALID_IDEMPOTENCY_KEY) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 모델(AI_MODEL_NOT_FOUND)·노드(NODE_NOT_FOUND)가 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description PROFILING_RUN_ACTIVE, PROFILING_NODE_BUSY, PROFILING_CAPACITY, PROFILING_NODE_INCOMPATIBLE, PROFILING_ALLOCATION_EXCEEDS_NODE, PROFILING_ACCELERATOR_UNAVAILABLE, PLATFORM_NOT_RUNNABLE, IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 128 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 측정 비활성 또는 Kubernetes·Prometheus 미구성(PROFILING_DISABLED, KUBERNETES_DISABLED, PROMETHEUS_DISABLED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAiModelProfilingRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 측정 상태·결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelProfilingRun"];
+                };
+            };
+            /** @description 측정이 없습니다(PROFILING_RUN_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    cancelAiModelProfilingRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description 측정 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelProfilingRun"];
+                };
+            };
+            /** @description 본문은 빈 객체입니다(INVALID_PROFILING_RUN). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 측정이 없습니다(PROFILING_RUN_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 상태 변경 경합(PROFILING_RUN_BUSY). 다시 시도하세요. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAiModelResourceProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description revision 목록 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AiModelResourceProfile"][];
+                    };
+                };
+            };
+            /** @description 모델이 없습니다(AI_MODEL_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    confirmAiModelResourceProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelResourceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 같은 Idempotency-Key·같은 입력으로 이미 저장한 revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelResourceProfile"];
+                };
+            };
+            /** @description 새 revision */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelResourceProfile"];
+                };
+            };
+            /** @description 입력 오류(INVALID_RESOURCE_PROFILE, INVALID_IDEMPOTENCY_KEY) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 모델(AI_MODEL_NOT_FOUND)·측정(PROFILING_RUN_NOT_FOUND)이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description PROFILING_RUN_NOT_SUCCEEDED, ACCELERATOR_NOT_TESTED, IDEMPOTENCY_CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAiModelResourceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+                profileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelResourceProfile"];
+                };
+            };
+            /** @description revision이 없습니다(RESOURCE_PROFILE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getResourceProfilingCapabilities: {
         parameters: {
             query?: never;
@@ -10816,3 +11716,6 @@ export interface operations {
         };
     };
 }
+type WithRequired<T, K extends keyof T> = T & {
+    [P in K]-?: T[P];
+};

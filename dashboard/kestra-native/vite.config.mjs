@@ -169,7 +169,7 @@ export default defineConfig(async (env) => {
               ["runs", "실행 · 작업 · 결과", "PlayOutline"],
               ["scheduling-profiles", "성능 프로파일", "SpeedometerMedium"],
               ["ai-models", "AI 모델 관리", "CubeOutline"],
-              ["resource-profiles", "자원 프로파일", "ChipIcon"],
+              // 자원 프로파일 stays routable but is reached from AI 모델 관리, not the menu.
               ["inference", "모델 추론", "ImageSearchOutline"],
               ["offload-lab", "오프로딩 테스트", "SwapHorizontal"],
               // Before "scenarios": the top bar picks the first item whose path prefixes /scenarios/hawkeye.
@@ -182,13 +182,13 @@ export default defineConfig(async (env) => {
             const items = entries
               .map(
                 ([id, title, icon]) =>
-                  `{id: "edgeai-${id}", title: ${JSON.stringify(title)}, routes: routeStartWith(${JSON.stringify(id === "home" ? id : "edgeai/" + id)}), href: {name: ${JSON.stringify(id === "home" ? id : "edgeai/" + id)}}, icon: {element: ${icon}}}`,
+                  `{id: "edgeai-${id}", title: ${JSON.stringify(title)}, routes: ${id === "ai-models" ? '[...routeStartWith("edgeai/ai-models"), ...routeStartWith("edgeai/resource-profiles")]' : `routeStartWith(${JSON.stringify(id === "home" ? id : "edgeai/" + id)})`}, href: {name: ${JSON.stringify(id === "home" ? id : "edgeai/" + id)}}, icon: {element: ${icon}}}`,
               )
               .join(",\n");
             return code
               .replace(
                 'import {computed} from "vue"',
-                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"\nimport SwapHorizontal from "vue-material-design-icons/SwapHorizontal.vue"\nimport ChipIcon from "vue-material-design-icons/Chip.vue"\nimport CubeOutline from "vue-material-design-icons/CubeOutline.vue"',
+                'import {computed} from "vue"\nimport ImageSearchOutline from "vue-material-design-icons/ImageSearchOutline.vue"\nimport CompareHorizontal from "vue-material-design-icons/CompareHorizontal.vue"\nimport ForkliftIcon from "vue-material-design-icons/Forklift.vue"\nimport SpeedometerMedium from "vue-material-design-icons/SpeedometerMedium.vue"\nimport SwapHorizontal from "vue-material-design-icons/SwapHorizontal.vue"\nimport CubeOutline from "vue-material-design-icons/CubeOutline.vue"',
               )
               .replace(
                 /const generated = \[[\s\S]*?\n        \]\n\n        flatten/,

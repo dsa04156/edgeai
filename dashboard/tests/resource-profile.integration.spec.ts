@@ -122,8 +122,9 @@ test("measured usage and the KRR recommendation are reviewed, confirmed and save
   page.on("pageerror", error => errors.push(error.message));
   const posts = mock(page, [measuredAnalysis], [{ status: 201, json: saved(expectedMeasured, "MEASURED") }]);
   if (testInfo.project.name === "desktop") {
-    await page.goto("/ui/main/profiles");
-    await page.getByRole("link", { name: "자원 프로파일" }).first().click();
+    // Reached from AI 모델 관리 now that it is no longer a menu item.
+    await page.goto("/ui/main/ai-models");
+    await page.getByRole("link", { name: "서비스 자원 프로파일" }).click();
     await expect(page).toHaveURL(/\/ui\/main\/resource-profiles/);
   } else await page.goto("/ui/main/resource-profiles");
   await chooseTarget(page);

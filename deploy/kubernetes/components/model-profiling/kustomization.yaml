@@ -1,0 +1,24 @@
+# AI model resource measurement (docs/guides/ai-model-profiling.md). API settings only: the API creates one owned, bounded
+# measurement Job per run in the dedicated namespace and reads Prometheus through the resource-profiling URL.
+# Apply deploy/kubernetes/bootstrap/model-profiling-rbac.json first (namespace, Pod service account, namespaced Role);
+# cluster-wide or cross-namespace objects stay outside the namespace-only Argo CD project.
+# Nothing here installs or changes device plugins, HAMi, VPA/HPA or exporters.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_MODEL_PROFILING_ENABLED, value: 'true'}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_MODEL_PROFILING_NAMESPACE, value: edgeai-model-profiling}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_MODEL_PROFILING_SERVICE_ACCOUNT, value: edgeai-model-profiler}
+      # Test allocations may use only these extended resources, and only where the node's allocatable advertises them.
+      # GPU/NPU quantities are recorded as allocated for the test, never derived from utilisation. hami.io/* is excluded.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_MODEL_PROFILING_ACCELERATOR_RESOURCES, value: 'nvidia.com/gpu.shared,nvidia.com/gpu,hailo.ai/h8,rockchip.com/rk3399pro,npu.intel.com/accel,mobilint.com/npu'}

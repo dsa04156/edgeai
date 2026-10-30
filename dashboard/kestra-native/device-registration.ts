@@ -82,6 +82,9 @@ export function createDeviceRegistrationMiddleware({
         "ai-models/registry/manifest",
       ].includes(target) ||
       new RegExp(`^ai-models/${uuid}$`).test(target) ||
+      new RegExp(
+        `^ai-models/${uuid}/(profiling/options|profiling-runs(/${uuid})?|resource-profiles(/${uuid})?)$`,
+      ).test(target) ||
       /^scenarios\/hawkeye-safety\/samples\/[a-z0-9_]{1,40}\/image$/.test(target) ||
       new RegExp(
         `^resource-profiles/(analyses/)?${uuid}$|^resource-profiles/${uuid}/handoff$|^resource-profiles/services/[a-z][a-z0-9._-]{0,99}/versions/[0-9]+\\.[0-9]+\\.[0-9]+/revisions/[1-9][0-9]{0,6}/handoff$`,
@@ -118,7 +121,7 @@ export function createDeviceRegistrationMiddleware({
         "scenarios/hawkeye-safety/video/sessions",
       ].includes(target) ||
       new RegExp(
-        `^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^scheduling-profiles/${uuid}/placement-preview$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$|^offload-lab/sessions/${uuid}/(stop|load|load/stop)$`,
+        `^ai-models/${uuid}/(profiling-runs(/${uuid}/cancel)?|resource-profiles)$|^scenarios/image-comparison/runs/${uuid}/stop$|^scenarios/hawkeye-safety/video/sessions/${uuid}/stop$|^virtual-devices/${uuid}/(provision|drain)$|^workflows/${uuid}/versions$|^scheduling-profiles/${uuid}/placement-preview$|^workflow-runs/${uuid}/(cancel|drain)$|^tasks/${uuid}/cancel$|^tasks/${uuid}/offload$|^offload-lab/sessions/${uuid}/(stop|load|load/stop)$`,
       ).test(target);
     const coreDelete =
       (profile && target.includes("/versions/")) ||
@@ -248,6 +251,8 @@ export function createDeviceRegistrationMiddleware({
       const inference = target === "inference/predict";
       // The API accepts a measured scheduling profile up to 1 MiB.
       const schedulingProfile = target === "scheduling-profiles";
+      // A profiling run carries one sample request body of up to 64 KiB; JSON escaping can enlarge its envelope.
+      const profilingRun = new RegExp(`^ai-models/${uuid}/profiling-runs$`).test(target);
       try {
         for await (const chunk of request) {
           length += chunk.length;
@@ -259,7 +264,9 @@ export function createDeviceRegistrationMiddleware({
                 ? 6 * 1024 * 1024
                 : schedulingProfile
                   ? 1024 * 1024
-                  : 65536)
+                  : profilingRun
+                    ? 512 * 1024
+                    : 65536)
           )
             return send(
               413,
@@ -269,7 +276,9 @@ export function createDeviceRegistrationMiddleware({
                   ? "추론 이미지는 4 MiB 이하로 선택하세요."
                   : schedulingProfile
                     ? "측정 프로파일은 1 MiB 이하로 입력하세요."
-                    : "JSON 규격은 64 KiB 이하로 입력하세요.",
+                    : profilingRun
+                      ? "측정 요청 본문은 64 KiB 이하로 입력하세요."
+                      : "JSON 규격은 64 KiB 이하로 입력하세요.",
             );
           chunks.push(chunk);
         }
