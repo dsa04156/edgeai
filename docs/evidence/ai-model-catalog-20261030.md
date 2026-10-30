@@ -47,6 +47,21 @@
 | 등록 → 같은 키 재전송 → 같은 키 다른 입력 → 새 키 같은 모델·버전 → CSRF 없음 → MEASURED 위조 | 201 → 200(같은 ID) → 409 `IDEMPOTENCY_CONFLICT` → 409 `AI_MODEL_VERSION_EXISTS` → 403 → 400 |
 | 브라우저(콘솔 13190 → API → Registry), desktop·mobile | 저장소 직접 입력·태그 확인·digest 표시 후 실행 구성 `ui-desktop`/`ui-mobile` 등록 201, 상세에 `10.254.192.47:5000/digits-model-amd64@sha256:f1e97a…` 표시, JS 오류 0 |
 
+## 검토 수정 1차(커밋 `f2c71f2` 기준)
+
+| 지적 | 수정 | RED → GREEN |
+|---|---|---|
+| JDK 21 `HttpRequest.timeout`은 응답 헤더까지만 제한해 본문이 멈추면 무기한 대기 | `DistributionRegistryClient#get`을 `sendAsync`+`get(timeout)`의 전체 기한으로 바꾸고, 기한 초과·중단 시 future 취소와 본문 구독 취소로 연결을 놓음. 크기 초과·오류 매핑 유지 | 새 시험(헤더+본문 1바이트 후 8초간 미완료, 기한 1초): 수정 전 약 8초 뒤 `INVALID_RESPONSE`로 실패 → 수정 후 `TIMEOUT`이 2.5초 안에 반환되고 서버 쪽 쓰기가 실패해 연결 해제 확인. adapter 시험 10/10 |
+| 등록 성공 시 `open(id, entry)`가 이전 상세 로딩 상태를 해제하지 않아 새 상세가 가려짐 | 알고 있는 항목을 바로 열 때 로딩 상태를 끔 | 브라우저: 이전 상세 응답을 붙잡은 채 등록 → 수정 전 로딩 표시가 남아 실패, 수정 후 새 상세 포커스·이전 응답 도착 후에도 유지 |
+| 자원 프로파일 불러오는 동안 채워질 입력을 고칠 수 있어 응답이 덮어씀 | 불러오는 동안 실행 명령·인자·입력 조건·런타임·CPU/메모리·가속기 입력과 추가/삭제를 잠금(프로파일 선택·모델 키 등은 편집 가능) | 브라우저: 서비스 버전 응답을 붙잡은 동안 수정 전에는 입력이 활성이라 실패, 수정 후 잠금 → 응답 후 프로파일 값(177m 등)·`자원 프로파일 그대로`, 모델 키 입력 유지 |
+
+| 명령 | 결과 |
+|---|---|
+| `gradlew :app:test --tests 'io.edgeai.adapters.registry.*'` | 10 통과 |
+| `integrationTest --tests '*AiModelIntegrationTest'`(격리 DB) | 7 통과(Registry 504 경로 포함) |
+| `corepack pnpm typecheck` / `lint` / `test` / `build` | 0 / 0 / 146 통과 / 성공 |
+| Playwright `tests/ai-model.integration.spec.ts` + 실제 Registry 브라우저 등록(임시 spec) | desktop·mobile 12/12(새 회귀 시험 2개×2 포함, 실구성 `r1-desktop`·`r1-mobile` 201) |
+
 ## 남은 사항
 
 - 운영 반영(API 이미지·콘솔·V71 적용·dev overlay의 `EDGEAI_AI_MODELS_REGISTRY_URL`)은 하지 않았습니다.

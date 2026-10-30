@@ -31,7 +31,16 @@ const entry = {
   resourceProfile: null, evidence: null, limitations: ["자원 요구량은 실행 측에 전달할 선언이며 자원 예약·분할·증강이나 실행 보장이 아닙니다."],
 };
 
-type Hold = { manifest?: Record<string, Promise<void>> };
+const sourceProfile = {
+  id: "00000000-0000-4000-8000-0000000000b2", revision: 2, measurementStatus: "MEASURED", analysisId: null, digest: "sha256:" + "9".repeat(64), createdAt: now,
+  serviceProfileVersionId: "00000000-0000-4000-8000-0000000000a2",
+  service: { profileVersionId: "00000000-0000-4000-8000-0000000000a2", key: "detector-svc", version: "1.0.0", digest: "sha256:" + "8".repeat(64) },
+  inputConditions: { resolution: "640x640" }, compatibility: { os: "linux", architectures: ["amd64"], runtime: { name: "onnxruntime", version: "1.20.1" } },
+  resources: { cpu: { minMillicores: 100, requestMillicores: 177, maxMillicores: 2000, basis: "RECOMMENDED" },
+    memory: { minBytes: 268435456, requestBytes: 450000000, maxBytes: 1073741824, basis: "MEASURED" }, accelerators: [] },
+  note: null, evidence: {},
+};
+type Hold = { manifest?: Record<string, Promise<void>>; detail?: Record<string, Promise<void>>; service?: Promise<void> };
 function mock(page: Page, saves: { status: number; json: unknown }[], options: { list?: { status: number; json: unknown }; hold?: Hold } = {}) {
   const posts: { key?: string; csrf?: string; body: unknown }[] = [];
   const models: unknown[] = [];
@@ -58,6 +67,14 @@ function mock(page: Page, saves: { status: number; json: unknown }[], options: {
       return route.fulfill(answer);
     }
     if (path === "ai-models") return route.fulfill(options.list ?? { json: { items: models, nextOffset: null } });
+    if (path === "resource-profiles") return route.fulfill({ json: { items: [sourceProfile], nextOffset: null } });
+    if (path === "profiles/SERVICE/detector-svc/versions/1.0.0") {
+      await options.hold?.service;
+      return route.fulfill({ json: { id: sourceProfile.serviceProfileVersionId, key: "detector-svc", version: "1.0.0", kind: "SERVICE",
+        spec: { image: `${host}/edgeai/detector@${digest}`, command: ["python3", "/app/serve.py"], args: [] } } });
+    }
+    const detailHold = Object.entries(options.hold?.detail ?? {}).find(([id]) => path === `ai-models/${id}`);
+    if (detailHold) { await detailHold[1]; return route.fulfill({ json: { ...entry, id: detailHold[0], displayName: "이전 모델" } }); }
     if (path === `ai-models/${modelId}`) return route.fulfill({ json: entry });
     return route.fulfill({ status: 404, json: { message: `unmocked ${path}` } });
   });
@@ -186,4 +203,49 @@ test("list loading failure is distinct from an empty list, and details open by k
   await expect(page.getByRole("heading", { name: "지게차 탐지 · 1.0.0 · default" })).toBeFocused();
   await expect(page.getByRole("table", { name: "자원 요구량" })).toContainText("512Mi");
   await noPageOverflow(page);
+});
+
+test("a registration that succeeds while an older detail is still loading shows the new detail", async ({ page }) => {
+  const olderId = "00000000-0000-4000-8000-0000000000d0";
+  let release!: () => void;
+  const older = new Promise<void>(resolve => (release = resolve));
+  mock(page, [{ status: 201, json: entry }], { hold: { detail: { [olderId]: older } } });
+  await page.goto(`/ui/main/ai-models?model=${olderId}`);
+  await expect(page.getByRole("status", { name: "모델 상세를 불러오는 중…" })).toBeVisible();
+  await page.getByRole("button", { name: "모델 등록" }).click();
+  await chooseImage(page);
+  await expect(page.getByLabel("확인한 이미지")).toContainText(digest);
+  await fillModel(page);
+  await page.getByRole("button", { name: "등록", exact: true }).click();
+  const heading = page.getByRole("heading", { name: "지게차 탐지 · 1.0.0 · default" });
+  await expect(heading).toBeFocused();
+  await expect(page.getByRole("status", { name: "모델 상세를 불러오는 중…" })).toHaveCount(0);
+  await expect(page.getByRole("table", { name: "자원 요구량" })).toContainText("250m");
+  release();
+  await page.waitForTimeout(300);
+  await expect(heading).toBeVisible();
+  await expect(page.getByText("이전 모델")).toHaveCount(0);
+});
+
+test("while a chosen resource profile loads, the fields it fills are read-only and then hold the profile values", async ({ page }) => {
+  let release!: () => void;
+  const service = new Promise<void>(resolve => (release = resolve));
+  mock(page, [], { hold: { service } });
+  await page.goto("/ui/main/ai-models");
+  await page.getByRole("button", { name: "모델 등록" }).click();
+  const combobox = page.getByRole("combobox", { name: "기존 자원 프로파일 가져오기(선택)", exact: true });
+  await page.locator(".kel-form-item").filter({ has: combobox }).locator(".kel-select").click();
+  await page.locator(`[id="${await combobox.getAttribute("aria-controls")}"]`).getByRole("option", { name: "detector-svc@1.0.0 r2 · 실측" }).click();
+  for (const label of ["CPU 요청", "메모리 최대", "실행 명령(선택, 한 줄에 하나)", "입력 조건(한 줄에 key=value)", "런타임 이름"])
+    await expect(page.getByLabel(label, { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "가속기 요구량 추가" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "등록", exact: true })).toBeDisabled();
+  // Unrelated identity fields stay editable during the load.
+  await page.getByLabel("모델 키", { exact: true }).fill("still-editable");
+  release();
+  await expect(page.getByLabel("CPU 요청", { exact: true })).toBeEnabled();
+  await expect(page.getByLabel("CPU 요청", { exact: true })).toHaveValue("177m");
+  await expect(page.getByLabel("실행 명령(선택, 한 줄에 하나)", { exact: true })).toHaveValue("python3\n/app/serve.py");
+  await expect(page.getByLabel("모델 키", { exact: true })).toHaveValue("still-editable");
+  await expect(page.getByRole("status").filter({ hasText: "요구량 출처" })).toContainText("자원 프로파일 그대로");
 });

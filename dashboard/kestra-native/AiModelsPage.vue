@@ -256,17 +256,17 @@
         <h3>실행 구성</h3>
         <div class="native-grid">
           <KsFormItem label="실행 명령(선택, 한 줄에 하나)"
-            ><KsInput v-model="draft.command" :disabled="saving" type="textarea" :rows="3" spellcheck="false" placeholder="비우면 이미지 기본값"
+            ><KsInput v-model="draft.command" :disabled="locked" type="textarea" :rows="3" spellcheck="false" placeholder="비우면 이미지 기본값"
           /></KsFormItem>
           <KsFormItem label="인자(선택, 한 줄에 하나)"
-            ><KsInput v-model="draft.args" :disabled="saving" type="textarea" :rows="3" spellcheck="false" placeholder="비우면 이미지 기본값"
+            ><KsInput v-model="draft.args" :disabled="locked" type="textarea" :rows="3" spellcheck="false" placeholder="비우면 이미지 기본값"
           /></KsFormItem>
           <KsFormItem label="입력 조건(한 줄에 key=value)"
-            ><KsInput v-model="draft.conditions" :disabled="saving" type="textarea" :rows="3" spellcheck="false" placeholder="예 resolution=640x640"
+            ><KsInput v-model="draft.conditions" :disabled="locked" type="textarea" :rows="3" spellcheck="false" placeholder="예 resolution=640x640"
           /></KsFormItem>
           <div class="native-grid">
-            <KsFormItem label="런타임 이름"><KsInput v-model="draft.runtimeName" :disabled="saving" maxlength="64" placeholder="예 onnxruntime" /></KsFormItem>
-            <KsFormItem label="런타임 버전"><KsInput v-model="draft.runtimeVersion" :disabled="saving" maxlength="64" /></KsFormItem>
+            <KsFormItem label="런타임 이름"><KsInput v-model="draft.runtimeName" :disabled="locked" maxlength="64" placeholder="예 onnxruntime" /></KsFormItem>
+            <KsFormItem label="런타임 버전"><KsInput v-model="draft.runtimeVersion" :disabled="locked" maxlength="64" /></KsFormItem>
           </div>
         </div>
 
@@ -305,7 +305,7 @@
                 <td v-for="field in rangeFields" :key="field">
                   <KsInput
                     v-model="draft[row.id][field]"
-                    :disabled="saving"
+                    :disabled="locked"
                     :aria-label="`${row.label} ${fieldLabel[field]}`"
                     :placeholder="row.placeholder"
                     spellcheck="false"
@@ -331,30 +331,30 @@
             <tbody>
               <tr v-for="(a, index) in draft.accelerators" :key="index">
                 <td>
-                  <KsSelect v-model="a.kind" :disabled="saving" :aria-label="`가속기 ${index + 1} 종류`"
+                  <KsSelect v-model="a.kind" :disabled="locked" :aria-label="`가속기 ${index + 1} 종류`"
                     ><KsOption value="GPU" label="GPU" /><KsOption value="NPU" label="NPU"
                   /></KsSelect>
                 </td>
-                <td><KsInput v-model="a.resourceName" :disabled="saving" :aria-label="`가속기 ${index + 1} 확장 자원 이름`" spellcheck="false" /></td>
+                <td><KsInput v-model="a.resourceName" :disabled="locked" :aria-label="`가속기 ${index + 1} 확장 자원 이름`" spellcheck="false" /></td>
                 <td>
-                  <KsSelect v-model="a.unit" :disabled="saving" :aria-label="`가속기 ${index + 1} 단위`"
+                  <KsSelect v-model="a.unit" :disabled="locked" :aria-label="`가속기 ${index + 1} 단위`"
                     ><KsOption value="COUNT" label="개수" /><KsOption value="MEBIBYTES" label="MiB" /><KsOption value="PERCENT" label="%"
                   /></KsSelect>
                 </td>
                 <td v-for="field in rangeFields" :key="field">
-                  <KsInput v-model="a[field]" :disabled="saving" :aria-label="`가속기 ${index + 1} ${fieldLabel[field]}`" inputmode="numeric" />
+                  <KsInput v-model="a[field]" :disabled="locked" :aria-label="`가속기 ${index + 1} ${fieldLabel[field]}`" inputmode="numeric" />
                 </td>
-                <td><KsInput v-model="a.deviceMemory" :disabled="saving" :aria-label="`가속기 ${index + 1} 장치 메모리 요구량`" placeholder="예 8Gi" /></td>
+                <td><KsInput v-model="a.deviceMemory" :disabled="locked" :aria-label="`가속기 ${index + 1} 장치 메모리 요구량`" placeholder="예 8Gi" /></td>
                 <td>
-                  <KsInput v-model="a.vendor" :disabled="saving" :aria-label="`가속기 ${index + 1} 벤더`" placeholder="벤더" />
-                  <KsInput v-model="a.models" :disabled="saving" :aria-label="`가속기 ${index + 1} 호환 모델`" placeholder="모델(쉼표 구분)" />
+                  <KsInput v-model="a.vendor" :disabled="locked" :aria-label="`가속기 ${index + 1} 벤더`" placeholder="벤더" />
+                  <KsInput v-model="a.models" :disabled="locked" :aria-label="`가속기 ${index + 1} 호환 모델`" placeholder="모델(쉼표 구분)" />
                 </td>
-                <td><KsButton :disabled="saving" :aria-label="`가속기 ${index + 1} 삭제`" @click="draft.accelerators.splice(index, 1)">삭제</KsButton></td>
+                <td><KsButton :disabled="locked" :aria-label="`가속기 ${index + 1} 삭제`" @click="draft.accelerators.splice(index, 1)">삭제</KsButton></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <KsButton :disabled="saving || draft.accelerators.length >= 8" @click="draft.accelerators.push(emptyAccelerator())">가속기 요구량 추가</KsButton>
+        <KsButton :disabled="locked || draft.accelerators.length >= 8" @click="draft.accelerators.push(emptyAccelerator())">가속기 요구량 추가</KsButton>
         <p class="native-note">
           확장 자원 이름은 실행 측 device plugin이 노출하는 이름(예 nvidia.com/gpu)입니다. 장치 메모리 요구량은 예약 가능한 Kubernetes 자원이 아닙니다.
         </p>
@@ -455,8 +455,11 @@ async function open(id: string, entry?: ModelEntry) {
   const generation = ++detailGeneration;
   detailError.value = "";
   void router.replace({ query: { ...route.query, model: id } });
-  if (entry) selected.value = entry;
-  else {
+  if (entry) {
+    // A newer known entry wins over any older detail request still loading.
+    selected.value = entry;
+    detailLoading.value = false;
+  } else {
     detailLoading.value = true;
     try {
       const result = await get<ModelEntry>(`ai-models/${encodeURIComponent(id)}`);
@@ -641,6 +644,8 @@ async function selectSource(id: string) {
     if (generation === sourceGeneration) sourceLoading.value = false;
   }
 }
+// While a chosen profile loads, the fields it will fill stay read-only so no edit is silently replaced.
+const locked = computed(() => saving.value || sourceLoading.value);
 const requirement = computed(() => requirementSource(draft, source.value));
 const rows = computed(() => {
   const kept = requirement.value === "RESOURCE_PROFILE";

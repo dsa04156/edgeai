@@ -240,15 +240,23 @@ public final class DistributionRegistryClient implements ImageRegistry, AutoClos
         URI uri = URI.create(origin + path + (query == null ? "" : "?" + query));
         var builder = HttpRequest.newBuilder(uri).timeout(timeout).header("Accept", accept).GET();
         if (authorization != null) builder.header("Authorization", authorization);
+        // HttpRequest.timeout only bounds the response headers; the deadline covers the whole body as well.
+        var body = new LimitedBody(maxBytes);
+        var exchange = client.sendAsync(builder.build(), info -> body);
         HttpResponse<byte[]> response;
-        try { response = client.send(builder.build(), info -> new LimitedBody(maxBytes)); }
-        catch (HttpTimeoutException timedOut) { throw new RegistryException(Reason.TIMEOUT, "Registry 응답이 제한 시간(" + timeout.toSeconds() + "초) 안에 오지 않았습니다."); }
-        catch (InterruptedException interrupted) {
+        try { response = exchange.get(timeout.toNanos(), TimeUnit.NANOSECONDS); }
+        catch (TimeoutException timedOut) {
+            abandon(exchange, body);
+            throw timedOut();
+        } catch (InterruptedException interrupted) {
+            abandon(exchange, body);
             Thread.currentThread().interrupt();
             throw new RegistryException(Reason.UNAVAILABLE, "Registry 조회가 중단되었습니다.");
-        } catch (IOException failed) {
-            for (Throwable cause = failed; cause != null; cause = cause.getCause())
+        } catch (ExecutionException failed) {
+            for (Throwable cause = failed.getCause(); cause != null; cause = cause.getCause()) {
                 if (cause instanceof TooLarge) throw new RegistryException(Reason.TOO_LARGE, "Registry 응답이 허용 크기를 넘습니다.");
+                if (cause instanceof HttpTimeoutException) throw timedOut();
+            }
             throw new RegistryException(Reason.UNAVAILABLE, "Registry(" + host + ")에 연결할 수 없습니다.");
         }
         int status = response.statusCode();
@@ -257,6 +265,16 @@ public final class DistributionRegistryClient implements ImageRegistry, AutoClos
         if (status == 401 || status == 403) throw new RegistryException(Reason.UNAUTHORIZED, "Registry가 접근을 거부했습니다(HTTP " + status + "). 서버의 Registry 인증 설정을 확인하세요.");
         if (status == 404) throw new RegistryException(Reason.NOT_FOUND, "Registry에 해당 저장소·태그·digest가 없습니다.");
         throw new RegistryException(Reason.UNAVAILABLE, "Registry가 HTTP " + status + "로 응답했습니다.");
+    }
+
+    private RegistryException timedOut() {
+        return new RegistryException(Reason.TIMEOUT, "Registry 응답이 제한 시간(" + timeout.toSeconds() + "초) 안에 끝나지 않았습니다.");
+    }
+
+    /** Cancels the exchange and its body subscription so a stalled response releases its connection. */
+    private static void abandon(CompletableFuture<HttpResponse<byte[]>> exchange, LimitedBody body) {
+        exchange.cancel(true);
+        body.abort();
     }
 
     static String sha256(byte[] bytes) {
@@ -269,12 +287,24 @@ public final class DistributionRegistryClient implements ImageRegistry, AutoClos
     private static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final HttpResponse.BodySubscriber<byte[]> delegate = HttpResponse.BodySubscribers.ofByteArray();
         private final long max;
-        private Flow.Subscription subscription;
+        private volatile Flow.Subscription subscription;
         private long size;
-        private boolean failed;
+        private volatile boolean failed;
         LimitedBody(long max) { this.max = max; }
         public CompletionStage<byte[]> getBody() { return delegate.getBody(); }
-        public void onSubscribe(Flow.Subscription value) { subscription = value; delegate.onSubscribe(value); }
+        public void onSubscribe(Flow.Subscription value) {
+            subscription = value;
+            delegate.onSubscribe(value);
+            if (failed) value.cancel();
+        }
+        /** Stops reading after the deadline; the partial body is discarded. */
+        void abort() {
+            if (failed) return;
+            failed = true;
+            var current = subscription;
+            if (current != null) current.cancel();
+            delegate.onError(new IOException("Registry response abandoned"));
+        }
         public void onNext(List<ByteBuffer> values) {
             if (failed) return;
             for (var value : values) size += value.remaining();

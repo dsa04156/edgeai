@@ -188,6 +188,29 @@ class DistributionRegistryClientTest {
         try { assertThat(reason(() -> down.repositories(null, 10))).isEqualTo(Reason.UNAVAILABLE); } finally { down.close(); }
     }
 
+    @Test void aBodyThatStallsAfterTheHeadersTimesOutWithinTheBudgetAndReleasesTheConnection() throws Exception {
+        var closed = new java.util.concurrent.CountDownLatch(1);
+        registry.override = e -> {
+            if (!e.getRequestURI().getPath().contains("/stall/")) return false;
+            e.getResponseHeaders().add("Content-Type", FakeRegistry.OCI_MANIFEST);
+            e.sendResponseHeaders(200, 0); // chunked: headers now, body later
+            var body = e.getResponseBody();
+            body.write('{'); body.flush();
+            try {
+                // The body never completes within 8 s; a write fails once the client abandons the exchange.
+                for (int i = 0; i < 80; i++) { Thread.sleep(100); body.write(' '); body.flush(); }
+            } catch (java.io.IOException released) { closed.countDown(); }
+            return true;
+        };
+        var slow = new DistributionRegistryClient(registry.url(), Duration.ofSeconds(1), null, null);
+        try {
+            long started = System.nanoTime();
+            assertThat(reason(() -> slow.resolve("edgeai/stall", "1"))).isEqualTo(Reason.TIMEOUT);
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(2500));
+            assertThat(closed.await(5, java.util.concurrent.TimeUnit.SECONDS)).as("connection released by the client").isTrue();
+        } finally { slow.close(); }
+    }
+
     @Test void onlyAServerOriginIsAcceptedAndInputsAreValidatedBeforeAnyRequest() {
         for (String bad : new String[]{"ftp://registry", "http://user:pw@registry:5000", "http://registry:5000/v2", "http://registry:5000?x=1", "registry:5000"})
             assertThatIllegalArgumentException().as(bad).isThrownBy(() -> new DistributionRegistryClient(bad, Duration.ofSeconds(2), null, null));
