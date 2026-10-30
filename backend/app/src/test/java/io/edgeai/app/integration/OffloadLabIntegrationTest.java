@@ -189,6 +189,25 @@ class OffloadLabIntegrationTest {
         assertThat(lab.stop(session.id(),"{}").state()).isEqualTo("STOPPED"); // Idempotent.
         assertThat(lab.start(UUID.randomUUID().toString(),start(edge.id())).created()).isTrue(); // Explicit repeat session.
     }
+    /** Live repro 26ce1cbb: the model failed while load ran; the session stayed ACTIVE with a running burner on a terminal Run. */
+    @Test void modelFailureDuringLoadStopsTheLoadAndFinishesTheSession() {
+        var session=lab.start(UUID.randomUUID().toString(),start(edge.id())).value();
+        var attempt=runs.attempts(runs.tasks(session.runId()).getFirst().id()).getFirst().id();
+        lifecycle.plan(attempt,"offload-lab-it");
+        var pod=new RuntimePod(UUID.randomUUID(),UUID.randomUUID(),edge.id(),edge.name());
+        lifecycle.submitted(attempt,pod.jobUid());lifecycle.claim(attempt,1,pod);
+        lab.startLoad(session.id(),UUID.randomUUID().toString(),load(4,300));
+        lifecycle.fail(attempt,1,pod.podUid(),"WORKLOAD_FAILED");
+        assertThat(runs.run(session.runId(),false).orElseThrow().state()).isEqualTo("FAILED");
+        rejected(()->lab.startLoad(session.id(),UUID.randomUUID().toString(),load(1,60)),"OFFLOAD_LAB_RUN_FINISHED");
+        lab.reconcile();
+        var view=lab.view().session();
+        assertThat(view.state()).isNotEqualTo("ACTIVE");assertThat(view.load().desired()).isEqualTo("STOPPED");
+        assertThat(gateway.deleted).contains(session.id());
+        modelTerminated(session.runId());
+        for(int i=0;i<3;i++)lab.reconcile();
+        assertThat(state(session.id())).isEqualTo("STOPPED");assertThat(gateway.jobs).doesNotContainKey(session.id());
+    }
     @Test void stopAndViewWorkWhileKubernetesIsUnavailable() {
         var session=lab.start(UUID.randomUUID().toString(),start(edge.id())).value();
         lab.startLoad(session.id(),UUID.randomUUID().toString(),load(2,120));

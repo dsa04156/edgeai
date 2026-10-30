@@ -139,6 +139,27 @@ export function policyFrom(lab: Lab, form: LabForm): OffloadPolicy {
 
 export const loadRunning = (session: LabSession | null | undefined) =>
   session?.load.desired === "RUNNING";
+/** The model Run ended on its own or was stopped; the server then stops the load and refuses a new one. */
+export const runFinished = (session: LabSession | null | undefined) =>
+  ["SUCCEEDED", "FAILED", "CANCELLED"].includes(session?.runState ?? "");
+
+const cleanup: Record<string, string> = { ACTIVE: "정리 대기", STOPPING: "정리 중 (Pod 종료 확인 대기)", STOPPED: "종료됨" };
+/**
+ * Session status for display. A finished Run is never shown as running, even before the server moved the session on; cleanup
+ * is only reported done once the server observed it (STOPPED).
+ */
+export function sessionStatus(session: LabSession) {
+  if (session.runState === "FAILED") return `모델 실패 · ${cleanup[session.state] ?? session.state}`;
+  if (runFinished(session) && session.state !== "STOPPED") return `모델 종료 · ${cleanup[session.state] ?? session.state}`;
+  return session.state === "ACTIVE" ? "실행 중" : (cleanup[session.state] ?? session.state);
+}
+
+/** Why the model Run failed, from its latest attempt; null unless the Run FAILED. */
+export function modelFailure(session: LabSession | null | undefined) {
+  if (session?.runState !== "FAILED") return null;
+  const last = [...session.attempts].sort((a, b) => b.number - a.number)[0];
+  return { reason: last?.failureReason ?? null, attempt: last?.number ?? null, nodeName: last?.nodeName ?? null, at: last?.updatedAt ?? null };
+}
 
 /** Which controls make sense now; the server still decides. */
 export function controls(lab: Lab | null) {
@@ -148,7 +169,7 @@ export function controls(lab: Lab | null) {
   return {
     start: !!lab?.enabled && !open,
     stop: active,
-    loadStart: active && !loadRunning(session),
+    loadStart: active && !runFinished(session) && !loadRunning(session),
     loadStop: !!session && loadRunning(session),
   };
 }

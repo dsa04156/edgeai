@@ -19,6 +19,15 @@
       :closable="false"
       :title="`모델 실행을 사용할 수 없습니다: ${disabledText}`"
     />
+    <KsAlert
+      v-if="failure"
+      type="error"
+      :closable="false"
+      :title="`모델 실행 실패: ${failure.reason ?? '사유 미보고'}`"
+    >
+      시도 {{ failure.attempt ?? "—" }} · {{ failure.nodeName ?? "노드 미상" }} · {{ time(failure.at) }}. 실패한 시험에는 부하를 시작할 수
+      없고, 남은 부하는 자동으로 중지됩니다. 정리 후 '모델 실행'으로 새 시험을 시작하세요.
+    </KsAlert>
 
     <section class="native-panel" aria-labelledby="lab-placement">
       <div class="native-toolbar lab-heading">
@@ -105,7 +114,7 @@
       </div>
       <NativeFeedback :error="actionError" :notice="notice" />
       <div v-if="session" class="native-detail lab-facts"><dl>
-        <div><dt>시험 상태</dt><dd>{{ sessionStates[session.state] }} · Run {{ session.runState }}</dd></div>
+        <div><dt>시험 상태</dt><dd>{{ sessionStatus(session) }} · Run {{ session.runState }}</dd></div>
         <div><dt>원래 edge</dt><dd>{{ session.edgeNodeName }}</dd></div>
         <div><dt>부하</dt><dd>{{ loadText }}</dd></div>
         <div>
@@ -208,7 +217,7 @@ import { KsAlert, KsButton, KsForm, KsFormItem, KsInputNumber, KsOption, KsSelec
 import TopNavBar from "kestra-original/components/layout/TopNavBar.vue";
 import useRouteContext from "kestra-original/composables/useRouteContext";
 import { all, get, pretty, requestKey, time, useAction, usePoll, write, type Schema } from "./native-api";
-import { actionKeys, controls, cores, formFrom, lockedFields, loadEstimate, presetWorkers, loadRunning, percent, placement, policyFrom, problem, shortId, stateLabel, transition, triggerLabel, type Lab, type LabForm, type NumericField } from "./offload-lab";
+import { actionKeys, controls, cores, formFrom, lockedFields, loadEstimate, presetWorkers, loadRunning, modelFailure, percent, placement, policyFrom, problem, sessionStatus, shortId, stateLabel, transition, triggerLabel, type Lab, type LabForm, type NumericField } from "./offload-lab";
 import NativeFeedback from "./NativeFeedback.vue";
 import NativeLoading from "./NativeLoading.vue";
 import NativeRecords from "./NativeRecords.vue";
@@ -252,6 +261,7 @@ function applyPreset() {
 }
 const here = computed(() => placement(session.value));
 const move = computed(() => transition(session.value));
+const failure = computed(() => modelFailure(session.value));
 const latency = computed(() => session.value?.latency[0] ?? null);
 const edges = computed(() => lab.value?.nodes.filter((n) => n.role === "EDGE") ?? []);
 const reasons: Record<string, string> = {
@@ -260,9 +270,8 @@ const reasons: Record<string, string> = {
   WORKFLOW_NOT_PUBLISHED: "시험 워크플로가 발행되지 않았습니다",
 };
 const disabledText = computed(() => reasons[lab.value?.disabledReason ?? ""] ?? lab.value?.disabledReason ?? "");
-const sessionStates: Record<string, string> = { ACTIVE: "실행 중", STOPPING: "정리 중 (Pod 종료 확인 대기)", STOPPED: "종료됨" };
 const sessionText = computed(() =>
-  session.value ? `시험 ${sessionStates[session.value.state]}` : "실행 중인 시험 없음",
+  session.value ? `시험 ${sessionStatus(session.value)}` : "실행 중인 시험 없음",
 );
 const fields: { key: NumericField; label: string; min: number; max: number; load?: boolean }[] = [
   { key: "sourceCpuPercent", label: "edge 과부하 CPU (%) 이상", min: 1, max: 100 },

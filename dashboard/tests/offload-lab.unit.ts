@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { controls, formFrom, placement, policyFrom, problem, transition, type Lab, type LabSession } from "../kestra-native/offload-lab.ts";
+import { controls, formFrom, modelFailure, placement, sessionStatus, policyFrom, problem, transition, type Lab, type LabSession } from "../kestra-native/offload-lab.ts";
 
 const offload = {
   cpuPercent: null, memoryPercent: null, latencyMicros: null, consecutiveSamples: 2, maxSampleAgeSeconds: 90, maxGapSeconds: 75,
@@ -41,6 +41,25 @@ test("controls follow the server state, not clicks", () => {
   assert.deepEqual(controls(lab(session({ load: { desired: "RUNNING" } as LabSession["load"] }))), { start: false, stop: true, loadStart: false, loadStop: true });
   assert.deepEqual(controls(lab(session({ state: "STOPPING" }))), { start: false, stop: false, loadStart: false, loadStop: false });
   assert.deepEqual(controls(lab(session({ state: "STOPPED" }))), { start: true, stop: false, loadStart: false, loadStop: false });
+});
+
+test("a failed model Run is reported at once and blocks load while the server finishes cleanup", () => {
+  const attempts = [
+    { number: 1, state: "FAILED", nodeName: "edge-a", failureReason: "WORKLOAD_FAILED", updatedAt: "2026-10-30T04:37:09.947Z" },
+  ] as unknown as LabSession["attempts"];
+  const failed = session({ runState: "FAILED", attempts, load: { desired: "RUNNING" } as LabSession["load"] });
+  assert.deepEqual(controls(lab(failed)), { start: false, stop: true, loadStart: false, loadStop: true });
+  assert.equal(controls(lab(session({ runState: "SUCCEEDED" }))).loadStart, false);
+  assert.deepEqual(modelFailure(failed), { reason: "WORKLOAD_FAILED", attempt: 1, nodeName: "edge-a", at: "2026-10-30T04:37:09.947Z" });
+  assert.equal(modelFailure(session({ runState: "RUNNING" })), null);
+  assert.equal(modelFailure(session({ runState: "CANCELLED", state: "STOPPED" })), null);
+  // The status shown in the heading and details follows the Run, and never claims cleanup before STOPPED is observed.
+  assert.equal(sessionStatus(failed), "모델 실패 · 정리 대기");
+  assert.equal(sessionStatus(session({ runState: "FAILED", state: "STOPPING" })), "모델 실패 · 정리 중 (Pod 종료 확인 대기)");
+  assert.equal(sessionStatus(session({ runState: "FAILED", state: "STOPPED" })), "모델 실패 · 종료됨");
+  assert.equal(sessionStatus(session({ runState: "SUCCEEDED" })), "모델 종료 · 정리 대기");
+  assert.equal(sessionStatus(session({ runState: "RUNNING" })), "실행 중");
+  assert.equal(sessionStatus(session({ runState: "CANCELLED", state: "STOPPED" })), "종료됨");
 });
 
 test("placement is only what a RUNNING producer reports; transitions show their real state", () => {

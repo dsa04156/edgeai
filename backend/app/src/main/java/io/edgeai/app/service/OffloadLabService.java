@@ -140,6 +140,8 @@ public class OffloadLabService {
                 return new Creation<>(session,false);
             }
             if(!session.state().equals("ACTIVE"))throw error(409,"OFFLOAD_LAB_STOPPED","중지된 시험에는 부하를 시작할 수 없습니다.");
+            if(FINISHED.contains(runs.run(session.runId(),false).orElseThrow().state()))
+                throw error(409,"OFFLOAD_LAB_RUN_FINISHED","모델 실행이 이미 끝났습니다. 모델 중지 후 새 시험을 시작하세요.");
             if(session.loadRunning(now))throw error(409,"OFFLOAD_LAB_LOAD_RUNNING","이 시험의 부하가 이미 실행 중입니다. 부하 중지 후 다시 시작하세요.");
             if(gateway.isEmpty())throw error(503,"OFFLOAD_LAB_KUBERNETES_DISABLED","부하 Job을 만들 Kubernetes 연결이 없습니다.");
             if(session.loadGeneration()>=1000)throw error(409,"OFFLOAD_LAB_LOAD_LIMIT","시험당 부하 시작 한도를 넘었습니다.");
@@ -207,13 +209,16 @@ public class OffloadLabService {
      * never reach a generation that a concurrent startLoad created after that read.
      */
     void advance(UUID id,Instant now) {
-        var session=sessions.find(id,false).orElseThrow();int generation=session.loadGeneration();
+        var session=sessions.find(id,false).orElseThrow();
+        if(session.state().equals("ACTIVE") && FINISHED.contains(runs.run(session.runId(),false).orElseThrow().state())) {
+            // Model ended on its own (duration, failure), also while load runs: STOPPING stops the load and admits no new generation.
+            transactions.executeWithoutResult(status->sessions.stopping(id,now));session=sessions.find(id,false).orElseThrow();
+        }
+        int generation=session.loadGeneration();
         if(session.loadRunning(now)){submit(session);return;}
         boolean loadGone=release(id,generation);
         if(session.loadDesired().equals("RUNNING")) // Expired: the program already exited or is past its bound.
             transactions.executeWithoutResult(status->sessions.stopLoad(id,generation,now));
-        if(session.state().equals("ACTIVE") && FINISHED.contains(runs.run(session.runId(),false).orElseThrow().state()))
-            transactions.executeWithoutResult(status->sessions.stopping(id,now)); // Model ended on its own (duration, failure).
         var latest=sessions.find(id,false).orElseThrow();
         if(latest.state().equals("STOPPING")) {
             if(latest.loadGeneration()!=generation)loadGone=release(id,latest.loadGeneration()); // Started before STOPPING; none can follow it.
