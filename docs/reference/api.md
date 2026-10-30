@@ -70,7 +70,7 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 ## 관리 operation 목록
 
 <!-- BEGIN GENERATED OPERATIONS -->
-계약에 정의된 operation은 **115개**입니다.
+계약에 정의된 operation은 **122개**입니다.
 
 | 메서드 | 경로 | operationId |
 |---|---|---|
@@ -143,6 +143,13 @@ Swagger에서 요청·응답·필드 제한과 오류를 확인합니다.
 | `POST` | `/api/v1/offload-lab/sessions/{sessionId}/stop` | `stopOffloadLabSession` |
 | `POST` | `/api/v1/offload-lab/sessions/{sessionId}/load` | `startOffloadLabLoad` |
 | `POST` | `/api/v1/offload-lab/sessions/{sessionId}/load/stop` | `stopOffloadLabLoad` |
+| `GET` | `/api/v1/ai-models/registry` | `getAiModelRegistry` |
+| `GET` | `/api/v1/ai-models/registry/repositories` | `listAiModelRegistryRepositories` |
+| `GET` | `/api/v1/ai-models/registry/tags` | `listAiModelRegistryTags` |
+| `GET` | `/api/v1/ai-models/registry/manifest` | `getAiModelRegistryManifest` |
+| `POST` | `/api/v1/ai-models` | `registerAiModel` |
+| `GET` | `/api/v1/ai-models` | `listAiModels` |
+| `GET` | `/api/v1/ai-models/{modelId}` | `getAiModel` |
 | `GET` | `/api/v1/resource-profiles/capabilities` | `getResourceProfilingCapabilities` |
 | `GET` | `/api/v1/resource-profiles/workloads` | `listResourceProfileWorkloads` |
 | `GET` | `/api/v1/resource-profiles/pods` | `listResourceProfilePods` |

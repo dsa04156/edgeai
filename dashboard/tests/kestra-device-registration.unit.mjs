@@ -163,3 +163,32 @@ test("cancelling an unfinished upload leaves registration and reads available", 
     assert.equal(calls.some(call => call.method === "POST"), false);
   });
 });
+
+test("AI model catalog routes reach only the management API with session, CSRF and Idempotency-Key", async () => {
+  await withServers(async (url, calls, baseUrl) => {
+    const id = "00000000-0000-4000-8000-0000000000c1";
+    for (const path of ["ai-models?q=det&limit=20&offset=0", "ai-models/registry", "ai-models/registry/repositories?limit=50&last=edgeai%2Fa",
+      "ai-models/registry/tags?repository=edgeai%2Fdetector&limit=50", "ai-models/registry/manifest?repository=edgeai%2Fdetector&reference=1.0", `ai-models/${id}`])
+      assert.equal((await fetch(`${url}/api/control-plane/${path}`, {headers: {Cookie: "EDGEAI_SESSION=fixture-session"}})).status, 200, path);
+    assert.deepEqual(calls.map(c => c.path), ["/api/v1/ai-models?q=det&limit=20&offset=0", "/api/v1/ai-models/registry",
+      "/api/v1/ai-models/registry/repositories?limit=50&last=edgeai%2Fa", "/api/v1/ai-models/registry/tags?repository=edgeai%2Fdetector&limit=50",
+      "/api/v1/ai-models/registry/manifest?repository=edgeai%2Fdetector&reference=1.0", `/api/v1/ai-models/${id}`]);
+    assert.ok(calls.every(c => c.headers.cookie === "EDGEAI_SESSION=fixture-session"));
+    const body = {modelKey: "detector", displayName: "Detector", modelVersion: "1.0.0"};
+    const created = await fetch(`${url}/api/control-plane/ai-models`, {method: "POST", headers: {
+      Origin: url, "Content-Type": "application/json", "X-CSRF-TOKEN": "fixture-token", "Idempotency-Key": id, Cookie: "EDGEAI_SESSION=fixture-session",
+    }, body: JSON.stringify(body)});
+    assert.equal(created.status, 201);
+    const post = calls.at(-1);
+    assert.equal(post.path, "/api/v1/ai-models");
+    assert.equal(post.headers["idempotency-key"], id);
+    assert.equal(post.headers["x-csrf-token"], "fixture-token");
+    assert.equal(post.headers.origin, baseUrl);
+    const before = calls.length;
+    for (const [path, method, expected] of [[`ai-models/${id}`, "DELETE", 405], [`ai-models/${id}`, "PUT", 405], ["ai-models/registry", "POST", 405],
+      ["ai-models/registry/blobs", "GET", 404], ["ai-models/not-a-uuid", "GET", 404], ["ai-models/registry/manifest/extra", "GET", 404]])
+      assert.equal((await fetch(`${url}/api/control-plane/${path}`, {method, headers: {"Content-Type": "application/json"}, ...(method === "GET" ? {} : {body: "{}"})})).status, expected, `${method} ${path}`);
+    assert.equal((await fetch(`${url}/api/control-plane/ai-models`, {method: "POST", headers: {Origin: "https://another.example", "Content-Type": "application/json"}, body: "{}"})).status, 403);
+    assert.equal(calls.length, before);
+  });
+});

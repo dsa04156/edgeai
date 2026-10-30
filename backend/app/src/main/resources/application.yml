@@ -63,6 +63,15 @@ edgeai:
       bridge-url: ${EDGEAI_RESOURCE_PROFILING_KRR_BRIDGE_URL:}
       version: ${EDGEAI_RESOURCE_PROFILING_KRR_VERSION:v1.31.1}
       timeout-seconds: ${EDGEAI_RESOURCE_PROFILING_KRR_TIMEOUT_SECONDS:130}
+  ai-models:
+    # Catalog of model execution configurations (image digest + resource requirements); reads/writes only the DB.
+    enabled: ${EDGEAI_AI_MODELS_ENABLED:true}
+    registry:
+      # The single registry the catalog may read. Empty disables image lookup and registration.
+      url: ${EDGEAI_AI_MODELS_REGISTRY_URL:}
+      timeout-seconds: ${EDGEAI_AI_MODELS_REGISTRY_TIMEOUT_SECONDS:10}
+      username: ${EDGEAI_AI_MODELS_REGISTRY_USERNAME:}
+      password-file: ${EDGEAI_AI_MODELS_REGISTRY_PASSWORD_FILE:}
   inference:
     enabled: ${EDGEAI_INFERENCE_ENABLED:false}
     model-id: ${EDGEAI_INFERENCE_MODEL_ID:}

@@ -1,3 +1,9 @@
+## 2026-10-30 AI 모델 관리
+
+- `AI 모델 관리`(`/ui/main/ai-models`)는 목록이 첫 화면이다. 검색·`모델 등록` 버튼은 목록 패널 툴바에, 등록 양식과 상세는 별도 native-panel이다. 원본 KsForm·KsSelect·KsInput·KsButton·NativeFeedback·NativeLoading과 자원 프로파일의 dense 표·상태 배지만 쓴다.
+- 표의 digest는 `sha256:` 뒤 12자와 `…`, 전체 값은 상세의 `code`(줄바꿈 허용)로 둔다. 표 스크롤 컨테이너는 `position: relative`로 숨김 머리글이 페이지 폭을 넓히지 않게 한다. 요청 키·config/document digest·media type·제한 문구는 `기술 상세` details로 접는다.
+- 새 모델의 요구량 칸은 비어 시작하고 근거는 사용자 지정(미측정)으로 표시한다. 기존 자원 프로파일을 그대로 쓸 때만 원본 근거를 표시한다.
+
 ## 2026-10-30 오프로딩 테스트 작업대
 
 - `오프로딩 테스트`는 상태 줄(시험 상태 태그·원래 엣지·모델 위치·조회 시각, 긴 시험 조건은 접힘) → 제어(엣지 선택 먼저, 모델[실행 primary·중지]·부하[프로세스·시간·시작·중지] fieldset) → 모델 위치 lane → 진행 기록 → 접힌 정책·원본 기록·실행 선언 순서다. 이 화면만 패널 padding·간격 16px.

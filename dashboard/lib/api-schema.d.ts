@@ -1165,6 +1165,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai-models/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 서버 설정 Registry 연결 상태
+         * @description 서버 설정으로 고정된 컨테이너 Registry가 있는지와 push에 쓸 host만 반환합니다. 인증 정보는 반환하지 않습니다.
+         */
+        get: operations["getAiModelRegistry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/registry/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registry 저장소 목록(_catalog)
+         * @description 설정된 Registry의 `_catalog`를 n·last로 한 페이지씩 조회합니다. 다음 페이지가 있으면 next에 마지막 저장소 이름을 주며, Registry의 Link URL은 따라가지 않습니다. 저장소를 모르면 이름을 직접 입력해 태그를 조회할 수 있습니다.
+         */
+        get: operations["listAiModelRegistryRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/registry/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registry 저장소의 태그 목록
+         * @description 저장소 이름은 OCI distribution 규칙으로 검증하며 next는 마지막 태그(last)입니다.
+         */
+        get: operations["listAiModelRegistryTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/registry/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 이미지 manifest 확인(digest·플랫폼)
+         * @description 태그 또는 sha256 digest의 manifest를 OCI·Docker manifest/index Accept로 실제 GET하고 반환 bytes의 sha256을 digest로 확인합니다. 단일 이미지는 config blob의 OS·아키텍처를, index는 선언된 플랫폼(unknown/unknown attestation 제외)을 반환합니다. 차트·서명·SBOM 같은 이미지가 아닌 artifact는 422입니다.
+         */
+        get: operations["getAiModelRegistryManifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * AI 모델 실행 구성 목록
+         * @description 최근 등록순입니다. q는 모델 키·표시 이름·버전·저장소를 대소문자 구분 없이 부분 일치로 찾습니다.
+         */
+        get: operations["listAiModels"];
+        put?: never;
+        /**
+         * AI 모델 실행 구성 등록
+         * @description 모델 키·버전·실행 구성명(기본 default)마다 하나의 불변 항목을 저장합니다. 이미지는 저장소와 사용자가 확인한 sha256 digest·플랫폼으로 지정하며, 서버가 Registry에서 manifest·선택 플랫폼 manifest·config blob을 다시 읽어 검증한 뒤 저장합니다(tag는 출처 기록). 자원 요구량은 자원 프로파일과 같은 단위·범위 규칙이며, resourceProfileId 없이 입력한 값은 MANUAL·UNMEASURED입니다. resourceProfileId를 지정하면 그 SERVICE 이미지가 같은 repository@digest(또는 선택 플랫폼 manifest digest)이고 호환 아키텍처에 선택 플랫폼이 있어야 하며, 실행 명령·입력 조건·런타임·요구량이 원본과 같을 때만 원본의 근거(evidence)와 측정 상태를 유지합니다. 수정한 값은 MANUAL이어야 합니다. 같은 Idempotency-Key와 같은 입력은 Registry 상태와 무관하게 200으로 기존 항목을, 다른 입력은 409를 반환합니다. 등록은 SERVICE 실행 모듈 발행·워크플로 연결·실행·자원 예약을 하지 않습니다.
+         */
+        post: operations["registerAiModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai-models/{modelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        /** AI 모델 실행 구성 조회 */
+        get: operations["getAiModel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resource-profiles/capabilities": {
         parameters: {
             query?: never;
@@ -4768,6 +4891,163 @@ export interface components {
             version: string;
             digest: string;
         };
+        AiModelRegistryStatus: {
+            configured: boolean;
+            /** @description push에 쓰는 Registry host[:port]. 인증 정보는 포함하지 않습니다. */
+            host: string | null;
+        };
+        AiModelRegistryPage: {
+            repository?: string;
+            items: string[];
+            /** @description 다음 페이지의 last 값. 없으면 마지막 페이지입니다. */
+            next: string | null;
+        };
+        AiModelPlatform: {
+            os: string;
+            architecture: string;
+            variant: string | null;
+            label: string;
+            /** @description linux/amd64·linux/arm64만 등록할 수 있습니다. */
+            runnable: boolean;
+        };
+        AiModelResolvedImage: {
+            registry: string;
+            repository: string;
+            /** @description 조회한 태그 또는 digest */
+            reference: string;
+            /** @description 반환 bytes로 검증한 manifest·index digest */
+            digest: string;
+            mediaType: string;
+            /** @enum {string} */
+            kind: "INDEX" | "MANIFEST";
+            /** @description host/repository@digest */
+            imageReference: string;
+            platforms: (components["schemas"]["AiModelPlatform"] & {
+                /** @description 플랫폼별 이미지 manifest digest(단일 이미지는 digest와 같음) */
+                manifestDigest: string;
+                mediaType: string;
+                size: number;
+            })[];
+        };
+        AiModelRegistration: {
+            modelKey: string;
+            displayName: string;
+            modelVersion: string;
+            description?: string | null;
+            /**
+             * @description 같은 모델·버전의 장치·이미지·입력 조건별 실행 구성 이름
+             * @default default
+             */
+            configName: string;
+            image: {
+                /** @description 서버 설정 Registry 안의 저장소 이름(host 제외) */
+                repository: string;
+                /** @description 조회에 쓴 태그(출처 기록). 등록은 digest로 고정합니다. */
+                tag?: string | null;
+                digest: string;
+                platform: {
+                    /** @enum {string} */
+                    os: "linux";
+                    /** @enum {string} */
+                    architecture: "amd64" | "arm64";
+                    variant?: string | null;
+                };
+            };
+            execution?: {
+                command?: string[] | null;
+                args?: string[] | null;
+            };
+            inputConditions?: {
+                [key: string]: string;
+            };
+            runtime?: {
+                name: string;
+                version?: string;
+            } | null;
+            resources: components["schemas"]["ResourceProfileCreate"]["resources"];
+            /**
+             * Format: uuid
+             * @description 요구량·근거를 재사용할 기존 불변 자원 프로파일
+             */
+            resourceProfileId?: string | null;
+        };
+        AiModelExecution: {
+            /** Format: uuid */
+            id: string;
+            /** @description 저장 문서 digest */
+            digest: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @enum {string} */
+            measurementStatus: "MEASURED" | "PARTIAL" | "UNMEASURED";
+            /** Format: uuid */
+            resourceProfileId: string | null;
+            modelKey: string;
+            displayName: string;
+            modelVersion: string;
+            configName: string;
+            description: string | null;
+            image: {
+                registry: string;
+                repository: string;
+                /** @description 등록한 불변 참조(index 또는 단일 manifest) */
+                digest: string;
+                /** @description host/repository@digest */
+                reference: string;
+                mediaType: string;
+                /** @enum {string} */
+                kind: "INDEX" | "MANIFEST";
+                sourceTag: string | null;
+                platform: components["schemas"]["AiModelPlatform"];
+                /** @description 선택 플랫폼의 이미지 manifest digest */
+                platformManifestDigest: string;
+                platformReference: string;
+                platformManifestMediaType: string;
+                configDigest: string;
+                configMediaType: string;
+                layersSize: number;
+                created: string | null;
+                /** Format: date-time */
+                verifiedAt: string;
+            };
+            execution: {
+                command: string[] | null;
+                args: string[] | null;
+            };
+            inputConditions: {
+                [key: string]: string;
+            };
+            runtime: {
+                [key: string]: string;
+            } | null;
+            requirements: {
+                /** @enum {string} */
+                source: "MANUAL" | "RESOURCE_PROFILE" | "MANUAL_FROM_RESOURCE_PROFILE";
+                /** @enum {string} */
+                measurementStatus: "MEASURED" | "PARTIAL" | "UNMEASURED";
+                resources: components["schemas"]["ResourceProfileCreate"]["resources"];
+            };
+            /** @description 원본 자원 프로파일 revision(서버가 불러온 불변 사본) */
+            resourceProfile: {
+                /** Format: uuid */
+                id?: string;
+                revision?: number;
+                digest?: string;
+                measurementStatus?: string;
+                service?: components["schemas"]["ResourceServiceVersion"];
+                /** Format: date-time */
+                createdAt?: string;
+            } | null;
+            /** @description 원본 자원 프로파일이 인용한 분석 근거 사본(원본과 같을 때만) */
+            evidence: {
+                [key: string]: unknown;
+            } | null;
+            limitations: string[];
+        };
+        AiModelPage: {
+            items: components["schemas"]["AiModelExecution"][];
+            nextOffset: number | null;
+        };
         /**
          * @description MEASURED: 인용 분석의 AVAILABLE 실측, RECOMMENDED: 인용 분석의 KRR 값, MANUAL: 사용자 직접 지정
          * @enum {string}
@@ -8167,6 +8447,410 @@ export interface operations {
                 content?: never;
             };
             /** @description OFFLOAD_LAB_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAiModelRegistry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registry 설정 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelRegistryStatus"];
+                };
+            };
+        };
+    };
+    listAiModelRegistryRepositories: {
+        parameters: {
+            query?: {
+                last?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 저장소 이름 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelRegistryPage"];
+                };
+            };
+            /** @description 페이지·이름 형식 오류(INVALID_IMAGE_REFERENCE, INVALID_AI_MODEL) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 장애·인증 거부·redirect·응답 오류(REGISTRY_*) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 미설정(REGISTRY_NOT_CONFIGURED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 응답 시간 초과(REGISTRY_TIMEOUT) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAiModelRegistryTags: {
+        parameters: {
+            query: {
+                repository: string;
+                last?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 태그 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelRegistryPage"];
+                };
+            };
+            /** @description 저장소·태그·페이지 형식 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소가 없습니다(IMAGE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 장애·응답 오류(REGISTRY_*) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 미설정(REGISTRY_NOT_CONFIGURED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 응답 시간 초과(REGISTRY_TIMEOUT) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAiModelRegistryManifest: {
+        parameters: {
+            query: {
+                repository: string;
+                /** @description 태그 또는 sha256 digest */
+                reference: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 검증한 manifest 요약 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelResolvedImage"];
+                };
+            };
+            /** @description 저장소·참조 형식 오류(INVALID_IMAGE_REFERENCE) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 저장소·태그·digest가 없습니다(IMAGE_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 지원하지 않는 artifact(UNSUPPORTED_IMAGE_ARTIFACT) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description digest 불일치(IMAGE_DIGEST_MISMATCH)·Registry 장애·redirect 차단(REGISTRY_*) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 미설정(REGISTRY_NOT_CONFIGURED) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 응답 시간 초과(REGISTRY_TIMEOUT) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAiModels: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 항목 페이지 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelPage"];
+                };
+            };
+            /** @description 잘못된 검색어·페이지(INVALID_AI_MODEL) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    registerAiModel: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelRegistration"];
+            };
+        };
+        responses: {
+            /** @description 같은 Idempotency-Key·같은 입력으로 이미 등록된 항목 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelExecution"];
+                };
+            };
+            /** @description 새 불변 항목 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelExecution"];
+                };
+            };
+            /** @description 필드·단위·범위·근거·이미지 참조 오류(INVALID_AI_MODEL) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description CSRF 토큰/쿠키가 없거나 유효하지 않습니다. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 이미지(IMAGE_NOT_FOUND)·자원 프로파일(RESOURCE_PROFILE_NOT_FOUND)이 없습니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 같은 모델·버전·실행 구성 존재(AI_MODEL_VERSION_EXISTS), Idempotency 충돌(IDEMPOTENCY_CONFLICT), 자원 프로파일 이미지·플랫폼 불일치(RESOURCE_PROFILE_IMAGE_MISMATCH, RESOURCE_PROFILE_PLATFORM_MISMATCH) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description UTF-8 JSON 요청은 64 KiB 이하여야 합니다. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 선택한 플랫폼이 없거나(IMAGE_PLATFORM_NOT_FOUND) 이미지가 아닌 artifact(UNSUPPORTED_IMAGE_ARTIFACT) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description digest 불일치·Registry 장애·redirect 차단(IMAGE_DIGEST_MISMATCH, REGISTRY_*) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 미설정 또는 저장소 사용 불가 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Registry 응답 시간 초과(REGISTRY_TIMEOUT) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAiModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 불변 항목 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelExecution"];
+                };
+            };
+            /** @description 항목이 없습니다(AI_MODEL_NOT_FOUND). */
             404: {
                 headers: {
                     [name: string]: unknown;

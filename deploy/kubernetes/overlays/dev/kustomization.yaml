@@ -53,6 +53,13 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: {name: EDGEAI_RAW_HISTORY_ENABLED, value: 'true'}
+  # AI model catalog reads only the existing in-cluster-reachable registry (images are pushed there with docker push).
+  # Appended so the rendered env order equals the running Pod plus this entry.
+  - target: {kind: Deployment, name: edgeai-api}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: EDGEAI_AI_MODELS_REGISTRY_URL, value: 'http://10.254.192.47:5000'}
   # Users reach the console at the server address 10.254.192.47:13080 (formerly the host Next.js process).
   # A hostPort cannot be shared during a rolling update, so the old Pod stops first.
   - patch: |-
@@ -91,10 +98,10 @@ images:
     digest: sha256:484af0d5232144e1d270f361c08495b8599997aa1565dd04467372d72348052f
   - name: ghcr.io/dsa04156/edgeai-api
     newName: 10.254.192.47:5000/edgeai-api
-    digest: sha256:8805111ca4aa44f4214c5d724d2a1c43c493cacc8e9efe68df3ef610126b31db
+    digest: sha256:d8562c314a36f44dbd65c61e546906b5ee244b8a2efb23ccbc89966153d62d0b
   - name: ghcr.io/dsa04156/edgeai-dashboard
     newName: 10.254.192.47:5000/edgeai-dashboard
-    digest: sha256:4187ee0d874f8664c8141a0716c64404692839a5b19c49a2ccb212377beb196e
+    digest: sha256:37f126ef2302699a6d6bef76bc8ede8ed9aeab4020104e4a28ed870237f3cbb9
   - name: ghcr.io/dsa04156/edgeai-minio
     digest: sha256:fd92ade7dfdebfbcc51337c9370d31b2f09d1f5411d2427d3195d34e7fa3b050
   # Patched build of deploy/influxdb; update-images.py pins the CI-tested digest.

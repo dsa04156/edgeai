@@ -4,6 +4,7 @@
 |---|---|
 | ProfileVersion | 종류·키·버전으로 식별하는 발행 규격 |
 | ResourceProfile(자원 프로파일) | SERVICE 버전의 CPU·메모리·GPU/NPU 요구량·허용 범위 불변 revision; 시간 기반 SchedulingProfile(성능 프로파일)과 별개이며 자원 예약이 아님 |
+| AI 모델 실행 구성(AiModelExecution) | 모델 키·버전·실행 구성명마다 하나인 불변 카탈로그 항목; 검증한 Registry 이미지 digest·플랫폼과 자원 요구량. SERVICE 발행·실행이 아님 |
 | 자원 분석(ResourceAnalysis) | 대상 워크로드·구간의 Prometheus 실측·장치 관측·KRR 추천을 서버가 저장한 불변 근거 |
 | 장치 귀속(attribution) | 장치 지표가 서비스 단독 사용인지, 공유·소유 미확인의 노드 장치 전체 값인지의 구분 |
 | Device | 현재 센서 관리에서는 측정 항목별 KubeEdge Device CRD; 과거 UUID 앱 Device는 별도 이력 신원 |
