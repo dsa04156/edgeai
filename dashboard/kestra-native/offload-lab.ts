@@ -88,10 +88,10 @@ export function actionKeys(create: () => string) {
 }
 
 const ranges: [NumericField, string, number, number][] = [
-  ["sourceCpuPercent", "edge 과부하 CPU", 1, 100],
+  ["sourceCpuPercent", "엣지 과부하 CPU", 1, 100],
   ["returnCpuPercent", "복귀 CPU", 1, 100],
-  ["targetMaxCpuPercent", "worker CPU 상한", 1, 100],
-  ["targetMaxMemoryPercent", "worker 메모리 상한", 1, 100],
+  ["targetMaxCpuPercent", "워커 CPU 상한", 1, 100],
+  ["targetMaxMemoryPercent", "워커 메모리 상한", 1, 100],
   ["consecutiveSamples", "연속 표본 수", 2, 6],
   ["maxSampleAgeSeconds", "표본 최대 나이", 10, 180],
   ["maxGapSeconds", "표본 간격 상한", 5, 120],
@@ -104,14 +104,14 @@ const ranges: [NumericField, string, number, number][] = [
 
 /** The same bounds the API enforces, reported before sending. */
 export function problem(form: LabForm): string {
-  if (!form.edgeNodeId) return "edge 노드를 선택하세요.";
+  if (!form.edgeNodeId) return "엣지 노드를 선택하세요.";
   for (const [key, label, min, max] of ranges) {
     const value = form[key];
     if (!Number.isInteger(value) || value < min || value > max)
       return `${label}은 ${min}–${max} 사이 정수로 입력하세요.`;
   }
   if (form.returnCpuPercent >= form.sourceCpuPercent)
-    return "복귀 CPU는 edge 과부하 CPU보다 낮아야 합니다 (흔들림 방지).";
+    return "복귀 CPU는 엣지 과부하 CPU보다 낮아야 합니다 (흔들림 방지).";
   if (form.maxTransfers < 2)
     return "왕복(이동 후 복귀)을 보려면 최대 전환 횟수를 2 이상으로 두세요.";
   return "";
@@ -181,10 +181,10 @@ export function placement(session: LabSession | null | undefined): "EDGE" | "WOR
 }
 
 const triggers: Record<string, string> = {
-  NODE_CPU: "edge CPU 과부하 → worker",
-  NODE_MEM: "edge 메모리 과부하 → worker",
-  NODE_GPU: "edge GPU 과부하 → worker",
-  NODE_RETURN: "원래 edge 여유 → 복귀",
+  NODE_CPU: "엣지 CPU 과부하 → 워커",
+  NODE_MEM: "엣지 메모리 과부하 → 워커",
+  NODE_GPU: "엣지 GPU 과부하 → 워커",
+  NODE_RETURN: "원래 엣지 여유 → 복귀",
   MANUAL: "수동 전환",
 };
 const states: Record<string, string> = {
@@ -198,16 +198,83 @@ const states: Record<string, string> = {
 export const triggerLabel = (trigger: string) => triggers[trigger] ?? trigger;
 export const stateLabel = (state: string) => states[state] ?? state;
 
-/** Latest transition as text, or null when none happened. */
+export type Tone = "success" | "warning" | "danger" | "info";
+const operationTone = (state: string): Tone =>
+  ["DRAINING", "STARTING", "CANCELLING"].includes(state) ? "warning" : state === "SUCCEEDED" ? "success" : state === "FAILED" ? "danger" : "info";
+
+/** Latest transition as text, or null when none happened. A return moves toward the edge; every other trigger away from it. */
 export function transition(session: LabSession | null | undefined) {
   const latest = session?.operations[0];
   if (!latest) return null;
   return {
     label: triggerLabel(latest.trigger),
     state: stateLabel(latest.state),
-    active: ["DRAINING", "STARTING", "CANCELLING"].includes(latest.state),
+    active: operationTone(latest.state) === "warning",
     reason: latest.failureReason,
+    direction: latest.trigger === "NODE_RETURN" ? ("RETURN" as const) : ("OFFLOAD" as const),
+    tone: operationTone(latest.state),
   };
+}
+
+/** Completed transitions against the session's fixed limit; only operations the server reports SUCCEEDED count. */
+export function transfers(session: LabSession | null | undefined) {
+  if (!session) return null;
+  const max = (session.policy as OffloadPolicy | null)?.maxTransfers ?? null;
+  const done = session.operations.filter((op) => op.state === "SUCCEEDED").length;
+  return { done, max, exhausted: max != null && done >= max };
+}
+
+export const route = (op: Schema["OffloadOperation"]) => {
+  const d = op.decision as { sourceNode?: { name: string }; targetNode?: { name: string } } | null;
+  return d?.sourceNode && d.targetNode ? `${d.sourceNode.name} → ${d.targetNode.name}` : "—";
+};
+
+export interface LabEvent {
+  at: string;
+  text: string;
+  detail: string;
+  tone: Tone;
+}
+const causes: Record<string, string> = { INITIAL: "최초 배치", OFFLOAD: "전환" };
+const loadDesired: Record<string, string> = { RUNNING: "실행 요청 유지", STOPPED: "중지 요청됨", EXPIRED: "시간 만료" };
+const podRole = (role: string) => (role === "MODEL" ? "모델" : "부하");
+
+/**
+ * Session events newest first, only from timestamps that mark that event: session start/stop, Attempt and transition
+ * creation, the current load generation's start, and Kubernetes Pod creation/deletion request. Current state is added as
+ * text; update times are not presented as lifecycle events, and earlier load generations are not invented.
+ */
+export function timeline(session: LabSession | null | undefined): LabEvent[] {
+  if (!session) return [];
+  const events: LabEvent[] = [{ at: session.createdAt, text: "시험 시작", detail: `원래 엣지 ${session.edgeNodeName}`, tone: "info" }];
+  if (session.stoppedAt) events.push({ at: session.stoppedAt, text: "시험 종료", detail: `Run ${session.runState}`, tone: "info" });
+  for (const a of session.attempts)
+    events.push({
+      at: a.createdAt,
+      text: `모델 Attempt #${a.number} 생성`,
+      detail: `${a.nodeName ?? "노드 미정"} · ${causes[a.cause] ?? a.cause} · 현재 ${a.observedState ?? a.state}${a.failureReason ? ` (${a.failureReason})` : ""}`,
+      tone: a.state === "FAILED" ? "danger" : "info",
+    });
+  for (const op of session.operations)
+    events.push({
+      at: op.createdAt,
+      text: `전환 판단 · ${triggerLabel(op.trigger)}`,
+      detail: `${route(op)} · 현재 ${stateLabel(op.state)}${op.failureReason ? ` (${op.failureReason})` : ""}`,
+      tone: operationTone(op.state),
+    });
+  const load = session.load;
+  if (load.desired !== "NONE" && load.startedAt)
+    events.push({
+      at: load.startedAt,
+      text: `부하 시작 (${load.generation}회차)`,
+      detail: `${load.workers}프로세스 · ${load.seconds}초 · 현재 ${loadDesired[load.desired] ?? load.desired}`,
+      tone: "warning",
+    });
+  for (const pod of session.pods.items) {
+    if (pod.createdAt) events.push({ at: pod.createdAt, text: `${podRole(pod.role)} Pod 생성`, detail: `${pod.nodeName ?? "노드 미정"} · ${pod.name}`, tone: "info" });
+    if (pod.deletingAt) events.push({ at: pod.deletingAt, text: `${podRole(pod.role)} Pod 삭제 요청`, detail: `${pod.nodeName ?? "노드 미정"} · ${pod.name}`, tone: "warning" });
+  }
+  return events.map((e, i) => ({ e, i, t: Date.parse(e.at) })).sort((x, y) => y.t - x.t || x.i - y.i).map(({ e }) => e);
 }
 
 export const percent = (value: number | null | undefined) =>

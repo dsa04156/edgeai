@@ -4,6 +4,12 @@
 - 표의 digest는 `sha256:` 뒤 12자와 `…`, 전체 값은 상세의 `code`(줄바꿈 허용)로 둔다. 표 스크롤 컨테이너는 `position: relative`로 숨김 머리글이 페이지 폭을 넓히지 않게 한다. 요청 키·config/document digest·media type·제한 문구는 `기술 상세` details로 접는다.
 - 새 모델의 요구량 칸은 비어 시작하고 근거는 사용자 지정(미측정)으로 표시한다. 기존 자원 프로파일을 그대로 쓸 때만 원본 근거를 표시한다.
 
+## 2026-10-30 오프로딩 테스트 작업대
+
+- `오프로딩 테스트`는 상태 줄(시험 상태 태그·원래 엣지·모델 위치·조회 시각, 긴 시험 조건은 접힘) → 제어(엣지 선택 먼저, 모델[실행 primary·중지]·부하[프로세스·시간·시작·중지] fieldset) → 모델 위치 lane → 진행 기록 → 접힌 정책·원본 기록·실행 선언 순서다. 이 화면만 패널 padding·간격 16px.
+- lane은 흰 station(엣지·워커) 사이 방향 화살표(→ 전환, ← 복귀, 모바일은 세로 회전)와 최신 전환 상태 색(진행 amber·완료 green·실패 red)을 둔다. 노드 이름이 CPU보다 앞서고, CPU는 6px 막대에 고정 정책 임계값 눈금만 둔다. 현재 모델 위치는 focus 보라 테두리+green 태그다. 열린 세션만 lane을 차지하며 종료 세션은 "직전 시험"으로만 표시한다. 전환 수는 SUCCEEDED 전환만 센다.
+- 진행 기록은 실제 사건 시각(createdAt·stoppedAt·현재 부하 회차 startedAt·Pod deletingAt)만 쓰고 updatedAt·expiresAt을 사건으로 만들지 않는다. 전체 Pod 이름·UID는 원본 기록 접힘에 둔다. 접힘 summary는 원본 marker 대신 토큰색 chevron과 focus ring을 쓴다.
+
 ## 2026-10-30 서비스 자원 프로파일
 
 - `자원 프로파일`(`/ui/main/resource-profiles`)은 대상 서비스 → 측정 대상·구간 → 실측·추천 확인과 요구량 확정 → 저장된 revision → 2-1 전달 계약 순서의 native-panel 화면이다. 원본 KsForm·KsSelect·KsInput·KsCheckbox·KsButton·NativeFeedback·NativeLoading만 쓰고 카드·지표 타일을 추가하지 않는다.

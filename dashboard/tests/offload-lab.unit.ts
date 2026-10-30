@@ -26,7 +26,7 @@ test("the preset form round-trips into the API policy with the return threshold"
 
 test("invalid presets are explained before any request", () => {
   const form = { ...formFrom(lab(null)), edgeNodeId: "x" };
-  assert.match(problem({ ...form, edgeNodeId: "" }), /edge/);
+  assert.match(problem({ ...form, edgeNodeId: "" }), /엣지/);
   assert.match(problem({ ...form, returnCpuPercent: 50 }), /낮아야/);
   assert.match(problem({ ...form, consecutiveSamples: 1 }), /2–6/);
   assert.match(problem({ ...form, workers: 17 }), /1–16/);
@@ -68,7 +68,7 @@ test("placement is only what a RUNNING producer reports; transitions show their 
   assert.equal(placement(session({ currentNodeName: "worker-b" })), "WORKER");
   assert.equal(transition(session({})), null);
   const draining = transition(session({ operations: [{ trigger: "NODE_RETURN", state: "DRAINING", failureReason: null }] as LabSession["operations"] }));
-  assert.deepEqual(draining, { label: "원래 edge 여유 → 복귀", state: "기존 Pod 종료 대기", active: true, reason: null });
+  assert.deepEqual(draining, { label: "원래 엣지 여유 → 복귀", state: "기존 Pod 종료 대기", active: true, reason: null, direction: "RETURN", tone: "warning" });
 });
 
 test("load presets and estimates follow the selected edge's core count", async () => {
@@ -133,4 +133,40 @@ test("idempotency keys repeat for retries, renew after a confirmed request (star
   assert.equal(keys.key("start"), "k3");
   keys.clear();
   assert.equal(keys.key("start"), "k4");
+});
+
+test("transfers count only SUCCEEDED operations against the session's fixed limit (2 = one round trip)", async () => {
+  const { transfers } = await import("../kestra-native/offload-lab.ts");
+  const ops = (...states: string[]) => states.map((state) => ({ state })) as LabSession["operations"];
+  assert.equal(transfers(null), null);
+  assert.deepEqual(transfers(session({ policy: offload, operations: ops("STARTING", "SUCCEEDED") } as Partial<LabSession>)), { done: 1, max: 2, exhausted: false });
+  assert.deepEqual(transfers(session({ policy: offload, operations: ops("SUCCEEDED", "SUCCEEDED") } as Partial<LabSession>)), { done: 2, max: 2, exhausted: true });
+  assert.deepEqual(transfers(session({ policy: null, operations: ops("FAILED") })), { done: 0, max: null, exhausted: false });
+});
+
+test("the timeline uses only event timestamps, newest first, and never turns update or expiry times into events", async () => {
+  const { timeline } = await import("../kestra-native/offload-lab.ts");
+  assert.deepEqual(timeline(null), []);
+  const events = timeline(session({
+    createdAt: "2026-10-30T04:46:00Z", stoppedAt: null, runState: "RUNNING",
+    attempts: [
+      { number: 2, cause: "OFFLOAD", state: "RUNNING", nodeName: "worker-b", observedState: "RUNNING", failureReason: null, createdAt: "2026-10-30T04:47:27Z", updatedAt: "2026-10-30T04:53:00Z" },
+      { number: 1, cause: "INITIAL", state: "OFFLOADED", nodeName: "edge-a", observedState: "TERMINATED", failureReason: "OFFLOADED", createdAt: "2026-10-30T04:46:00Z", updatedAt: "2026-10-30T04:47:22Z" },
+    ],
+    operations: [{ trigger: "NODE_CPU", state: "SUCCEEDED", failureReason: null, decision: { sourceNode: { name: "edge-a" }, targetNode: { name: "worker-b" } }, createdAt: "2026-10-30T04:47:20Z", updatedAt: "2026-10-30T04:47:30Z" }],
+    load: { desired: "EXPIRED", generation: 2, workers: 4, seconds: 300, startedAt: "2026-10-30T04:46:30Z", expiresAt: "2026-10-30T04:51:30Z" },
+    pods: { status: "OBSERVED", items: [{ role: "MODEL", name: "edgeai-x-abc", nodeName: "worker-b", createdAt: "2026-10-30T04:47:28Z", deletingAt: "2026-10-30T04:52:00Z" }] },
+  } as unknown as Partial<LabSession>));
+  assert.deepEqual(events.map((e) => [e.at, e.text]), [
+    ["2026-10-30T04:52:00Z", "모델 Pod 삭제 요청"],
+    ["2026-10-30T04:47:28Z", "모델 Pod 생성"],
+    ["2026-10-30T04:47:27Z", "모델 Attempt #2 생성"],
+    ["2026-10-30T04:47:20Z", "전환 판단 · 엣지 CPU 과부하 → 워커"],
+    ["2026-10-30T04:46:30Z", "부하 시작 (2회차)"],
+    ["2026-10-30T04:46:00Z", "시험 시작"],
+    ["2026-10-30T04:46:00Z", "모델 Attempt #1 생성"],
+  ]);
+  assert.equal(events.find((e) => e.text.startsWith("전환"))?.detail, "edge-a → worker-b · 현재 완료");
+  assert.match(events.find((e) => e.text.startsWith("부하"))!.detail, /현재 시간 만료/);
+  assert.ok(!events.some((e) => ["2026-10-30T04:51:30Z", "2026-10-30T04:47:22Z", "2026-10-30T04:47:30Z"].includes(e.at)));
 });
