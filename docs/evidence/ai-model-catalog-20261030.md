@@ -1,6 +1,6 @@
 # AI 모델 관리 시험 기록 (2026-10-30)
 
-구현 `f2c71f2`, 검토 보완 `b56927f`, 최신 오프로딩 화면 변경을 보존한 병합 소스 `ea88b51`. 아래 시험은 격리 DB 및 로컬 API에서 수행했습니다. 운영 반영 결과는 후속 배포 기록에 구분합니다. 가이드: [AI 모델 관리](../guides/ai-model-catalog.md).
+구현 `f2c71f2`, 검토 보완 `b56927f`, 최신 오프로딩 화면 변경을 보존한 병합 소스 `ea88b51`. 아래 시험은 격리 DB 및 로컬 API에서 수행했습니다. 운영 반영 결과는 아래 배포 검증 절에 구분합니다. 가이드: [AI 모델 관리](../guides/ai-model-catalog.md).
 
 ## 환경
 
@@ -64,7 +64,7 @@
 
 ## 남은 사항
 
-- 운영 반영은 아래 이미지 고정 및 GitOps 동기화 뒤 검증합니다. 운영 DB에 시험 모델을 등록하지 않습니다.
+- 등록·목록은 운영 반영했습니다. 워크플로에서 선택해 가져오는 기능은 추후입니다.
 - 워크플로 연동, SERVICE 발행, 실행·측정은 후속입니다. 이 기능은 3-3 전체 완료가 아닙니다.
 - Bearer 토큰 방식 Registry 인증은 지원하지 않습니다(현재 Registry는 인증 없음, Basic만 선택 지원).
 
@@ -76,3 +76,20 @@
 - api: `10.254.192.47:5000/edgeai-api@sha256:d8562c314a36f44dbd65c61e546906b5ee244b8a2efb23ccbc89966153d62d0b`
 - dashboard: `10.254.192.47:5000/edgeai-dashboard@sha256:37f126ef2302699a6d6bef76bc8ede8ed9aeab4020104e4a28ed870237f3cbb9`
 - 배포 직전 PostgreSQL custom dump SHA256: `aec5dfc6248c27cd8bbd59fd9eb18d37ebffffde4849f07f72959d7a8560bd1b`. 비공개 로컬 백업과 직전 Deployment 명세를 보존합니다.
+
+## 운영 배포 검증
+
+- `db227e5`를 main에 push하고 Argo CD `edgeai-dev`의 `Synced / Healthy / Succeeded`를 확인했습니다. API·콘솔 모두 Ready 1/1, restart 0, 실제 Pod imageID가 위 고정 digest와 일치했습니다.
+- API 컨테이너 JAR SHA256 `e2a86f8ecc22fb6729b338e2edfcd27981106b1bc272836b97d4bfc68183b2ec`가 로컬 검증 산출물과 일치했고, 콘솔 `/app/REVISION`도 `ea88b51`이었습니다.
+- 운영 DB Flyway V71 `success=true`, `edgeai.ai_model_execution` 테이블 조회 성공(0행). 운영 DB에 시험용 모델을 등록하지 않았습니다.
+- `http://10.254.192.47:13080/ui/main/ai-models`: desktop 1440×1000·mobile 390×844에서 빈 목록, 등록 양식, 실제 `digits-model-amd64:generic-model-20260915` digest 확인 통과. JS 오류 0·페이지 가로 넘침 없음. 등록 POST의 실동작은 위 격리 DB 시험으로 확인했습니다.
+- 콘솔 proxy의 모델 목록·Registry 설정·자원 프로파일·오프로딩 API 모두 200. 기존 오프로딩 화면 변경을 포함합니다.
+- 작업 전용 API 18190·콘솔 13190·PostgreSQL 55480은 검증 후 정상 종료했습니다. Orca 회수 대상 worker는 0이며, 소유권 규칙상 retained 터미널은 강제로 닫지 않았습니다.
+- 기존 `.tools/kestra-publish`에는 다른 작업의 미커밋 변경이 있어 자동 fast-forward하지 않았습니다. 구현·배포 소스는 main과 `ai-model-catalog` 작업 트리에 보존했습니다.
+
+### 다른 작업 병합 후 최종 확인
+
+- 이후 GPU 오프로딩 작업이 `1b8fb80`에서 모델 관리 구현을 보존해 병합하고 `fa5daa9`로 새 통합 이미지를 배포했습니다. Argo CD `fa5daa9`도 Synced·Healthy·Succeeded입니다.
+- 통합본에서 AI 모델 목록·등록 양식과 모델 목록/Registry/자원 프로파일/오프로딩 API 200, JS 오류 0을 재확인했습니다. 모델 관리 구현 파일은 이후 병합에서 변경되지 않았습니다.
+- [이번 CI](https://github.com/dsa04156/edgeai/actions/runs/41011489990)는 scaffold·storage·data-store·influxdb·Runner 재사용 검증을 통과한 뒤, 다른 작업의 새 main push로 이미지/GitOps 단계가 취소됐습니다. [통합본 CI](https://github.com/dsa04156/edgeai/actions/runs/41011807819)는 기록 시점 진행 중이며 전체 성공으로 표시하지 않습니다.
+- 최종 배포 근거 문서는 진행 중인 main CI의 source revision을 바꾸지 않도록 작업 브랜치 `dsa04156/ai-model-catalog`에 별도로 보존합니다. 기능 코드와 배포 설정은 main에 반영되어 있습니다.
