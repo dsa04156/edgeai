@@ -16,4 +16,4 @@ patches:
               - name: api
                 env:
                   - {name: EDGEAI_RUNTIME_WORKFLOW_KEYS, value: 'hawkeye-video-safety,offload-lab'}
-                  - {name: EDGEAI_OFFLOAD_LAB_LOAD_IMAGE, value: '10.254.192.47:5000/edgeai/offload-lab@sha256:94a0fc502c99dd45f47bae3e4c0ac69dbd698b8b404c2c80c411e934317a48ef'}
+                  - {name: EDGEAI_OFFLOAD_LAB_LOAD_IMAGE, value: '10.254.192.47:5000/edgeai/offload-lab@sha256:bdbd7d9fa34edab47b142177db34bb2268d0392bb9a226b32ea42f93f145d146'}
