@@ -1,3 +1,9 @@
+## 2026-10-30 AI 모델 관리
+
+- `AI 모델 관리`(`/ui/main/ai-models`)는 목록이 첫 화면이다. 검색·`모델 등록` 버튼은 목록 패널 툴바에, 등록 양식과 상세는 별도 native-panel이다. 원본 KsForm·KsSelect·KsInput·KsButton·NativeFeedback·NativeLoading과 자원 프로파일의 dense 표·상태 배지만 쓴다.
+- 표의 digest는 `sha256:` 뒤 12자와 `…`, 전체 값은 상세의 `code`(줄바꿈 허용)로 둔다. 표 스크롤 컨테이너는 `position: relative`로 숨김 머리글이 페이지 폭을 넓히지 않게 한다. 요청 키·config/document digest·media type·제한 문구는 `기술 상세` details로 접는다.
+- 새 모델의 요구량 칸은 비어 시작하고 근거는 사용자 지정(미측정)으로 표시한다. 기존 자원 프로파일을 그대로 쓸 때만 원본 근거를 표시한다.
+
 ## 2026-10-30 서비스 자원 프로파일
 
 - `자원 프로파일`(`/ui/main/resource-profiles`)은 대상 서비스 → 측정 대상·구간 → 실측·추천 확인과 요구량 확정 → 저장된 revision → 2-1 전달 계약 순서의 native-panel 화면이다. 원본 KsForm·KsSelect·KsInput·KsCheckbox·KsButton·NativeFeedback·NativeLoading만 쓰고 카드·지표 타일을 추가하지 않는다.

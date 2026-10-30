@@ -23,10 +23,37 @@ public final class ResourceProfileInput {
             Set.of("analysisId", "inputConditions", "compatibility", "note"));
         JSON.boundedCanonical(map, MAX_BYTES);
         var resources = fields(map.get("resources"), Set.of("cpu", "memory"), Set.of("accelerators"));
-        var cpu = fields(resources.get("cpu"), Set.of("minMillicores", "requestMillicores", "maxMillicores", "basis"), Set.of());
-        var memory = fields(resources.get("memory"), Set.of("minBytes", "requestBytes", "maxBytes", "basis"), Set.of());
+        var conditions = inputConditions(map.get("inputConditions"));
+        var architectures = new ArrayList<String>();
+        Map<String, String> runtime = null;
+        if (map.get("compatibility") != null) {
+            var compatibility = fields(map.get("compatibility"), Set.of(), Set.of("architectures", "runtime"));
+            for (Object arch : list(orEmpty(compatibility.get("architectures")), 2)) {
+                String value = text(arch, 8);
+                if (!Set.of("amd64", "arm64").contains(value) || architectures.contains(value)) throw new IllegalArgumentException("Architectures are amd64/arm64");
+                architectures.add(value);
+            }
+            runtime = runtime(compatibility.get("runtime"));
+        }
+        Collections.sort(architectures);
+        return new Save(WorkflowInput.uuid(map.get("serviceProfileVersionId")),
+            map.get("analysisId") == null ? null : WorkflowInput.uuid(map.get("analysisId")), conditions, architectures, runtime,
+            cpu(resources.get("cpu")), memory(resources.get("memory")), accelerators(resources.get("accelerators")),
+            map.get("note") == null ? null : text(map.get("note"), 500));
+    }
+
+    /** CPU millicores min ≤ request ≤ max with its claimed basis (shared by AI model registration). */
+    static Confirmed cpu(Object value) {
+        var cpu = fields(value, Set.of("minMillicores", "requestMillicores", "maxMillicores", "basis"), Set.of());
+        return new Confirmed(ResourceRange.cpu(integer(cpu.get("minMillicores")), integer(cpu.get("requestMillicores")), integer(cpu.get("maxMillicores"))), basis(cpu.get("basis")));
+    }
+    static Confirmed memory(Object value) {
+        var memory = fields(value, Set.of("minBytes", "requestBytes", "maxBytes", "basis"), Set.of());
+        return new Confirmed(ResourceRange.memory(integer(memory.get("minBytes")), integer(memory.get("requestBytes")), integer(memory.get("maxBytes"))), basis(memory.get("basis")));
+    }
+    static List<AcceleratorRequirement> accelerators(Object value) {
         var accelerators = new ArrayList<AcceleratorRequirement>();
-        for (Object item : list(orEmpty(resources.get("accelerators")), 8)) {
+        for (Object item : list(orEmpty(value), 8)) {
             var a = fields(item, Set.of("kind", "resourceName", "unit", "min", "request", "max"), Set.of("deviceMemoryBytes", "vendor", "models"));
             var models = new ArrayList<String>();
             for (Object model : list(orEmpty(a.get("models")), 16)) models.add(text(model, 100));
@@ -38,36 +65,26 @@ public final class ResourceProfileInput {
         }
         var names = new HashSet<String>();
         for (var a : accelerators) if (!names.add(a.resourceName())) throw new IllegalArgumentException("Accelerator resource names must be unique");
+        return List.copyOf(accelerators);
+    }
+    static TreeMap<String, String> inputConditions(Object value) {
         var conditions = new TreeMap<String, String>();
-        var rawConditions = map.get("inputConditions") == null ? Map.of() : object(map.get("inputConditions"));
+        var rawConditions = value == null ? Map.of() : object(value);
         if (rawConditions.size() > 32) throw new IllegalArgumentException("At most 32 input conditions");
         for (var entry : rawConditions.entrySet()) {
             String key = text(entry.getKey(), 64);
             if (!key.matches("[A-Za-z][A-Za-z0-9_.-]*")) throw new IllegalArgumentException("Input condition keys are identifiers");
             conditions.put(key, text(entry.getValue(), 200));
         }
-        var architectures = new ArrayList<String>();
-        Map<String, String> runtime = null;
-        if (map.get("compatibility") != null) {
-            var compatibility = fields(map.get("compatibility"), Set.of(), Set.of("architectures", "runtime"));
-            for (Object arch : list(orEmpty(compatibility.get("architectures")), 2)) {
-                String value = text(arch, 8);
-                if (!Set.of("amd64", "arm64").contains(value) || architectures.contains(value)) throw new IllegalArgumentException("Architectures are amd64/arm64");
-                architectures.add(value);
-            }
-            if (compatibility.get("runtime") != null) {
-                var r = fields(compatibility.get("runtime"), Set.of("name"), Set.of("version"));
-                runtime = new TreeMap<>();
-                runtime.put("name", text(r.get("name"), 64));
-                if (r.get("version") != null) runtime.put("version", text(r.get("version"), 64));
-            }
-        }
-        Collections.sort(architectures);
-        return new Save(WorkflowInput.uuid(map.get("serviceProfileVersionId")),
-            map.get("analysisId") == null ? null : WorkflowInput.uuid(map.get("analysisId")), conditions, architectures, runtime,
-            new Confirmed(ResourceRange.cpu(integer(cpu.get("minMillicores")), integer(cpu.get("requestMillicores")), integer(cpu.get("maxMillicores"))), basis(cpu.get("basis"))),
-            new Confirmed(ResourceRange.memory(integer(memory.get("minBytes")), integer(memory.get("requestBytes")), integer(memory.get("maxBytes"))), basis(memory.get("basis"))),
-            List.copyOf(accelerators), map.get("note") == null ? null : text(map.get("note"), 500));
+        return conditions;
+    }
+    static Map<String, String> runtime(Object value) {
+        if (value == null) return null;
+        var r = fields(value, Set.of("name"), Set.of("version"));
+        var runtime = new TreeMap<String, String>();
+        runtime.put("name", text(r.get("name"), 64));
+        if (r.get("version") != null) runtime.put("version", text(r.get("version"), 64));
+        return runtime;
     }
 
     public static Analyze analyze(String body) {

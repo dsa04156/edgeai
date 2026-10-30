@@ -75,7 +75,13 @@ export function createDeviceRegistrationMiddleware({
         "resource-profiles/capabilities",
         "resource-profiles/workloads",
         "resource-profiles/pods",
+        "ai-models",
+        "ai-models/registry",
+        "ai-models/registry/repositories",
+        "ai-models/registry/tags",
+        "ai-models/registry/manifest",
       ].includes(target) ||
+      new RegExp(`^ai-models/${uuid}$`).test(target) ||
       /^scenarios\/hawkeye-safety\/samples\/[a-z0-9_]{1,40}\/image$/.test(target) ||
       new RegExp(
         `^resource-profiles/(analyses/)?${uuid}$|^resource-profiles/${uuid}/handoff$|^resource-profiles/services/[a-z][a-z0-9._-]{0,99}/versions/[0-9]+\\.[0-9]+\\.[0-9]+/revisions/[1-9][0-9]{0,6}/handoff$`,
@@ -102,6 +108,7 @@ export function createDeviceRegistrationMiddleware({
         "scheduling-profiles",
         "resource-profiles",
         "resource-profiles/analyses",
+        "ai-models",
         "device-profiles",
         "device-connections/test",
         "inference/predict",

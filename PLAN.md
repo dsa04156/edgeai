@@ -34,6 +34,8 @@
 - [x] 1–5단계의 웹·API 범위: 계약·저장소(V70)·Prometheus 실측·KRR v1.31.1 bridge·웹 화면·2-1 전달 계약을 구현하고 격리 PostgreSQL·브라우저 시험과 읽기 전용 운영 Prometheus의 실제 KRR 실행으로 확인했습니다. 근거: [시험·연동 기록](docs/evidence/resource-profiling-20261030.md).
 - [x] 운영 배포: CI 검증 이미지 digest 고정, KRR 읽기 권한 bootstrap, API·콘솔·bridge Ready, GitOps Synced/Healthy, V70 적용. [근거](docs/evidence/resource-profiling-20261030.md#운영-배포-2026-10-30)
 - [ ] 2-1의 실제 YAML 생성·전달과 실행 측 ①·③ 적용 검증은 해당 담당 범위입니다. 현재 문서의 계획을 배포 상태로 해석하지 않습니다.
+- [x] AI 모델 관리(2026-10-30, 로컬 구현·검증, 미배포): 기존 Registry 이미지 digest·플랫폼 검증과 요구량을 모델 버전·실행 구성별 불변 항목(V71)으로 등록·목록·상세. [가이드](docs/guides/ai-model-catalog.md)
+- [ ] AI 모델의 워크플로 연동(노드 선택·`resources` 주입·YAML 생성)은 후속입니다. 모델 등록은 SERVICE 발행·실행·자원 예약을 하지 않으며 3-3 전체 완료가 아닙니다.
 
 ### 프로파일에 담을 정보
 

@@ -125,7 +125,7 @@ export function basis(request: number | null, suggestion: { measured: number | n
   return "MANUAL";
 }
 
-function range(label: string, draft: RangeDraft, parse: (text: string) => number | null, max: number, unitHint: string) {
+export function range(label: string, draft: RangeDraft, parse: (text: string) => number | null, max: number, unitHint: string) {
   const values = [draft.min, draft.request, draft.max].map((text) => parse(text));
   const names = ["최소", "요청", "최대"];
   values.forEach((value, index) => {
@@ -150,11 +150,9 @@ export function conditions(text: string): Record<string, string> {
   return result;
 }
 
-export function profileDocument(serviceProfileVersionId: string, analysis: Analysis | null, draft: ProfileDraft): Api["ResourceProfileCreate"] {
-  const cpu = range("CPU", draft.cpu, parseCpu, MAX_CPU_MILLICORES, "millicores(예 250m) 또는 core");
-  const memory = range("메모리", draft.memory, parseMemory, MAX_MEMORY_BYTES, "bytes 또는 Ki/Mi/Gi");
-  const hints = suggestions(analysis);
-  const accelerators = draft.accelerators.map((a, index) => {
+/** Confirmed GPU/NPU requirements; the server applies the same resource-name, unit and range rules. */
+export function acceleratorDocuments(drafts: AcceleratorDraft[]) {
+  return drafts.map((a, index) => {
     const label = `가속기 ${index + 1}(${a.resourceName || "자원 이름 없음"})`;
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+\/[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$/.test(a.resourceName))
       throw new Error(`${label}: vendor 도메인 확장 자원 이름(예 nvidia.com/gpu)을 입력하세요.`);
@@ -167,6 +165,13 @@ export function profileDocument(serviceProfileVersionId: string, analysis: Analy
       models: a.models.split(",").map((m) => m.trim()).filter(Boolean),
     };
   });
+}
+
+export function profileDocument(serviceProfileVersionId: string, analysis: Analysis | null, draft: ProfileDraft): Api["ResourceProfileCreate"] {
+  const cpu = range("CPU", draft.cpu, parseCpu, MAX_CPU_MILLICORES, "millicores(예 250m) 또는 core");
+  const memory = range("메모리", draft.memory, parseMemory, MAX_MEMORY_BYTES, "bytes 또는 Ki/Mi/Gi");
+  const hints = suggestions(analysis);
+  const accelerators = acceleratorDocuments(draft.accelerators);
   return {
     serviceProfileVersionId,
     analysisId: analysis?.id ?? null,
