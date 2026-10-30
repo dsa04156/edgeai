@@ -29,7 +29,7 @@ DB·실장비·복구 검사는 [테스트 안내](../testing/commands.md)에서
 ## 문서와 변경 설명
 
 사용자에게 바뀐 동작, 실행 조건, 검증 범위와 한계를 설명합니다.
-일상 사용법은 가이드, 설계 변경 근거는 ADR, 실제 시험 결과는 evidence에 기록합니다.
+일상 사용법은 가이드, 설계 변경 근거는 ADR, 실제 시험 로그·스크린샷은 Git에서 제외한 `output/verification/`에 보관합니다.
 [문서 작성 기준](documentation.md)을 따르며 대화 기록과 개인 환경 값을 사용자 문서에 누적하지 않습니다.
 
-에이전트별 저장소 작업 지침은 루트와 모듈의 `AGENTS.md`, 개발 규칙은 `DEVELOPMENT.md`를 확인합니다.
+에이전트별 저장소 작업 지침은 전역 `~/.codex/AGENTS.md`와 프로젝트·모듈의 `AGENTS.md`, 개발 규칙은 [DEVELOPMENT.md](../../DEVELOPMENT.md)를 확인합니다. UI 디자인·구현은 Claude Code / Opus, 요구사항·기술 설계·검증·배포는 Codex가 담당합니다.

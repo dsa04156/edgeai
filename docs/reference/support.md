@@ -34,8 +34,9 @@ Serial JSON은 정해진 프레임 규격을, Sense HAT은 ARM64 Raspberry Pi의
 
 ## 현재 개발 경계
 
-WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS)은 API·Kestra 콘솔에 통합·배포되었고 Runner 이미지는 게시만 되었습니다. runtime은 꺼져 있어 운영 실행과 실장비 수용은 남아 있습니다([현재 상태](../../PROGRESS.md)).
-독립 GPU 객체 검출(이미지 1장 → COCO 박스, [런타임](../../inference/README.md))은 2026-10-22 운영 콘솔(`/ui/main/inference`)과 API에 배포되어 ser0003 GB10에서 실제 추론을 확인했습니다. 단일 모델·동시 1건이며 정확도·부하 수용은 하지 않았습니다.
+WORKFLOW_DATA 전체 관측(ALL_OBSERVATIONS)은 API·Kestra 콘솔에 통합·배포되었고 Runner 이미지는 게시만 되었습니다. 현재 dev runtime은 `hawkeye-video-safety,offload-lab` 워크플로에 제한해 활성화돼 있으며, ALL_OBSERVATIONS의 전체 운영 수용은 남아 있습니다([현재 상태](../../PROGRESS.md)).
+독립 GPU 객체 검출(이미지 1장 → COCO 박스, [런타임](../../inference/README.md))은 2026-10-22 운영 콘솔(`/ui/main/inference`)과 API에 배포되어 ser0003 GB10에서 실제 추론을 확인했습니다. 단일 모델·동시 1건이며 정확도·부하 수용은 하지 않았습니다. 현재 dev overlay에서는 사용자 요청에 따라 이 GPU 런타임을 replicas=0으로 중지했으므로 과거 추론 성공을 현재 가용성으로 해석하지 않습니다.
+[오프로딩 테스트](../guides/offload-lab.md)는 CPU·GPU 부하 기반 edge→worker→edge 왕복을 실장비로 검증했습니다. 시험 모델은 CPU 추론이며 NPU 사용률 기반 전환은 미구현입니다. [AI 모델 관리](../guides/ai-model-catalog.md)와 [자원 프로파일](../guides/resource-profiling.md)은 배포됐지만 등록한 모델의 워크플로 실행 연결·자원 보장·자동 증강은 별도입니다.
 Workflow 실행 경로의 실제 GPU/NPU 모델, 외부 시스템 전체 계약, 성능 수용 기준, 사용자별 권한과 종합 복구 검증은
 [개발 단계](../../PLAN.md)와 [현재 상태](../../PROGRESS.md)에서 남은 범위를 확인합니다.
 

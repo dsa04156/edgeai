@@ -54,6 +54,13 @@ Run `e86a1c2b-b4d7-419e-9998-496965c4cc20`의 실제 전환 기록은 다음과 
 
 GPU 관측 간격은 이 시험에서 15초였습니다. 새로고침 후 GPU 종류·정책 고정을 확인했으며 복귀한 모델의 추론 보고도 확인했습니다. 마지막으로 모델을 중지해 세션 STOPPED·Run CANCELLED·모델/부하 Pod 없음까지 확인했습니다.
 
+## NPU 지원 경계
+
+이 화면의 부하 종류는 CPU·GPU이며 NPU 선택은 없습니다. 전환 컨트롤러는 CPU·메모리·GPU 관측을 사용하고 `NPU_USAGE`는 아직 판단에 연결하지 않습니다.
+현재 클러스터의 Hailo-8 엣지(`etri-dev0002-raspi5`, `etri-dev0006-raspi5`)는 `hailo.ai/h8` 자원과 별도 Hailo 추론 경로가 있지만 사용률 계측이 필요합니다.
+워커의 Intel·Mobilint NPU는 [노드 메트릭](node-metrics.md)에서 사용률을 수집합니다. 장치 존재·사용률 수집·추론 실행·자동 오프로딩은 각각 다른 지원 범위입니다.
+NPU 시험을 추가하려면 장치별 추론 부하, 실제 사용률 관측, NPU 이동·복귀 정책을 연결하고 실장비로 검증해야 합니다.
+
 ## 정리 보장
 
 - 부하 Job은 프로그램 자체 종료(부하 시간) + `activeDeadlineSeconds`(부하 시간 + 30초) + `ttlSecondsAfterFinished=600`으로 제한됩니다.
@@ -63,14 +70,14 @@ GPU 관측 간격은 이 시험에서 15초였습니다. 새로고침 후 GPU �
 
 ## 배포 구성
 
-1. 이미지: `10.254.192.47:5000/edgeai/offload-lab@sha256:94a0fc502c99dd45f47bae3e4c0ac69dbd698b8b404c2c80c411e934317a48ef`
+1. 모델 실행 이미지: `10.254.192.47:5000/edgeai/offload-lab@sha256:94a0fc502c99dd45f47bae3e4c0ac69dbd698b8b404c2c80c411e934317a48ef`
    (linux/amd64·arm64). `runner/Dockerfile.offload-lab`로 CI가 만든 multi-arch Runner index
    (`sha256:ed9a4c7dd286…`) 위에 모델·부하 스크립트와 모델 파일만 COPY했습니다(RUN 없음).
-   빌드 입력 4개 파일의 sha256은 저장소 원본과 같습니다.
-2. 워크플로 발행: `deploy/offload-lab/offload-lab.json`(profile image가 위 digest)으로
+   CPU/GPU 부하용 이미지는 같은 기반에 `offload_lab_gpu_load.py`를 추가한 `10.254.192.47:5000/edgeai/offload-lab@sha256:bdbd7d9fa34edab47b142177db34bb2268d0392bb9a226b32ea42f93f145d146`입니다(amd64·arm64). 모델과 부하 이미지는 독립적으로 고정하며 모델 이미지 재발행은 필요하지 않습니다.
+2. 워크플로 발행: `deploy/offload-lab/offload-lab.json`(profile image는 모델 실행용 `sha256:94a0fc50…`)으로
    `EDGEAI_API_URL=... EDGEAI_API_USER=... EDGEAI_API_PASSWORD=... python3 -I hawkeye-runtime/workflow/publish.py deploy/offload-lab/offload-lab.json`.
 3. API 설정: `overlays/dev`가 `components/hawkeye-video` 뒤에 `components/offload-lab`을 포함합니다.
-   `EDGEAI_RUNTIME_WORKFLOW_KEYS`는 `hawkeye-video-safety,offload-lab`, `EDGEAI_OFFLOAD_LAB_LOAD_IMAGE`는 같은 digest입니다.
+   `EDGEAI_RUNTIME_WORKFLOW_KEYS`는 `hawkeye-video-safety,offload-lab`, `EDGEAI_OFFLOAD_LAB_LOAD_IMAGE`는 위 CPU/GPU 부하용 digest입니다.
    실행 기능·Prometheus·Kubernetes 연결이 필요하며 부하 Job·Pod 조회는 기존 runtime 네임스페이스 RBAC(jobs·pods get/list/create/delete)를 사용합니다.
 4. 설정 값: `EDGEAI_OFFLOAD_LAB_LOAD_IMAGE`(digest 고정 필수, 없으면 부하·시험 비활성), `EDGEAI_OFFLOAD_LAB_WORKFLOW_KEY`(기본 `offload-lab`),
    `EDGEAI_OFFLOAD_LAB_POLL_MS`(기본 3000).

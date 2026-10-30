@@ -4,6 +4,16 @@
 
 구현 과정·날짜별 변경·검증 결과는 [PROGRESS.md](PROGRESS.md)에 기록하고, 이 파일은 완료한 단계와 다음 수용 게이트를 관리합니다. 사용법은 [연속 센서 계산](docs/guides/vd-processing.md), 설계 근거는 [ADR](docs/adr/)을 확인합니다.
 
+## 2-1 동적 오프로딩 — 2026-10-30
+
+- [x] 노드 CPU·메모리·GPU 관측에 따른 edge→worker 재배치와 선택적 원래 edge 복귀 정책.
+- [x] 웹 모델 실행/중지·CPU/GPU 부하 시작/중지, 실제 Pod·Attempt·전환 사유 표시와 배포.
+- [x] CPU 왕복 및 Jetson 실제 CUDA 부하에 따른 GPU 왕복. GPU 99.1%·99.9%에서 `NODE_GPU`, 0%·0%에서 `NODE_RETURN` 성공. [사용법·근거](docs/guides/offload-lab.md)
+- [ ] NPU 부하 생성·`NPU_USAGE` 기반 이동/복귀. Hailo 추론 경로와 Mobilint·Intel 관측이 존재하지만 이 정책에는 아직 연결하지 않았습니다.
+- [ ] 모델 사전 예약 배치·사용자 우선순위 전환·서비스 이상 자동 롤백의 구현과 실장비 검증.
+
+현재 GPU 시험은 CPU 모델을 GPU 압력에 따라 재시작하는 시험입니다. GPU 모델 추론·NPU 모델 전환·무중단 상태 이전까지 검증한 것은 아닙니다.
+
 ## 3-3 자원 프로파일링 계획
 
 **사용자 합의: 2026-10-29. 상태: ② 웹 기능 1–5단계 구현·검증 및 운영 배포 완료(2026-10-30).** 사용법과 계약은 [서비스 자원 프로파일](docs/guides/resource-profiling.md)입니다. 목표는 웹에서 서비스·모델을 Pod로 실행할 때 명시할 자원 요구량과 허용 범위를 관리하고, 그 프로파일을 2-1 오프로딩에 제공하는 것입니다. 이 절은 새 기능의 범위이며 아래 M0–M10의 과거 Runner 구현 기록과 구분합니다.
@@ -34,7 +44,7 @@
 - [x] 1–5단계의 웹·API 범위: 계약·저장소(V70)·Prometheus 실측·KRR v1.31.1 bridge·웹 화면·2-1 전달 계약을 구현하고 격리 PostgreSQL·브라우저 시험과 읽기 전용 운영 Prometheus의 실제 KRR 실행으로 확인했습니다. 근거: [시험·연동 기록](docs/evidence/resource-profiling-20261030.md).
 - [x] 운영 배포: CI 검증 이미지 digest 고정, KRR 읽기 권한 bootstrap, API·콘솔·bridge Ready, GitOps Synced/Healthy, V70 적용. [근거](docs/evidence/resource-profiling-20261030.md#운영-배포-2026-10-30)
 - [ ] 2-1의 실제 YAML 생성·전달과 실행 측 ①·③ 적용 검증은 해당 담당 범위입니다. 현재 문서의 계획을 배포 상태로 해석하지 않습니다.
-- [x] AI 모델 관리(2026-10-30, 로컬 구현·검증, 미배포): 기존 Registry 이미지 digest·플랫폼 검증과 요구량을 모델 버전·실행 구성별 불변 항목(V71)으로 등록·목록·상세. [가이드](docs/guides/ai-model-catalog.md)
+- [x] AI 모델 관리(2026-10-30, 구현·검증·운영 배포 완료): 기존 Registry 이미지 digest·플랫폼 검증과 요구량을 모델 버전·실행 구성별 불변 항목(V71)으로 등록·목록·상세. [가이드](docs/guides/ai-model-catalog.md)
 - [ ] AI 모델의 워크플로 연동(노드 선택·`resources` 주입·YAML 생성)은 후속입니다. 모델 등록은 SERVICE 발행·실행·자원 예약을 하지 않으며 3-3 전체 완료가 아닙니다.
 
 ### 프로파일에 담을 정보
@@ -72,7 +82,7 @@
 
 기능 개발은M5·M7·M10의 잔여 기능을 먼저 다룹니다. M6 조합형 등록 편의는 완료했습니다. M9의identity/권한은 기능 구현 범위로, M8 부하·M9 종합 복구는 이후 운영 수용 범위로 분리합니다. 구체적인 작업 순서는 아래 표를 따릅니다.
 
-## 현재 완료 범위 — 2026-10-19
+## 이전 완료 범위 — 2026-10-19 당시 기록
 
 - [x] Kestra 원본 Vue 콘솔의 전체 메뉴와 기존 관리·워크플로·DDS API 연결, 서버 우선 자원 막대와 GPU/NPU 공통 표시
 - [x] 실제 NODE 결과·센서/VD STREAM 정상 종료·RTSP JPEG·ARM64 DDS 빌드/배포/통신/정리 검증
